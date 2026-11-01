@@ -282,14 +282,15 @@
                 results.steps.push('收养 finger: p39=' + adopted.Param39 + ' p40=' + adopted.Param40 + ' p41=' + adopted.Param41);
                 var toGrass = L.setPose({ right: 'grass', left: 'rest' });
                 results.grassAccepted = toGrass.ok;
-                await new Promise(function (r) { setTimeout(r, 600); });
+                await new Promise(function (r) { setTimeout(r, 1400); });
                 var grass = readPose();
                 results.injAfterGrass = L.getInfo().inj;
-                results.steps.push('grass accepted=' + toGrass.ok + ' inj=' + results.injAfterGrass);
+                results.poseAfterGrass = L.getPose();
+                results.steps.push('grass accepted=' + toGrass.ok + ' inj=' + results.injAfterGrass + ' pose=' + JSON.stringify(results.poseAfterGrass));
                 results.steps.push('grass: p36=' + grass.Param36 + ' p39=' + grass.Param39 + ' p41=' + grass.Param41);
                 var toChest = L.setPose({ right: 'grass', left: 'chest' });
                 results.chestAccepted = toChest.ok;
-                await new Promise(function (r) { setTimeout(r, 700); });
+                await new Promise(function (r) { setTimeout(r, 1200); });
                 var chest = readPose();
                 results.injAfterChest = L.getInfo().inj;
                 results.steps.push('chest accepted=' + toChest.ok + ' inj=' + results.injAfterChest);
@@ -308,6 +309,21 @@
                 s4El.textContent = '✕ S4 异常: ' + (e && e.message ? e.message : e) + '\n' + results.steps.join('\n');
               }
             })();
+          }, 300);
+        }
+
+        // 聊天动作映射自测：?chatText=谢谢
+        var chatText = new URLSearchParams(location.search).get('chatText');
+        if (chatText) {
+          var chatWait = setInterval(function () {
+            var UI = window.DSH_L2D_UI;
+            if (!UI || !window.DSH_L2D || !window.DSH_L2D.isReady || !window.DSH_L2D.isReady()) return;
+            clearInterval(chatWait);
+            setTimeout(function () {
+              UI.executePokeAction(UI.chatActionForReply(chatText));
+              document.getElementById('log').textContent =
+                'chatText=' + chatText + '\naction=' + JSON.stringify(UI.chatActionForReply(chatText));
+            }, 400);
           }, 300);
         }
 

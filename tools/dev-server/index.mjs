@@ -111,6 +111,7 @@ const memSettings = {
   spontaneousChat: true,
   memeStyle: true,
   memeLevel: 50,
+  autoAct: true,
 };
 
 function settingsView() {
@@ -125,6 +126,7 @@ function settingsView() {
     spontaneousChat: memSettings.spontaneousChat !== false,
     memeStyle: memSettings.memeStyle !== false,
     memeLevel: Math.min(100, Math.max(0, Number(memSettings.memeLevel) || 0)),
+    autoAct: memSettings.autoAct !== false,
     hasApiKey: !!String(memSettings.apiKey || '').trim(),
   };
 }

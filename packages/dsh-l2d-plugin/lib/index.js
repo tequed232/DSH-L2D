@@ -76,6 +76,7 @@ const SETTINGS_SHAPE = {
   spontaneousChat: { type: 'boolean', default: true, description: '空闲/完成时让角色主动冒泡' },
   memeStyle: { type: 'boolean', default: true, description: '让动作/气泡带梗味人设' },
   memeLevel: { type: 'number', default: 50, description: '玩梗程度 0~100' },
+  autoAct: { type: 'boolean', default: true, description: '空闲时让 API 定期编排小动作' },
 };
 
 let z = null;
@@ -98,6 +99,7 @@ export const Config = z
       spontaneousChat: z.boolean().default(true).description('空闲/完成时让角色主动冒泡').extra('volatile', true),
       memeStyle: z.boolean().default(true).description('让动作/气泡带梗味人设').extra('volatile', true),
       memeLevel: z.number().default(50).description('玩梗程度 0~100').extra('volatile', true),
+      autoAct: z.boolean().default(true).description('空闲时让 API 定期编排小动作').extra('volatile', true),
     })
   : { ...SETTINGS_SHAPE };
 
@@ -349,13 +351,14 @@ function writeSettings(patch) {
   const next = { ...readSettings(), ...(patch || {}) };
   // 约束取值范围，避免脏数据把前端弄坏
   next.soundVolume = Math.min(1, Math.max(0, Number(next.soundVolume) || 0));
-  next.scale = Math.min(1.6, Math.max(0.6, Number(next.scale) || 1));
+  next.scale = Math.min(2.0, Math.max(0.6, Number(next.scale) || 1));
   next.refreshSeconds = Math.min(3600, Math.max(15, Number(next.refreshSeconds) || 60));
   next.agentLink = next.agentLink !== false;
   next.clickMode = next.clickMode === 'api' ? 'api' : 'random';
   next.spontaneousChat = next.spontaneousChat !== false;
   next.memeStyle = next.memeStyle !== false;
   next.memeLevel = Math.min(100, Math.max(0, Number(next.memeLevel) || 0));
+  next.autoAct = next.autoAct !== false;
   try {
     fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf8');
@@ -554,6 +557,31 @@ function pickAllowed(value, list) {
   return typeof value === 'string' && list.includes(value) ? value : null;
 }
 
+function sanitizeKeyframeStep(step) {
+  if (!step || !Array.isArray(step.tracks)) return null;
+  const tracks = [];
+  for (const track of step.tracks.slice(0, 5)) {
+    if (!track || typeof track.param !== 'string' || !Array.isArray(track.keys)) continue;
+    const keys = [];
+    for (const key of track.keys.slice(0, 10)) {
+      if (!Array.isArray(key) || key.length < 2) continue;
+      const time = Math.max(0, Math.min(10000, Number(key[0]) || 0));
+      const value = Number(key[1]);
+      if (!Number.isFinite(value)) continue;
+      keys.push([time, value]);
+    }
+    if (keys.length >= 2) tracks.push({ param: track.param.slice(0, 80), keys });
+  }
+  if (!tracks.length) return null;
+  return {
+    kind: 'keyframes',
+    tracks,
+    duration: Math.max(500, Math.min(8000, Number(step.duration) || 1800)),
+    loop: step.loop === true,
+    delayMs: Math.max(0, Math.min(5000, Number(step.delayMs) || 0)),
+  };
+}
+
 function sanitizePokeAction(raw, allowed) {
   if (!raw || typeof raw !== 'object') return null;
 
@@ -596,6 +624,9 @@ function sanitizePokeAction(raw, allowed) {
         left: pickAllowed(step.pose.left, ['rest', 'finger', 'grass', 'chest']),
       } : null;
       if (pose && (pose.right || pose.left)) sanitizedChain.push({ kind: 'pose', pose, delayMs });
+    } else if (step.kind === 'keyframes') {
+      const keyframes = sanitizeKeyframeStep(step);
+      if (keyframes) sanitizedChain.push(keyframes);
     } else if (step.kind === 'look') {
       sanitizedChain.push({
         kind: 'look',
@@ -627,18 +658,23 @@ async function requestDeepSeekPokeAction(key, payload, style = {}) {
     expressions: payload.expressions,
     motions: payload.motions,
     poses: ['rest', 'finger', 'grass', 'chest'],
+    safeParams: payload.safeParams || [],
   };
   const system = [
     '你是 Live2D 桌面宠物的动作导演。',
-    '用户“戳了一下”角色，请返回一个轻量、可爱、不过度的动作链。',
-    '只允许使用给定枚举值，不要发明表情、动作组或姿势。',
+    '用户触发一次角色动作，请返回轻量、可爱、不过度的动作链。',
+    '只允许使用给定枚举值和安全参数，不要发明表情、动作组、姿势或参数名。',
     '动作不能同时占用冲突的右臂姿势：finger 和 grass 是右臂互斥；chest 用左臂。',
+    '除了预设动作组，你应优先用 keyframes 编排更细腻的眼/嘴/头/身体微动作。',
+    'keyframes 规则：最多 5 条轨道；每轨 2~10 个关键帧；总时长 500~8000ms；参数必须来自 safeParams。',
+    '不要把同一帧写给互相打架的参数；动作结尾尽量回到自然值。',
     '通常 1~2 个步骤，不要每项都填满。',
     'bubble 最多 12 个汉字，不要加引号或 Markdown。',
     '严格返回 JSON：{ "chain": [步骤], "bubble": "..." }。',
-    '步骤 kind 可用：expression / motion / pose / look。',
+    '步骤 kind 可用：expression / motion / pose / look / keyframes。',
     'expression: { kind, name, delayMs }；motion: { kind, name, closeMotion?, closeAfterMs?, delayMs }；',
-    'pose: { kind, pose:{right?,left?}, delayMs }；look: { kind, x, y, delayMs }。',
+    'pose: { kind, pose:{right?,left?}, delayMs }；look: { kind, x, y, delayMs }；',
+    'keyframes: { kind, tracks:[{param,keys:[[ms,value],...]}], duration, loop?, delayMs }。',
     'delayMs 是相对上一步的等待毫秒，0 表示立刻。',
     'bubble 风格：' + memeToneRules(style.memeLevel),
     style.memeStyle === false
@@ -649,7 +685,8 @@ async function requestDeepSeekPokeAction(key, payload, style = {}) {
     '可用表情：' + JSON.stringify(allowedText.expressions),
     '可用动作组：' + JSON.stringify(allowedText.motions),
     '可用姿势：' + JSON.stringify(allowedText.poses),
-    '触发原因：用户戳了一下角色。',
+    '安全参数（只可用这些做 keyframes）：' + JSON.stringify(allowedText.safeParams),
+    '触发原因：用户触发一次角色动作。',
     '请返回 JSON。',
   ].join('\n');
 
@@ -668,7 +705,7 @@ async function requestDeepSeekPokeAction(key, payload, style = {}) {
         { role: 'user', content: user },
       ],
       temperature: 1.1,
-      max_tokens: 300,
+      max_tokens: 900,
       response_format: { type: 'json_object' },
     }),
   });
@@ -854,6 +891,7 @@ export function apply(root, config = {}) {
           expressions: asStringList(body.expressions, 64),
           motions: asStringList(body.motions, 64)
             .filter((name) => name !== 'Idle'),
+          safeParams: asStringList(body.safeParams, 48),
         };
         if (!allowed.expressions.length || !allowed.motions.length) {
           return sendJson(200, { ok: false, reason: 'empty-capabilities' });
@@ -984,6 +1022,7 @@ export function apply(root, config = {}) {
             spontaneousChat: saved.spontaneousChat !== false,
             memeStyle: saved.memeStyle !== false,
             memeLevel: Math.min(100, Math.max(0, Number(saved.memeLevel) || 0)),
+            autoAct: saved.autoAct !== false,
             hasApiKey: !!String(saved.apiKey || '').trim(),
           };
           sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(view), 'utf8'));
@@ -1003,6 +1042,7 @@ export function apply(root, config = {}) {
         spontaneousChat: st.spontaneousChat !== false,
         memeStyle: st.memeStyle !== false,
         memeLevel: Math.min(100, Math.max(0, Number(st.memeLevel) || 0)),
+        autoAct: st.autoAct !== false,
         hasApiKey: !!String(st.apiKey || '').trim(),
       };
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(view), 'utf8'));
@@ -1060,6 +1100,7 @@ export function apply(root, config = {}) {
         spontaneousChat: st.spontaneousChat !== false,
         memeStyle: st.memeStyle !== false,
         memeLevel: Math.min(100, Math.max(0, Number(st.memeLevel) || 0)),
+        autoAct: st.autoAct !== false,
         hasApiKey: !!String(st.apiKey || '').trim(),
       };
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(payload), 'utf8'));

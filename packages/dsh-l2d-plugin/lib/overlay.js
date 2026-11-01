@@ -28,12 +28,13 @@
     away: ['去忙吧', '我眯一会儿', 'zzZ', '回来叫我']
   };
 
-  var prefs = { state: 'idle', left: null, top: null };
+  var prefs = { state: 'idle', left: null, top: null, bodyType: 0 };
   try {
     var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
     if (saved && STATES.indexOf(saved.state) >= 0) prefs.state = saved.state;
     if (typeof saved.left === 'number') prefs.left = saved.left;
     if (typeof saved.top === 'number') prefs.top = saved.top;
+    if (Number.isInteger(saved.bodyType) && saved.bodyType >= 0 && saved.bodyType <= 2) prefs.bodyType = saved.bodyType;
   } catch (e) { /* 隐私模式忽略 */ }
 
   function persist() {
@@ -45,7 +46,7 @@
   var STYLE_TEXT = [
     // 用 transform 定位而不是 left/top：拖拽时只改合成层偏移，不触发布局重排。
     // will-change 提前把图层独立出来，避免拖动过程中反复提升/降级。
-    '#' + ROOT_ID + '{position:fixed;left:0;top:0;width:240px;height:300px;',
+    '#' + ROOT_ID + '{position:fixed;left:0;top:0;width:320px;height:400px;',
     'z-index:2147483000;pointer-events:none;user-select:none;-webkit-user-select:none;',
     'will-change:transform;transform:translate3d(0,0,0);contain:layout style;',
     'font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;}',
@@ -57,7 +58,7 @@
     'filter:drop-shadow(0 10px 26px rgba(0,0,0,.38));',
     'transition:transform .25s cubic-bezier(.34,1.4,.64,1);will-change:transform;pointer-events:none;}',
     '#' + ROOT_ID + ' .l2d-body:hover img{margin-bottom:4px;}',
-    '#' + ROOT_ID + ' .l2d-chip{position:absolute;left:50%;bottom:-2px;transform:translateX(-50%);',
+    '#' + ROOT_ID + ' .l2d-chip{position:absolute;left:50%;top:-34px;bottom:auto;transform:translateX(-50%);',
     'pointer-events:auto;cursor:pointer;padding:3px 10px;border-radius:999px;',
     'font-size:11px;line-height:1.4;white-space:nowrap;',
     'background:rgba(28,27,32,.82);color:#e6e0e9;border:1px solid rgba(230,224,233,.16);',
@@ -72,36 +73,52 @@
     '#' + ROOT_ID + ' .l2d-bubble .price-up{color:#c62828;font-weight:800;}',
     '#' + ROOT_ID + ' .l2d-bubble .price-down{color:#1b5e20;font-weight:800;}',
     '#' + ROOT_ID + ' .l2d-bubble .price-sub{display:block;font-size:10.5px;line-height:1.35;color:#5f5f66;}',
+    '#' + ROOT_ID + ' .l2d-price{position:absolute;left:50%;top:calc(100% + 8px);transform:translateX(-50%);',
+    'max-width:min(360px,calc(100vw - 24px));padding:6px 10px;border-radius:12px;font-size:10.5px;line-height:1.35;',
+    'white-space:nowrap;background:rgba(24,22,28,.9);color:#e6e0e9;border:1px solid rgba(230,224,233,.12);',
+    'box-shadow:0 6px 20px rgba(0,0,0,.28);opacity:0;transition:opacity .22s ease;pointer-events:none;}',
+    '#' + ROOT_ID + ' .l2d-price.show{opacity:1;}',
+    '#' + ROOT_ID + ' .l2d-price .price-up{color:#ff8a80;font-weight:800;}',
+    '#' + ROOT_ID + ' .l2d-price .price-down{color:#a5d6a7;font-weight:800;}',
+    '#' + ROOT_ID + ' .l2d-price .price-sub{display:block;font-size:9.5px;color:#cac4d0;}',
+    '.l2d-menu{position:fixed;z-index:2147483100;min-width:168px;padding:6px;',
+    'border-radius:14px;background:rgba(24,22,28,.98);color:#e6e0e9;pointer-events:auto;',
+    'box-shadow:0 10px 34px rgba(0,0,0,.5);border:1px solid rgba(230,224,233,.12);display:none;flex-direction:column;gap:2px;}',
+    '.l2d-menu.open{display:flex;}',
+    '.l2d-menu button{border:none;background:transparent;color:#e6e0e9;text-align:left;',
+    'padding:8px 10px;border-radius:10px;font-size:12px;cursor:pointer;}',
+    '.l2d-menu button:hover{background:rgba(208,188,255,.18);color:#f3edf7;}',
+    '.l2d-menu .l2d-menu-title{padding:4px 10px 2px;font-size:10.5px;color:#938f99;}',
     '#' + ROOT_ID + '.away .l2d-body{filter:grayscale(.55) brightness(.72);opacity:.8;}',
     '#' + ROOT_ID + '.conversation .l2d-chip{background:rgba(208,188,255,.94);color:#381e72;',
     'border-color:rgba(56,30,114,.22);}',
     '#' + ROOT_ID + '.work .l2d-chip{background:rgba(239,184,200,.92);color:#492532;',
     'border-color:rgba(73,37,50,.22);}',
-    '#' + ROOT_ID + ' .l2d-gear{position:absolute;top:2px;right:2px;width:26px;height:26px;border-radius:999px;',
+    '#' + ROOT_ID + ' .l2d-gear{position:absolute;top:-34px;right:-4px;width:28px;height:28px;border-radius:999px;',
     'display:grid;place-items:center;pointer-events:auto;cursor:pointer;border:none;',
     'background:rgba(28,27,32,.72);color:#e6e0e9;font-size:14px;line-height:1;opacity:0;',
     'transition:opacity .2s ease,background .2s ease;}',
     '#' + ROOT_ID + ':hover .l2d-gear{opacity:1;}',
     '#' + ROOT_ID + ' .l2d-gear:hover{background:rgba(56,52,66,.95);}',
-    '#' + ROOT_ID + ' .l2d-panel{position:absolute;right:0;bottom:0;width:268px;padding:16px;',
-    'border-radius:18px;background:rgba(24,22,28,.98);color:#e6e0e9;pointer-events:auto;',
+    '.l2d-panel{position:fixed;right:28px;top:28px;width:296px;max-height:min(760px,calc(100vh - 56px));',
+    'overflow:auto;padding:16px;border-radius:18px;background:rgba(24,22,28,.98);color:#e6e0e9;pointer-events:auto;',
     'box-shadow:0 12px 40px rgba(0,0,0,.55);border:1px solid rgba(230,224,233,.12);',
-    'font-size:12.5px;display:none;flex-direction:column;gap:12px;}',
-    '#' + ROOT_ID + ' .l2d-panel.open{display:flex;}',
-    '#' + ROOT_ID + ' .l2d-panel h4{margin:0;font-size:13px;font-weight:500;letter-spacing:.3px;color:#d0bcff;}',
-    '#' + ROOT_ID + ' .l2d-row{display:flex;flex-direction:column;gap:6px;}',
-    '#' + ROOT_ID + ' .l2d-row label{font-size:11.5px;color:#cac4d0;}',
-    '#' + ROOT_ID + ' .l2d-row input[type=password],#' + ROOT_ID + ' .l2d-row input[type=number]',
+    'font-size:12.5px;display:none;flex-direction:column;gap:12px;z-index:2147483200;}',
+    '.l2d-panel.open{display:flex;}',
+    '.l2d-panel h4{margin:0;font-size:13px;font-weight:500;letter-spacing:.3px;color:#d0bcff;}',
+    '.l2d-panel .l2d-row{display:flex;flex-direction:column;gap:6px;}',
+    '.l2d-panel .l2d-row label{font-size:11.5px;color:#cac4d0;}',
+    '.l2d-panel .l2d-row input[type=password],.l2d-panel .l2d-row input[type=number]',
     '{width:100%;box-sizing:border-box;padding:7px 10px;border-radius:10px;',
     'border:1px solid rgba(230,224,233,.18);background:rgba(255,255,255,.06);color:#e6e0e9;',
     'font-size:12px;outline:none;}',
-    '#' + ROOT_ID + ' .l2d-inline{display:flex;align-items:center;gap:10px;}',
-    '#' + ROOT_ID + ' .l2d-inline input[type=range]{flex:1;}',
-    '#' + ROOT_ID + ' .l2d-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:2px;}',
-    '#' + ROOT_ID + ' .l2d-actions button{border:none;border-radius:999px;padding:7px 16px;font-size:12px;',
+    '.l2d-panel .l2d-inline{display:flex;align-items:center;gap:10px;}',
+    '.l2d-panel .l2d-inline input[type=range]{flex:1;}',
+    '.l2d-panel .l2d-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:2px;}',
+    '.l2d-panel .l2d-actions button{border:none;border-radius:999px;padding:7px 16px;font-size:12px;',
     'cursor:pointer;background:rgba(255,255,255,.1);color:#e6e0e9;}',
-    '#' + ROOT_ID + ' .l2d-actions button.primary{background:#d0bcff;color:#381e72;}',
-    '#' + ROOT_ID + ' .l2d-hint{font-size:11px;color:#938f99;line-height:1.5;}',
+    '.l2d-panel .l2d-actions button.primary{background:#d0bcff;color:#381e72;}',
+    '.l2d-panel .l2d-hint{font-size:11px;color:#938f99;line-height:1.5;}',
     '#' + ROOT_ID + '.conversation .l2d-bubble{border-bottom-right-radius:4px;}'
   ].join('');
 
@@ -110,6 +127,8 @@
   var bubbleEl = null;
   var chipEl = null;
   var bodyEl = null;
+  var priceEl = null;
+  var menuEl = null;
 
   function ensureMounted() {
     if (document.getElementById(ROOT_ID)) return;
@@ -161,12 +180,21 @@
     panelEl = document.createElement('div');
     panelEl.className = 'l2d-panel';
 
+    priceEl = document.createElement('div');
+    priceEl.className = 'l2d-price';
+
+    menuEl = document.createElement('div');
+    menuEl.className = 'l2d-menu';
+    menuEl.setAttribute('aria-hidden', 'true');
+
     root.appendChild(bubbleEl);
     root.appendChild(bodyEl);
     root.appendChild(chipEl);
     root.appendChild(gear);
-    root.appendChild(panelEl);
+    root.appendChild(priceEl);
     document.body.appendChild(root);
+    document.body.appendChild(menuEl);
+    document.body.appendChild(panelEl);
 
     buildPanel();
     loadSettings();
@@ -195,31 +223,96 @@
     bodyEl.appendChild(ph);
   }
 
-  // 角色左上角的屏幕坐标。null 表示还没定位过，此时落到右下角默认位。
-  // 拖拽惯性已按用户要求移除：这里只保留最稳定的 1:1 跟手定位。
+  // 角色左上角：pos 是逻辑目标（拖拽/持久化），spring 是渲染位置。
+  // 恢复惯性但不用“甩出初速度”：临界阻尼弹簧只收敛到松手点，不会飞出屏幕。
   var pos = { x: null, y: null };
+  var spring = { x: null, y: null, vx: 0, vy: 0, active: false, raf: 0, lastAt: 0 };
 
-  /** 把 pos 同步到合成层（只改 transform，不碰布局） */
+  function renderSpring() {
+    if (!root || spring.x === null || spring.y === null) return;
+    root.style.transform = 'translate3d(' + spring.x + 'px,' + spring.y + 'px,0)';
+  }
+
+  function snapSpringToTarget() {
+    if (pos.x === null || pos.y === null) return;
+    spring.x = pos.x;
+    spring.y = pos.y;
+    spring.vx = 0;
+    spring.vy = 0;
+    spring.active = false;
+    renderSpring();
+  }
+
   function applyPos() {
     if (!root) return;
     if (pos.x === null || pos.y === null) {
-      var w = root.offsetWidth || 240;
-      var h = root.offsetHeight || 300;
+      var w = root.offsetWidth || 320;
+      var h = root.offsetHeight || 400;
       pos.x = Math.max(0, window.innerWidth - w - 24);
       pos.y = Math.max(0, window.innerHeight - h - 24);
     }
-    root.style.transform =
-      'translate3d(' + pos.x + 'px,' + pos.y + 'px,0)';
+    snapSpringToTarget();
   }
 
-  /** 限制在可视区域内（允许露出一部分，但不要推到完全看不见） */
   function clampPos(x, y) {
-    var w = root ? root.offsetWidth || 240 : 240;
-    var h = root ? root.offsetHeight || 300 : 300;
+    var w = root ? root.offsetWidth || 320 : 320;
+    var h = root ? root.offsetHeight || 400 : 400;
     return {
       x: Math.max(-w * 0.35, Math.min(window.innerWidth - w * 0.65, x)),
       y: Math.max(0, Math.min(window.innerHeight - h * 0.25, y)),
     };
+  }
+
+  // 临界阻尼解析解：任意帧率稳定，收敛不超调。松手后没有额外初速度。
+  function stepSpring(now) {
+    if (pos.x === null || pos.y === null) return false;
+    if (spring.x === null || spring.y === null) snapSpringToTarget();
+
+    var dt = spring.lastAt ? Math.max(0, (now - spring.lastAt) / 1000) : 0.016;
+    spring.lastAt = now;
+    if (dt > 0.05) dt = 0.05;
+
+    var omega = 24;
+    var dx = spring.x - pos.x;
+    var dy = spring.y - pos.y;
+
+    function axis(x, v, d) {
+      var b = v + omega * d;
+      var e = Math.exp(-omega * dt);
+      return { x: x + (d + b * dt) * e, v: (v - omega * b * dt) * e };
+    }
+
+    var rx = axis(spring.x, spring.vx, dx);
+    var ry = axis(spring.y, spring.vy, dy);
+    spring.x = rx.x;
+    spring.vx = rx.v;
+    spring.y = ry.x;
+    spring.vy = ry.v;
+
+    var settled =
+      !physics.dragging &&
+      Math.abs(spring.x - pos.x) < 0.08 &&
+      Math.abs(spring.y - pos.y) < 0.08 &&
+      Math.abs(spring.vx) < 2 &&
+      Math.abs(spring.vy) < 2;
+    if (settled) {
+      snapSpringToTarget();
+      return false;
+    }
+    spring.active = true;
+    renderSpring();
+    return true;
+  }
+
+  function ensureSpringLoop() {
+    if (spring.raf || pos.x === null) return;
+    spring.lastAt = performance.now();
+    var loop = function () {
+      spring.raf = 0;
+      if (!stepSpring(performance.now())) return;
+      spring.raf = requestAnimationFrame(loop);
+    };
+    spring.raf = requestAnimationFrame(loop);
   }
 
   function applyPrefs() {
@@ -422,12 +515,227 @@
   }
 
   function showBalance() {
-    sayHtml('查询中…', 1800);
     var tier = billingTier();
     fetchBalance().then(function (data) {
-      sayHtml(formatBalanceHtml(data, tier), 5200);
+      // 价格放到底部专用条，不占对话框
+      if (priceEl) {
+        priceEl.innerHTML = formatBalanceHtml(data, tier);
+        priceEl.classList.add('show');
+        clearTimeout(priceEl._hideTimer);
+        priceEl._hideTimer = setTimeout(function () {
+          priceEl.classList.remove('show');
+        }, 6500);
+      }
     });
   }
+
+  // ---------------------------------------------------------------- 体型/分区互动
+  function appearanceValues(ids) {
+    var L = window.DSH_L2D;
+    if (!L || !L.readParameters) return {};
+    return L.readParameters(ids) || {};
+  }
+
+  function setSwitch(id, value) {
+    var L = window.DSH_L2D;
+    if (!L || !L.setParameter) return;
+    L.setParameter(id, value, 1);
+    if (L.markActive) L.markActive();
+  }
+
+  function switchOn(id) {
+    var value = appearanceValues([id])[id];
+    return Number(value) > 0.5;
+  }
+
+  function setBodyType(index) {
+    var L = window.DSH_L2D;
+    if (!L || !L.setParameter) return;
+    var item = BODY_TYPES[Math.max(0, Math.min(2, Number(index) || 0))];
+    prefs.bodyType = Math.max(0, Math.min(2, Number(index) || 0));
+    persist();
+    setSwitch('Clothes2', item.value);
+    applyScale(settings.scale);
+    say('换好了：' + item.label, 2400);
+  }
+
+  function cycleBodyType() {
+    setBodyType((Number(prefs.bodyType) || 0) + 1);
+  }
+
+  function toggleShoes() {
+    var on = switchOn('Clothes4');
+    setSwitch('Clothes4', on ? 0 : 1);
+    say(on ? '鞋子穿好啦' : '光脚舒服～', 2600);
+  }
+
+  function friendlyHead() {
+    var L = window.DSH_L2D;
+    if (!L) return;
+    if (L.setExpression) L.setExpression(Math.random() < 0.55 ? '兔牙' : '爱心眼');
+    if (L.lookAt) L.lookAt(0, 0.24);
+    say('嘿嘿，好痒~', 2600);
+  }
+
+  function shyChest() {
+    var L = window.DSH_L2D;
+    if (!L) return;
+    if (L.setExpression) L.setExpression(Math.random() < 0.65 ? '脸红' : '＞＜');
+    if (L.lookAt) L.lookAt((Math.random() - 0.5) * 0.25, -0.1);
+    say('别、别乱摸啦！', 3200);
+  }
+
+  function bodyPoint(e) {
+    var rect = bodyEl.getBoundingClientRect();
+    return {
+      nx: (e.clientX - rect.left) / Math.max(1, rect.width),
+      ny: (e.clientY - rect.top) / Math.max(1, rect.height),
+      rect: rect,
+    };
+  }
+
+  function zoneAt(e) {
+    var p = bodyPoint(e);
+    if (p.nx < 0 || p.nx > 1 || p.ny < 0 || p.ny > 1) return null;
+    // 分区按整身画布归一化；以实测截图校准，覆盖头/胸/裙/足四类高频互动。
+    if (p.nx >= 0.38 && p.nx <= 0.68 && p.ny < 0.15) return 'head';
+    if (p.nx >= 0.32 && p.nx <= 0.72 && p.ny >= 0.15 && p.ny < 0.37) return 'chest';
+    if (p.nx >= 0.22 && p.nx <= 0.82 && p.ny >= 0.37 && p.ny < 0.66) return 'skirt';
+    if (p.nx >= 0.28 && p.nx <= 0.76 && p.ny >= 0.66) return 'foot';
+    return 'body';
+  }
+
+  function startSkirtDrag(e) {
+    var startValue = appearanceValues(['Clothes1']).Clothes1;
+    startValue = Number.isFinite(Number(startValue)) ? Number(startValue) : 0;
+    var startY = e.clientY;
+    var moved = false;
+
+    function onMove(ev) {
+      var dy = ev.clientY - startY;
+      if (Math.abs(dy) > 3) moved = true;
+      // 上拖 = 裙摆收短，下拖 = 放长；表达式的切换方向是 -1。
+      var value = Math.max(-1, Math.min(0, startValue + Math.max(-1, Math.min(1, dy / 110))));
+      setSwitch('Clothes1', value);
+    }
+
+    function onUp(ev) {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+      if (Math.abs(ev.clientY - startY) > 5) {
+        var value = appearanceValues(['Clothes1']).Clothes1 || 0;
+        say(value < -0.5 ? '裙摆收短了' : '裙摆放长了', 2600);
+        window.__DSH_L2D_SKIRT_DRAGGED__ = Date.now();
+      }
+    }
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+  }
+
+  function handleZoneClick(e) {
+    var zone = zoneAt(e);
+    if (zone === 'foot') return toggleShoes();
+    if (zone === 'head') return friendlyHead();
+    if (zone === 'chest') return shyChest();
+    return pokeAction();
+  }
+
+  // ---------------------------------------------------------------- 右键菜单
+  function closeMenu() {
+    if (!menuEl) return;
+    menuEl.classList.remove('open');
+    menuEl.setAttribute('aria-hidden', 'true');
+  }
+
+  function menuButton(text, onClick) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = text;
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      closeMenu();
+      onClick();
+    });
+    return btn;
+  }
+
+  function buildMenu() {
+    if (!menuEl) return;
+    menuEl.innerHTML = '';
+    var title = document.createElement('div');
+    title.className = 'l2d-menu-title';
+    title.textContent = 'DSH-L2D';
+    menuEl.appendChild(title);
+    menuEl.appendChild(menuButton('设置', openPanel));
+    menuEl.appendChild(menuButton('对话', function () {
+      var agent = window.__DSH_L2D_AGENT__ || {};
+      var text = trimChatText(agent.lastAssistantText, 70) || '我在听，你说吧～';
+      say(text, 5200);
+      if (window.DSH_L2D && window.DSH_L2D.setExpression) window.DSH_L2D.setExpression('兔牙');
+    }));
+    menuEl.appendChild(menuButton('随机动作', pokeRandom));
+    var bodyLabel = (BODY_TYPES[Number(prefs.bodyType) || 0] || BODY_TYPES[0]).label;
+    menuEl.appendChild(menuButton('切换体型（' + bodyLabel + '）', function () {
+      cycleBodyType();
+      setTimeout(buildMenu, 30);
+    }));
+    menuEl.appendChild(menuButton('余额 / 价格', showBalance));
+  }
+
+  function openMenuAt(e) {
+    buildMenu();
+    if (!menuEl) return;
+    menuEl.classList.add('open');
+    menuEl.setAttribute('aria-hidden', 'false');
+    var w = menuEl.offsetWidth || 160;
+    var h = menuEl.offsetHeight || 180;
+    var x = Math.min(window.innerWidth - w - 8, Math.max(8, e.clientX));
+    var y = Math.min(window.innerHeight - h - 8, Math.max(8, e.clientY));
+    menuEl.style.left = x + 'px';
+    menuEl.style.top = y + 'px';
+  }
+
+  function chatActionForReply(text) {
+    var t = String(text || '');
+    var chain = [];
+    function add(step) { chain.push(step); }
+
+    if (/(你好|hello|hi|在吗|早上好|晚上好|我回来了|嗨)/i.test(t)) {
+      add({ kind: 'expression', name: '兔牙' });
+      add({ kind: 'motion', name: '竖手指打开', closeMotion: '竖手指关闭', closeAfterMs: 4200, delayMs: 120 });
+    } else if (/(谢谢|感谢|辛苦|厉害|great|done|完成|成功|修复)/i.test(t)) {
+      add({ kind: 'expression', name: '兔牙' });
+      add({ kind: 'pose', pose: { right: 'finger' }, delayMs: 120 });
+    } else if (/(对不起|抱歉|失败|错误|error|failed|异常)/i.test(t)) {
+      add({ kind: 'expression', name: '流冷汗' });
+      add({ kind: 'pose', pose: { right: 'rest', left: 'chest' }, delayMs: 120 });
+    } else if (/(为什么|怎么|如何|是否|吗？|\?|思考|分析|看看)/.test(t)) {
+      add({ kind: 'expression', name: '加载' });
+      add({ kind: 'look', x: 0.18, y: 0.22, delayMs: 80 });
+    } else if (/(哈哈|笑死|乐|草|梗|好玩)/i.test(t)) {
+      add({ kind: 'expression', name: '＞＜' });
+      add({ kind: 'pose', pose: { right: 'grass' }, delayMs: 120 });
+    } else if (/(抱抱|摸摸|喜欢|爱你|可爱)/i.test(t)) {
+      add({ kind: 'expression', name: '脸红' });
+      add({ kind: 'pose', pose: { right: 'rest', left: 'chest' }, delayMs: 120 });
+    } else {
+      add({ kind: 'expression', name: Math.random() < 0.5 ? '兔牙' : '加载' });
+      add({ kind: 'look', x: (Math.random() - 0.5) * 0.4, y: Math.random() * 0.2, delayMs: 100 });
+    }
+    return { chain: chain, bubble: '', silent: true };
+  }
+
+  // 调试/自动化测试钩子：不进 AI 工具白名单
+  window.DSH_L2D_UI = {
+    chatActionForReply: chatActionForReply,
+    executePokeAction: executePokeAction,
+    setBodyType: setBodyType,
+    cycleBodyType: cycleBodyType,
+    zoneAt: zoneAt,
+  };
 
   // ---------------------------------------------------------------- 拖动
   // ---------------------------------------------------------------- 拖拽物理
@@ -492,9 +800,61 @@
     return v < -1 ? -1 : v > 1 ? 1 : v;
   };
 
-  /** 每帧物理已按用户要求停用：避免任何拖拽/松手惯性把角色甩走。 */
+  /** 每帧物理：窗口弹簧速度 → 轻微侧倾/位移惯性，交给模型物理传导到头发四肢。 */
   function physicsTick() {
-    return;
+    var L = window.DSH_L2D;
+    if (!L || !L.setParameters || !L.isReady || !L.isReady()) return;
+
+    var now = performance.now();
+
+    // 拖拽按住但长时间没动时自然回正，兜底 pointerup 丢失
+    if (physics.dragging && now - physics.lastMoveAt > 600) {
+      physics.dragging = false;
+      physics.vx = 0;
+      physics.vy = 0;
+    }
+
+    var targetLean = 0;
+    var targetPosX = 0;
+    var targetPosY = 0;
+    var targetLookX = 0;
+    var targetLookY = 0;
+
+    if (physics.dragging || spring.active) {
+      // 幅度刻意收小；弹簧速度是有界的，不会把角色甩出去。
+      targetLean = clampUnit(-spring.vx / 1100) * 0.38;
+      targetPosX = pos.x === null || spring.x === null ? 0 : clampUnit((pos.x - spring.x) / 70) * 0.35;
+      targetPosY = pos.y === null || spring.y === null ? 0 : clampUnit((pos.y - spring.y) / 70) * 0.25;
+      targetLookX = clampUnit(spring.vx / 1200) * 0.35;
+      targetLookY = clampUnit(-spring.vy / 1400) * 0.22;
+    }
+
+    var kBody = physics.dragging ? 0.16 : 0.10;
+    var kHead = physics.dragging ? 0.34 : 0.16;
+    physics.leanZ += (targetLean - physics.leanZ) * kBody;
+    physics.posX += (targetPosX - physics.posX) * kBody;
+    physics.posY += (targetPosY - physics.posY) * kBody;
+    physics.lookX += (targetLookX - physics.lookX) * kHead;
+    physics.lookY += (targetLookY - physics.lookY) * kHead;
+
+    var active =
+      physics.dragging ||
+      spring.active ||
+      Math.abs(physics.leanZ) > 0.004 ||
+      Math.abs(physics.posX) > 0.004 ||
+      Math.abs(physics.posY) > 0.004 ||
+      Math.abs(physics.lookX) > 0.004 ||
+      Math.abs(physics.lookY) > 0.004;
+    if (!active) return;
+
+    if (!resolvePhysParams()) return;
+
+    var vals = {};
+    if (physParams.angleZ) vals[physParams.angleZ.id] = normToValue(physParams.angleZ, physics.leanZ);
+    if (physParams.posX) vals[physParams.posX.id] = normToValue(physParams.posX, physics.posX);
+    if (physParams.posY) vals[physParams.posY.id] = normToValue(physParams.posY, physics.posY);
+    L.setParameters(vals);
+    if (L.lookAt) L.lookAt(physics.lookX, physics.lookY);
   }
 
   function bindPhysics() {
@@ -530,15 +890,22 @@
     function flushFrame() {
       rafPending = false;
       if (!dragging || !root) return;
-      // 拖拽惯性已移除：直接 1:1 跟手。
+      // 逻辑目标跟手，渲染位置由临界阻尼弹簧收敛，形成稳定滞后惯性。
       pos.x = pendingX;
       pos.y = pendingY;
-      applyPos();
+      ensureSpringLoop();
       if (window.DSH_L2D && window.DSH_L2D.markActive) window.DSH_L2D.markActive();
     }
 
     bodyEl.addEventListener('pointerdown', function (e) {
       if (!root) return;
+      // 裙摆是独立手势：垂直拖拽调裙长，不拖动容器
+      if (zoneAt(e) === 'skirt') {
+        e.preventDefault();
+        startSkirtDrag(e);
+        return;
+      }
+
       loadCustomAudio();
       playSound('press');
       if (pos.x === null) applyPos(); // 首次交互先落实初始位置
@@ -612,11 +979,11 @@
       if (bodyEl) bodyEl.classList.remove('dragging');
       if (!moved) playSound('release');
 
-      // 惯性已移除：松手直接落到当前位置。
+      // 惯性恢复：松手不追加初速度；弹簧带着当前速度收敛到松手点，不超调不飞走。
       if (moved) {
         pos.x = pendingX;
         pos.y = pendingY;
-        applyPos();
+        ensureSpringLoop();
       }
       prefs.left = Math.round(pos.x);
       prefs.top = Math.round(pos.y);
@@ -630,13 +997,13 @@
     bodyEl.addEventListener('pointerup', endDrag);
     bodyEl.addEventListener('pointercancel', endDrag);
 
-    // 窗口尺寸变化时重新夹位置，防止角色被挤出可视区域
+    // 窗口尺寸变化时直接吸附；缩放/换体型不做“慢慢滑回”。
     window.addEventListener('resize', function () {
       if (pos.x === null) return;
       var c = clampPos(pos.x, pos.y);
       pos.x = c.x;
       pos.y = c.y;
-      applyPos();
+      snapSpringToTarget();
     });
   }
 
@@ -652,6 +1019,8 @@
     pokeTimers = [];
   }
 
+  var SAFE_MOTION_PARAM = /^(?:Angle[XYZ]bs?|Position[XYZ]|LeanInput|ParamEyeBall[XY]|ParamEyeLOpen|ParamEyeROpen|ParamEyeSmile[LR]?|ParamMouthOpenY|ParamMouthForm|ParamCheek|ParamBreath|Movement[123])$/i;
+
   function pokeCapabilities() {
     var L = window.DSH_L2D;
     var cap = L && L.getCapabilities ? L.getCapabilities() : null;
@@ -661,7 +1030,11 @@
     var motions = ((cap && cap.motionGroups) || [])
       .map(function (item) { return item && item.name ? item.name : item; })
       .filter(function (name) { return typeof name === 'string' && name && name !== 'Idle'; });
-    return { expressions: expressions, motions: motions };
+    var safeParams = ((cap && cap.params) || [])
+      .map(function (item) { return item && item.id ? item.id : ''; })
+      .filter(function (id) { return SAFE_MOTION_PARAM.test(id); })
+      .slice(0, 48);
+    return { expressions: expressions, motions: motions, safeParams: safeParams };
   }
 
   function randomOf(list) {
@@ -702,6 +1075,11 @@
         if (step.closeMotion) {
           scheduleCloseMotion(step.closeMotion, step.closeAfterMs || 6000, currentRunId);
         }
+      } else if (step.kind === 'keyframes' && L.playKeyframes) {
+        L.playKeyframes(step.tracks || [], {
+          duration: step.duration,
+          loop: step.loop === true,
+        });
       } else if (step.kind === 'pose' && step.pose && L.setPose) {
         L.setPose(step.pose);
       } else if (step.kind === 'look' && L.lookAt) {
@@ -723,7 +1101,7 @@
     }
 
     if (action.bubble) say(action.bubble, 3200);
-    else say('戳戳~', 2200);
+    else if (!action.silent) say('戳戳~', 2200);
   }
 
   function pokeRandom() {
@@ -768,20 +1146,24 @@
     }
   }
 
-  function pokeByApi() {
+  function pokeByApi(silent) {
     var L = window.DSH_L2D;
     if (!L || !L.isReady || !L.isReady()) {
-      say('模型还没准备好', 1800);
+      if (!silent) say('模型还没准备好', 1800);
       return;
     }
     var cap = pokeCapabilities();
     if (!cap.expressions.length || !cap.motions.length) return pokeRandom();
 
-    say('让 DeepSeek 想想…', 2600);
+    if (!silent) say('让 DeepSeek 想想…', 2600);
     fetch('/dsh-l2d/ai-action.json', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ expressions: cap.expressions, motions: cap.motions }),
+      body: JSON.stringify({
+        expressions: cap.expressions,
+        motions: cap.motions,
+        safeParams: cap.safeParams,
+      }),
       cache: 'no-store',
     })
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -789,11 +1171,11 @@
         if (!data) throw new Error('http');
         if (!data.ok) {
           if (data.reason === 'no-key') {
-            say('没配 Key，我先随机一个', 2600);
+            if (!silent) say('没配 Key，我先随机一个', 2600);
             return pokeRandom();
           }
           if (data.reason === 'cooldown') {
-            say('刚刚戳过了，等等我', 2200);
+            if (!silent) say('刚刚戳过了，等等我', 2200);
             return;
           }
           throw new Error(data.reason || 'api');
@@ -802,7 +1184,7 @@
       })
       .catch(function (err) {
         console.warn('[dsh-l2d] api poke failed', err);
-        say('API 不太配合，我先随机一个', 2600);
+        if (!silent) say('API 不太配合，我先随机一个', 2600);
         pokeRandom();
       });
   }
@@ -814,7 +1196,7 @@
 
   // ---------------------------------------------------------------- 交互
   function bindClick() {
-    // 单击角色：戳一戳动作（随机 / DeepSeek 决定，可在设置里选）
+    // 单击身体：分区互动；右键：选项卡菜单；拖动后的 click 不算戳一戳。
     var downX = 0;
     var downY = 0;
     bodyEl.addEventListener('pointerdown', function (e) {
@@ -822,12 +1204,26 @@
       downY = e.clientY;
     });
     bodyEl.addEventListener('click', function (e) {
-      // 拖动后的 click 不算“戳一下”
       if (Math.abs(e.clientX - downX) > 5 || Math.abs(e.clientY - downY) > 5) return;
-      pokeAction();
+      if (Date.now() - Number(window.__DSH_L2D_SKIRT_DRAGGED__ || 0) < 120) return;
+      handleZoneClick(e);
     });
 
-    // 悬停 350ms 显示余额 + 当前峰/谷计费；移开取消未触发的悬停
+    bodyEl.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openMenuAt(e);
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!menuEl || !menuEl.classList.contains('open')) return;
+      if (menuEl.contains(e.target) || bodyEl.contains(e.target)) return;
+      closeMenu();
+    });
+    window.addEventListener('blur', closeMenu);
+    window.addEventListener('resize', closeMenu);
+
+    // 悬停 350ms 更新底部价格条；不再抢对话框。
     var hoverTimer = null;
     bodyEl.addEventListener('mouseenter', function () {
       if (hoverTimer) clearTimeout(hoverTimer);
@@ -843,8 +1239,7 @@
       }
     });
 
-    // 双击切状态已按用户要求移除：角色区域单击就是“戳一戳动作”。
-    // 保留底部小徽标作为状态切换入口，避免误触。
+    // 底部小徽标保留状态切换。
     chipEl.addEventListener('click', function (e) {
       e.stopPropagation();
       cycleState();
@@ -889,9 +1284,9 @@
     } catch (e) { /* ignore */ }
     if (!w || !h) {
       // 容器尚未布局完成（或窗口被遮挡）时，按当前缩放算一个确定尺寸，避免 0×0
-      var sc = Math.min(1.6, Math.max(0.6, Number(settings.scale) || 1));
-      w = Math.round(240 * sc);
-      h = Math.round(300 * sc);
+      var sc = Math.min(2.0, Math.max(0.6, Number(settings.scale) || 1));
+      w = Math.round(320 * sc * bodyTypeFactor());
+      h = Math.round(400 * sc * bodyTypeFactor());
     }
     return { w: w, h: h };
   }
@@ -1007,17 +1402,34 @@
   // ---------------------------------------------------------------- 设置面板
   // 用户自填 API Key / 音效 / 缩放 / 刷新间隔；宿主侧落盘（$DSH_HOME/l2d-settings.json）。
   var panelEl = null;
-  var settings = { scale: 1, soundEnabled: true, soundVolume: 0.7, refreshSeconds: 60, hasApiKey: false, agentLink: true, clickMode: 'random', spontaneousChat: true, memeStyle: true, memeLevel: 50 };
+  var settings = { scale: 1, soundEnabled: true, soundVolume: 0.7, refreshSeconds: 60, hasApiKey: false, agentLink: true, clickMode: 'random', spontaneousChat: true, memeStyle: true, memeLevel: 50, autoAct: true };
   var panelOpen = false;
+
+  // 体型系数：三个体型的可见轮廓不同，用一个统一系数把视觉高度拉回一致。
+  // 这里按模型实测微调；后续换模型时只需要改这一张表。
+  var BODY_TYPES = [
+    { label: '默认体型', value: 0, factor: 1.0 },
+    { label: '体型1', value: 0.4, factor: 1.08 },
+    { label: '体型2', value: 1.0, factor: 0.95 },
+  ];
+  var BODY_BASE_W = 320;
+  var BODY_BASE_H = 400;
+
+  function bodyTypeFactor() {
+    var item = BODY_TYPES[prefs.bodyType] || BODY_TYPES[0];
+    return item.factor || 1;
+  }
 
   function applyScale(scale) {
     if (!root) return;
-    var sc = Math.min(1.6, Math.max(0.6, Number(scale) || 1));
-    root.style.width = Math.round(240 * sc) + 'px';
-    root.style.height = Math.round(300 * sc) + 'px';
+    var sc = Math.min(2.0, Math.max(0.6, Number(scale) || 1));
+    settings.scale = sc;
+    var factor = bodyTypeFactor();
+    var w = Math.round(BODY_BASE_W * sc * factor);
+    var h = Math.round(BODY_BASE_H * sc * factor);
+    root.style.width = w + 'px';
+    root.style.height = h + 'px';
     if (rendererReady && window.DSH_L2D && window.DSH_L2D.layout) {
-      var w = Math.round(240 * sc);
-      var h = Math.round(300 * sc);
       if (canvasEl) {
         canvasEl.style.width = w + 'px';
         canvasEl.style.height = h + 'px';
@@ -1103,7 +1515,7 @@
     var scaleInput = document.createElement('input');
     scaleInput.type = 'range';
     scaleInput.min = '0.6';
-    scaleInput.max = '1.6';
+    scaleInput.max = '2.0';
     scaleInput.step = '0.05';
     scaleInput.value = String(settings.scale);
     scaleInput.addEventListener('input', function () {
@@ -1153,6 +1565,11 @@
     memeLevel.value = String(settings.memeLevel);
     panelEl.appendChild(row('玩梗程度', memeLevel));
 
+    var autoAct = document.createElement('input');
+    autoAct.type = 'checkbox';
+    autoAct.checked = settings.autoAct !== false;
+    panelEl.appendChild(row('API 自主动作', autoAct));
+
     var hint = document.createElement('div');
     hint.className = 'l2d-hint';
     hint.textContent = '单击角色播放动作；悬停显示余额与当前峰/谷价。开启自发聊天后，完成状态会回流最新回复，空闲时偶尔说话。';
@@ -1183,7 +1600,8 @@
         clickMode: clickMode.value,
         spontaneousChat: spontaneousChat.checked,
         memeStyle: memeToggle.checked,
-        memeLevel: Number(memeLevel.value)
+        memeLevel: Number(memeLevel.value),
+        autoAct: autoAct.checked
       };
       if (keyInput.value.trim()) patch.apiKey = keyInput.value.trim();
       fetch('/dsh-l2d/settings.json', {
@@ -1259,27 +1677,24 @@
       var L = window.DSH_L2D;
       if (!L) return;
       if (L.setExpression) L.setExpression('加载');
-      if (L.setPose) L.setPose({ right: 'finger' });
       if (L.lookAt) L.lookAt(0.2, 0.1);
     },
     attention: function () {
       var L = window.DSH_L2D;
       if (!L) return;
       if (L.setExpression) L.setExpression('兔牙');
-      if (L.setPose) L.setPose({ right: 'rest', left: 'rest' });
       if (L.lookAt) L.lookAt(0, 0);
     },
     error: function () {
       var L = window.DSH_L2D;
       if (!L) return;
       if (L.setExpression) L.setExpression('流冷汗');
-      if (L.setPose) L.setPose({ right: 'rest', left: 'rest' });
       if (L.lookAt) L.lookAt(0, -0.18);
     },
     idle: function () {
       var L = window.DSH_L2D;
       if (!L) return;
-      if (L.setPose) L.setPose({ right: 'rest', left: 'rest' });
+      // 不在这里复位四肢：会覆盖用户/API 的姿势意图
       if (L.lookAt) L.lookAt(0, 0);
     },
   };
@@ -1297,8 +1712,10 @@
       } else if (next === 'error' && meta && meta.lastError) {
         say('出错了：' + String(meta.lastError).slice(0, 60), 4200);
       } else if (next === 'attention') {
-        // 自发聊天：工作区刚完成的回复回流成短气泡；没有文本才用默认提示。
+        // 自发聊天：回复回流短气泡，并根据文本映射一条轻量动作链
         var reply = trimChatText(meta && meta.lastAssistantText, 60);
+        var chatAction = chatActionForReply(reply);
+        executePokeAction(chatAction);
         if (!speakSpontaneous(reply, 3000)) say('我看完啦，等你下一句', 2400);
       }
     } catch (e) {
@@ -1325,6 +1742,27 @@
     agentLink.idleTimer = setTimeout(tick, 12000);
   }
 
+  function startIdleAutoAct() {
+    if (agentLink.autoActTimer) return;
+    // 自动化测试可通过 ?noauto=1 关掉，避免后台动作污染断言
+    if (new URLSearchParams(location.search).get('noauto') === '1') return;
+    var tick = function () {
+      if (
+        settings.autoAct !== false &&
+        settings.agentLink !== false &&
+        agentLink.state === 'idle' &&
+        !physics.dragging &&
+        !panelOpen &&
+        window.DSH_L2D && window.DSH_L2D.isReady && window.DSH_L2D.isReady() &&
+        Date.now() - agentLink.lastSpokeAt > 10000
+      ) {
+        pokeByApi(true);
+      }
+      agentLink.autoActTimer = setTimeout(tick, 42000 + Math.random() * 45000);
+    };
+    agentLink.autoActTimer = setTimeout(tick, 30000);
+  }
+
   function startAgentPoll() {
     if (agentLink.timer) return;
     agentLink.timer = setInterval(function () {
@@ -1339,6 +1777,7 @@
         .catch(function () { /* 下一轮再试 */ });
     }, 2500);
     startIdleChat();
+    startIdleAutoAct();
   }
 
   // ---------------------------------------------------------------- AI 指令轮询
