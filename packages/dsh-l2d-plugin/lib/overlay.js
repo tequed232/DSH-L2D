@@ -69,6 +69,9 @@
     'opacity:0;transform:translateY(6px) scale(.96);transform-origin:bottom right;',
     'transition:opacity .22s ease,transform .22s cubic-bezier(.34,1.4,.64,1);pointer-events:none;}',
     '#' + ROOT_ID + ' .l2d-bubble.show{opacity:1;transform:translateY(0) scale(1);}',
+    '#' + ROOT_ID + ' .l2d-bubble .price-up{color:#c62828;font-weight:800;}',
+    '#' + ROOT_ID + ' .l2d-bubble .price-down{color:#1b5e20;font-weight:800;}',
+    '#' + ROOT_ID + ' .l2d-bubble .price-sub{display:block;font-size:10.5px;line-height:1.35;color:#5f5f66;}',
     '#' + ROOT_ID + '.away .l2d-body{filter:grayscale(.55) brightness(.72);opacity:.8;}',
     '#' + ROOT_ID + '.conversation .l2d-chip{background:rgba(208,188,255,.94);color:#381e72;',
     'border-color:rgba(56,30,114,.22);}',
@@ -248,6 +251,17 @@
     }, holdMs || 2600);
   }
 
+  /** 可信 HTML 专用：只用于本插件自己构造的余额/动作气泡，不用于外部内容 */
+  function sayHtml(html, holdMs) {
+    if (!bubbleEl || !html) return;
+    bubbleEl.innerHTML = html;
+    bubbleEl.classList.add('show');
+    if (bubbleTimer) clearTimeout(bubbleTimer);
+    bubbleTimer = setTimeout(function () {
+      bubbleEl.classList.remove('show');
+    }, holdMs || 2600);
+  }
+
   // ---------------------------------------------------------------- 音效
   // 优先播放 $DSH_HOME/l2d-audio/ 下的自定义音频；没有则用 WebAudio 合成「小黄鸭」声。
   // 不内置任何第三方音频文件，避免素材授权与复用问题。
@@ -356,21 +370,62 @@
       .catch(function () { return null; });
   }
 
-  function formatBalance(data) {
+  // DeepSeek API 峰谷计费（2026-08-23 规则）：
+  // 工作日 09:00-12:00 / 14:00-18:00 为峰价；其余与周末全天为谷价。
+  var PEAK_PRICES = {
+    pro: { input: 9, output: 27, cache: 0.3 },
+    flash: { input: 3, output: 9, cache: 0.1 },
+  };
+  var OFF_PEAK_PRICES = {
+    pro: { input: 4.5, output: 13.5, cache: 0.15 },
+    flash: { input: 1.5, output: 4.5, cache: 0.05 },
+  };
+
+  function billingTier(at) {
+    var date = at ? new Date(at) : new Date();
+    // 用北京时间判断；本机可能不是 UTC+8
+    var bj = new Date(date.getTime() + (8 * 60 + date.getTimezoneOffset()) * 60000);
+    var hour = bj.getHours();
+    var weekday = bj.getDay() >= 1 && bj.getDay() <= 5;
+    var peak = weekday && ((hour >= 9 && hour < 12) || (hour >= 14 && hour < 18));
+    return {
+      peak: peak,
+      weekend: !weekday,
+      label: peak ? '峰价' : '谷价',
+      mark: peak ? '🔴' : '🟢',
+      prices: peak ? PEAK_PRICES : OFF_PEAK_PRICES,
+    };
+  }
+
+  function priceHtml(label, value, colorClass) {
+    return '<span class="' + colorClass + '">' + label + ' ' + value + '</span>';
+  }
+
+  function formatBalanceHtml(data, tier) {
+    var t = tier || billingTier();
     if (!data) return '余额获取失败';
     if (!data.ok) {
-      if (data.reason === 'no-key') return '未配置 API Key';
-      return '余额暂时不可用';
+      var miss = data.reason === 'no-key' ? '未配置 API Key' : '余额暂时不可用';
+      return miss +
+        '<span class="price-sub">当前计费：' + priceHtml(t.label, t.mark, t.peak ? 'price-up' : 'price-down') + '</span>';
     }
     var symbol = data.currency === 'USD' ? '$' : '¥';
     var total = typeof data.total === 'number' ? data.total.toFixed(2) : '—';
-    return '余额 ' + symbol + total + (data.stale ? '（缓存）' : '');
+    var tierClass = t.peak ? 'price-up' : 'price-down';
+    var sub =
+      '<span class="price-sub">计费：' + priceHtml(t.label, t.mark, tierClass) +
+      ' · V4-Pro ' + t.prices.pro.input + '/' + t.prices.pro.output +
+      ' · Flash ' + t.prices.flash.input + '/' + t.prices.flash.output + '</span>' +
+      '<span class="price-sub">缓存命中 V4-Pro ' + t.prices.pro.cache + ' · Flash ' + t.prices.flash.cache +
+      ' 元/百万tokens' + (t.weekend ? '（周末全天谷价）' : '') + '</span>';
+    return '余额 ' + symbol + total + (data.stale ? '（缓存）' : '') + sub;
   }
 
   function showBalance() {
-    say('查询中…', 1800);
+    sayHtml('查询中…', 1800);
+    var tier = billingTier();
     fetchBalance().then(function (data) {
-      say(formatBalance(data), 4200);
+      sayHtml(formatBalanceHtml(data, tier), 5200);
     });
   }
 
@@ -585,14 +640,194 @@
     });
   }
 
+  // ---------------------------------------------------------------- 戳一戳动作
+  // 动作链批次：每次戳一下生成新 runId，旧链的延时步骤会被打断。
+  // 参考 FULASKA/-live2d- 的 ActionBus 设计：受理成功不等于必须播完，后续高优可打断。
+  var pokeTimers = [];
+  var pokeRunId = 0;
+
+  function clearPokeTimers() {
+    pokeRunId++;
+    for (var i = 0; i < pokeTimers.length; i++) clearTimeout(pokeTimers[i]);
+    pokeTimers = [];
+  }
+
+  function pokeCapabilities() {
+    var L = window.DSH_L2D;
+    var cap = L && L.getCapabilities ? L.getCapabilities() : null;
+    var expressions = ((cap && cap.expressions) || [])
+      .map(function (item) { return item && item.name ? item.name : item; })
+      .filter(function (name) { return typeof name === 'string' && name; });
+    var motions = ((cap && cap.motionGroups) || [])
+      .map(function (item) { return item && item.name ? item.name : item; })
+      .filter(function (name) { return typeof name === 'string' && name && name !== 'Idle'; });
+    return { expressions: expressions, motions: motions };
+  }
+
+  function randomOf(list) {
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  function scheduleCloseMotion(closeMotion, delayMs, runId) {
+    var L = window.DSH_L2D;
+    if (!L || !closeMotion || !L.playMotionAsync) return;
+    pokeTimers.push(setTimeout(function () {
+      if (runId !== pokeRunId) return;
+      L.playMotionAsync(closeMotion).catch(function () { /* 状态机可能已处理 */ });
+    }, delayMs || 6000));
+  }
+
+  function executePokeAction(action) {
+    var L = window.DSH_L2D;
+    if (!L || !action) return;
+    var runId = clearPokeTimers();
+
+    // 兼容旧字段；新协议使用 chain：expression / motion / pose / look
+    var chain = Array.isArray(action.chain) ? action.chain : [];
+    if (!chain.length) {
+      if (action.expression) chain.push({ kind: 'expression', name: action.expression });
+      if (action.motion) chain.push({ kind: 'motion', name: action.motion, closeMotion: action.closeMotion, closeAfterMs: action.closeAfterMs });
+      if (action.pose) chain.push({ kind: 'pose', pose: action.pose });
+      if (action.look) chain.push({ kind: 'look', x: action.look.x, y: action.look.y });
+    }
+
+    var elapsed = 0;
+    var currentRunId = runId;
+    function runStep(step) {
+      if (!L || !step || currentRunId !== pokeRunId) return;
+      if (step.kind === 'expression' && step.name && L.setExpression) {
+        L.setExpression(step.name);
+      } else if (step.kind === 'motion' && step.name && L.playMotionAsync) {
+        L.playMotionAsync(step.name).catch(function () { /* 状态机会拒绝冲突 */ });
+        if (step.closeMotion) {
+          scheduleCloseMotion(step.closeMotion, step.closeAfterMs || 6000, currentRunId);
+        }
+      } else if (step.kind === 'pose' && step.pose && L.setPose) {
+        L.setPose(step.pose);
+      } else if (step.kind === 'look' && L.lookAt) {
+        L.lookAt(step.x || 0, step.y || 0);
+      }
+    }
+
+    for (var i = 0; i < chain.length; i++) {
+      var step = chain[i];
+      var delay = Math.max(0, Number(step.delayMs) || 0);
+      elapsed += delay;
+      if (elapsed <= 0) {
+        runStep(step);
+      } else {
+        (function (pending) {
+          pokeTimers.push(setTimeout(function () { runStep(pending); }, elapsed));
+        })(step);
+      }
+    }
+
+    if (action.bubble) say(action.bubble, 3200);
+    else say('戳戳~', 2200);
+  }
+
+  function pokeRandom() {
+    var L = window.DSH_L2D;
+    if (!L || !L.isReady || !L.isReady()) {
+      say('模型还没准备好', 1800);
+      return;
+    }
+    var runId = clearPokeTimers();
+    var cap = pokeCapabilities();
+    var expressions = cap.expressions;
+    var motions = cap.motions.filter(function (name) { return name.endsWith('打开'); });
+    var roll = Math.random();
+
+    try {
+      if (roll < 0.36 && expressions.length) {
+        var expression = randomOf(expressions);
+        L.setExpression(expression);
+        if (L.lookAt) L.lookAt((Math.random() - 0.5) * 0.7, Math.random() * 0.35);
+        say(expression, 2800);
+        return;
+      }
+
+      if (roll < 0.76 && motions.length) {
+        var motion = randomOf(motions);
+        L.playMotionAsync(motion).catch(function () { say('这个动作先让位', 2200); });
+        scheduleCloseMotion(motion.replace(/打开$/, '关闭'), 5200 + Math.random() * 2600, runId);
+        say('看这个~', 2600);
+        return;
+      }
+
+      var poses = ['finger', 'grass', 'chest'];
+      var poseName = randomOf(poses);
+      var pose = poseName === 'chest'
+        ? { right: 'rest', left: 'chest' }
+        : { right: poseName, left: 'rest' };
+      L.setPose(pose);
+      say(poseName === 'finger' ? '看这里！' : poseName === 'grass' ? '给你草草' : '抱抱~', 2800);
+    } catch (err) {
+      console.warn('[dsh-l2d] random poke failed', err);
+      say('今天不太想动…', 2200);
+    }
+  }
+
+  function pokeByApi() {
+    var L = window.DSH_L2D;
+    if (!L || !L.isReady || !L.isReady()) {
+      say('模型还没准备好', 1800);
+      return;
+    }
+    var cap = pokeCapabilities();
+    if (!cap.expressions.length || !cap.motions.length) return pokeRandom();
+
+    say('让 DeepSeek 想想…', 2600);
+    fetch('/dsh-l2d/ai-action.json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expressions: cap.expressions, motions: cap.motions }),
+      cache: 'no-store',
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data) throw new Error('http');
+        if (!data.ok) {
+          if (data.reason === 'no-key') {
+            say('没配 Key，我先随机一个', 2600);
+            return pokeRandom();
+          }
+          if (data.reason === 'cooldown') {
+            say('刚刚戳过了，等等我', 2200);
+            return;
+          }
+          throw new Error(data.reason || 'api');
+        }
+        executePokeAction(data);
+      })
+      .catch(function (err) {
+        console.warn('[dsh-l2d] api poke failed', err);
+        say('API 不太配合，我先随机一个', 2600);
+        pokeRandom();
+      });
+  }
+
+  function pokeAction() {
+    if (settings.clickMode === 'api') return pokeByApi();
+    return pokeRandom();
+  }
+
   // ---------------------------------------------------------------- 交互
   function bindClick() {
-    // 单击角色：显示当前 API 余额（与 Whale 挂件的「点一下看余额」一致）
-    bodyEl.addEventListener('click', function () {
-      showBalance();
+    // 单击角色：戳一戳动作（随机 / DeepSeek 决定，可在设置里选）
+    var downX = 0;
+    var downY = 0;
+    bodyEl.addEventListener('pointerdown', function (e) {
+      downX = e.clientX;
+      downY = e.clientY;
+    });
+    bodyEl.addEventListener('click', function (e) {
+      // 拖动后的 click 不算“戳一下”
+      if (Math.abs(e.clientX - downX) > 5 || Math.abs(e.clientY - downY) > 5) return;
+      pokeAction();
     });
 
-    // 悬停 350ms 也弹出余额对话框；移开取消未触发的悬停
+    // 悬停 350ms 显示余额 + 当前峰/谷计费；移开取消未触发的悬停
     var hoverTimer = null;
     bodyEl.addEventListener('mouseenter', function () {
       if (hoverTimer) clearTimeout(hoverTimer);
@@ -608,10 +843,8 @@
       }
     });
 
-    bodyEl.addEventListener('dblclick', function () {
-      cycleState();
-    });
-
+    // 双击切状态已按用户要求移除：角色区域单击就是“戳一戳动作”。
+    // 保留底部小徽标作为状态切换入口，避免误触。
     chipEl.addEventListener('click', function (e) {
       e.stopPropagation();
       cycleState();
@@ -774,7 +1007,7 @@
   // ---------------------------------------------------------------- 设置面板
   // 用户自填 API Key / 音效 / 缩放 / 刷新间隔；宿主侧落盘（$DSH_HOME/l2d-settings.json）。
   var panelEl = null;
-  var settings = { scale: 1, soundEnabled: true, soundVolume: 0.7, refreshSeconds: 60, hasApiKey: false };
+  var settings = { scale: 1, soundEnabled: true, soundVolume: 0.7, refreshSeconds: 60, hasApiKey: false, agentLink: true, clickMode: 'random', spontaneousChat: true, memeStyle: true, memeLevel: 50 };
   var panelOpen = false;
 
   function applyScale(scale) {
@@ -890,9 +1123,39 @@
     agentToggle.checked = settings.agentLink !== false;
     panelEl.appendChild(row('工作区联动', agentToggle));
 
+    var clickMode = document.createElement('select');
+    var modeRandom = document.createElement('option');
+    modeRandom.value = 'random';
+    modeRandom.textContent = '随机动作';
+    var modeApi = document.createElement('option');
+    modeApi.value = 'api';
+    modeApi.textContent = 'DeepSeek 决定';
+    clickMode.appendChild(modeRandom);
+    clickMode.appendChild(modeApi);
+    clickMode.value = settings.clickMode === 'api' ? 'api' : 'random';
+    panelEl.appendChild(row('戳一戳动作', clickMode));
+
+    var spontaneousChat = document.createElement('input');
+    spontaneousChat.type = 'checkbox';
+    spontaneousChat.checked = settings.spontaneousChat !== false;
+    panelEl.appendChild(row('自发聊天', spontaneousChat));
+
+    var memeToggle = document.createElement('input');
+    memeToggle.type = 'checkbox';
+    memeToggle.checked = settings.memeStyle !== false;
+    panelEl.appendChild(row('梗味人设', memeToggle));
+
+    var memeLevel = document.createElement('input');
+    memeLevel.type = 'range';
+    memeLevel.min = '0';
+    memeLevel.max = '100';
+    memeLevel.step = '5';
+    memeLevel.value = String(settings.memeLevel);
+    panelEl.appendChild(row('玩梗程度', memeLevel));
+
     var hint = document.createElement('div');
     hint.className = 'l2d-hint';
-    hint.textContent = '工作区联动会读取 DSH 会话状态（thinking/working/attention/error/idle），并触发对应的表情与姿势。';
+    hint.textContent = '单击角色播放动作；悬停显示余额与当前峰/谷价。开启自发聊天后，完成状态会回流最新回复，空闲时偶尔说话。';
     panelEl.appendChild(hint);
 
     var actions = document.createElement('div');
@@ -916,7 +1179,11 @@
         soundVolume: Number(soundVol.value),
         scale: Number(scaleInput.value),
         refreshSeconds: Number(refreshInput.value),
-        agentLink: agentToggle.checked
+        agentLink: agentToggle.checked,
+        clickMode: clickMode.value,
+        spontaneousChat: spontaneousChat.checked,
+        memeStyle: memeToggle.checked,
+        memeLevel: Number(memeLevel.value)
       };
       if (keyInput.value.trim()) patch.apiKey = keyInput.value.trim();
       fetch('/dsh-l2d/settings.json', {
@@ -954,7 +1221,33 @@
   //
   // 参照 dsh-pet-indesktop 的 Agent Link：读取 DSH 会话事件并聚合为状态，
   // 状态切换时触发一条轻量动作链（表情/视线/姿势），不做高频重播。
-  var agentLink = { state: 'unknown', lastAt: 0, timer: 0 };
+  var agentLink = { state: 'unknown', lastAt: 0, timer: 0, lastSpokeAt: 0 };
+  var IDLE_LINES = [
+    '我在呢～',
+    '你继续忙，我陪你。',
+    '刚活动了一下尾巴。',
+    '要看会代码吗？',
+    '别熬太久哦。',
+    '嘿嘿，戳我一下嘛。',
+  ];
+
+  function trimChatText(text, max) {
+    return String(text || '')
+      .replace(/\s+/g, ' ')
+      .replace(/^[\r\n\s`>*#\-\[\]]+/, '')
+      .trim()
+      .slice(0, max || 60);
+  }
+
+  function speakSpontaneous(text, minGapMs) {
+    if (settings.spontaneousChat === false || !text) return false;
+    var now = Date.now();
+    if (now - agentLink.lastSpokeAt < (minGapMs || 8000)) return false;
+    agentLink.lastSpokeAt = now;
+    say(text, 5200);
+    return true;
+  }
+
   var AGENT_CHAIN = {
     thinking: function () {
       var L = window.DSH_L2D;
@@ -1004,11 +1297,32 @@
       } else if (next === 'error' && meta && meta.lastError) {
         say('出错了：' + String(meta.lastError).slice(0, 60), 4200);
       } else if (next === 'attention') {
-        say('我看完啦，等你下一句', 2400);
+        // 自发聊天：工作区刚完成的回复回流成短气泡；没有文本才用默认提示。
+        var reply = trimChatText(meta && meta.lastAssistantText, 60);
+        if (!speakSpontaneous(reply, 3000)) say('我看完啦，等你下一句', 2400);
       }
     } catch (e) {
       console.warn('[dsh-l2d] agent chain failed', e);
     }
+  }
+
+  function startIdleChat() {
+    if (agentLink.idleTimer) return;
+    var tick = function () {
+      // 8~18 秒一次；只有长期空闲、无拖拽、无面板打开才说话
+      if (
+        settings.spontaneousChat !== false &&
+        settings.agentLink !== false &&
+        agentLink.state === 'idle' &&
+        !physics.dragging &&
+        !panelOpen &&
+        window.DSH_L2D && window.DSH_L2D.isReady && window.DSH_L2D.isReady()
+      ) {
+        speakSpontaneous(randomOf(IDLE_LINES), 12000);
+      }
+      agentLink.idleTimer = setTimeout(tick, 8000 + Math.random() * 10000);
+    };
+    agentLink.idleTimer = setTimeout(tick, 12000);
   }
 
   function startAgentPoll() {
@@ -1024,6 +1338,7 @@
         })
         .catch(function () { /* 下一轮再试 */ });
     }, 2500);
+    startIdleChat();
   }
 
   // ---------------------------------------------------------------- AI 指令轮询

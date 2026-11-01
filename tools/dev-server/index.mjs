@@ -107,6 +107,10 @@ const memSettings = {
   scale: 1,
   eyeFollow: false,
   agentLink: true,
+  clickMode: 'random',
+  spontaneousChat: true,
+  memeStyle: true,
+  memeLevel: 50,
 };
 
 function settingsView() {
@@ -117,6 +121,10 @@ function settingsView() {
     refreshSeconds: memSettings.refreshSeconds,
     eyeFollow: memSettings.eyeFollow,
     agentLink: memSettings.agentLink !== false,
+    clickMode: memSettings.clickMode === 'api' ? 'api' : 'random',
+    spontaneousChat: memSettings.spontaneousChat !== false,
+    memeStyle: memSettings.memeStyle !== false,
+    memeLevel: Math.min(100, Math.max(0, Number(memSettings.memeLevel) || 0)),
     hasApiKey: !!String(memSettings.apiKey || '').trim(),
   };
 }
@@ -214,6 +222,13 @@ const server = http.createServer((req, res) => {
     const body = memSettings.agentLink === false
       ? { ok: false, state: 'idle', reason: 'disabled' }
       : { ok: true, state: 'idle', workspace: 'dev-server', ageMs: 999999 };
+    return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(body), 'utf8'));
+  }
+
+  // 本地不真正调用 DeepSeek：让前端走随机动作兜底
+  if (urlPath === '/ai-action.json') {
+    if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+    const body = { ok: false, reason: 'no-key' };
     return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(body), 'utf8'));
   }
 

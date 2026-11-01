@@ -72,6 +72,10 @@ const SETTINGS_SHAPE = {
   scale: { type: 'number', default: 1, description: '角色显示缩放 0.6~1.6' },
   eyeFollow: { type: 'boolean', default: false, description: '眼睛跟随鼠标' },
   agentLink: { type: 'boolean', default: true, description: '读取 DSH 工作区会话状态，驱动角色表情/动作链' },
+  clickMode: { type: 'string', default: 'random', description: '单击角色动作：random 随机动作 / api DeepSeek 决定' },
+  spontaneousChat: { type: 'boolean', default: true, description: '空闲/完成时让角色主动冒泡' },
+  memeStyle: { type: 'boolean', default: true, description: '让动作/气泡带梗味人设' },
+  memeLevel: { type: 'number', default: 50, description: '玩梗程度 0~100' },
 };
 
 let z = null;
@@ -90,6 +94,10 @@ export const Config = z
       scale: z.number().default(1).description('角色显示缩放 0.6~1.6').extra('volatile', true),
       eyeFollow: z.boolean().default(false).description('眼睛跟随鼠标（需接入 Cubism 渲染后生效）').extra('volatile', true),
       agentLink: z.boolean().default(true).description('读取 DSH 工作区会话状态，驱动角色表情/动作链').extra('volatile', true),
+      clickMode: z.string().default('random').description('单击角色动作：random 随机动作 / api DeepSeek 决定').extra('volatile', true),
+      spontaneousChat: z.boolean().default(true).description('空闲/完成时让角色主动冒泡').extra('volatile', true),
+      memeStyle: z.boolean().default(true).description('让动作/气泡带梗味人设').extra('volatile', true),
+      memeLevel: z.number().default(50).description('玩梗程度 0~100').extra('volatile', true),
     })
   : { ...SETTINGS_SHAPE };
 
@@ -114,6 +122,30 @@ function sendBuffer(res, status, type, buf) {
   res.setHeader('Content-Type', type);
   res.setHeader('Cache-Control', 'no-store');
   res.end(buf);
+}
+
+function readJsonBody(req, maxBytes = 16 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        req.destroy();
+        reject(new Error('payload too large'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')) || {});
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on('error', reject);
+  });
 }
 
 function readIfExists(p) {
@@ -320,6 +352,10 @@ function writeSettings(patch) {
   next.scale = Math.min(1.6, Math.max(0.6, Number(next.scale) || 1));
   next.refreshSeconds = Math.min(3600, Math.max(15, Number(next.refreshSeconds) || 60));
   next.agentLink = next.agentLink !== false;
+  next.clickMode = next.clickMode === 'api' ? 'api' : 'random';
+  next.spontaneousChat = next.spontaneousChat !== false;
+  next.memeStyle = next.memeStyle !== false;
+  next.memeLevel = Math.min(100, Math.max(0, Number(next.memeLevel) || 0));
   try {
     fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf8');
@@ -500,6 +536,157 @@ function getAgentState(force = false) {
 
 export { getAgentState };
 
+// ---------------------------------------------------------------- 戳一戳 API 动作
+// 用户单击角色时可选择「让 DeepSeek 决定动作」。为避免模型编参数，
+// 只允许它从前端上报的白名单里挑：表情 / 动作组 / 四肢姿势 / 视线 / 气泡文案。
+const POKE_API_COOLDOWN = 1200;
+let lastPokeApiAt = 0;
+
+function asStringList(value, maxItems = 80) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+function pickAllowed(value, list) {
+  return typeof value === 'string' && list.includes(value) ? value : null;
+}
+
+function sanitizePokeAction(raw, allowed) {
+  if (!raw || typeof raw !== 'object') return null;
+
+  // 参照 FULASKA/-live2d- 的动作协议：底层用 kind 化的步骤链，
+  // 但保留旧字段 expression/motion/pose 兼容现有调用方。
+  let chain = Array.isArray(raw.chain) ? raw.chain.slice(0, 6) : null;
+  if (!chain) {
+    chain = [];
+    if (raw.expression) chain.push({ kind: 'expression', name: raw.expression });
+    if (raw.motion) chain.push({ kind: 'motion', name: raw.motion, closeMotion: raw.closeMotion, closeAfterMs: raw.closeAfterMs });
+    if (raw.pose) chain.push({ kind: 'pose', pose: raw.pose });
+    if (raw.look) chain.push({ kind: 'look', x: raw.look?.[0], y: raw.look?.[1] });
+  }
+
+  const sanitizedChain = [];
+  for (const step of chain) {
+    if (!step || typeof step !== 'object') continue;
+    const delayMs = Math.max(0, Math.min(5000, Number(step.delayMs) || 0));
+    if (step.kind === 'expression') {
+      const name = pickAllowed(step.name, allowed.expressions);
+      if (name) sanitizedChain.push({ kind: 'expression', name, delayMs });
+    } else if (step.kind === 'motion') {
+      const name = pickAllowed(step.name, allowed.motions);
+      if (name) {
+        const closeName = pickAllowed(step.closeMotion, allowed.motions)
+          || (name.endsWith('打开') && allowed.motions.includes(name.replace(/打开$/, '关闭'))
+            ? name.replace(/打开$/, '关闭')
+            : null);
+        sanitizedChain.push({
+          kind: 'motion',
+          name,
+          closeMotion: closeName,
+          closeAfterMs: Math.max(2000, Math.min(12000, Number(step.closeAfterMs) || 6000)),
+          delayMs,
+        });
+      }
+    } else if (step.kind === 'pose') {
+      const pose = step.pose && typeof step.pose === 'object' ? {
+        right: pickAllowed(step.pose.right, ['rest', 'finger', 'grass', 'chest']),
+        left: pickAllowed(step.pose.left, ['rest', 'finger', 'grass', 'chest']),
+      } : null;
+      if (pose && (pose.right || pose.left)) sanitizedChain.push({ kind: 'pose', pose, delayMs });
+    } else if (step.kind === 'look') {
+      sanitizedChain.push({
+        kind: 'look',
+        x: Math.max(-1, Math.min(1, Number(step.x) || 0)),
+        y: Math.max(-1, Math.min(1, Number(step.y) || 0)),
+        delayMs,
+      });
+    }
+  }
+
+  if (!sanitizedChain.length && allowed.expressions.length) {
+    sanitizedChain.push({ kind: 'expression', name: allowed.expressions[0], delayMs: 0 });
+  }
+
+  const bubble = typeof raw.bubble === 'string' ? raw.bubble.trim().slice(0, 40) : '';
+  return { ok: true, kind: 'poke-action', chain: sanitizedChain, bubble };
+}
+
+function memeToneRules(level) {
+  const n = Math.max(0, Math.min(100, Number(level) || 0));
+  if (n <= 20) return '语气正常克制，不刻意玩梗；最多用“好的/来啦”这类自然口语。';
+  if (n <= 45) return '轻度玩梗：可以用常见中文网络语气词，不硬解释梗，不用黑称。';
+  if (n <= 70) return '中等玩梗：可以接通用梗和互动梗，短句、可爱、带一点小得意；不用黑称。';
+  return '高玩梗：放开一点，可以用夸张网络语气和通用梗，但不要辱骂、不造谣、不用黑称。';
+}
+
+async function requestDeepSeekPokeAction(key, payload, style = {}) {
+  const allowedText = {
+    expressions: payload.expressions,
+    motions: payload.motions,
+    poses: ['rest', 'finger', 'grass', 'chest'],
+  };
+  const system = [
+    '你是 Live2D 桌面宠物的动作导演。',
+    '用户“戳了一下”角色，请返回一个轻量、可爱、不过度的动作链。',
+    '只允许使用给定枚举值，不要发明表情、动作组或姿势。',
+    '动作不能同时占用冲突的右臂姿势：finger 和 grass 是右臂互斥；chest 用左臂。',
+    '通常 1~2 个步骤，不要每项都填满。',
+    'bubble 最多 12 个汉字，不要加引号或 Markdown。',
+    '严格返回 JSON：{ "chain": [步骤], "bubble": "..." }。',
+    '步骤 kind 可用：expression / motion / pose / look。',
+    'expression: { kind, name, delayMs }；motion: { kind, name, closeMotion?, closeAfterMs?, delayMs }；',
+    'pose: { kind, pose:{right?,left?}, delayMs }；look: { kind, x, y, delayMs }。',
+    'delayMs 是相对上一步的等待毫秒，0 表示立刻。',
+    'bubble 风格：' + memeToneRules(style.memeLevel),
+    style.memeStyle === false
+      ? '禁用玩梗：bubble 用自然、简短、不刻意搞笑的中文。'
+      : '可以有梗味，但不要解释梗、不要使用黑称、不要发敏感或冒犯内容。',
+  ].join('\n');
+  const user = [
+    '可用表情：' + JSON.stringify(allowedText.expressions),
+    '可用动作组：' + JSON.stringify(allowedText.motions),
+    '可用姿势：' + JSON.stringify(allowedText.poses),
+    '触发原因：用户戳了一下角色。',
+    '请返回 JSON。',
+  ].join('\n');
+
+  const model = process.env.DSH_L2D_API_MODEL || 'deepseek-chat';
+  const response = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      temperature: 1.1,
+      max_tokens: 300,
+      response_format: { type: 'json_object' },
+    }),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`HTTP ${response.status} ${text.slice(0, 180)}`);
+  }
+  const data = await response.json();
+  const content = data?.choices?.[0]?.message?.content;
+  let raw;
+  try {
+    raw = JSON.parse(content);
+  } catch {
+    throw new Error('API 返回不是 JSON');
+  }
+  return sanitizePokeAction(raw, payload);
+}
+
 export function apply(root, config = {}) {
   // ① DSH 原生设置里填的 Key 同步进插件设置：balance.json 只读 l2d-settings.json。
   // 空字符串不覆盖，避免设置页默认值把用户已保存的 Key 冲掉。
@@ -641,6 +828,48 @@ export function apply(root, config = {}) {
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(data), 'utf8'));
     });
 
+    // 戳一戳「API 决定动作」：用用户自己的 DeepSeek Key 生成一次安全动作链
+    route('/dsh-l2d/ai-action.json', async (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'POST') {
+        return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      }
+
+      const sendJson = (status, payload) => {
+        sendBuffer(res, status, MIME['.json'], Buffer.from(JSON.stringify(payload), 'utf8'));
+      };
+
+      try {
+        const now = Date.now();
+        if (now - lastPokeApiAt < POKE_API_COOLDOWN) {
+          return sendJson(429, { ok: false, reason: 'cooldown' });
+        }
+        lastPokeApiAt = now;
+
+        const body = await readJsonBody(req);
+        const key = String(readSettings().apiKey || process.env.DEEPSEEK_API_KEY || '').trim();
+        if (!key) return sendJson(200, { ok: false, reason: 'no-key' });
+
+        const allowed = {
+          expressions: asStringList(body.expressions, 64),
+          motions: asStringList(body.motions, 64)
+            .filter((name) => name !== 'Idle'),
+        };
+        if (!allowed.expressions.length || !allowed.motions.length) {
+          return sendJson(200, { ok: false, reason: 'empty-capabilities' });
+        }
+        const action = await requestDeepSeekPokeAction(key, allowed, {
+          memeStyle: readSettings().memeStyle !== false,
+          memeLevel: Number(readSettings().memeLevel) || 0,
+        });
+        sendJson(200, action);
+      } catch (err) {
+        const message = String(err && err.message ? err.message : err);
+        diag('ai-action 失败: ' + message);
+        sendJson(200, { ok: false, reason: 'api-failed', hint: message });
+      }
+    });
+
     route('/dsh-l2d/core.js', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       const buf = readIfExists(CORE_FILE);
@@ -751,6 +980,10 @@ export function apply(root, config = {}) {
             refreshSeconds: saved.refreshSeconds,
             eyeFollow: saved.eyeFollow,
             agentLink: saved.agentLink !== false,
+            clickMode: saved.clickMode === 'api' ? 'api' : 'random',
+            spontaneousChat: saved.spontaneousChat !== false,
+            memeStyle: saved.memeStyle !== false,
+            memeLevel: Math.min(100, Math.max(0, Number(saved.memeLevel) || 0)),
             hasApiKey: !!String(saved.apiKey || '').trim(),
           };
           sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(view), 'utf8'));
@@ -766,6 +999,10 @@ export function apply(root, config = {}) {
         refreshSeconds: st.refreshSeconds,
         eyeFollow: st.eyeFollow,
         agentLink: st.agentLink !== false,
+        clickMode: st.clickMode === 'api' ? 'api' : 'random',
+        spontaneousChat: st.spontaneousChat !== false,
+        memeStyle: st.memeStyle !== false,
+        memeLevel: Math.min(100, Math.max(0, Number(st.memeLevel) || 0)),
         hasApiKey: !!String(st.apiKey || '').trim(),
       };
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(view), 'utf8'));
@@ -819,6 +1056,10 @@ export function apply(root, config = {}) {
         refreshSeconds: st.refreshSeconds,
         eyeFollow: st.eyeFollow,
         agentLink: st.agentLink !== false,
+        clickMode: st.clickMode === 'api' ? 'api' : 'random',
+        spontaneousChat: st.spontaneousChat !== false,
+        memeStyle: st.memeStyle !== false,
+        memeLevel: Math.min(100, Math.max(0, Number(st.memeLevel) || 0)),
         hasApiKey: !!String(st.apiKey || '').trim(),
       };
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(payload), 'utf8'));
