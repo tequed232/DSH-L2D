@@ -1,4 +1,4 @@
-# DSH-L2D
+## DSH-L2D
 
 在 DeepSeek Harness（DSH）界面上叠加一个真实渲染的 Live2D 角色：官方 Cubism 5 Web SDK、
 表情 / 动作 / 四肢姿势、AI 工具调用、余额查询、角色缩放、DSH 工作区会话状态联动。
@@ -7,7 +7,7 @@
 
 ## 功能
 
-- Cubism 5 真渲染：呼吸、眨眼、表情叠加、动作组、物理输出表识别
+- Cubism 5 渲染：呼吸、眨眼、表情叠加、动作组、物理输出表识别
 - AI 工具通道：`l2d_set_expression` / `l2d_play_motion` / `l2d_set_pose` / `l2d_look_at` /
   `l2d_set_parameters` / `l2d_play_keyframes` / `l2d_reset_pose`
 - 戳一戳动作链：随机动作，或让 DeepSeek 生成表情 / 动作 / 姿势 / 视线 / 关键帧组合；连点中断未完成动作链
