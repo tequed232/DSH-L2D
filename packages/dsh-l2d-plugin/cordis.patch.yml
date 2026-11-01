@@ -1,0 +1,12 @@
+# dsh-l2d —— bundle patch
+#
+# 把本插件作为一条 loader entry 插入 profile 的配置树。
+# id 与包名保持同名（dsh-l2d），方便后续挂 settings 命名空间时直接对应。
+#
+# 安装（本地开发）：
+#   在 profile 的 package.json 中加依赖 "dsh-l2d": "link:<本目录绝对路径>"，
+#   并把 "dsh-l2d" 加入 dsh.profile.bundles，然后重启 DSH。
+- insert:
+    - id: dsh-l2d
+      name: dsh-l2d
+      config: {}

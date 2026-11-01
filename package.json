@@ -1,0 +1,25 @@
+{
+  "name": "dsh-l2d",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.5.1",
+  "description": "DSH-L2D · Live2D 角色运行时（Windows / Android，支持 LLM 与用户双路驱动）",
+  "scripts": {
+    "dev": "pnpm -F @dsh/stage-web dev",
+    "build": "pnpm -F @dsh/stage-web build",
+    "typecheck": "pnpm -F @dsh/stage-web typecheck",
+    "test:core": "node --experimental-strip-types packages/core/test/smoke.ts",
+    "adapter": "node tools/vts-adapter/index.mjs",
+    "texture": "node tools/texture-opt/index.mjs",
+    "build:renderer": "pnpm -F @dsh/renderer build",
+    "dev:server": "node tools/dev-server/index.mjs",
+    "gen:ai-tools": "node tools/gen-ai-tools/index.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "sharp": "^0.35.5"
+  }
+}

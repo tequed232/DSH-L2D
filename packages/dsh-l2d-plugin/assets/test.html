@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DSH-L2D · 渲染自检</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background:
+          repeating-conic-gradient(#2a2730 0% 25%, #211f26 0% 50%) 50% / 24px 24px;
+        font-family: system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        color: #e6e0e9;
+        overflow: hidden;
+      }
+      #stage {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: end center;
+      }
+      canvas {
+        display: block;
+      }
+      #hud {
+        position: fixed;
+        left: 12px;
+        top: 12px;
+        padding: 8px 12px;
+        border-radius: 12px;
+        background: rgba(20, 18, 24, 0.82);
+        border: 1px solid rgba(230, 224, 233, 0.14);
+        font-size: 12px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        max-width: 60vw;
+      }
+      .ok {
+        color: #9fe1cb;
+      }
+      .err {
+        color: #f2b8b5;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><canvas id="cv"></canvas></div>
+    <div id="hud">初始化…</div>
+
+    <script>
+      var hud = document.getElementById('hud');
+      function log(text, cls) {
+        hud.innerHTML = '<span class="' + (cls || '') + '">' + text + '</span>';
+        console.log('[l2d-test] ' + text);
+      }
+      window.addEventListener('error', function (e) {
+        log('运行时错误：' + e.message, 'err');
+      });
+
+      var CORE = '/dsh-l2d/core.js';
+      var RENDERER = '/dsh-l2d/renderer.js';
+      var MODEL = '/dsh-l2d/model/' + encodeURIComponent('大肥鱼.dsl2d.2048.model3.json');
+
+      function loadScript(src) {
+        return new Promise(function (resolve, reject) {
+          var s = document.createElement('script');
+          s.src = src;
+          s.async = false;
+          s.onload = function () { resolve(); };
+          s.onerror = function () { reject(new Error('加载失败: ' + src)); };
+          document.head.appendChild(s);
+        });
+      }
+
+      (async function () {
+        try {
+          log('加载 Cubism Core…');
+          await loadScript(CORE);
+          if (!window.Live2DCubismCore) throw new Error('Core 已加载但未挂载 window.Live2DCubismCore');
+
+          log('加载渲染包…');
+          await loadScript(RENDERER);
+          if (!window.DSH_L2D || !window.DSH_L2D.mount) throw new Error('渲染包未挂载 window.DSH_L2D');
+
+          var cv = document.getElementById('cv');
+          var w = 420;
+          var h = 560;
+          cv.width = w;
+          cv.height = h;
+          cv.style.width = w + 'px';
+          cv.style.height = h + 'px';
+
+          log('加载模型…');
+          var t0 = performance.now();
+          var zm = Number(new URLSearchParams(location.search).get('zoom') || '1');
+          await window.DSH_L2D.mount(cv, { modelUrl: MODEL, width: w, height: h, zoom: zm, debugRect: /debug=1/.test(location.search) });
+          var cost = Math.round(performance.now() - t0);
+          var info = window.DSH_L2D.getInfo ? window.DSH_L2D.getInfo() : null;
+          var head = '模型已就绪（' + cost + 'ms）\n分辨率 ' + w + '×' + h + '\nCore: OK';
+          var render = function () {
+            var i2 = window.DSH_L2D.getInfo ? window.DSH_L2D.getInfo() : null;
+            var lines = [head];
+            if (i2) Object.keys(i2).forEach(function (k) { lines.push(k + ': ' + i2[k]); });
+            hud.innerHTML = '<span class="ok">' + lines.join('\n') + '</span>';
+          };
+          render();
+          setInterval(render, 500);
+        } catch (err) {
+          log('失败：' + (err && err.message ? err.message : err), 'err');
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,32 @@
+# 模型文件不入库：授权禁止重新分发，且体积过大
+models/
+DeepSeek免费公皮/
+**/*.moc3
+**/*.4096/
+**/*.2048/
+
+# Cubism Core / 官方 SDK 不入库，由使用者自行下载
+vendor/
+**/live2dcubismcore.min.js
+**/live2dcubismcore.js
+
+# 依赖与产物
+node_modules/
+dist/
+*.tgz
+*.log
+.DS_Store
+Thumbs.db
+
+# 会话/记忆/本地数据
+.workbuddy/
+.sessions/
+
+# 密钥与本地环境
+.env
+.env.*
+*.local
+
+# 临时产物
+tmp/
+coverage/

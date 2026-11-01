@@ -1,0 +1,1217 @@
+/**
+ * DSH-L2D 渲染包（官方 Cubism Web SDK 版）
+ *
+ * 不再依赖第三方 pixi 封装：直接使用 SDK 自带的 Framework + 样例的 LApp* 装配，
+ * 由我们控制初始化、加载、每帧绘制与缩放，保证「整个模型完整显示」。
+ *
+ * 对外暴露 window.DSH_L2D（IIFE），插件前端按需调用。
+ */
+import { CubismFramework, Option, LogLevel } from './fw/live2dcubismframework';
+import { CubismShaderManager_WebGL } from './fw/rendering/cubismshader_webgl';
+import { LAppSubdelegate } from './app/lappsubdelegate';
+import { LAppPal } from './app/lapppal';
+import type { LAppModel } from './app/lappmodel';
+import { ParamInjector } from './app/param-injector';
+import { MotionDirector } from './app/motion-director';
+import { PoseController, POSE_IDS } from './app/pose-controller';
+import { SHADER_SOURCES } from './shaders';
+
+let sub: LAppSubdelegate | null = null;
+let model: LAppModel | null = null;
+let rafId = 0;
+let started = false;
+let lastError = '';
+let frames = 0;
+let canvasEl: HTMLCanvasElement | null = null;
+
+/** model3.json 原文，用于自省表情/动作组（不依赖 SDK 内部结构） */
+interface ModelSettingRefs {
+  Moc?: string;
+  Expressions?: Array<{ Name?: string; File?: string }>;
+  Motions?: Record<string, Array<{ File?: string }>>;
+  Physics?: string;
+}
+interface ModelSetting {
+  FileReferences?: ModelSettingRefs;
+}
+let modelSetting: ModelSetting | null = null;
+let currentZoom = 1;
+const injector = new ParamInjector();
+const motionDirector = new MotionDirector();
+const poseController = new PoseController();
+
+/** 页面里加载 Cubism Core（幂等） */
+export function loadCore(url: string): Promise<void> {
+  const w = window as unknown as { Live2DCubismCore?: unknown };
+  if (w.Live2DCubismCore) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = url;
+    s.async = false;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('core load failed: ' + url));
+    document.head.appendChild(s);
+  });
+}
+
+export interface MountOptions {
+  modelUrl: string;
+  width?: number;
+  height?: number;
+  zoom?: number;
+}
+
+function splitUrl(url: string): { dir: string; file: string } {
+  const clean = url.split('?')[0];
+  const i = clean.lastIndexOf('/');
+  return { dir: clean.slice(0, i + 1), file: clean.slice(i + 1) };
+}
+
+function bootFramework(): void {
+  if (started) return;
+  const option = new Option();
+  option.logFunction = (m: string) => console.log('[cubism]', m);
+  option.loggingLevel = LogLevel.LogLevel_Warning;
+  CubismFramework.startUp(option);
+  CubismFramework.initialize();
+  started = true;
+}
+
+/**
+ * 把内联的 shader 源码注入 CubismShader_WebGL，并短路掉它的网络加载。
+ *
+ * Cubism 5-r.5 默认会 fetch `../../Framework/Shaders/WebGL/*.vert|.frag`。
+ * 打包后这个相对路径一定取不到，而失败路径是静默的（catch 里只 console.error，
+ * 源码被填成空串），最终表现为「模型加载成功、帧循环在跑、但每帧刷
+ * Shader program is not initialized，画面全透明」。
+ *
+ * 必须在 sub.initialize() 之后调用 —— 要先有 gl 上下文，才能拿到对应的 shader 实例。
+ */
+let shaderDiag = 'not-run';
+let fitDiag = 'not-run';
+
+function installEmbeddedShaders(gl: WebGLRenderingContext | WebGL2RenderingContext): void {
+  try {
+    const mgr = CubismShaderManager_WebGL.getInstance();
+    // getShader(gl) 只做 map 查询、不会新建实例；必须先 setGlContext 注册，
+    // 否则拿到 undefined，注入会静默失效。
+    mgr.setGlContext(gl as WebGLRenderingContext);
+    const shader = mgr.getShader(gl as WebGLRenderingContext) as unknown as Record<string, unknown>;
+    if (!shader) throw new Error('getShader 返回空');
+
+    Object.assign(shader, SHADER_SOURCES);
+    // 私有方法：让 generateShaders 里的 `this.loadShaders().then(...)` 立刻 resolve
+    shader.loadShaders = () => Promise.resolve();
+    // 复位状态，使下一次 doDrawModel 用已注入的源码重新 registerShader
+    shader._isShaderLoading = false;
+    shader._isShaderLoaded = false;
+    shader._shaderSets = [];
+
+    // 诊断：手动编译一遍主顶点着色器，抓真实 info log
+    // （SDK 自己的日志格式串是 '{0}' 占位但没做替换，细节会被吞掉）
+    const vs = gl.createShader(gl.VERTEX_SHADER);
+    if (!vs) {
+      shaderDiag = 'createShader 失败';
+    } else {
+      gl.shaderSource(vs, SHADER_SOURCES._vertShaderSrc);
+      gl.compileShader(vs);
+      const ok = gl.getShaderParameter(vs, gl.COMPILE_STATUS);
+      const log = gl.getShaderInfoLog(vs);
+      shaderDiag = ok
+        ? 'vs-ok len=' + SHADER_SOURCES._vertShaderSrc.length
+        : 'vs-fail [' + String(log) + '] len=' + SHADER_SOURCES._vertShaderSrc.length;
+      gl.deleteShader(vs);
+    }
+  } catch (err) {
+    shaderDiag = 'inject-fail: ' + String(err && (err as Error).message ? (err as Error).message : err);
+    lastError = shaderDiag;
+  }
+}
+
+/**
+ * 让整个模型（含完整身体）居中落在画布内。
+ *
+ * 三个必须注意的点：
+ *  1. 本模型的 model3.json 没有 Layout 字段，setupFromLayout 不会执行，
+ *     所以 CubismModelMatrix 默认的 setHeight(2.0) 会把模型摆在视图左下象限，
+ *     必须自己居中。
+ *  2. setWidth/setHeight 是「相对累乘」（内部用构造时缓存的 _width/_height 求比例），
+ *     反复调用会越缩越小，因此这里先 loadIdentity() 再写参数。
+ *  3. 可视范围与 onUpdate 里的投影校正必须成对，否则两边各算一次比例。
+ *     约定：视图短边恒为 2 个单位（即 x/y ∈ [-1,1] 的方形单位）。
+ */
+/** 在模型坐标系下统计实际可见顶点的包围盒 */
+function computeBounds(core: {
+  getDrawableCount?: () => number;
+  getDrawableVertexCount?: (i: number) => number;
+  getDrawableVertexPositions?: (i: number) => Float32Array;
+  getDrawableOpacity?: (i: number) => number;
+}): { x0: number; y0: number; w: number; h: number } | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  const n = core.getDrawableCount ? core.getDrawableCount() : 0;
+  for (let i = 0; i < n; i++) {
+    try {
+      // 跳过完全透明的部件（未显示的尾巴/道具会把包围盒撑大）
+      if (core.getDrawableOpacity && core.getDrawableOpacity(i) <= 0.01) continue;
+      const vc = core.getDrawableVertexCount ? core.getDrawableVertexCount(i) : 0;
+      if (!vc) continue;
+      const pos = core.getDrawableVertexPositions ? core.getDrawableVertexPositions(i) : null;
+      if (!pos) continue;
+      for (let j = 0; j < vc; j++) {
+        const x = pos[j * 2];
+        const y = pos[j * 2 + 1];
+        if (!isFinite(x) || !isFinite(y)) continue;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    } catch {
+      /* 单个 drawable 异常不影响整体 */
+    }
+  }
+
+  if (!isFinite(minX) || maxX <= minX || maxY <= minY) return null;
+  return { x0: minX, y0: minY, w: maxX - minX, h: maxY - minY };
+}
+
+let lastFit = { w: 0, h: 0 };
+let refitLeft = 0;
+let lastParamSample: number | null = null;
+
+/**
+ * 让整个模型（含完整身体）居中铺满画布。
+ *
+ * 用「可见顶点包围盒」而不是 canvasWidth/Height：后者记录的是整张画布尺寸，
+ * 角色在画布里往往偏置（留白不对称），直接按画布适配会表现为人物偏到一角、
+ * 而且看着明显偏小。
+ *
+ * 投影矩阵是单位阵（见 LAppLive2DManager.onUpdate），所以这里直接按像素换算，
+ * 不依赖 multiplyByMatrix 的乘法方向，也不会和 demo 的 _viewMatrix 重复缩放。
+ */
+function fitModel(width: number, height: number, zoom: number): void {
+  if (!model) return;
+  const core = model.getModel();
+  if (!core) return;
+
+  lastFit = { w: width, h: height };
+
+  const canvasW = core.getCanvasWidth();
+  const canvasH = core.getCanvasHeight();
+  if (!canvasW || !canvasH) return;
+
+  let box = computeBounds(core as never);
+  // 包围盒异常（顶点为空、比例离谱）时回退到画布范围，避免把模型缩没
+  if (box) {
+    const ratio = box.w / box.h;
+    if (!isFinite(ratio) || ratio <= 0.02 || ratio >= 50) box = null;
+  }
+  const x0 = box ? box.x0 : 0;
+  const y0 = box ? box.y0 : 0;
+  const boxW = box ? box.w : canvasW;
+  const boxH = box ? box.h : canvasH;
+
+  // 等比：取更受限的一边，整个角色必然落在画布内
+  const pxPerUnit = Math.min(width / boxW, height / boxH) * zoom;
+  const sx = (2 * pxPerUnit) / width;
+  const sy = (2 * pxPerUnit) / height;
+
+  const matrix = model.getModelMatrix();
+  // setWidth/setHeight 是相对累乘，重复调用会越缩越小，所以每次先复位
+  matrix.loadIdentity();
+  matrix.scale(sx, sy);
+  // 顶点变换 x' = sx * x + tx；要让包围盒中心落在原点，即 tx = -sx * (x0 + w/2)
+  matrix.translate(-(x0 + boxW / 2) * sx, -(y0 + boxH / 2) * sy);
+
+  const a = matrix.getArray();
+  fitDiag =
+    'box=[' + x0.toFixed(3) + ',' + y0.toFixed(3) + ',' + boxW.toFixed(3) + ',' + boxH.toFixed(3) + ']' +
+    ' k=' + pxPerUnit.toFixed(1) +
+    ' m=[' + a[0].toFixed(3) + ',' + a[5].toFixed(3) + ',' + a[12].toFixed(3) + ',' + a[13].toFixed(3) + ']';
+}
+
+export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Promise<void> {
+  await destroy();
+
+  const width = Math.max(1, Math.round(opts.width ?? canvas.clientWidth ?? 300));
+  const height = Math.max(1, Math.round(opts.height ?? canvas.clientHeight ?? 400));
+  currentZoom = opts.zoom ?? 1;
+  canvasEl = canvas;
+
+  bootFramework();
+
+  // 先设定 CSS 尺寸：subdelegate 初始化时会按 clientWidth/Height 决定画布尺寸
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
+  canvas.width = width;
+  canvas.height = height;
+
+  sub = new LAppSubdelegate();
+  if (!sub.initialize(canvas)) throw new Error('WebGL 初始化失败');
+
+  // 必须在拿到 gl 之后、第一次 draw 之前注入 shader
+  const gl = sub.getGl();
+  if (gl) installEmbeddedShaders(gl);
+
+  canvas.width = width;
+  canvas.height = height;
+  sub.onResize();
+
+  const { dir, file } = splitUrl(opts.modelUrl);
+  const mgr = sub.getLive2DManager();
+  model = mgr.loadModelUrl(dir, file);
+
+  // 拉一份 model3.json：表情名与动作组清单从这里来，供 getCapabilities() 自省
+  modelSetting = null;
+  try {
+    const res = await fetch(opts.modelUrl, { cache: 'no-store' });
+    if (res.ok) modelSetting = (await res.json()) as ModelSetting;
+  } catch {
+    /* 拿不到就不提供自省，不影响渲染 */
+  }
+
+  await waitForModel(15000);
+  // 首次动作调用必须等预加载完成，否则一定命中「缓存尚未写入」的竞态。
+  await model.waitForAllMotions(12000);
+
+  // 唯一正确的外部写入窗口：saveParameters 之后、物理/表情更新之前。
+  // 兼容旧 setPreUpdate 名称，但实际已不在 sub.update() 之前执行。
+  // 两个注入相位：
+  //   pre  = 物理输入（Angle/Position），必须在物理更新前
+  //   post = 姿势/关键帧 set 值，必须在 PoseUpdater 后，否则被覆盖
+  model.setPreLateUpdateHook((core) => {
+    phaseDiag.pre++;
+    if (preUpdateHook) preUpdateHook();
+    injector.apply(core, 'pre');
+  });
+  model.setPostLateUpdateHook((core, deltaTimeSeconds) => {
+    phaseDiag.post++;
+    kfTick(performance.now());
+    if (!poseOwnedByMotion) {
+      poseController.update(core, deltaTimeSeconds, injector);
+    }
+    injector.apply(core, 'post');
+  });
+
+  // 从模型自己的 physics3.json 读取输出表，禁止把无效写入误报为成功。
+  const physicsFile = modelSetting?.FileReferences?.Physics;
+  if (physicsFile) {
+    const { dir } = splitUrl(opts.modelUrl);
+    void fetch(dir + physicsFile, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((physics) => {
+        const outputs = new Set<string>();
+        for (const setting of physics?.PhysicsSettings || []) {
+          for (const output of setting?.Output || []) {
+            const id = output?.Destination?.Id;
+            if (typeof id === 'string') outputs.add(id);
+          }
+        }
+        if (outputs.size) injector.setPhysicsOutputs(outputs);
+      })
+      .catch(() => {
+        /* 保留内置兜底规则 */
+      });
+  }
+
+  fitModel(width, height, currentZoom);
+  refitLeft = 6;
+  startLoop();
+}
+
+function waitForModel(timeoutMs: number): Promise<void> {
+  const t0 = performance.now();
+  return new Promise((resolve, reject) => {
+    const tick = () => {
+      if (model && model.getModel()) return resolve();
+      if (performance.now() - t0 > timeoutMs) return reject(new Error('模型加载超时'));
+      setTimeout(tick, 60);
+    };
+    tick();
+  });
+}
+
+let lastTickAt = 0;
+let driverTimer = 0;
+
+// ---------------------------------------------------------------- 帧率控制
+// 目标是“看得见的稳定 60fps”。只有失焦/页面隐藏才降载，前台不主动降帧，
+// 避免出现呼吸、眨眼、物理被 15/10fps 拉慢的观感；这也是用户明确要求的。
+let targetFps = 60;
+let paused = false;
+let pausedByVisibility = false;
+let lastActiveAt = typeof performance !== 'undefined' ? performance.now() : 0;
+
+/**
+ * 兼容原 API 的外部写入钩子。
+ * 实际执行点位于 LAppModel 的 saveParameters 之后、onLateUpdate 之前；
+ * 名称保留是为了不破坏 overlay 与既有调用方。
+ */
+let preUpdateHook: (() => void) | null = null;
+
+export function setPreUpdate(fn: (() => void) | null): void {
+  preUpdateHook = fn;
+}
+
+/** 动作诊断，不参与渲染决策。 */
+let motionDiag = { group: 'none', startedAt: 0, playing: false };
+/** 动作播放期间姿势层让位；Loop 动作靠定时器交还。 */
+let poseOwnedByMotion = false;
+/** 注入相位诊断：确认 pre/post 钩子都在跑。 */
+const phaseDiag = { pre: 0, post: 0 };
+let windowFocused = true;
+
+/** 标记"有交互"：拖拽、点击、AI 指令、动作播放都会调它，确保前台满帧 */
+export function markActive(): void {
+  lastActiveAt = performance.now();
+  if (!paused) targetFps = 60;
+}
+
+/** 当前应使用的帧率：前台恒定 60；失焦降载，隐藏由可见性守卫暂停 */
+function computeFps(_now: number): number {
+  if (kfActive) return 60;
+  if (!windowFocused) return 15;
+  return 60;
+}
+
+function tick(): void {
+  if (paused) return;
+  const now = performance.now();
+  targetFps = computeFps(now);
+  // 帧率上限：防重入 + 控帧合并在一个判断里
+  if (now - lastTickAt < 1000 / targetFps - 1) return;
+  lastTickAt = now;
+  if (!sub) return;
+
+  // 推进帧时间。Cubism 的动作、物理、呼吸、眨眼全部依赖 LAppPal.getDeltaTime()；
+  // 官方 demo 在启动器的每帧循环里调用 updateTime()，我们自己接管循环时也必须调，
+  // 否则 deltaTime 恒为 0 —— 模型画得出来，但永远静止不动。
+  LAppPal.updateTime();
+  // 长时间挂起（切标签页、休眠）后恢复时步长会很大，会让动作瞬移、物理爆炸，做一次钳制
+  const dt = LAppPal.getDeltaTime();
+  if (!(dt > 0) || dt > 0.1) LAppPal.deltaTime = 0.016;
+
+  try {
+    sub.update();
+    frames++;
+    // 首帧的部件可见性/不透明度可能还没稳定，包围盒会偏。跑几帧后重排一次。
+    if (refitLeft > 0) {
+      refitLeft--;
+      if (refitLeft === 0 && lastFit.w > 0) fitModel(lastFit.w, lastFit.h, currentZoom);
+    }
+  } catch (err) {
+    if (!lastError) lastError = err && (err as Error).message ? (err as Error).message : String(err);
+  }
+}
+
+function startLoop(): void {
+  if (rafId) return;
+
+  const rafLoop = () => {
+    rafId = requestAnimationFrame(rafLoop);
+    tick();
+  };
+  rafId = requestAnimationFrame(rafLoop);
+
+  // rAF 在后台标签页、被遮挡窗口、部分内嵌浏览器里会被节流甚至完全暂停。
+  // 这种情况下模型解析成功却一帧都画不出来（表现为画布全透明）。
+  // 兜底：超过 250ms 没推进就用定时器补帧；rAF 恢复后自动让位。
+  if (!driverTimer) {
+    driverTimer = window.setInterval(() => {
+      if (!paused && performance.now() - lastTickAt > 250) tick();
+    }, 66);
+  }
+
+  installSchedulingGuards();
+}
+
+/**
+ * 调度守卫：页面隐藏就停、窗口失焦就降频。
+ *
+ * 不做这件事的后果很实在：
+ *   - 用户最小化窗口后角色还在满帧渲染，笔记本风扇狂转
+ *   - DSH 里开着角色去用别的软件，GPU 一直被占着
+ */
+function installSchedulingGuards(): void {
+  if ((window as unknown as { __DSH_L2D_GUARD__?: boolean }).__DSH_L2D_GUARD__) return;
+  (window as unknown as { __DSH_L2D_GUARD__?: boolean }).__DSH_L2D_GUARD__ = true;
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      pausedByVisibility = true;
+      paused = true;
+    } else if (pausedByVisibility) {
+      pausedByVisibility = false;
+      paused = false;
+      lastTickAt = 0; // 立即补一帧，避免恢复时画面停住
+    }
+  });
+
+  window.addEventListener('blur', () => {
+    windowFocused = false;
+  });
+  window.addEventListener('focus', () => {
+    windowFocused = true;
+    markActive();
+  });
+  // 任何指针活动都算交互，避免「只是在角色上移一下」就掉到低帧
+  window.addEventListener('pointerdown', markActive, { passive: true });
+  window.addEventListener('wheel', markActive, { passive: true });
+}
+
+export function layout(width: number, height: number, zoom = 1): void {
+  if (!sub || !canvasEl) return;
+  canvasEl.width = Math.round(width);
+  canvasEl.height = Math.round(height);
+  canvasEl.style.width = width + 'px';
+  canvasEl.style.height = height + 'px';
+  currentZoom = zoom;
+  sub.onResize();
+  fitModel(width, height, zoom);
+}
+
+// ---------------------------------------------------------------- 关键帧播放器
+//
+// 让 AI 自己「编排动作」的入口：给一组 (参数, 时间→值) 轨道，运行时线性插值写参数。
+//
+// 为什么要有硬限制（轨道数 / 关键帧数 / 时长 / 值域）：
+//   AI 很容易一次吐出几百条轨道，或者给出 1e6 这种值。没有护栏的话，
+//   轻则模型姿势扭曲，重则每帧写上百个参数把帧率拖垮。
+//   这里统一钳到参数自身范围内，并限制规模，保证「编错了也不会炸」。
+
+export interface KeyframeTrack {
+  /** 参数名，必须真实存在 */
+  param: string;
+  /** [[时间ms, 值], ...]，按时间递增 */
+  keys: Array<[number, number]>;
+}
+
+export interface KeyframesOptions {
+  /** 总时长 ms；缺省取所有轨道最大时间 */
+  duration?: number;
+  loop?: boolean;
+}
+
+interface KfTrackRuntime {
+  handle: { getString: () => string };
+  min: number;
+  max: number;
+  keys: Array<[number, number]>;
+}
+
+let kfTracks: KfTrackRuntime[] = [];
+let kfStart = 0;
+let kfDuration = 0;
+let kfLoop = false;
+let kfActive = false;
+
+const KF_MAX_TRACKS = 8;
+const KF_MAX_KEYS = 32;
+const KF_MAX_MS = 10000;
+
+function sampleTrack(keys: Array<[number, number]>, t: number): number {
+  if (!keys.length) return 0;
+  if (t <= keys[0][0]) return keys[0][1];
+  const last = keys[keys.length - 1];
+  if (t >= last[0]) return last[1];
+  for (let i = 1; i < keys.length; i++) {
+    const [t1, v1] = keys[i];
+    if (t <= t1) {
+      const [t0, v0] = keys[i - 1];
+      const span = t1 - t0;
+      if (span <= 0) return v1;
+      return v0 + ((v1 - v0) * (t - t0)) / span;
+    }
+  }
+  return last[1];
+}
+
+/**
+ * 播放一段关键帧动画。
+ * @returns 实际生效的轨道数；0 表示没有任何合法轨道（参数全不存在或数据非法）
+ */
+export function playKeyframes(tracks: KeyframeTrack[], opts: KeyframesOptions = {}): number {
+  if (!model) return 0;
+  const core = model.getModel();
+  if (!core) return 0;
+
+  const accepted: KfTrackRuntime[] = [];
+  let maxT = 0;
+
+  for (const tr of (tracks || []).slice(0, KF_MAX_TRACKS)) {
+    if (!tr || !tr.param || !Array.isArray(tr.keys) || tr.keys.length < 2) continue;
+    try {
+      const handle = CubismFramework.getIdManager().getId(tr.param);
+      const idx = core.getParameterIndex(handle);
+      if (idx < 0 || injector.isPhysicsOutput(tr.param)) continue; // 不存在或物理输出直接丢弃
+
+      const min = core.getParameterMinimumValue(idx);
+      const max = core.getParameterMaximumValue(idx);
+
+      const keys: Array<[number, number]> = tr.keys
+        .slice(0, KF_MAX_KEYS)
+        .map((k) => {
+          const t = Math.max(0, Math.min(KF_MAX_MS, Number(k[0]) || 0));
+          const v = Math.max(min, Math.min(max, Number(k[1]) || 0));
+          return [t, v] as [number, number];
+        })
+        .sort((a, b) => a[0] - b[0]);
+
+      maxT = Math.max(maxT, keys[keys.length - 1][0]);
+      accepted.push({ handle, min, max, keys });
+    } catch {
+      /* 单条轨道异常忽略 */
+    }
+  }
+
+  if (!accepted.length) return 0;
+
+  kfTracks = accepted;
+  kfDuration = Math.max(16, Math.min(KF_MAX_MS, Number(opts.duration) || maxT));
+  kfLoop = !!opts.loop;
+  kfStart = performance.now();
+  kfActive = true;
+  markActive();
+  return accepted.length;
+}
+
+export function stopKeyframes(): void {
+  kfActive = false;
+  kfTracks = [];
+}
+
+function kfTick(now: number): void {
+  if (!kfActive) return;
+  const core = model?.getModel();
+  if (!core) {
+    kfActive = false;
+    return;
+  }
+
+  const elapsed = now - kfStart;
+  const t = kfLoop ? elapsed % kfDuration : Math.min(elapsed, kfDuration);
+
+  for (const tr of kfTracks) {
+    let v = sampleTrack(tr.keys, t);
+    v = Math.max(tr.min, Math.min(tr.max, v));
+    try {
+      injector.set(core, tr.handle.getString(), v, 1);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (!kfLoop && elapsed >= kfDuration) kfActive = false;
+}
+
+// ---------------------------------------------------------------- 控制接口
+//
+// 重要：Cubism 5 的 setParameterValueById(id) 要求 CubismIdHandle，内部会调 id.getString()。
+// 直接传字符串会抛异常 —— 旧实现把异常吞掉了，表现为「调用成功但模型毫无反应」。
+// 这里统一走 getIdManager().getId()，并且先用 getParameterIndex 校验参数是否真的存在，
+// 避免把值写进一个自动新建的空 ID 上。
+
+function handleOf(id: string): ReturnType<ReturnType<typeof CubismFramework.getIdManager>['getId']> | null {
+  try {
+    return CubismFramework.getIdManager().getId(id);
+  } catch {
+    return null;
+  }
+}
+
+const clamp = (v: number): number => (v < -1 ? -1 : v > 1 ? 1 : v);
+
+/**
+ * 设置单个参数并逐帧保持；参数不存在或是物理输出时返回 false。
+ * 写入会在下一个正确的帧相位生效，而不是在这里直接改 Core。
+ */
+export function setParameter(id: string, value: number, weight = 1): boolean {
+  const core = model?.getModel();
+  if (!core) return false;
+  return injector.set(core, id, Number(value), weight);
+}
+
+export interface ApplyReport {
+  ok: string[];
+  failed: string[];
+}
+
+/** 批量设置参数（AI 一次返回多个参数时用） */
+export function setParameters(values: Record<string, number>, weight = 1): ApplyReport {
+  const ok: string[] = [];
+  const failed: string[] = [];
+  const src = values || {};
+  for (const key of Object.keys(src)) {
+    if (setParameter(key, src[key], weight)) ok.push(key);
+    else failed.push(key);
+  }
+  return { ok, failed };
+}
+
+/** 视线/头部朝向，x、y ∈ [-1, 1]，走模型自带的拖动逻辑（Angle/EyeBall 一起动） */
+export function lookAt(x: number, y: number): void {
+  markActive();
+  if (!model) return;
+  const core = model.getModel();
+  if (!core) return;
+
+  const px = clamp(Number(x) || 0);
+  const py = clamp(Number(y) || 0);
+
+  // 以默认值为中点、按参数自身范围映射归一化值
+  const writeNormalized = (paramId: string, normalized: number): boolean => {
+    try {
+      const handle = CubismFramework.getIdManager().getId(paramId);
+      const idx = core.getParameterIndex(handle);
+      if (idx < 0) return false;
+      const min = core.getParameterMinimumValue(idx);
+      const max = core.getParameterMaximumValue(idx);
+      const def = core.getParameterDefaultValue(idx);
+      const value =
+        normalized >= 0 ? def + (max - def) * normalized : def + (def - min) * normalized;
+      return injector.set(core, paramId, Math.max(min, Math.min(max, value)), 1);
+    } catch {
+      return false;
+    }
+  };
+
+  // 必须写物理输入参数：这个模型把 ParamAngleX/Y 当作物理「输出」，
+  // 直接写会被每帧的物理演算覆盖（表现为调了没反应）。
+  // AngleX / AngleY 是安全输入，且会被物理学传导到头发、肩、四肢。
+  const okX = writeNormalized('AngleX', px);
+  const okY = writeNormalized('AngleY', py);
+
+  if (!okX && !okY) {
+    try {
+      model.setDragging(px, py);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** 播放指定动作组；组或下标不存在时返回 false */
+export function playMotion(group: string, index = 0, priority = 2): boolean {
+  if (!model) return false;
+  markActive();
+  try {
+    const groups = modelSetting?.FileReferences?.Motions || {};
+    const list = groups[group];
+    if (!Array.isArray(list) || list.length === 0) return false;
+    const no = Math.max(0, Math.min(list.length - 1, Math.floor(Number(index) || 0)));
+    model.startMotion(group, no, priority);
+    motionDiag = { group: group + '_' + no, startedAt: performance.now(), playing: true };
+    motionDirector.commit(group);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface PlayMotionOptions {
+  index?: number;
+  /** 显式打断时用 3；默认 2（Normal），避免动作之间互相硬抢 */
+  priority?: number;
+  interrupt?: boolean;
+  awaitFinish?: boolean;
+}
+
+export interface PlayMotionResult {
+  status: 'ok' | 'skipped' | 'conflict' | 'failed';
+  reason?: string;
+  slot?: string;
+  dir?: 'open' | 'close';
+  group?: string;
+  handle?: unknown;
+}
+
+/** Loop 动作会在 duration 处回卷；终态使用动作曲线实测终点，而不是运行时取值。 */
+function terminalPoseForMotion(group: string): SetPoseInput | null {
+  switch (group) {
+    case '竖手指打开':
+      return { right: 'finger' };
+    case '竖手指关闭':
+      return { right: 'rest' };
+    case '狗尾巴草打开':
+      return { right: 'grass' };
+    case '狗尾巴草关闭':
+      return { right: 'rest' };
+    case '抚胸手打开':
+      return { left: 'chest' };
+    case '抚胸手关闭':
+      return { left: 'rest' };
+    default:
+      return null;
+  }
+}
+
+/**
+ * 结构化动作入口：先过成对状态机与冲突仲裁，再等预加载完成后启动。
+ * AI 可以根据返回的 skipped/conflict 原因决定重试或换动作。
+ */
+export async function playMotionAsync(
+  group: string,
+  opts: PlayMotionOptions = {}
+): Promise<PlayMotionResult> {
+  const decision = motionDirector.decide(group);
+  if (decision.status === 'skipped' || decision.status === 'conflict') {
+    return {
+      status: decision.status,
+      reason: decision.reason,
+      slot: decision.slot,
+      dir: decision.dir,
+      group: decision.targetGroup,
+    };
+  }
+
+  if (!model || !model.getModel()) return { status: 'failed', reason: 'not-ready' };
+
+  const target = decision.status === 'ok' ? decision.targetGroup || group : group;
+  const groups = modelSetting?.FileReferences?.Motions || {};
+  const list = groups[target];
+  if (!Array.isArray(list) || list.length === 0) {
+    return { status: 'failed', reason: 'unknown-motion-group: ' + target, group: target };
+  }
+  const no = Math.max(0, Math.min(list.length - 1, Math.floor(Number(opts.index) || 0)));
+  const priority = opts.interrupt || opts.priority === 3 ? 3 : opts.priority || 2;
+
+  markActive();
+  const core = model.getModel();
+  if (!core) return { status: 'failed', reason: 'not-ready' };
+
+  // 动作独占标志：动作播放期间姿势层完全不写，避免互抢。
+  // Loop 动作不会触发结束回调，所以用动作时长定时交还。
+  injector.clear(POSE_IDS);
+  poseOwnedByMotion = true;
+  let finished: Promise<void> | null = null;
+  let finishResolve: (() => void) | null = null;
+  if (opts.awaitFinish) {
+    finished = new Promise<void>((resolve) => {
+      finishResolve = resolve;
+    });
+  }
+  let motionStopTimer = 0;
+  const adoptAfterMotion = (): void => {
+    if (motionStopTimer) {
+      window.clearTimeout(motionStopTimer);
+      motionStopTimer = 0;
+    }
+    try {
+      model.stopMotions();
+    } catch {
+      /* ignore */
+    }
+    poseOwnedByMotion = false;
+    const terminal = terminalPoseForMotion(target);
+    if (terminal) poseController.adoptPreset(terminal);
+    else poseController.adopt(injector.snapshot(core, POSE_IDS));
+    if (finishResolve) finishResolve();
+  };
+  const motionDuration = model.getMotionDuration(target, no) || 1.25;
+  // Loop 动作会在 duration 处瞬间回到起点；必须在回卷前一点取样收养，
+  // 否则读到的是下一圈开头的默认姿势。
+  motionStopTimer = window.setTimeout(
+    adoptAfterMotion,
+    Math.max(250, motionDuration * 1000 - 120)
+  );
+  const handle = model.startMotion(target, no, priority);
+  if (handle === -1) {
+    if (motionStopTimer) {
+      window.clearTimeout(motionStopTimer);
+      motionStopTimer = 0;
+    }
+    poseOwnedByMotion = false;
+    if (finishResolve) finishResolve();
+    return { status: 'failed', reason: 'start-rejected', group: target };
+  }
+  motionDirector.commit(target);
+  motionDiag = { group: target + '_' + no, startedAt: performance.now(), playing: true };
+
+  if (finished) await finished;
+  return {
+    status: 'ok',
+    slot: decision.slot,
+    dir: decision.dir,
+    group: target,
+    handle,
+  };
+}
+
+/** 当前成对动作槽位状态（open/closed），用于诊断与调试面板按钮。 */
+export function getMotionSlots(): Record<string, string> {
+  return motionDirector.slotStates();
+}
+
+/** 设置表情；表情不存在时返回 false */
+export function setExpression(name: string): boolean {
+  if (!model) return false;
+  markActive();
+  try {
+    const list = modelSetting?.FileReferences?.Expressions || [];
+    if (!list.some((e) => e && e.Name === name)) return false;
+    model.setExpression(name);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 清除所有外部姿势/关键帧，交还模型自身的动作与物理。 */
+export function resetPose(): number {
+  const core = model?.getModel();
+  if (!core) return 0;
+  stopKeyframes();
+  injector.clear();
+  injector.unlock();
+  poseController.resetToRest();
+  markActive();
+  return core.getParameterCount();
+}
+
+export interface SetPoseInput {
+  right?: 'rest' | 'finger' | 'grass' | 'chest';
+  left?: 'rest' | 'finger' | 'grass' | 'chest';
+}
+
+export interface SetPoseResult {
+  ok: boolean;
+  reason?: string;
+  pose?: { right: string; left: string; active: boolean };
+}
+
+/**
+ * 四肢姿势入口：枚举值，不暴露裸参数，避免 AI 把手臂拧畸形。
+ * 动作播放期间拒绝，避免和动作互抢同一批手臂参数。
+ */
+export function setPose(req: SetPoseInput): SetPoseResult {
+  const core = model?.getModel();
+  if (!core) return { ok: false, reason: 'not-ready' };
+  if (isUserMotionPlaying()) return { ok: false, reason: 'motion-playing' };
+
+  const right = req?.right;
+  const left = req?.left;
+  const allowed = ['rest', 'finger', 'grass', 'chest'];
+  if ((right && allowed.indexOf(right) < 0) || (left && allowed.indexOf(left) < 0)) {
+    return { ok: false, reason: 'invalid-pose' };
+  }
+  poseController.setPose({ right, left });
+  markActive();
+  return { ok: true, pose: poseController.describe() };
+}
+
+export function getPose(): { right: string; left: string; active: boolean } {
+  return poseController.describe();
+}
+
+function isUserMotionPlaying(): boolean {
+  try {
+    const mm = (model as unknown as {
+      _motionManager?: {
+        isFinished?: () => boolean;
+        getCurrentPriority?: () => number;
+      };
+    })?._motionManager;
+    if (!mm?.isFinished) return false;
+    return !mm.isFinished() && (mm.getCurrentPriority ? mm.getCurrentPriority() >= 2 : false);
+  } catch {
+    return false;
+  }
+}
+
+/** 调试/校准用：读取当前参数值（不对外给 AI，避免误当姿势入口） */
+export function readParameters(ids: string[]): Record<string, number> {
+  const core = model?.getModel();
+  if (!core || !Array.isArray(ids)) return {};
+  return injector.snapshot(core, ids);
+}
+
+export interface ParamMeta {
+  id: string;
+  min: number;
+  max: number;
+  def: number;
+}
+
+export interface Capabilities {
+  model: string;
+  expressions: string[];
+  motionGroups: string[];
+  params: ParamMeta[];
+}
+
+/**
+ * 运行时自省：返回这个模型真正支持的表情、动作组和参数范围。
+ * 给 AI 用的工具清单应该基于它生成，而不是写死 —— 换模型后自动适配。
+ */
+export function getCapabilities(): Capabilities | null {
+  if (!model) return null;
+  const core = model.getModel();
+  if (!core) return null;
+
+  const expressions = (modelSetting?.FileReferences?.Expressions || [])
+    .map((e) => (e && e.Name ? e.Name : ''))
+    .filter((s) => !!s);
+
+  const motionGroups = Object.keys(modelSetting?.FileReferences?.Motions || {});
+
+  const params: ParamMeta[] = [];
+  try {
+    const count = core.getParameterCount();
+    for (let i = 0; i < count; i++) {
+      const id = core.getParameterId(i);
+      params.push({
+        id: id.getString(),
+        min: +core.getParameterMinimumValue(i).toFixed(3),
+        max: +core.getParameterMaximumValue(i).toFixed(3),
+        def: +core.getParameterDefaultValue(i).toFixed(3),
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return {
+    model: modelSetting?.FileReferences?.Moc || '',
+    expressions,
+    motionGroups,
+    params,
+  };
+}
+
+export async function destroy(): Promise<void> {
+  if (rafId) {
+    cancelAnimationFrame(rafId);
+    rafId = 0;
+  }
+  if (driverTimer) {
+    clearInterval(driverTimer);
+    driverTimer = 0;
+  }
+  lastTickAt = 0;
+  try {
+    model?.setPreLateUpdateHook(null);
+    model?.setPostLateUpdateHook(null);
+  } catch {
+    /* ignore */
+  }
+  injector.clear();
+  injector.unlock();
+  injector.resetStats();
+  motionDirector.reset();
+  poseOwnedByMotion = false;
+  poseController.resetToRest();
+  kfActive = false;
+  kfTracks = [];
+  try {
+    model?.release?.();
+  } catch {
+    /* ignore */
+  }
+  model = null;
+  try {
+    sub?.release();
+  } catch {
+    /* ignore */
+  }
+  sub = null;
+  canvasEl = null;
+  frames = 0;
+  lastError = '';
+}
+
+export function isReady(): boolean {
+  return !!model && !!model.getModel();
+}
+
+export function getInfo(): Record<string, number | string> | null {
+  if (!model) return null;
+  const core = model.getModel();
+  if (!core) return null;
+
+  // GL 层状态：贴图尺寸上限、错误码、实际像素缓冲
+  let glErr = 'n/a';
+  let maxTex = 0;
+  try {
+    const gl = sub?.getGl();
+    if (gl) {
+      maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
+      glErr = String(gl.getError());
+    }
+  } catch {
+    glErr = 'query-failed';
+  }
+
+  // 参数级诊断：Cubism 5 的 getParameterValueById 需要 CubismIdHandle，传字符串会抛错
+  let params = 'n/a';
+  let utime = -1;
+  try {
+    const anyM = model as unknown as { _userTimeSeconds?: number };
+    utime = anyM._userTimeSeconds ?? -1;
+
+    const idMgr = CubismFramework.getIdManager();
+    const ids = [
+      'AngleX',
+      'AngleZ',
+      'PositionX',
+      'ParamAngleX',
+      'ParamBodyAngleZ',
+      'SideHairRX1',
+      'ParamBreath',
+      'ParamEyeLOpen',
+    ];
+    const parts: string[] = [];
+    for (const name of ids) {
+      try {
+        const handle = idMgr.getId(name);
+        parts.push(name + '=' + core.getParameterValueById(handle).toFixed(3));
+      } catch {
+        parts.push(name + '=?');
+      }
+    }
+    // 判定是否真的在动：与上次采样比较
+    try {
+      const h = idMgr.getId('AngleX');
+      const now = core.getParameterValueById(h);
+      if (lastParamSample !== null) {
+        parts.push('chg=' + (Math.abs(now - lastParamSample) > 1e-5 ? 'yes' : 'no'));
+      }
+      lastParamSample = now;
+    } catch {
+      /* ignore */
+    }
+    try {
+      const mm = (model as unknown as { _motionManager?: { isFinished?: () => boolean } })
+        ._motionManager;
+      parts.push('finished=' + (mm && mm.isFinished ? String(mm.isFinished()) : '?'));
+    } catch {
+      parts.push('finished=?');
+    }
+    params = parts.join(' ');
+  } catch {
+    params = 'err';
+  }
+
+  let mxNow = 'n/a';
+  try {
+    const a = model.getModelMatrix().getArray();
+    mxNow = [a[0], a[5], a[12], a[13]].map((v) => v.toFixed(3)).join(',');
+  } catch {
+    mxNow = 'err';
+  }
+
+  let motionPlaying = motionDiag.playing;
+  try {
+    const mm = (model as unknown as { _motionManager?: { isFinished?: () => boolean } })
+      ._motionManager;
+    if (mm?.isFinished) motionPlaying = !mm.isFinished();
+  } catch {
+    /* 保留最近一次动作状态 */
+  }
+  motionDiag.playing = motionPlaying;
+  const motionElapsed = motionDiag.startedAt
+    ? ((performance.now() - motionDiag.startedAt) / 1000).toFixed(2)
+    : '0.00';
+
+  const inj = injector.diagnostics();
+  const slotText = Object.entries(motionDirector.slotStates())
+    .map(([slot, state]) => slot + ':' + state)
+    .join(',');
+  return {
+    frames,
+    mxNow,
+    phase: 'pre=' + phaseDiag.pre + ' post=' + phaseDiag.post,
+    inj:
+      'calls=' +
+      inj.calls +
+      ' writes=' +
+      inj.writes +
+      ' skip=' +
+      inj.skipped +
+      ' sticky=' +
+      inj.sticky +
+      ' locked=' +
+      inj.locked +
+      ' modes=' +
+      inj.modes.set +
+      '/' +
+      inj.modes.add +
+      ' pw=' +
+      inj.phaseWrites.pre +
+      '/' +
+      inj.phaseWrites.post +
+      ' seen=' +
+      inj.applySeen.pre +
+      '/' +
+      inj.applySeen.post +
+      ' ne=' +
+      inj.applySeen.preNonEmpty +
+      '/' +
+      inj.applySeen.postNonEmpty +
+      ' dbg=' +
+      inj.debug.modeMismatch +
+      ':' +
+      inj.debug.lastPhase +
+      ':' +
+      inj.debug.lastMode +
+      ':' +
+      inj.debug.firstId,
+    motion:
+      'group=' +
+      motionDiag.group +
+      ' playing=' +
+      (motionPlaying ? 1 : 0) +
+      ' t=' +
+      motionElapsed +
+      ' slots=' +
+      (slotText || 'none'),
+    lastError: lastError || 'none',
+    shader: shaderDiag,
+    fit: fitDiag,
+    utime: +utime.toFixed(2),
+    pv: params,
+    dt: +LAppPal.getDeltaTime().toFixed(4),
+    canvasW: +core.getCanvasWidth().toFixed(4),
+    canvasH: +core.getCanvasHeight().toFixed(4),
+    drawables: core.getDrawableCount ? core.getDrawableCount() : 0,
+    params: core.getParameterCount ? core.getParameterCount() : 0,
+    zoom: currentZoom,
+    pxW: canvasEl ? canvasEl.width : 0,
+    pxH: canvasEl ? canvasEl.height : 0,
+    maxTex,
+    glErr,
+  };
+}
+
+const api = {
+  loadCore,
+  mount,
+  layout,
+  // 控制
+  setParameter,
+  setParameters,
+  lookAt,
+  playMotion,
+  playMotionAsync,
+  getMotionSlots,
+  setPose,
+  getPose,
+  readParameters,
+  setExpression,
+  resetPose,
+  playKeyframes,
+  stopKeyframes,
+  markActive,
+  setPreUpdate,
+  getCapabilities,
+  // 生命周期
+  destroy,
+  isReady,
+  getInfo,
+};
+export default api;
+
+(window as unknown as { DSH_L2D?: typeof api }).DSH_L2D = api;

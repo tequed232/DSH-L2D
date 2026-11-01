@@ -1,0 +1,34 @@
+{
+  "name": "dsh-l2d",
+  "version": "0.1.0-preview",
+  "description": "DSH-L2D：在 DeepSeek Harness 界面之上叠加透明 Live2D 角色（官方 Cubism 5 渲染，支持拖拽惯性物理与 AI 工具调用）",
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib",
+    "assets",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "live2d",
+    "avatar"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

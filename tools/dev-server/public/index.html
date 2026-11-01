@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DSH-L2D 渲染调试台</title>
+    <style>
+      :root {
+        --bg: #141318;
+        --surface: #1d1b22;
+        --surface-2: #26232d;
+        --on: #e6e0e9;
+        --on-var: #cac4d0;
+        --primary: #d0bcff;
+        --on-primary: #381e72;
+        --outline: rgba(230, 224, 233, 0.16);
+        --ok: #8fd9a8;
+        --warn: #f2cc60;
+        --err: #f28b82;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        display: flex;
+        background: var(--bg);
+        color: var(--on);
+        font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+
+      /* 舞台：棋盘格背景，透明区域一眼可见 */
+      #stage {
+        flex: 1;
+        display: grid;
+        place-items: center;
+        position: relative;
+        overflow: hidden;
+        background-color: #1a1820;
+        background-image:
+          linear-gradient(45deg, #232029 25%, transparent 25%),
+          linear-gradient(-45deg, #232029 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #232029 75%),
+          linear-gradient(-45deg, transparent 75%, #232029 75%);
+        background-size: 20px 20px;
+        background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+      }
+      /* 画布边界参考线 */
+      #frame {
+        position: relative;
+        outline: 1px dashed rgba(208, 188, 255, 0.35);
+        outline-offset: 0;
+      }
+      #cv { display: block; }
+
+      /* 右侧面板 */
+      #panel {
+        width: 320px;
+        flex: 0 0 320px;
+        background: var(--surface);
+        border-left: 1px solid var(--outline);
+        padding: 18px 18px 24px;
+        overflow-y: auto;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+      }
+      .sub { margin: 0 0 18px; font-size: 11.5px; color: var(--on-var); }
+      h2 {
+        margin: 18px 0 8px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        color: var(--primary);
+      }
+      .row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+      .row > label { font-size: 11.5px; color: var(--on-var); }
+      select, input[type="number"] {
+        width: 100%;
+        padding: 7px 9px;
+        border-radius: 10px;
+        border: 1px solid var(--outline);
+        background: var(--surface-2);
+        color: var(--on);
+        font-size: 12px;
+        outline: none;
+      }
+      select:focus, input:focus { border-color: var(--primary); }
+      input[type="range"] { width: 100%; accent-color: var(--primary); }
+      .inline { display: flex; align-items: center; gap: 10px; }
+      .inline b { min-width: 52px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--primary); }
+
+      /* 单个 XY 轴控件：拖圆点同时给水平和垂直，避免两个滑块来回调 */
+      .xy-pad {
+        position: relative;
+        width: 100%;
+        max-width: 170px;
+        aspect-ratio: 1 / 1;
+        border-radius: 16px;
+        background: radial-gradient(circle at 50% 50%, #272430 0%, #16151a 100%);
+        border: 1px solid var(--outline);
+        cursor: crosshair;
+        touch-action: none;
+        overflow: hidden;
+        margin-bottom: 6px;
+      }
+      .xy-pad::before,
+      .xy-pad::after {
+        content: '';
+        position: absolute;
+        background: rgba(230, 224, 233, 0.1);
+        pointer-events: none;
+      }
+      .xy-pad::before { left: 50%; top: 0; bottom: 0; width: 1px; }
+      .xy-pad::after { top: 50%; left: 0; right: 0; height: 1px; }
+      .xy-dot {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 18px;
+        height: 18px;
+        margin: -9px 0 0 -9px;
+        border-radius: 50%;
+        background: var(--primary);
+        box-shadow: 0 0 14px rgba(208, 188, 255, 0.55);
+        pointer-events: none;
+      }
+      .xy-val {
+        font: 11px/1.5 ui-monospace, Consolas, monospace;
+        color: #938f99;
+        font-variant-numeric: tabular-nums;
+      }
+
+      button {
+        padding: 8px 14px;
+        border: none;
+        border-radius: 999px;
+        font-size: 12px;
+        cursor: pointer;
+        background: var(--surface-2);
+        color: var(--on);
+        transition: background 0.15s;
+      }
+      button:hover { background: #322e3b; }
+      button.primary { background: var(--primary); color: var(--on-primary); font-weight: 500; }
+      button.primary:hover { filter: brightness(1.08); }
+      .btns { display: flex; gap: 8px; margin-top: 12px; }
+
+      /* 诊断表 */
+      #stats {
+        margin: 0;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: #100f14;
+        border: 1px solid var(--outline);
+        font: 11.5px/1.7 ui-monospace, "SF Mono", Consolas, monospace;
+        white-space: pre-wrap;
+        word-break: break-all;
+        color: var(--on-var);
+      }
+      #stats .k { color: #938f99; }
+      #stats .v-ok { color: var(--ok); }
+      #stats .v-warn { color: var(--warn); }
+      #stats .v-err { color: var(--err); }
+      #err {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: rgba(242, 139, 130, 0.1);
+        border: 1px solid rgba(242, 139, 130, 0.35);
+        color: var(--err);
+        font: 11.5px/1.6 ui-monospace, Consolas, monospace;
+        white-space: pre-wrap;
+        display: none;
+      }
+      .hint { font-size: 11px; color: #938f99; line-height: 1.6; margin-top: 10px; }
+      .pill {
+        display: inline-block;
+        padding: 1px 8px;
+        border-radius: 999px;
+        font-size: 10.5px;
+        background: rgba(208, 188, 255, 0.14);
+        color: var(--primary);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div id="frame">
+        <canvas id="cv"></canvas>
+      </div>
+    </div>
+
+    <aside id="panel">
+      <h1>DSH-L2D 渲染调试台</h1>
+      <p class="sub">官方 Cubism Web SDK 5-r.5 <span class="pill" id="status">初始化中</span></p>
+
+      <h2>模型</h2>
+      <div class="row">
+        <label for="model">model3.json</label>
+        <select id="model"></select>
+      </div>
+
+      <h2>画布</h2>
+      <div class="row">
+        <label>尺寸（宽 × 高）</label>
+        <div class="inline">
+          <input id="w" type="number" value="360" min="80" max="1600" step="10" />
+          <span style="color: #938f99">×</span>
+          <input id="h" type="number" value="560" min="80" max="1600" step="10" />
+        </div>
+      </div>
+      <div class="row">
+        <label>缩放 zoom</label>
+        <div class="inline">
+          <input id="zoom" type="range" min="0.4" max="2.4" step="0.05" value="1" />
+          <b id="zoomVal">1.00</b>
+        </div>
+      </div>
+
+      <div class="btns">
+        <button class="primary" id="reload">重新加载</button>
+        <button id="fit">重置适配</button>
+      </div>
+
+      <h2>控制测试</h2>
+      <div class="row">
+        <label for="exp">表情</label>
+        <select id="exp"></select>
+      </div>
+      <div class="row">
+        <label for="mot">动作组</label>
+        <select id="mot"></select>
+      </div>
+      <div class="row">
+        <label>眼神（拖动圆点，同时控制水平与垂直）</label>
+        <div class="xy-pad" id="xyPad" title="拖动控制视线方向">
+          <div class="xy-dot" id="xyDot"></div>
+        </div>
+        <div class="xy-val" id="xyVal">x 0.00 · y 0.00</div>
+      </div>
+      <div class="btns">
+        <button id="btnMotion">播放动作</button>
+        <button id="btnReset">恢复站姿</button>
+        <button id="btnSwing">甩动测试</button>
+      </div>
+      <pre id="cap" style="margin:8px 0 0;padding:8px 10px;border-radius:10px;background:#100f14;border:1px solid rgba(230,224,233,.16);font:11px/1.6 ui-monospace,Consolas,monospace;white-space:pre-wrap;color:#cac4d0;">能力清单加载中…</pre>
+
+      <h2>诊断</h2>
+      <pre id="stats">等待启动…</pre>
+      <div id="err"></div>
+
+      <h2>控制台</h2>
+      <pre id="log" style="margin:0;padding:10px 12px;border-radius:12px;background:#100f14;border:1px solid rgba(230,224,233,.16);font:11px/1.6 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all;color:#cac4d0;max-height:220px;overflow:auto;">（等待输出）</pre>
+
+      <h2>说明</h2>
+      <p class="hint">
+        frames 持续增长表示每帧绘制在跑；若 Canvas 尺寸正常但画面空白，
+        说明绘制或贴图环节有问题，而不是循环没启动。
+      </p>
+    </aside>
+
+    <script>
+      (function () {
+        'use strict';
+
+        // 先装控制台捕获：必须在 core / renderer 加载之前，
+        // 这样 SDK 内部的 CubismLogError / shader 编译错误才能被看到。
+        (function hookConsole() {
+          var logEl = document.getElementById('log');
+          var lines = [];
+          function push(kind, args) {
+            var text = Array.prototype.map
+              .call(args, function (a) {
+                if (a instanceof Error) return a.stack || a.message;
+                if (typeof a === 'object') {
+                  try {
+                    return JSON.stringify(a);
+                  } catch (e) {
+                    return String(a);
+                  }
+                }
+                return String(a);
+              })
+              .join(' ');
+            lines.push((kind === 'error' ? '✕ ' : '· ') + text);
+            if (lines.length > 120) lines.shift();
+            logEl.textContent = lines.join('\n');
+            logEl.scrollTop = logEl.scrollHeight;
+          }
+          ['log', 'warn', 'error', 'info'].forEach(function (k) {
+            var orig = console[k].bind(console);
+            console[k] = function () {
+              var important = k === 'error' || k === 'warn';
+              // 只显示可能相关的输出，避免刷屏
+              var joined = Array.prototype.join.call(arguments, ' ');
+              if (important || /cubism|webgl|texture|shader|model|error|fail/i.test(joined)) {
+                push(k, arguments);
+              }
+              orig.apply(console, arguments);
+            };
+          });
+          window.addEventListener('error', function (e) {
+            push('error', [e.message + ' @ ' + (e.filename || '') + ':' + (e.lineno || '')]);
+          });
+          window.addEventListener('unhandledrejection', function (e) {
+            push('error', ['unhandled: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)]);
+          });
+        })();
+
+        var cv = document.getElementById('cv');
+        var frame = document.getElementById('frame');
+        var sel = document.getElementById('model');
+        var wIn = document.getElementById('w');
+        var hIn = document.getElementById('h');
+        var zoomIn = document.getElementById('zoom');
+        var zoomVal = document.getElementById('zoomVal');
+        var statsEl = document.getElementById('stats');
+        var errEl = document.getElementById('err');
+        var statusEl = document.getElementById('status');
+
+        var MODELS = [];
+        var base = '';
+
+        function setStatus(text, kind) {
+          statusEl.textContent = text;
+          statusEl.style.background =
+            kind === 'ok'
+              ? 'rgba(143,217,168,.16)'
+              : kind === 'err'
+                ? 'rgba(242,139,130,.16)'
+                : 'rgba(208,188,255,.14)';
+          statusEl.style.color =
+            kind === 'ok' ? '#8fd9a8' : kind === 'err' ? '#f28b82' : '#d0bcff';
+        }
+
+        function showErr(msg) {
+          if (!msg) {
+            errEl.style.display = 'none';
+            return;
+          }
+          errEl.style.display = 'block';
+          errEl.textContent = msg;
+        }
+
+        function loadScript(id, src) {
+          return new Promise(function (resolve, reject) {
+            if (document.getElementById(id)) return resolve();
+            var s = document.createElement('script');
+            s.id = id;
+            s.src = src;
+            s.async = false;
+            s.onload = function () {
+              resolve();
+            };
+            s.onerror = function () {
+              reject(new Error('脚本加载失败: ' + src));
+            };
+            document.head.appendChild(s);
+          });
+        }
+
+        function size() {
+          return {
+            w: Math.max(80, Number(wIn.value) || 360),
+            h: Math.max(80, Number(hIn.value) || 560),
+          };
+        }
+
+        function applySize() {
+          var s = size();
+          frame.style.width = s.w + 'px';
+          frame.style.height = s.h + 'px';
+          cv.style.width = s.w + 'px';
+          cv.style.height = s.h + 'px';
+          cv.width = s.w;
+          cv.height = s.h;
+        }
+
+        var started = false;
+        var bootSeq = 0;
+
+        function boot() {
+          var mySeq = ++bootSeq; // 只让最后一次 boot 生效，避免并发 mount 互相 destroy
+          var s = size();
+          applySize();
+          var name = sel.value;
+          if (!name) return;
+
+          setStatus('加载中', 'idle');
+          showErr('');
+
+          var p = Promise.resolve();
+          if (!started) {
+            started = true;
+            p = loadScript('c-core', '/core.js')
+              .then(function () {
+                if (!window.Live2DCubismCore) throw new Error('Core 未挂载到 window');
+                return loadScript('c-renderer', '/renderer.js');
+              })
+              .then(function () {
+                if (!window.DSH_L2D) throw new Error('渲染包未挂载到 window.DSH_L2D');
+              });
+          }
+
+          p.then(function () {
+            if (mySeq !== bootSeq) return null; // 已有更新的 boot，放弃本次
+            var url = '/model/' + encodeURIComponent(name);
+            return window.DSH_L2D.mount(cv, {
+              modelUrl: url,
+              width: s.w,
+              height: s.h,
+              zoom: Number(zoomIn.value),
+            });
+          })
+            .then(function (r) {
+              if (r === null || mySeq !== bootSeq) return;
+              setStatus('已就绪', 'ok');
+              fillCapabilities();
+            })
+            .catch(function (err) {
+              if (mySeq !== bootSeq) return;
+              setStatus('失败', 'err');
+              showErr(err && err.message ? err.message : String(err));
+            });
+        }
+
+        function renderStats() {
+          if (!window.DSH_L2D || !window.DSH_L2D.getInfo) {
+            statsEl.textContent = '渲染包未就绪';
+            return;
+          }
+          var info = window.DSH_L2D.getInfo();
+          if (!info) {
+            statsEl.textContent = '模型未加载';
+            return;
+          }
+          var rows = [];
+          Object.keys(info).forEach(function (k) {
+            var v = info[k];
+            var cls = 'v-ok';
+            if (k === 'frames') cls = Number(v) > 0 ? 'v-ok' : 'v-err';
+            else if (k === 'lastError') cls = v === 'none' ? 'v-ok' : 'v-err';
+            else cls = 'v-ok';
+            rows.push(
+              '<span class="k">' +
+                k.padEnd(10) +
+                '</span> <span class="' +
+                cls +
+                '">' +
+                v +
+                '</span>',
+            );
+          });
+          statsEl.innerHTML = rows.join('\n');
+        }
+
+        // 尺寸输入即时生效
+        [wIn, hIn].forEach(function (el) {
+          el.addEventListener('change', function () {
+            applySize();
+            boot();
+          });
+        });
+
+        zoomIn.addEventListener('input', function () {
+          zoomVal.textContent = Number(zoomIn.value).toFixed(2);
+        });
+        zoomIn.addEventListener('change', function () {
+          boot();
+        });
+
+        document.getElementById('reload').addEventListener('click', boot);
+        document.getElementById('fit').addEventListener('click', function () {
+          zoomIn.value = '1';
+          zoomVal.textContent = '1.00';
+          wIn.value = '360';
+          hIn.value = '560';
+          boot();
+        });
+        sel.addEventListener('change', boot);
+
+        // ---------------------------------------------------- 控制测试
+        var expSel = document.getElementById('exp');
+        var motSel = document.getElementById('mot');
+        var padEl = document.getElementById('xyPad');
+        var dotEl = document.getElementById('xyDot');
+        var xyValEl = document.getElementById('xyVal');
+        var capEl = document.getElementById('cap');
+
+        function fillCapabilities() {
+          if (!window.DSH_L2D || !window.DSH_L2D.getCapabilities) return;
+          var cap = window.DSH_L2D.getCapabilities();
+          if (!cap) {
+            capEl.textContent = '无能力信息';
+            return;
+          }
+
+          expSel.innerHTML = '';
+          (cap.expressions || []).forEach(function (n) {
+            var o = document.createElement('option');
+            o.value = n;
+            o.textContent = n;
+            expSel.appendChild(o);
+          });
+
+          motSel.innerHTML = '';
+          (cap.motionGroups || []).forEach(function (n) {
+            var o = document.createElement('option');
+            o.value = n;
+            o.textContent = n;
+            motSel.appendChild(o);
+          });
+
+          var key = (cap.params || []).filter(function (p) {
+            return /Angle[XYZ]|EyeBall|EyeL?R?Open|MouthOpen|Brow/i.test(p.id);
+          });
+          capEl.textContent =
+            '表情 ' + (cap.expressions || []).length +
+            ' / 动作组 ' + (cap.motionGroups || []).length +
+            ' / 参数 ' + (cap.params || []).length +
+            '\n关键参数: ' +
+            key.map(function (p) { return p.id + '[' + p.min + ',' + p.max + ']'; }).join(' ');
+        }
+
+        // 选中即应用表情
+        expSel.addEventListener('change', function () {
+          if (!window.DSH_L2D) return;
+          var ok = window.DSH_L2D.setExpression(expSel.value);
+          showErr(ok ? '' : '表情应用失败: ' + expSel.value);
+        });
+
+        document.getElementById('btnMotion').addEventListener('click', function () {
+          if (!window.DSH_L2D) return;
+          var ok = window.DSH_L2D.playMotion(motSel.value, 0);
+          showErr(ok ? '' : '动作播放失败: ' + motSel.value);
+        });
+
+        document.getElementById('btnReset').addEventListener('click', function () {
+          if (!window.DSH_L2D) return;
+          var n = window.DSH_L2D.resetPose();
+          padCenter();
+          say('已恢复站姿（' + n + ' 个参数）');
+        });
+
+        // ---- 单个 XY 轴控件：一次拖动同时给出水平与垂直，替代原来的两个滑块
+        var padActive = false;
+
+        function padCenter() {
+          dotEl.style.left = '50%';
+          dotEl.style.top = '50%';
+          xyValEl.textContent = 'x 0.00 · y 0.00';
+          if (window.DSH_L2D) window.DSH_L2D.lookAt(0, 0);
+        }
+
+        function padApply(e) {
+          var r = padEl.getBoundingClientRect();
+          var nx = ((e.clientX - r.left) / r.width) * 2 - 1;
+          // 屏幕 y 向下、模型 y 向上，取反
+          var ny = 1 - ((e.clientY - r.top) / r.height) * 2;
+          nx = Math.max(-1, Math.min(1, nx));
+          ny = Math.max(-1, Math.min(1, ny));
+
+          dotEl.style.left = ((nx + 1) / 2) * 100 + '%';
+          dotEl.style.top = ((1 - ny) / 2) * 100 + '%';
+          xyValEl.textContent = 'x ' + nx.toFixed(2) + ' · y ' + ny.toFixed(2);
+          if (window.DSH_L2D) window.DSH_L2D.lookAt(nx, ny);
+        }
+
+        padEl.addEventListener('pointerdown', function (e) {
+          padActive = true;
+          try {
+            padEl.setPointerCapture(e.pointerId);
+          } catch (err) { /* ignore */ }
+          padApply(e);
+        });
+        padEl.addEventListener('pointermove', function (e) {
+          if (padActive) padApply(e);
+        });
+        function padEnd(e) {
+          padActive = false;
+          try {
+            padEl.releasePointerCapture(e.pointerId);
+          } catch (err) { /* ignore */ }
+        }
+        padEl.addEventListener('pointerup', padEnd);
+        padEl.addEventListener('pointercancel', padEnd);
+
+        // 与 overlay.js 里 startSwing 同构：预设档位的阻尼振荡，只写 AngleZ
+        document.getElementById('btnSwing').addEventListener('click', function () {
+          if (!window.DSH_L2D) return;
+          var amp = 25;
+          var freq = 2.6;
+          var decay = 1.1;
+          var t0 = performance.now();
+          function step() {
+            var t = (performance.now() - t0) / 1000;
+            var k = Math.exp(-decay * t);
+            if (k < 0.03) {
+              window.DSH_L2D.setParameters({ ParamAngleZ: 0 });
+              return;
+            }
+            window.DSH_L2D.setParameters({ ParamAngleZ: -amp * k * Math.sin(freq * t) });
+            requestAnimationFrame(step);
+          }
+          step();
+        });
+
+        function say(t) {
+          setStatus(t, 'ok');
+        }
+
+        // ---- AI 指令轮询（与 overlay.js 同一套语义，便于 curl 验证整条链路）
+        setInterval(function () {
+          if (!window.DSH_L2D || !window.DSH_L2D.isReady || !window.DSH_L2D.isReady()) return;
+          fetch('/ai/poll', { cache: 'no-store' })
+            .then(function (r) {
+              return r.ok ? r.json() : null;
+            })
+            .then(function (d) {
+              if (!d || !d.calls || !d.calls.length) return;
+              var L = window.DSH_L2D;
+              d.calls.forEach(function (c) {
+                var a = c.args || {};
+                try {
+                  if (c.name === 'l2d_set_expression') L.setExpression(a.name);
+                  else if (c.name === 'l2d_play_motion') L.playMotion(a.group, a.index || 0);
+                  else if (c.name === 'l2d_look_at') L.lookAt(a.x || 0, a.y || 0);
+                  else if (c.name === 'l2d_set_parameters') L.setParameters(a.values || {});
+                  else if (c.name === 'l2d_reset_pose') L.resetPose();
+                } catch (e) {
+                  /* 单条失败不影响其它 */
+                }
+              });
+            })
+            .catch(function () {});
+        }, 400);
+
+        // 先取模型清单
+        fetch('/api/models')
+          .then(function (r) {
+            return r.json();
+          })
+          .then(function (data) {
+            MODELS = data.models || [];
+            if (!MODELS.length) {
+              setStatus('无模型', 'err');
+              statsEl.textContent = '目录里没有 .model3.json：\n' + (data.dir || '');
+              return;
+            }
+            // 优先选降档版
+            var pref =
+              MODELS.filter(function (m) {
+                return m.indexOf('2048') >= 0;
+              })[0] || MODELS[0];
+            MODELS.forEach(function (m) {
+              var o = document.createElement('option');
+              o.value = m;
+              o.textContent = m;
+              if (m === pref) o.selected = true;
+              sel.appendChild(o);
+            });
+            boot();
+          })
+          .catch(function (err) {
+            setStatus('清单失败', 'err');
+            showErr(String(err));
+          });
+
+        setInterval(renderStats, 400);
+      })();
+    </script>
+  </body>
+</html>

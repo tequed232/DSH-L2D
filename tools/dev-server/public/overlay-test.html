@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>overlay 端到端测试</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: #16151a;
+        color: #cac4d0;
+        font: 13px/1.6 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+        padding: 20px 22px;
+        box-sizing: border-box;
+        overflow: hidden;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 15px;
+        font-weight: 600;
+        color: #e6e0e9;
+      }
+      .sub {
+        margin: 0 0 16px;
+        font-size: 12px;
+        color: #938f99;
+      }
+      ul {
+        margin: 0 0 16px;
+        padding-left: 18px;
+        font-size: 12.5px;
+        color: #cac4d0;
+      }
+      li {
+        margin-bottom: 4px;
+      }
+      #log {
+        margin-top: 14px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: #100f14;
+        border: 1px solid rgba(230, 224, 233, 0.14);
+        font: 11px/1.65 ui-monospace, Consolas, monospace;
+        white-space: pre-wrap;
+        word-break: break-all;
+        color: #cac4d0;
+        max-height: 220px;
+        overflow: auto;
+      }
+      code {
+        font-family: ui-monospace, Consolas, monospace;
+        color: #d0bcff;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>overlay 端到端测试</h1>
+    <p class="sub">这个页面原样加载 <code>lib/overlay.js</code>，与在 DSH 里运行的是同一份代码。</p>
+
+    <ul>
+      <li><b>拖拽角色</b>：按住角色拖动，松手应有惯性回摆</li>
+      <li><b>点击角色</b>：弹出余额（本地无 Key，应显示未配置）</li>
+      <li><b>悬停</b>：右上角出现齿轮，可打开设置面板</li>
+      <li><b>位置记忆</b>：拖动后刷新页面，应停在上次位置</li>
+    </ul>
+
+    <div id="log">等待 overlay 启动…</div>
+    <div id="params" style="margin-top:10px;padding:10px 12px;border-radius:12px;background:#100f14;border:1px solid rgba(143,217,168,.28);font:10.5px/1.45 ui-monospace,Consolas,monospace;color:#8fd9a8;white-space:pre-wrap;max-height:220px;overflow:auto;">参数探测中…</div>
+    <div id="phys" style="margin-top:10px;padding:10px 12px;border-radius:12px;background:#100f14;border:1px solid rgba(208,188,255,.25);font:11px/1.7 ui-monospace,Consolas,monospace;color:#d0bcff;white-space:pre-wrap;">物理状态：等待拖动…</div>
+    <div id="s1" style="margin-top:10px;padding:10px 12px;border-radius:12px;background:#100f14;border:1px solid rgba(255,200,120,.3);font:11px/1.6 ui-monospace,Consolas,monospace;color:#ffc878;white-space:pre-wrap;">S1：带上 ?s1=1 自动验收</div>
+    <div id="s2" style="margin-top:10px;padding:10px 12px;border-radius:12px;background:#100f14;border:1px solid rgba(120,200,255,.3);font:11px/1.6 ui-monospace,Consolas,monospace;color:#78c8ff;white-space:pre-wrap;">S2：带上 ?s2=1 自动验收</div>
+    <div id="s4" style="margin-top:10px;padding:10px 12px;border-radius:12px;background:#100f14;border:1px solid rgba(255,150,190,.3);font:11px/1.6 ui-monospace,Consolas,monospace;color:#ff96be;white-space:pre-wrap;">S4：带上 ?s4=1 自动验收</div>
+
+    <script>
+      (function () {
+        var logEl = document.getElementById('log');
+        var lines = [];
+        function push(t) {
+          lines.push(t);
+          if (lines.length > 60) lines.shift();
+          logEl.textContent = lines.join('\n');
+          logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        window.addEventListener('error', function (e) {
+          push('✕ ' + e.message);
+        });
+
+        // 列出模型里所有角度/位置类参数（用于确认物理驱动源真的存在）
+        var probeTimer = setInterval(function () {
+          if (!window.DSH_L2D || !window.DSH_L2D.getCapabilities) return;
+          var cap = window.DSH_L2D.getCapabilities();
+          if (!cap || !cap.params) return;
+          clearInterval(probeTimer);
+          var hits = cap.params.filter(function (p) {
+            return !/^Param/i.test(p.id) && /angle|position|lean|movement/i.test(p.id);
+          });
+          var text = hits
+            .map(function (p) {
+              return p.id + ' [' + p.min + ',' + p.max + '] def ' + p.def;
+            })
+            .join('\n');
+          document.getElementById('params').textContent =
+            '角度/位置参数（共 ' + hits.length + '）：\n' + text;
+        }, 400);
+
+        // 实时显示物理状态（拖动时看 leanZ / lookX 是否在变）
+        var physEl = document.getElementById('phys');
+        setInterval(function () {
+          var p = window.__DSH_L2D_PHYS__;
+          if (!p) {
+            physEl.textContent = '物理状态：尚未激活（可能渲染未就绪或未开始拖动）';
+            return;
+          }
+          physEl.textContent =
+            '拖动中: ' + p.dragging + '   速度 vx=' + p.vx + '\n' +
+            '侧倾 leanZ: ' + p.leanZ + '   位移惯性 posX=' + p.posX + ' posY=' + p.posY + '\n' +
+            '视线 lookX: ' + p.lookX + '\n' +
+            '驱动参数: ' + p.angleZParam + ' ' + p.angleZRange + '\n' +
+            '          ' + p.posParam + ' ' + p.posRange;
+        }, 200);
+
+        // S1 自动验收：真实模型 + 真实帧循环，不靠静态推断。
+        if (new URLSearchParams(location.search).get('s1') === '1') {
+          var s1El = document.getElementById('s1');
+          var s1Wait = setInterval(function () {
+            var L = window.DSH_L2D;
+            if (!L || !L.isReady || !L.isReady()) return;
+            clearInterval(s1Wait);
+            function value(info, id) {
+              var m = String(info && info.pv).match(new RegExp('(?:^| )' + id + '=(-?[0-9.]+)'));
+              return m ? Number(m[1]) : NaN;
+            }
+            function snapshot() {
+              var info = L.getInfo();
+              return {
+                angleZ: value(info, 'AngleZ'),
+                bodyZ: value(info, 'ParamBodyAngleZ'),
+                hair: value(info, 'SideHairRX1'),
+                breath: value(info, 'ParamBreath'),
+                inj: info.inj,
+              };
+            }
+            var results = { steps: [] };
+            window.__S1_RESULTS__ = results;
+            L.resetPose();
+            setTimeout(function () {
+              results.blockedOutput = !L.setParameter('ParamAngleZ', 5);
+              results.stickyAccepted = L.setParameter('AngleZ', 20);
+              setTimeout(function () {
+                results.sticky = snapshot();
+                results.steps.push('sticky: AngleZ=' + results.sticky.angleZ + ' hair=' + results.sticky.hair);
+                L.resetPose();
+                results.kfTracks = L.playKeyframes([
+                  { param: 'AngleZ', keys: [[0, 0], [120, 20], [600, 20]] },
+                ], { duration: 600 });
+                setTimeout(function () {
+                  results.keyframe = snapshot();
+                  results.steps.push('keyframe: AngleZ=' + results.keyframe.angleZ + ' hair=' + results.keyframe.hair);
+                  results.pass =
+                    results.blockedOutput &&
+                    results.stickyAccepted &&
+                    Math.abs(results.sticky.angleZ - 20) < 0.2 &&
+                    Math.abs(results.sticky.hair) > 0.01 &&
+                    results.kfTracks === 1 &&
+                    Math.abs(results.keyframe.angleZ) > 15;
+                  s1El.textContent =
+                    (results.pass ? '✓ S1 PASS' : '✕ S1 FAIL') + '\n' +
+                    results.steps.join('\n') + '\n' +
+                    '物理输出拒绝=' + results.blockedOutput + '  tracks=' + results.kfTracks + '\n' +
+                    results.keyframe.inj;
+                }, 300);
+              }, 1000);
+            }, 250);
+          }, 300);
+        }
+
+        // S2 动作链自动验收：真实播放，验证状态机/幂等/冲突/共存。
+        if (new URLSearchParams(location.search).get('s2') === '1') {
+          var s2El = document.getElementById('s2');
+          var s2Wait = setInterval(function () {
+            var L = window.DSH_L2D;
+            if (!L || !L.isReady || !L.isReady() || !L.playMotionAsync) return;
+            clearInterval(s2Wait);
+            (async function () {
+              var results = { steps: [] };
+              window.__S2_RESULTS__ = results;
+              function slots() {
+                return L.getInfo().motion.match(/slots=(.*)$/);
+              }
+              try {
+                var cold = await L.playMotionAsync('竖手指打开', { awaitFinish: true });
+                results.steps.push('冷启动 open=' + cold.status + (cold.reason ? '/' + cold.reason : ''));
+                var again = await L.playMotionAsync('竖手指打开', { awaitFinish: true });
+                results.steps.push('重复 open=' + again.status + '/' + again.reason);
+                var conflict = await L.playMotionAsync('狗尾巴草打开', { awaitFinish: true });
+                results.steps.push('右臂冲突=' + conflict.status + '/' + conflict.reason);
+                var chest = await L.playMotionAsync('抚胸手打开', { awaitFinish: true });
+                results.steps.push('左臂共存=' + chest.status + (chest.reason ? '/' + chest.reason : ''));
+                results.slotsAfter = slots()[1];
+                var closeGrass = await L.playMotionAsync('狗尾巴草打开');
+                results.steps.push('冲突仍拒绝=' + closeGrass.status + '/' + closeGrass.reason);
+                await L.playMotionAsync('竖手指关闭', { awaitFinish: true });
+                await L.playMotionAsync('狗尾巴草打开', { awaitFinish: true });
+                await L.playMotionAsync('狗尾巴草关闭', { awaitFinish: true });
+                await L.playMotionAsync('抚胸手关闭', { awaitFinish: true });
+                results.slotsFinal = slots()[1];
+                results.pass =
+                  cold.status === 'ok' &&
+                  again.status === 'skipped' && again.reason === 'already-open' &&
+                  conflict.status === 'conflict' &&
+                  chest.status === 'ok' &&
+                  closeGrass.status === 'conflict' &&
+                  results.slotsAfter.indexOf('竖手指:open') >= 0 &&
+                  results.slotsAfter.indexOf('抚胸手:open') >= 0 &&
+                  results.slotsFinal.indexOf('竖手指:closed') >= 0 &&
+                  results.slotsFinal.indexOf('狗尾巴草:closed') >= 0 &&
+                  results.slotsFinal.indexOf('抚胸手:closed') >= 0;
+                s2El.textContent =
+                  (results.pass ? '✓ S2 PASS' : '✕ S2 FAIL') + '\n' + results.steps.join('\n') +
+                  '\nslotsAfter=' + results.slotsAfter + '\nslotsFinal=' + results.slotsFinal;
+              } catch (e) {
+                s2El.textContent = '✕ S2 异常: ' + (e && e.message ? e.message : e) + '\n' + results.steps.join('\n');
+              }
+            })();
+          }, 300);
+        }
+
+        // S4b 隔离测试：只测 setPose 是否能稳定写入模型。
+        if (new URLSearchParams(location.search).get('s4b') === '1') {
+          var s4bEl = document.getElementById('s4');
+          var s4bWait = setInterval(function () {
+            var L = window.DSH_L2D;
+            if (!L || !L.isReady || !L.isReady() || !L.setPose) return;
+            clearInterval(s4bWait);
+            L.resetPose();
+            var accepted = L.setPose({ right: 'finger' });
+            setTimeout(function () {
+              var vals = L.readParameters(['Param36','Param39','Param40','Param41','Param42','Param43','Param59','Param60','Param61','Param62']);
+              var info = L.getInfo();
+              s4bEl.textContent =
+                (accepted.ok ? '✓ accepted' : '✕ rejected') + ' pose=' + JSON.stringify(L.getPose()) +
+                '\nphase=' + (info.phase || 'n/a') + ' inj=' + info.inj +
+                '\np36=' + vals.Param36 + ' p39=' + vals.Param39 + ' p40=' + vals.Param40 +
+                '\np41=' + vals.Param41 + ' p42=' + vals.Param42 + ' p43=' + vals.Param43;
+            }, 1000);
+          }, 300);
+        }
+
+        // S4 四肢姿势自动验收：动作让位 → 收养终态 → 姿势切换/左右共存。
+        if (new URLSearchParams(location.search).get('s4') === '1') {
+          var s4El = document.getElementById('s4');
+          var s4Wait = setInterval(function () {
+            var L = window.DSH_L2D;
+            if (!L || !L.isReady || !L.isReady() || !L.setPose) return;
+            clearInterval(s4Wait);
+            (async function () {
+              var results = { steps: [] };
+              window.__S4_RESULTS__ = results;
+              function near(actual, expected) {
+                return Math.abs(actual - expected) < 0.03;
+              }
+              function readPose() {
+                return L.readParameters(['Param36','Param39','Param40','Param41','Param42','Param43','Param59','Param60','Param61','Param62']);
+              }
+              try {
+                L.resetPose();
+                var motion = L.playMotionAsync('竖手指打开', { awaitFinish: true });
+                await new Promise(function (r) { setTimeout(r, 120); });
+                var during = L.setPose({ right: 'finger' });
+                results.steps.push('动作中 setPose=' + during.ok + '/' + (during.reason || '-'));
+                var finished = await motion;
+                await new Promise(function (r) { setTimeout(r, 120); });
+                var adopted = readPose();
+                results.injAfterMotion = L.getInfo().inj;
+                results.poseAfterMotion = L.getPose();
+                results.steps.push('动作=' + finished.status + ' inj=' + results.injAfterMotion + ' pose=' + JSON.stringify(results.poseAfterMotion));
+                results.steps.push('收养 finger: p39=' + adopted.Param39 + ' p40=' + adopted.Param40 + ' p41=' + adopted.Param41);
+                var toGrass = L.setPose({ right: 'grass', left: 'rest' });
+                results.grassAccepted = toGrass.ok;
+                await new Promise(function (r) { setTimeout(r, 600); });
+                var grass = readPose();
+                results.injAfterGrass = L.getInfo().inj;
+                results.steps.push('grass accepted=' + toGrass.ok + ' inj=' + results.injAfterGrass);
+                results.steps.push('grass: p36=' + grass.Param36 + ' p39=' + grass.Param39 + ' p41=' + grass.Param41);
+                var toChest = L.setPose({ right: 'grass', left: 'chest' });
+                results.chestAccepted = toChest.ok;
+                await new Promise(function (r) { setTimeout(r, 700); });
+                var chest = readPose();
+                results.injAfterChest = L.getInfo().inj;
+                results.steps.push('chest accepted=' + toChest.ok + ' inj=' + results.injAfterChest);
+                results.steps.push('chest: p59=' + chest.Param59 + ' p60=' + chest.Param60 + ' p62=' + chest.Param62);
+                results.pass =
+                  during.ok === false && during.reason === 'motion-playing' &&
+                  finished.status === 'ok' &&
+                  near(adopted.Param39, 0.322) && near(adopted.Param40, 1) && near(adopted.Param41, 0.702) &&
+                  toGrass.ok && toChest.ok &&
+                  near(grass.Param36, 0.04) && near(grass.Param39, 0.2) && near(grass.Param41, -0.732) &&
+                  near(chest.Param59, 0.476) && near(chest.Param60, 0.86) && near(chest.Param62, 0.034);
+                s4El.textContent =
+                  (results.pass ? '✓ S4 PASS' : '✕ S4 FAIL') + '\n' + results.steps.join('\n');
+                L.resetPose();
+              } catch (e) {
+                s4El.textContent = '✕ S4 异常: ' + (e && e.message ? e.message : e) + '\n' + results.steps.join('\n');
+              }
+            })();
+          }, 300);
+        }
+
+        // 等 overlay 挂载后报告状态
+        var n = 0;
+        var timer = setInterval(function () {
+          n++;
+          var root = document.getElementById('dsh-l2d-root');
+          var ready = window.DSH_L2D && window.DSH_L2D.isReady && window.DSH_L2D.isReady();
+          if (root) {
+            push('· 容器已挂载 ' + (root.style.transform || ''));
+          }
+          if (ready) {
+            push('✓ 渲染就绪');
+            var info = window.DSH_L2D.getInfo();
+            if (info) {
+              push('  frames=' + info.frames + ' fps目标=动态 glErr=' + info.glErr);
+            }
+            clearInterval(timer);
+          }
+          if (n > 40 && !ready) {
+            push('✕ 超时：渲染未就绪');
+            clearInterval(timer);
+          }
+        }, 500);
+      })();
+    </script>
+    <script src="/dsh-l2d/overlay.js"></script>
+  </body>
+</html>

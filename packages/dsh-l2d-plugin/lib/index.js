@@ -1,0 +1,843 @@
+/**
+ * dsh-l2d —— DSH 插件（host 侧）
+ *
+ * 职责：把一层「透明角色叠加层」注入到 DSH 的 Web UI 里。
+ *
+ * 注入通道（关键，照抄 dsh-whale-widget 的结论）：
+ *   - 桌面壳的 index.html 从安装包静态 dist 直出，tapIndex 变换过不去；
+ *     唯一通道是宿主启动时一次性收集的 `webserver/index-inject` 注入表。
+ *   - 表里只支持两种 script 行，且处理不对称：
+ *       kind: 'script'      → 内联 createElement + textContent，不 await，不可能失败
+ *       kind: 'script-src'  → await loadScript(src)，失败会 reject 掉 __DSH_BOOT_READY__ ⇒ 应用起不来
+ *     所以这里**必须**用内联 script 行，由我们自己建 <script src> 并吞掉 onerror。
+ *   - 注入表在宿主启动时收集一次、无刷新路径，订阅晚于收集就永远进不了表。
+ *     因此 apply() 里**第一件事**就是注册注入行，不能把 apply 本身挂在 inject 上等 webServer。
+ *
+ * 模型资源不外拷贝：按绝对路径从模型目录直读，遵守「模型文件不重新分发」的授权约束。
+ */
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+
+const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const OVERLAY_FILE = path.join(PKG_ROOT, 'lib', 'overlay.js');
+
+const L2D_ROOT = process.env.DSH_L2D_ROOT || 'D:/Desktop/DSH-L2D';
+const MODEL_DIR =
+  process.env.DSH_L2D_MODEL_DIR || path.join(L2D_ROOT, 'DeepSeek免费公皮', 'DeepSeek');
+
+const CORE_FILE =
+  process.env.DSH_L2D_CORE ||
+  path.join(L2D_ROOT, 'vendor', 'cubism', 'CubismSdkForWeb-5-r.5', 'Core', 'live2dcubismcore.min.js');
+const RENDERER_FILE = path.join(PKG_ROOT, 'assets', 'renderer.js');
+const TEST_FILE = path.join(PKG_ROOT, 'assets', 'test.html');
+const MODEL_EXT = new Set(['.json', '.moc3', '.png', '.jpg', '.jpeg']);
+
+const AVATAR_CANDIDATES = [
+  path.join(MODEL_DIR, '大肥鱼.png'),
+  path.join(MODEL_DIR, 'avatar.png'),
+  path.join(MODEL_DIR, 'preview.png'),
+];
+
+const MIME = {
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.png': 'image/png',
+  '.json': 'application/json; charset=utf-8',
+};
+
+const injectRowText =
+  '(function(){try{' +
+  'var d=document.body||document.documentElement;if(!d)return;' +
+  'if(document.querySelector("script[data-dsh-l2d]"))return;' +
+  'var s=document.createElement("script");s.src="/dsh-l2d/overlay.js";s.async=true;' +
+  's.setAttribute("data-dsh-l2d","1");s.onerror=function(){};d.appendChild(s)' +
+  '}catch(e){}})()';
+
+export const name = 'dsh-l2d';
+
+/**
+ * DSH 设置命名空间。
+ * schemastery 是 DSH 内置依赖，但独立安装/打包环境可能没有；
+ * 这里动态加载，拿不到时退化为普通配置对象：插件仍可运行，
+ * 只是失去 DSH 原生设置页的类型校验，overlay 设置面板不受影响。
+ */
+const SETTINGS_SHAPE = {
+  apiKey: { type: 'string', default: '', description: 'DeepSeek API Key，仅用于查询账户余额' },
+  refreshSeconds: { type: 'number', default: 60, description: '余额自动刷新间隔（秒），最小 15' },
+  soundEnabled: { type: 'boolean', default: true, description: '按下/松开角色时的音效' },
+  soundVolume: { type: 'number', default: 0.7, description: '音效音量 0~1' },
+  scale: { type: 'number', default: 1, description: '角色显示缩放 0.6~1.6' },
+  eyeFollow: { type: 'boolean', default: false, description: '眼睛跟随鼠标' },
+  agentLink: { type: 'boolean', default: true, description: '读取 DSH 工作区会话状态，驱动角色表情/动作链' },
+};
+
+let z = null;
+try {
+  z = (await import('@deepseek-ai/schemastery')).default;
+} catch {
+  z = null;
+}
+
+export const Config = z
+  ? z.object({
+      apiKey: z.string().default('').description('DeepSeek API Key，仅用于查询账户余额（留空则不显示余额）').extra('volatile', true),
+      refreshSeconds: z.number().default(60).description('余额自动刷新间隔（秒），最小 15').extra('volatile', true),
+      soundEnabled: z.boolean().default(true).description('按下/松开角色时的音效').extra('volatile', true),
+      soundVolume: z.number().default(0.7).description('音效音量 0~1').extra('volatile', true),
+      scale: z.number().default(1).description('角色显示缩放 0.6~1.6').extra('volatile', true),
+      eyeFollow: z.boolean().default(false).description('眼睛跟随鼠标（需接入 Cubism 渲染后生效）').extra('volatile', true),
+      agentLink: z.boolean().default(true).description('读取 DSH 工作区会话状态，驱动角色表情/动作链').extra('volatile', true),
+    })
+  : { ...SETTINGS_SHAPE };
+
+/** 轻量信任栅栏：拒绝跨站请求，避免任意网页读到本地模型资源 */
+function isCrossSite(req) {
+  const site = req.headers['sec-fetch-site'];
+  if (site === 'cross-site') return true;
+  const origin = req.headers.origin;
+  if (origin) {
+    try {
+      const host = req.headers.host;
+      if (new URL(origin).host !== host) return true;
+    } catch {
+      return true;
+    }
+  }
+  return false;
+}
+
+function sendBuffer(res, status, type, buf) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', type);
+  res.setHeader('Cache-Control', 'no-store');
+  res.end(buf);
+}
+
+function readIfExists(p) {
+  try {
+    return fs.readFileSync(p);
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------- 余额
+// 独立实现：直接调用 DeepSeek 官方余额接口，不复用其它插件的中间端点。
+// 凭据从 DSH 凭据服务读取（DEEPSEEK_API_KEY），插件本身不落盘任何密钥。
+const BALANCE_TTL = 60 * 1000;
+const balanceCache = { ts: 0, data: null, inflight: null };
+const DIAG = path.join(os.tmpdir(), 'dsh-l2d.log');
+
+function diag(msg) {
+  try {
+    fs.appendFileSync(DIAG, `[${new Date().toISOString()}] ${msg}\n`);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 从任意形状的对象里尽力提取「余额」数值与币种 */
+function normalizeLoose(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  const seen = new Set();
+  const queue = [obj];
+  let fallback = null;
+  while (queue.length && seen.size < 60) {
+    const cur = queue.shift();
+    if (!cur || typeof cur !== 'object' || seen.has(cur)) continue;
+    seen.add(cur);
+    for (const [k, v] of Object.entries(cur)) {
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        if (/total.?balance|^total$|remaining|balance$/i.test(k)) {
+          if (!fallback) fallback = { total: v, currency: cur.currency || cur.unit || 'CNY' };
+        }
+      } else if (typeof v === 'string' && /^[A-Z]{3}$/.test(v)) {
+        if (fallback) fallback.currency = v;
+      } else if (v && typeof v === 'object') {
+        queue.push(v);
+      }
+    }
+  }
+  return fallback;
+}
+
+/** 读取 DSH 版本，账号服务要求一个稳定的客户端身份；拿不到时给安全兜底。 */function readDshVersion() {
+  try {
+    if (process.env.DSH_VERSION) return String(process.env.DSH_VERSION);
+    const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+    const versionFile = path.join(home, 'version');
+    if (fs.existsSync(versionFile)) {
+      const text = fs.readFileSync(versionFile, 'utf8').trim();
+      if (text) return text;
+    }
+    const pkgFile = path.join(home, 'package.json');
+    if (fs.existsSync(pkgFile)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+      if (pkg && pkg.version) return String(pkg.version);
+    }
+  } catch {
+    /* ignore */
+  }
+  return '0.0.0';
+}
+
+async function getBalance(ctx, cfg = {}) {
+  const now = Date.now();
+  const ttl = Math.max(15, Number(cfg && cfg.refreshSeconds) || 60) * 1000;
+  if (balanceCache.data && now - balanceCache.ts < ttl) return balanceCache.data;
+  if (balanceCache.inflight) return balanceCache.inflight;
+
+  balanceCache.inflight = (async () => {
+    try {
+      // ① API Key 路径：直接调 DeepSeek 官方余额接口
+      // ① 设置里手填的 Key 优先（用户可在 DSH 设置中自行填写）
+      let key = (cfg && typeof cfg.apiKey === 'string' && cfg.apiKey.trim()) || null;
+      try {
+        const cred = ctx.credentials || (typeof ctx.get === 'function' ? ctx.get('credentials') : null);
+        if (!key && cred && typeof cred.resolve === 'function') key = await cred.resolve('DEEPSEEK_API_KEY');
+      } catch (err) {
+        diag('credentials.resolve 失败: ' + String(err && err.message));
+      }
+      if (!key) key = process.env.DEEPSEEK_API_KEY || null;
+
+      if (key) {
+        const res = await fetch('https://api.deepseek.com/user/balance', {
+          headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const info = (json.balance_infos && json.balance_infos[0]) || {};
+        const total = Number(info.total_balance);
+        const out = {
+          ok: true,
+          source: 'api-key',
+          available: !!json.is_available,
+          currency: info.currency || 'CNY',
+          total: Number.isFinite(total) ? total : null,
+          granted: Number(info.granted_balance) || 0,
+          toppedUp: Number(info.topped_up_balance) || 0,
+          ts: Date.now(),
+        };
+        balanceCache.ts = Date.now();
+        balanceCache.data = out;
+        return out;
+      }
+
+      // ② 账号登录态：走 DSH 自己的账号服务（插件不接触任何令牌）
+      let acct = null;
+      try {
+        acct = ctx.get ? ctx.get('deepseekAccount') : ctx.deepseekAccount;
+      } catch {
+        acct = null;
+      }
+      if (acct && typeof acct.getBalance === 'function') {
+        try {
+          // 账号服务要求一个「调用方身份」，字段与 DSH 客户端内部一致
+          const version = readDshVersion();
+          const client = {
+            version,
+            locale: 'zh',
+            timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60,
+          };
+          const raw = await acct.getBalance(client);
+          diag('account.getBalance -> ' + JSON.stringify(raw).slice(0, 900));
+          const payload = raw && raw.ok ? raw.value : null;
+          const norm = normalizeBalance(payload);
+          if (norm) {
+            const out = { ok: true, source: 'account', currency: norm.currency, total: norm.total, ts: Date.now() };
+            balanceCache.ts = Date.now();
+            balanceCache.data = out;
+            return out;
+          }
+        } catch (err) {
+          diag('account.getBalance 抛错: ' + String(err && err.message));
+        }
+      }
+
+      const miss = { ok: false, reason: 'no-key', hint: '未检测到 API Key 或账号登录态' };
+      balanceCache.ts = Date.now();
+      balanceCache.data = miss;
+      return miss;
+    } catch (err) {
+      const prev = balanceCache.data;
+      const fallback =
+        prev && prev.ok
+          ? { ...prev, stale: true }
+          : { ok: false, reason: 'fetch-failed', hint: String(err && err.message ? err.message : err) };
+      balanceCache.ts = Date.now();
+      balanceCache.data = fallback;
+      return fallback;
+    } finally {
+      balanceCache.inflight = null;
+    }
+  })();
+
+  return balanceCache.inflight;
+}
+
+// ---------------------------------------------------------------- 音效
+// 用户可自定义：把 mp3/wav 放进 $DSH_HOME/l2d-audio/ 即可被前端随机取用。
+// 没有自定义文件时，前端用 WebAudio 合成「小黄鸭」音，不依赖任何外部素材。
+const AUDIO_DIR =
+  process.env.DSH_L2D_AUDIO_DIR ||
+  path.join(process.env.DSH_HOME || path.join(os.homedir(), '.dsh'), 'l2d-audio');
+const AUDIO_EXT = new Set(['.mp3', '.wav', '.ogg', '.m4a']);
+
+// ---------------------------------------------------------------- 设置持久化
+// 与 whale 的 size.json 同构：宿主侧落盘，客户端通过 GET/PUT 读写，刷新后保持。
+const SETTINGS_FILE = path.join(
+  process.env.DSH_HOME || path.join(os.homedir(), '.dsh'),
+  'l2d-settings.json',
+);
+
+const SETTINGS_DEFAULT = {
+  apiKey: '',
+  refreshSeconds: 60,
+  soundEnabled: true,
+  soundVolume: 0.7,
+  scale: 1,
+  eyeFollow: false,
+  agentLink: true,
+};
+
+function readSettings() {
+  let stored = {};
+  try {
+    stored = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) || {};
+  } catch {
+    stored = {};
+  }
+  return { ...SETTINGS_DEFAULT, ...stored };
+}
+
+function writeSettings(patch) {
+  const next = { ...readSettings(), ...(patch || {}) };
+  // 约束取值范围，避免脏数据把前端弄坏
+  next.soundVolume = Math.min(1, Math.max(0, Number(next.soundVolume) || 0));
+  next.scale = Math.min(1.6, Math.max(0.6, Number(next.scale) || 1));
+  next.refreshSeconds = Math.min(3600, Math.max(15, Number(next.refreshSeconds) || 60));
+  next.agentLink = next.agentLink !== false;
+  try {
+    fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf8');
+  } catch (err) {
+    diag('writeSettings 失败: ' + String(err && err.message));
+  }
+  return next;
+}
+
+/** 只允许本机回环写入，防止任意网页改设置 */
+function isLoopback(req) {
+  const host = String(req.headers.host || '');
+  return /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(host);
+}
+
+function listAudio() {
+  try {
+    return fs
+      .readdirSync(AUDIO_DIR)
+      .filter((f) => AUDIO_EXT.has(path.extname(f).toLowerCase()))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------- 工作区会话状态
+// 参照 dsh-pet-indesktop 的 Agent Link：只读监听，不写不锁文件。
+// DSH 的 session.v4.jsonl.zstd 是“多帧 zstd + JSONL”，必须按帧边界逐段解压。
+const MAGIC_ZSTD = Buffer.from('28b52ffd', 'hex');
+const AGENT_STATE_TTL = 1500;
+let agentStateCache = { ts: 0, data: null };
+
+function extractText(value, limit = 90) {
+  if (!value) return '';
+  if (typeof value === 'string') return value.slice(0, limit);
+  if (Array.isArray(value)) {
+    for (const part of value) {
+      const text = part && typeof part.text === 'string' ? part.text : '';
+      if (text) return text.slice(0, limit);
+    }
+  }
+  return '';
+}
+
+function decompressZstdFrames(buffer) {
+  const lines = [];
+  let pos = 0;
+  while (pos < buffer.length) {
+    const start = buffer.indexOf(MAGIC_ZSTD, pos);
+    if (start < 0) break;
+    let end = buffer.indexOf(MAGIC_ZSTD, start + 1);
+    if (end < 0) end = buffer.length;
+    try {
+      const text = zlib.zstdDecompressSync(buffer.subarray(start, end)).toString('utf8');
+      for (const line of text.split(/\n/)) {
+        if (line.trim()) lines.push(line);
+      }
+    } catch {
+      // 单帧损坏不能拖垮状态读取
+    }
+    pos = end;
+  }
+  return lines;
+}
+
+function listSessionFiles() {
+  const base = process.env.DSH_L2D_SESSION_DIR || path.join(process.env.DSH_HOME || path.join(os.homedir(), '.dsh'), 'sessions');
+  const files = [];
+  let dirs = [];
+  try {
+    dirs = fs.readdirSync(base, { withFileTypes: true }).filter((d) => d.isDirectory());
+  } catch {
+    return files;
+  }
+  for (const dir of dirs) {
+    const dirPath = path.join(base, dir.name);
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dirPath, { withFileTypes: true }).filter((d) => d.isDirectory());
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const file = path.join(dirPath, entry.name, 'session.v4.jsonl.zstd');
+      try {
+        const stat = fs.statSync(file);
+        files.push({ file, mtimeMs: stat.mtimeMs, workspace: dir.name });
+      } catch {
+        continue;
+      }
+    }
+  }
+  files.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return files;
+}
+
+function deriveAgentState(events, ageMs, workspace) {
+  let state = 'idle';
+  let lastUserText = '';
+  let lastTool = '';
+  let lastAssistantText = '';
+  let lastError = '';
+  let lastTime = 0;
+
+  for (const event of events) {
+    const type = event.type || '';
+    const data = event.data || {};
+    lastTime = Math.max(lastTime, Number(event.time) || 0);
+
+    if (type === 'user/message') {
+      const text = extractText(data.content || data.message?.content);
+      if (text && data.source?.kind !== 'user-approval') lastUserText = text;
+      state = 'thinking';
+    } else if (type === 'step/start') {
+      state = 'thinking';
+    } else if (type === 'tool/call') {
+      lastTool = String(data.name || data.kind || '');
+      state = 'working';
+    } else if (type === 'assistant/message') {
+      const text = extractText(data.message?.content);
+      if (text) lastAssistantText = text;
+      state = 'thinking';
+    } else if (type === 'turn/end') {
+      const reason = data.reason || {};
+      if (reason.kind === 'error' || reason.error) {
+        lastError = String(reason.error?.message || reason.message || 'unknown error');
+        state = 'error';
+      } else {
+        state = 'attention';
+      }
+    }
+  }
+
+  // 长时间没有事件就是 idle；错误保留更久，方便用户注意到失败。
+  if (state !== 'error' && ageMs > 120000) state = 'idle';
+  if (state === 'error' && ageMs > 600000) state = 'idle';
+
+  return {
+    ok: true,
+    state,
+    workspace,
+    ageMs: Math.max(0, Math.round(ageMs)),
+    lastUserText,
+    lastTool,
+    lastAssistantText,
+    lastError,
+    lastEventAt: lastTime,
+  };
+}
+
+function getAgentState(force = false) {
+  const now = Date.now();
+  if (!force && agentStateCache.data && now - agentStateCache.ts < AGENT_STATE_TTL) {
+    return agentStateCache.data;
+  }
+  let data = { ok: false, state: 'idle', reason: 'no-session' };
+  try {
+    const files = listSessionFiles();
+    if (files.length) {
+      const latest = files[0];
+      const events = [];
+      for (const line of decompressZstdFrames(fs.readFileSync(latest.file))) {
+        try {
+          events.push(JSON.parse(line));
+        } catch {
+          continue;
+        }
+      }
+      data = deriveAgentState(events, now - latest.mtimeMs, latest.workspace);
+    }
+  } catch (err) {
+    data = { ok: false, state: 'idle', reason: String(err && err.message ? err.message : err) };
+  }
+  agentStateCache = { ts: now, data };
+  return data;
+}
+
+export { getAgentState };
+
+export function apply(root, config = {}) {
+  // ① DSH 原生设置里填的 Key 同步进插件设置：balance.json 只读 l2d-settings.json。
+  // 空字符串不覆盖，避免设置页默认值把用户已保存的 Key 冲掉。
+  try {
+    const nativeKey = String(config && config.apiKey ? config.apiKey : '').trim();
+    if (nativeKey && readSettings().apiKey !== nativeKey) writeSettings({ apiKey: nativeKey });
+  } catch (err) {
+    diag('同步原生 apiKey 失败: ' + String(err && err.message));
+  }
+
+  // ② 立刻注册注入行：这一步不依赖任何服务，必须最先做
+  try {
+    root.on('webserver/index-inject', (table) => {
+      try {
+        if (!Array.isArray(table)) return;
+        for (const row of table) {
+          if (row && row.kind === 'script' && typeof row.text === 'string') {
+            if (row.text.indexOf('/dsh-l2d/overlay.js') >= 0) return; // 已推过，不重复
+          }
+        }
+        table.push({ kind: 'script', placement: 'body', text: injectRowText });
+      } catch {
+        /* 注入表异常不应影响宿主启动 */
+      }
+    });
+  } catch (err) {
+    console.warn('[dsh-l2d] 注册注入行失败：' + String(err && err.message ? err.message : err));
+  }
+
+  // ② 等 webServer / credentials 就绪后再挂路由
+  root.inject(['webServer', 'credentials'], (ctx) => {
+    const disposers = [];
+
+    const route = (routePath, handler) => {
+      try {
+        const d = ctx.webServer.register({ kind: 'exact', path: routePath, handler });
+        if (typeof d === 'function') disposers.push(d);
+      } catch (err) {
+        console.warn(`[dsh-l2d] 路由 ${routePath} 注册失败：` + String(err && err.message ? err.message : err));
+      }
+    };
+
+    route('/dsh-l2d/overlay.js', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const buf = readIfExists(OVERLAY_FILE);
+      if (!buf) return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('overlay.js missing'));
+      sendBuffer(res, 200, MIME['.js'], buf);
+    });
+
+    route('/dsh-l2d/avatar.png', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      for (const candidate of AVATAR_CANDIDATES) {
+        const buf = readIfExists(candidate);
+        if (buf) return sendBuffer(res, 200, MIME['.png'], buf);
+      }
+      // 找不到立绘时返回 1×1 透明图，前端会切到内置的占位轮廓
+      const px = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+        'base64',
+      );
+      sendBuffer(res, 200, MIME['.png'], px);
+    });
+
+    // ------------------------------------------------------ AI 指令通道
+    //
+    // 任何外部 Agent（DSH 会话里的大模型、本地脚本、别的服务）都能通过 HTTP 驱动角色：
+    //   POST /dsh-l2d/ai/call  { "name": "l2d_set_expression", "args": { "name": "兔牙" } }
+    //   GET  /dsh-l2d/ai/poll  浏览器侧取走待执行队列
+    // 用「队列 + 轮询」而不是 WebSocket：插件环境里没有长连接，轮询 400ms 足够，
+    // 而且失败可重建，不会因为连接断了就哑掉。
+    let aiSeq = 0;
+    const AI_QUEUE_MAX = 32;
+    const aiQueue = [];
+
+    route('/dsh-l2d/ai/call', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'POST') {
+        return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      }
+      const chunks = [];
+      req.on('data', (c) => {
+        chunks.push(c);
+        if (chunks.reduce((n, b) => n + b.length, 0) > 16 * 1024) req.destroy();
+      });
+      req.on('end', () => {
+        let body = {};
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
+        } catch {
+          return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
+        }
+        const name = String(body.name || '').trim();
+        if (!name) {
+          return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('name required'));
+        }
+        // 只放行已知工具名，避免变成任意函数调用面
+        const ALLOWED = new Set([
+          'l2d_set_expression',
+          'l2d_play_motion',
+          'l2d_look_at',
+          'l2d_set_parameters',
+          'l2d_reset_pose',
+          'l2d_play_keyframes',
+          'l2d_stop_keyframes',
+          'l2d_set_pose',
+        ]);
+        if (!ALLOWED.has(name)) {
+          return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('unknown tool: ' + name));
+        }
+        const item = { id: ++aiSeq, name, args: body.args || {}, ts: Date.now() };
+        aiQueue.push(item);
+        while (aiQueue.length > AI_QUEUE_MAX) aiQueue.shift();
+        sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, id: item.id, queued: aiQueue.length }), 'utf8'));
+      });
+    });
+
+    route('/dsh-l2d/ai/poll', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const calls = aiQueue.splice(0, aiQueue.length);
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ calls }), 'utf8'));
+    });
+
+    route('/dsh-l2d/status.json', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const avatar = AVATAR_CANDIDATES.find((p) => fs.existsSync(p)) || null;
+      const body = JSON.stringify({
+        version: '0.1.0-preview',
+        modelDir: MODEL_DIR,
+        avatarFound: !!avatar,
+        avatar: avatar ? path.basename(avatar) : null,
+        note: '当前为静态立绘预览；接入 Cubism Core 后替换为真实模型渲染',
+      });
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(body, 'utf8'));
+    });
+
+    route('/dsh-l2d/balance.json', async (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const data = await getBalance(ctx, readSettings());
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(data), 'utf8'));
+    });
+
+    route('/dsh-l2d/core.js', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const buf = readIfExists(CORE_FILE);
+      if (!buf) {
+        return sendBuffer(
+          res,
+          404,
+          'text/plain; charset=utf-8',
+          Buffer.from('Cubism Core 缺失，请把 SDK 的 Core/live2dcubismcore.min.js 放到 vendor/cubism/'),
+        );
+      }
+      sendBuffer(res, 200, MIME['.js'], buf);
+    });
+
+    route('/dsh-l2d/renderer.js', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const buf = readIfExists(RENDERER_FILE);
+      if (!buf) {
+        return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('renderer.js 未构建：pnpm -F @dsh/renderer build'));
+      }
+      sendBuffer(res, 200, MIME['.js'], buf);
+    });
+
+    route('/dsh-l2d/test.html', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const buf = readIfExists(TEST_FILE);
+      if (!buf) return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('test.html missing'));
+      sendBuffer(res, 200, 'text/html; charset=utf-8', buf);
+    });
+
+    // 模型资源：prefix 路由，直接把模型目录当静态根，仍做扩展名白名单与穿越防护
+    try {
+      const d = ctx.webServer.register({
+        kind: 'prefix',
+        path: '/dsh-l2d/model',
+        handler: (req, res) => {
+          if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+          let rel = '';
+          try {
+            rel = decodeURIComponent(String(req.url || '').split('?')[0].replace(/^\/dsh-l2d\/model\/?/, ''));
+          } catch {
+            return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad path'));
+          }
+          if (!rel || rel.indexOf('..') >= 0) {
+            return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('not found'));
+          }
+          const ext = path.extname(rel).toLowerCase();
+          if (!MODEL_EXT.has(ext)) {
+            return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('ext not allowed'));
+          }
+          const full = path.resolve(MODEL_DIR, rel);
+          if (!full.startsWith(path.resolve(MODEL_DIR))) {
+            return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('out of root'));
+          }
+          const buf = readIfExists(full);
+          if (!buf) return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('not found'));
+          const type =
+            ext === '.json'
+              ? 'application/json; charset=utf-8'
+              : ext === '.moc3'
+                ? 'application/octet-stream'
+                : 'image/png';
+          res.setHeader('Cache-Control', 'public, max-age=3600');
+          sendBuffer(res, 200, type, buf);
+        },
+      });
+      if (typeof d === 'function') disposers.push(d);
+    } catch (err) {
+      diag('model prefix 路由注册失败: ' + String(err && err.message));
+    }
+
+    route('/dsh-l2d/agent-state.json', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const enabled = readSettings().agentLink !== false;
+      const data = enabled ? getAgentState() : { ok: false, state: 'idle', reason: 'disabled' };
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(data), 'utf8'));
+    });
+
+    route('/dsh-l2d/settings.json', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+
+      if (req.method === 'PUT' || req.method === 'POST') {
+        if (!isLoopback(req)) {
+          return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+        }
+        const chunks = [];
+        req.on('data', (c) => {
+          chunks.push(c);
+          if (chunks.reduce((n, b) => n + b.length, 0) > 64 * 1024) req.destroy();
+        });
+        req.on('end', () => {
+          let patch = {};
+          try {
+            patch = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
+          } catch {
+            return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
+          }
+          if (patch.clearApiKey === true) patch.apiKey = '';
+          // apiKey 传空字符串视为「不修改」，避免前端回写时把已存的 key 冲掉
+          if (patch.apiKey === '') delete patch.apiKey;
+          delete patch.clearApiKey;
+          const saved = writeSettings(patch);
+          balanceCache.ts = 0; // 让下一次查询立即生效
+          const view = {
+            scale: saved.scale,
+            soundEnabled: saved.soundEnabled,
+            soundVolume: saved.soundVolume,
+            refreshSeconds: saved.refreshSeconds,
+            eyeFollow: saved.eyeFollow,
+            agentLink: saved.agentLink !== false,
+            hasApiKey: !!String(saved.apiKey || '').trim(),
+          };
+          sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(view), 'utf8'));
+        });
+        return;
+      }
+
+      const st = readSettings();
+      const view = {
+        scale: st.scale,
+        soundEnabled: st.soundEnabled,
+        soundVolume: st.soundVolume,
+        refreshSeconds: st.refreshSeconds,
+        eyeFollow: st.eyeFollow,
+        agentLink: st.agentLink !== false,
+        hasApiKey: !!String(st.apiKey || '').trim(),
+      };
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(view), 'utf8'));
+    });
+
+    route('/dsh-l2d/audio/index.json', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const files = listAudio();
+      sendBuffer(
+        res,
+        200,
+        MIME['.json'],
+        Buffer.from(JSON.stringify({ dir: AUDIO_DIR, files }), 'utf8'),
+      );
+    });
+
+    route('/dsh-l2d/audio/file', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      let name = '';
+      try {
+        name = new URL(req.url, 'http://127.0.0.1').searchParams.get('name') || '';
+      } catch {
+        name = '';
+      }
+      // 只允许取 AUDIO_DIR 下白名单内的文件名，杜绝路径穿越
+      if (!name || name !== path.basename(name) || !listAudio().includes(name)) {
+        return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('not found'));
+      }
+      const buf = readIfExists(path.join(AUDIO_DIR, name));
+      if (!buf) return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('not found'));
+      const ext = path.extname(name).toLowerCase();
+      const type =
+        ext === '.mp3'
+          ? 'audio/mpeg'
+          : ext === '.wav'
+            ? 'audio/wav'
+            : ext === '.ogg'
+              ? 'audio/ogg'
+              : 'audio/mp4';
+      sendBuffer(res, 200, type, buf);
+    });
+
+    route('/dsh-l2d/config.json', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      // 只下发前端需要的非敏感项，apiKey 绝不出网
+      const st = readSettings();
+      const payload = {
+        scale: st.scale,
+        soundEnabled: st.soundEnabled,
+        soundVolume: st.soundVolume,
+        refreshSeconds: st.refreshSeconds,
+        eyeFollow: st.eyeFollow,
+        agentLink: st.agentLink !== false,
+        hasApiKey: !!String(st.apiKey || '').trim(),
+      };
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(payload), 'utf8'));
+    });
+
+    try {
+      ctx.effect(() => () => {
+        for (const d of disposers) {
+          try {
+            d();
+          } catch {
+            /* ignore */
+          }
+        }
+      });
+    } catch {
+      /* effect 不可用时忽略，进程退出时路由自然释放 */
+    }
+
+    console.log(`[dsh-l2d] 已挂载：/dsh-l2d/overlay.js（立绘：${AVATAR_CANDIDATES[0]}）`);
+  });
+}
