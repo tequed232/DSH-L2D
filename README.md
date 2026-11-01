@@ -17,7 +17,6 @@
 - 余额查询与峰谷价：价格条显示在角色下方，红绿标识当前峰/谷计费
 - 自发聊天与聊天动作：完成状态回流最新回复，并按文本映射表情/动作/姿势
 - 余额查询：用户自填 DeepSeek API Key，走官方 `/user/balance`
-- 角色缩放：设置面板 0.6~1.6 实时生效
 - 工作区联动：读取 DSH 会话状态，聚合为 `thinking / working / attention / error / idle`
   并触发对应表情、姿势和气泡提示
 
@@ -26,7 +25,7 @@
 ## 轮椅玩法 
 
 创建一个新工作区，让把仓库链接（https://github.com/tequed232/DSH-L2D/）
-发给 Harness 会话 (如DeepSeek Harness  Codex)，跟着它的提示补全运行所需模型和运行库即可
+发给 Harness 会话 (如DeepSeek Harness  Codex)，跟着它的提示补全运行所需模型和运行所需SDK 即可
 
 ---
 
