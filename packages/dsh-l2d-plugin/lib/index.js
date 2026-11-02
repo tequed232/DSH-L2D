@@ -21,6 +21,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { createAiInbox } from './ai-inbox.mjs';
+import { buildAgentPlanContext, validateAgentPlan, MAX_AGENT_PLAN_SEGMENTS } from './action-planner.mjs';
 import { createReverseLog } from './reverse-log.mjs';
 import { setupPetWindow } from './pet-window.mjs';
 
@@ -729,7 +730,7 @@ function sanitizePokeAction(raw, allowed) {
   }
 
   const bubble = typeof raw.bubble === 'string' ? raw.bubble.trim().slice(0, 40) : '';
-  return { ok: true, kind: 'poke-action', chain: sanitizedChain, bubble };
+  return { ok: true, kind: 'poke-action', chain: sanitizedChain, bubble, continue: raw.continue === true, rationale: typeof raw.rationale === 'string' ? raw.rationale.slice(0, 120) : '' };
 }
 
 function memeToneRules(level) {
@@ -749,7 +750,9 @@ async function requestDeepSeekPokeAction(key, payload, style = {}) {
   };
   const system = [
     '你是 Live2D 桌面宠物的动作导演。',
-    '用户触发一次角色动作，请返回轻量、可爱、不过度的动作链。',
+    style.agentPlan === true
+      ? '你是 Live2D 的自主行为导演。根据真实对话上下文和上一段执行回执，动态规划下一段有明确意图的动作；不要套用固定模板。'
+      : '用户触发一次角色动作，请返回轻量、可爱、不过度的动作链。',
     '只允许使用给定枚举值和安全参数，不要发明表情、动作组、姿势或参数名。',
     '动作不能同时占用冲突的右臂姿势：finger 和 grass 是右臂互斥；chest 用左臂。',
     '除了预设动作组，你应优先用 keyframes 编排更细腻的眼/嘴/头/身体微动作。',
@@ -773,8 +776,10 @@ async function requestDeepSeekPokeAction(key, payload, style = {}) {
     '可用动作组：' + JSON.stringify(allowedText.motions),
     '可用姿势：' + JSON.stringify(allowedText.poses),
     '安全参数（只可用这些做 keyframes）：' + JSON.stringify(allowedText.safeParams),
-    '触发原因：用户触发一次角色动作。',
-    '请返回 JSON。',
+    '触发上下文：' + JSON.stringify(style.context || { trigger: 'user-poke' }),
+    style.agentPlan === true
+      ? '这是连续编排任务。每段最多 6 步，只使用 expression/motion/pose/look。根据 receipt 决定是否调整方案。若本次动作后还需要一个自然的后续表现，continue=true；否则 continue=false。最多连续 3 段。返回 JSON：{chain,bubble,continue,rationale}。'
+      : '请返回 JSON。',
   ].join('\n');
 
   const model = process.env.DSH_L2D_API_MODEL || 'deepseek-chat';
@@ -1096,6 +1101,57 @@ export function apply(root, config = {}) {
         const message = String(err && err.message ? err.message : err);
         diag('ai-action 失败: ' + message);
         sendJson(200, { ok: false, reason: 'api-failed', hint: message });
+      }
+    });
+
+    // Agent 自主动作规划：模型只提出高层动作，严格白名单校验后再交给 overlay 执行。
+    let agentPlanInflight = false;
+    let lastAgentPlanAt = 0;
+    route('/dsh-l2d/agent-plan.json', async (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'POST') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      const sendJson = (status, payload) => sendBuffer(res, status, MIME['.json'], Buffer.from(JSON.stringify(payload), 'utf8'));
+      if (agentPlanInflight) return sendJson(429, { ok: false, reason: 'planner-busy' });
+      if (Date.now() - lastAgentPlanAt < 900) return sendJson(429, { ok: false, reason: 'planner-cooldown' });
+      agentPlanInflight = true;
+      lastAgentPlanAt = Date.now();
+      try {
+        const body = await readJsonBody(req, 24 * 1024);
+        const settings = readSettings();
+        if (settings.agentLink === false || settings.autoAct === false) {
+          return sendJson(200, { ok: false, reason: 'autonomy-disabled' });
+        }
+        const key = String(settings.apiKey || process.env.DEEPSEEK_API_KEY || '').trim();
+        if (!key) return sendJson(200, { ok: false, reason: 'no-key' });
+        const capabilities = {
+          expressions: asStringList(body.expressions, 64),
+          motions: asStringList(body.motions, 64).filter((name) => name !== 'Idle'),
+        };
+        if (!capabilities.expressions.length || !capabilities.motions.length) {
+          return sendJson(200, { ok: false, reason: 'empty-capabilities' });
+        }
+        const context = buildAgentPlanContext(body.context || {});
+        if (context.segment > MAX_AGENT_PLAN_SEGMENTS) {
+          return sendJson(400, { ok: false, reason: 'segment-limit' });
+        }
+        const proposed = await requestDeepSeekPokeAction(key, capabilities, {
+          agentPlan: true,
+          context,
+          memeStyle: settings.memeStyle !== false,
+          memeLevel: Number(settings.memeLevel) || 0,
+        });
+        const validated = validateAgentPlan(proposed, capabilities);
+        if (!validated.ok) {
+          diag('agent-plan rejected: ' + validated.errors.join('; '));
+          return sendJson(200, { ok: false, reason: 'invalid-plan', errors: validated.errors });
+        }
+        return sendJson(200, validated);
+      } catch (err) {
+        const message = String(err && err.message ? err.message : err);
+        diag('agent-plan failed: ' + message);
+        return sendJson(200, { ok: false, reason: 'planner-failed', hint: message.slice(0, 180) });
+      } finally {
+        agentPlanInflight = false;
       }
     });
 
