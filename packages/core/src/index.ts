@@ -13,6 +13,7 @@ export {
   parseActPriority,
   canInterruptAct,
   chainHasMotion,
+  motionResultKind,
   closeMotionsOnPreempt,
   preemptedYandere,
   getActPhaseTemplate,

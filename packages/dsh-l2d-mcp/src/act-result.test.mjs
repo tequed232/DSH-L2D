@@ -20,6 +20,14 @@ assert.equal(done.outcome, 'completed');
 assert.equal(done.reason, undefined);
 assert.equal(done.events.length, 2);
 
+const noted = shapeActReceipt(
+  { ok: true, accepted: true, runId: 4, priority: 'FORCE', reason: 'pending' },
+  [start, { ...end, notes: ['already-open'] }],
+);
+assert.equal(noted.outcome, 'completed');
+assert.equal(noted.reason, undefined);
+assert.deepEqual(noted.events[1].notes, ['already-open']);
+
 const cut = shapeActReceipt(
   { ok: true, accepted: true, runId: 4 },
   [start, { type: 'action-done', phase: 'interrupted', runId: 4, reason: 'preempted' }],

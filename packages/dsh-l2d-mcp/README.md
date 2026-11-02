@@ -88,7 +88,9 @@ node packages/dsh-l2d-mcp/src/server.mjs
 }}
 ```
 
-`phase` 只有三种：`start`（开始播）、`end`（按计划播完）、`interrupted`（被同级或更高的链打断，或邪神从菜单退出）。打断时多一个 `reason`，例如 `preempted`。动作被状态机跳过、冲突或吞掉时（`already-open`、`start-rejected` 这类），`end` 回执也会带上 `reason`，不再静默。
+`phase` 只有三种：`start`（开始播）、`end`（按计划播完）、`interrupted`（被同级或更高的链打断，或邪神从菜单退出）。打断时多一个 `reason`，例如 `preempted`。
+
+`end.reason` 只表示动作真的没播成：被状态机拒绝（`conflict`）或被正在播的动作吞掉（`start-rejected`）。`already-open`、`already-closed` 是正常跳过（手已经在那个状态），写在 `end.notes` 里，不要当成失败。连发两句 `speaking` 时第二句常常是 `notes: ["already-open"]`，手指本来就举着。
 
 MCP 不自己判断该不该打断。它转发 `/ai/call`，再把这个 id 上的回执和事件收齐。工具返回大致是：
 

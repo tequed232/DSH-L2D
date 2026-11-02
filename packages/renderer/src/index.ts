@@ -22,6 +22,7 @@ import {
   ActGate,
   closeMotionsOnPreempt,
   getActPhaseTemplate,
+  motionResultKind,
   preemptedYandere,
   type ActAdmitInput,
   type ActPhaseTemplate,
@@ -459,12 +460,12 @@ export function actPhaseTemplate(name: string): ActPhaseTemplate | null {
   return getActPhaseTemplate(name);
 }
 
-export function noteActMotion(runId: number, reason: string): void {
+export function noteActMotion(runId: number, reason: string, kind?: 'fail' | 'skip'): void {
   if (!runId || !reason) return;
-  actGate.noteMotion(runId, reason);
+  actGate.noteMotion(runId, reason, kind === 'skip' ? 'skip' : 'fail');
 }
 
-export { closeMotionsOnPreempt, preemptedYandere, motionsShareArm };
+export { closeMotionsOnPreempt, preemptedYandere, motionsShareArm, motionResultKind };
 
 /** 动作诊断，不参与渲染决策。 */
 let motionDiag = { group: 'none', startedAt: 0, playing: false };
@@ -1641,6 +1642,7 @@ const api = {
   closeMotionsOnPreempt,
   preemptedYandere,
   motionsShareArm,
+  motionResultKind,
   noteActMotion,
   getCapabilities,
   // 生命周期

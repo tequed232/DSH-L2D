@@ -1378,12 +1378,28 @@
     pendingCloses = next;
   }
 
-  function chainMotionNames(chain) {
-    var names = [];
+  function chainMotionPlan(chain) {
+    var items = [];
+    var elapsed = 0;
     for (var i = 0; i < (chain ? chain.length : 0); i++) {
-      if (chain[i] && chain[i].kind === 'motion' && chain[i].name) names.push(chain[i].name);
+      var step = chain[i] || {};
+      elapsed += Math.max(0, Number(step.delayMs) || 0);
+      if (step.kind === 'motion' && step.name) items.push({ name: step.name, at: elapsed });
     }
-    return names;
+    return items;
+  }
+
+  function motionKind(result) {
+    var L = window.DSH_L2D;
+    if (L && L.motionResultKind) return L.motionResultKind(result);
+    if (!result || result.status === 'ok') return 'ok';
+    if (result.status === 'skipped' || result.reason === 'already-open' || result.reason === 'already-closed') return 'skip';
+    return 'fail';
+  }
+
+  function waitMs(ms) {
+    if (!ms || ms <= 0) return Promise.resolve();
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
   }
 
   function closesToFlush(chain) {
@@ -1395,36 +1411,56 @@
     return [];
   }
 
-  // 状态机同一时刻只收一个普通优先级动作。被跳过、冲突或吞掉时写进这条链的结束回执。
-  function watchMotion(runId, pending, source) {
+  // ownMotion 才记回执、才可能弹气泡。补播的关闭动作不弹。
+  // 气泡和 reason 只留给真正失败（被拒、被吞）。already-open 这类跳过放 notes。
+  function watchMotion(runId, pending, source, ownMotion) {
     Promise.resolve(pending).then(function (result) {
-      if (!result || result.status === 'ok') return;
-      var reason = result.reason || result.status || 'motion-rejected';
+      if (!ownMotion) return;
+      var kind = motionKind(result);
+      if (kind === 'ok') return;
+      var text = (result && (result.reason || result.status)) || 'motion-rejected';
       var L = window.DSH_L2D;
-      if (L && L.noteActMotion && runId) L.noteActMotion(runId, String(reason));
-      if (source === 'poke') say('这个动作先让位', 2200);
+      if (L && L.noteActMotion && runId) L.noteActMotion(runId, String(text), kind === 'skip' ? 'skip' : 'fail');
+      if (source === 'poke' && kind === 'fail') say('这个动作先让位', 2200);
     }).catch(function (err) {
+      if (!ownMotion) return;
       var reason = err && err.message ? err.message : 'motion-failed';
       var L = window.DSH_L2D;
-      if (L && L.noteActMotion && runId) L.noteActMotion(runId, String(reason));
+      if (L && L.noteActMotion && runId) L.noteActMotion(runId, String(reason), 'fail');
       if (source === 'poke') say('这个动作先让位', 2200);
     });
   }
 
-  // 前一个 playMotionAsync 返回后再播下一个。有关闭要补时，新动作用 awaitFinish，好让状态机让出优先级。
-  function playSerial(names, runId, source) {
+  // 新动作按自己的 delayMs 排。后面还有关闭或其他动作时，等 playMotionAsync 返回再播下一个。
+  function playSerial(motions, closes, runId, source) {
     var L = window.DSH_L2D;
     var seq = Promise.resolve();
-    for (var i = 0; i < names.length; i++) {
+    var prevAt = 0;
+    for (var i = 0; i < motions.length; i++) {
+      (function (item, index, gap) {
+        var awaitFinish = index < motions.length - 1 || closes.length > 0;
+        seq = seq.then(function () {
+          return waitMs(gap).then(function () {
+            if (runId && !actStillCurrent(runId)) return null;
+            if (!L || !L.playMotionAsync) return null;
+            var pending = L.playMotionAsync(item.name, { awaitFinish: awaitFinish });
+            watchMotion(runId, pending, source, true);
+            return pending;
+          });
+        });
+      })(motions[i], i, motions[i].at - prevAt);
+      prevAt = motions[i].at;
+    }
+    for (var j = 0; j < closes.length; j++) {
       (function (name, awaitFinish) {
         seq = seq.then(function () {
           if (runId && !actStillCurrent(runId)) return null;
           if (!L || !L.playMotionAsync) return null;
           var pending = L.playMotionAsync(name, { awaitFinish: awaitFinish });
-          watchMotion(runId, pending, source);
+          watchMotion(runId, pending, source, false);
           return pending;
         });
-      })(names[i], i < names.length - 1);
+      })(closes[j], j < closes.length - 1);
     }
     return seq;
   }
@@ -1462,7 +1498,7 @@
         if (step.clear && L.clearExpression) L.clearExpression();
         else if (step.name && L.setExpression) L.setExpression(step.name);
       } else if (step.kind === 'motion' && step.name) {
-        if (!skipMotions && L.playMotionAsync) watchMotion(runId, L.playMotionAsync(step.name), source);
+        if (!skipMotions && L.playMotionAsync) watchMotion(runId, L.playMotionAsync(step.name), source, true);
         if (step.closeMotion) {
           scheduleCloseMotion(step.closeMotion, step.closeAfterMs || 6000, runId);
         }
@@ -1521,17 +1557,17 @@
 
   function playbackAct(chain, runId, source, holdOnly) {
     var flush = closesToFlush(chain);
-    var motions = chainMotionNames(chain);
+    var motions = chainMotionPlan(chain);
     pendingCloses = [];
     cancelActTimers();
     if (holdOnly) return;
     // 另一只手的关闭不能和新动作同时发，否则状态机把后一个吞掉。先播新动作，等它返回再收。
     if (flush.length && motions.length) {
-      playSerial(motions.concat(flush), runId, source);
+      playSerial(motions, flush, runId, source);
       playActSteps(chain, runId, source, true);
       return;
     }
-    if (flush.length) playSerial(flush, runId, source);
+    if (flush.length) playSerial([], flush, runId, source);
     playActSteps(chain, runId, source, false);
   }
 

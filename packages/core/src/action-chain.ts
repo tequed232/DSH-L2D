@@ -115,6 +115,23 @@ export function chainHasMotion(chain: readonly { kind?: string }[] | null | unde
   return chain.some((step) => !!step && step.kind === 'motion');
 }
 
+export type MotionResultKind = 'ok' | 'skip' | 'fail';
+
+/**
+ * 成对动作的结果分三类。
+ * ok：播出去了。
+ * skip：本来就开着或关着，手的状态已经是对的，不算失败。
+ * fail：被状态机拒绝或被正在播的动作吞掉。
+ */
+export function motionResultKind(
+  result: { status?: string; reason?: string } | null | undefined,
+): MotionResultKind {
+  if (!result || result.status === 'ok' || !result.status) return 'ok';
+  if (result.status === 'skipped') return 'skip';
+  if (result.reason === 'already-open' || result.reason === 'already-closed') return 'skip';
+  return 'fail';
+}
+
 /**
  * 抢占时要补播哪些还挂着的关闭动作。
  * 新链没有 motion 时，原样补播，避免手停在半空。
@@ -178,7 +195,10 @@ export interface ActionDoneEvent {
   callId: number | null;
   source: string;
   steps: number;
+  /** 动作真的没播成：被拒或被吞。正常跳过不写这里。 */
   reason?: string;
+  /** already-open / already-closed 这类正常跳过，不表示失败。 */
+  notes?: string[];
 }
 
 export interface ActiveAct {
@@ -211,7 +231,12 @@ function snapshot(run: ActiveAct): { runId: number; priority: ActPriority; sourc
   return { runId: run.runId, priority: run.priority, source: run.source };
 }
 
-function doneEvent(run: ActiveAct, phase: ActEventPhase, reason?: string): ActionDoneEvent {
+function doneEvent(
+  run: ActiveAct,
+  phase: ActEventPhase,
+  reason?: string,
+  notes?: string[],
+): ActionDoneEvent {
   const event: ActionDoneEvent = {
     type: 'action-done',
     phase,
@@ -222,20 +247,31 @@ function doneEvent(run: ActiveAct, phase: ActEventPhase, reason?: string): Actio
     steps: run.steps,
   };
   if (reason) event.reason = reason;
+  if (notes && notes.length) event.notes = notes.slice();
   return event;
 }
 
 export class ActGate {
   private seq = 0;
   private active: ActiveAct | null = null;
-  /** 这条链里有动作被状态机跳过或吞掉。结束回执带上，避免静默。 */
-  private motionNote: { runId: number; reason: string } | null = null;
+  /** 真正没播成。结束回执的 reason 只用这个。 */
+  private motionFail: { runId: number; reason: string } | null = null;
+  /** 正常跳过，结束回执放 notes，不当成失败。 */
+  private motionSkips: { runId: number; notes: string[] } | null = null;
 
-  /** 记下第一个失败原因。runId 对不上（已经换链）就忽略。 */
-  noteMotion(runId: number, reason: string): void {
+  /**
+   * kind 为 skip 时记进 notes（already-open 这类）。
+   * 缺省和 fail 记第一个失败原因。runId 对不上就忽略。
+   */
+  noteMotion(runId: number, reason: string, kind: 'fail' | 'skip' = 'fail'): void {
     if (!reason || !this.active || this.active.runId !== runId) return;
-    if (this.motionNote && this.motionNote.runId === runId) return;
-    this.motionNote = { runId, reason };
+    if (kind === 'skip') {
+      if (!this.motionSkips || this.motionSkips.runId !== runId) this.motionSkips = { runId, notes: [] };
+      if (this.motionSkips.notes.indexOf(reason) < 0) this.motionSkips.notes.push(reason);
+      return;
+    }
+    if (this.motionFail && this.motionFail.runId === runId) return;
+    this.motionFail = { runId, reason };
   }
 
   current(): ActiveAct | null {
@@ -265,7 +301,8 @@ export class ActGate {
 
     const events: ActionDoneEvent[] = [];
     if (current) events.push(doneEvent(current, 'interrupted', 'preempted'));
-    this.motionNote = null;
+    this.motionFail = null;
+    this.motionSkips = null;
 
     const next: ActiveAct = {
       runId: ++this.seq,
@@ -289,9 +326,11 @@ export class ActGate {
   /** 自然播完。runId 对不上（已被打断或本来就不是这条）则忽略。 */
   finish(runId: number): ActionDoneEvent | null {
     if (!this.active || this.active.runId !== runId) return null;
-    const reason = this.motionNote && this.motionNote.runId === runId ? this.motionNote.reason : undefined;
-    this.motionNote = null;
-    const event = doneEvent(this.active, 'end', reason);
+    const reason = this.motionFail && this.motionFail.runId === runId ? this.motionFail.reason : undefined;
+    const notes = this.motionSkips && this.motionSkips.runId === runId ? this.motionSkips.notes : undefined;
+    this.motionFail = null;
+    this.motionSkips = null;
+    const event = doneEvent(this.active, 'end', reason, notes);
     this.active = null;
     return event;
   }
@@ -300,7 +339,8 @@ export class ActGate {
   release(runId?: number, reason = 'released'): ActionDoneEvent | null {
     if (!this.active) return null;
     if (runId != null && this.active.runId !== runId) return null;
-    this.motionNote = null;
+    this.motionFail = null;
+    this.motionSkips = null;
     const event = doneEvent(this.active, 'interrupted', reason);
     this.active = null;
     return event;

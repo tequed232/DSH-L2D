@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
-import { ActGate } from '../../core/src/index.ts';
+import { ActGate, getActPhaseTemplate, motionResultKind } from '../../core/src/index.ts';
 import { closeMotionsOnPreempt, preemptedYandere } from '../../core/src/action-chain.ts';
 import { MotionDirector, motionsShareArm } from '../../renderer/src/app/motion-director.ts';
 
@@ -320,8 +320,12 @@ globalThis.DSH_L2D = {
   currentAct() {
     return gate.current();
   },
-  noteActMotion(runId, reason) {
-    gate.noteMotion(runId, reason);
+  noteActMotion(runId, reason, kind) {
+    gate.noteMotion(runId, reason, kind === 'skip' ? 'skip' : 'fail');
+  },
+  motionResultKind,
+  actPhaseTemplate(name) {
+    return getActPhaseTemplate(name);
   },
   closeMotionsOnPreempt,
   preemptedYandere,
@@ -359,6 +363,20 @@ vm.runInThisContext(readFileSync(join(here, 'overlay.js'), 'utf8'), { filename: 
 document.readyState = 'complete';
 for (const fn of docListeners.DOMContentLoaded || []) fn();
 
+function bubbleEl() {
+  return queryAll(body, '.l2d-bubble')[0] || null;
+}
+
+function bubbleText() {
+  const el = bubbleEl();
+  return el ? el.textContent : '';
+}
+
+function clearBubble() {
+  const el = bubbleEl();
+  if (el) el.textContent = '';
+}
+
 function vignetteOn() {
   for (const el of body.children) {
     if (el.classList && el.classList.contains('l2d-yandere-fx')) return el.classList.contains('on');
@@ -384,6 +402,7 @@ async function bootYandere() {
   timers.length = 0;
   ui.enableYandere();
   await settle();
+  clearBubble();
 }
 
 let passed = 0;
@@ -435,7 +454,9 @@ await test('开场被戳，首步是抚胸手打开：不补播关闭，槽保�
   await settle();
   const end = events.find((event) => event.phase === 'end' && event.runId === result.runId);
   assert.ok(end);
-  assert.equal(end.reason, 'already-open');
+  assert.equal(end.reason, undefined);
+  assert.deepEqual(end.notes, ['already-open']);
+  assert.notEqual(bubbleText(), '这个动作先让位');
 });
 
 await test('开场被戳，首步是狗尾巴草打开：草最终 open，左手收回', async () => {
@@ -458,6 +479,27 @@ await test('开场被戳，首步是狗尾巴草打开：草最终 open，左手
   assert.equal(director.slotStates()['抚胸手'], 'closed');
   assert.equal(vignetteOn(), true);
   assert.equal(state.expression, '黑脸');
+  assert.notEqual(bubbleText(), '这个动作先让位');
+});
+
+await test('开场被戳，首步是竖手指打开：不弹让位气泡，手指 open，左手收回', async () => {
+  await bootYandere();
+  releaseMotion();
+  const mark = played.length;
+  ui.executePokeAction({
+    priority: 'FORCE',
+    source: 'poke',
+    silent: true,
+    callId: 26,
+    chain: [{ kind: 'motion', name: '竖手指打开' }],
+  });
+  await settle();
+  const after = played.slice(mark);
+  assert.deepEqual(after.map((item) => item.group), ['竖手指打开', '抚胸手关闭']);
+  assert.equal(after.every((item) => item.status === 'ok'), true);
+  assert.equal(director.slotStates()['竖手指'], 'open');
+  assert.equal(director.slotStates()['抚胸手'], 'closed');
+  assert.notEqual(bubbleText(), '这个动作先让位');
 });
 
 await test('新链没有 motion：照常补播抚胸手关闭', async () => {
@@ -531,7 +573,65 @@ await test('动作还占着状态机时新动作被吞，结束回执带 start-r
   const end = events.find((event) => event.phase === 'end' && event.runId === result.runId);
   assert.ok(end);
   assert.equal(end.reason, 'start-rejected');
+  assert.equal(bubbleText(), '这个动作先让位');
   assert.equal(director.slotStates()['竖手指'], 'closed');
+});
+
+await test('连发两句 speaking：手指照样举着，end 没有失败 reason', async () => {
+  timers.length = 0;
+  director.reset();
+  releaseMotion();
+  played.length = 0;
+  events.length = 0;
+  clearBubble();
+  ui.executePokeAction({
+    phase: 'speaking',
+    priority: 'FORCE',
+    silent: true,
+    callId: 31,
+    source: 'speaking',
+  });
+  flushTimers(400);
+  await settle();
+  releaseMotion();
+  assert.equal(director.slotStates()['竖手指'], 'open');
+  const second = ui.executePokeAction({
+    phase: 'speaking',
+    priority: 'FORCE',
+    silent: true,
+    callId: 32,
+    source: 'speaking',
+  });
+  flushTimers(400);
+  await settle();
+  // 第二句碰到已经举起的手指，槽保持 open，这时还没到它自己的关闭时间。
+  assert.equal(director.slotStates()['竖手指'], 'open');
+  flushTimers(4000);
+  await settle();
+  const end = events.find((event) => event.phase === 'end' && event.runId === second.runId);
+  assert.ok(end);
+  assert.equal(end.reason, undefined);
+  assert.deepEqual(end.notes, ['already-open']);
+  assert.notEqual(bubbleText(), '这个动作先让位');
+});
+
+await test('补关闭会等到 motion 的 delayMs 再播', async () => {
+  await bootYandere();
+  releaseMotion();
+  const mark = played.length;
+  ui.executePokeAction({
+    priority: 'FORCE',
+    source: 'poke',
+    silent: true,
+    callId: 41,
+    chain: [{ kind: 'motion', name: '狗尾巴草打开', delayMs: 500 }],
+  });
+  await settle();
+  assert.equal(played.slice(mark).some((item) => item.group === '狗尾巴草打开'), false);
+  flushTimers(500);
+  await settle();
+  assert.deepEqual(played.slice(mark).map((item) => item.group), ['狗尾巴草打开', '抚胸手关闭']);
+  assert.notEqual(bubbleText(), '这个动作先让位');
 });
 
 if (process.exitCode) {

@@ -219,7 +219,7 @@ MCP 上的 `l2d_act` 用来演一小段，不要用它写 `ParamMouthOpenY` 或�
 
 邪神是常驻模式，只能从菜单关掉。你发一条链不会收掉暗角和黑脸。那 9 秒只是开场不被待机打断。新动作如果是另一只手，左手的抚胸会等新动作播完再收回；新动作本身就是抚胸手时，不会再补一次关闭。
 
-`accepted: true` 只说明这条链已经排上。看返回里的 `events`：`start` 是开始，`end` 是播完，`interrupted` 是被打断。`reason: priority-blocked` 表示没播成，等当前演出结束再发，或者改用更高优先级。
+`accepted: true` 只说明这条链已经排上。看返回里的 `events`：`start` 是开始，`end` 是播完，`interrupted` 是被打断。`reason: priority-blocked` 表示没播成，等当前演出结束再发，或者改用更高优先级。`end.reason` 只有 `start-rejected`、`conflict` 这种才是动作没播成。`notes` 里的 `already-open` 表示手本来就举着，不是失败。
 
 四段可以直接用 `phase`，不必自己拼步骤：
 

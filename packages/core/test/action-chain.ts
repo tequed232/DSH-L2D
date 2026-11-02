@@ -10,6 +10,7 @@ import {
   canInterruptAct,
   closeMotionsOnPreempt,
   getActPhaseTemplate,
+  motionResultKind,
   parseActPriority,
   preemptedYandere,
 } from '../src/index.ts';
@@ -183,19 +184,27 @@ test('按同一只手决定补不补播：左手关闭不会挡住右手，同�
   assert.deepEqual(closeMotionsOnPreempt(['竖手指关闭'], speaking.chain, share), []);
 });
 
-test('动作被状态机拒绝或吞掉时，结束回执带上 reason', () => {
+test('只有被拒或被吞才写 reason，already-open 放 notes', () => {
+  assert.equal(motionResultKind({ status: 'ok' }), 'ok');
+  assert.equal(motionResultKind({ status: 'skipped', reason: 'already-open' }), 'skip');
+  assert.equal(motionResultKind({ status: 'skipped', reason: 'already-closed' }), 'skip');
+  assert.equal(motionResultKind({ status: 'failed', reason: 'start-rejected' }), 'fail');
+  assert.equal(motionResultKind({ status: 'conflict', reason: 'arm' }), 'fail');
+
   const gate = new ActGate();
-  const admitted = gate.admit({ priority: 'FORCE', source: 'poke', callId: 4, steps: 1 });
-  gate.noteMotion(admitted.runId || 0, 'already-open');
+  const admitted = gate.admit({ priority: 'FORCE', source: 'speaking', callId: 4, steps: 1 });
+  gate.noteMotion(admitted.runId || 0, 'already-open', 'skip');
   const skipped = gate.finish(admitted.runId || 0);
   assert.equal(skipped?.phase, 'end');
-  assert.equal(skipped?.reason, 'already-open');
+  assert.equal(skipped?.reason, undefined);
+  assert.deepEqual(skipped?.notes, ['already-open']);
 
   const again = gate.admit({ priority: 'FORCE', source: 'poke', callId: 5, steps: 1 });
-  gate.noteMotion(again.runId || 0, 'start-rejected');
-  gate.noteMotion(again.runId || 0, 'later-reason');
+  gate.noteMotion(again.runId || 0, 'start-rejected', 'fail');
+  gate.noteMotion(again.runId || 0, 'later-reason', 'fail');
   const swallowed = gate.finish(again.runId || 0);
   assert.equal(swallowed?.reason, 'start-rejected');
+  assert.equal(swallowed?.notes, undefined);
 });
 
 test('只有邪神自己那条槽被抢走时才要收视觉层', () => {
