@@ -24,7 +24,7 @@ import { createAiInbox } from './ai-inbox.mjs';
 import { createWorkspaceAgentBridge } from './workspace-agent.mjs';
 import { createReverseLog } from './reverse-log.mjs';
 import { normalizePresencePayload, writeEnvState } from './env-state.mjs';
-import { collectReservedParams } from './param-guards.mjs';
+import { createModelIndexCache, guardAiCall } from './host-guard.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
 import { isActionTool, summarizeSession } from './session-events.mjs';
 import { setupPetWindow } from './pet-window.mjs';
@@ -1006,6 +1006,9 @@ export function apply(root, config = {}) {
     // 而且失败可重建，不会因为连接断了就哑掉。
     const aiInbox = createAiInbox();
     const reverseLog = createReverseLog({ diag });
+    // 模型索引（表情/动作组/物理输出表）只读缓存：/ai/call 不该每次都读磁盘。
+    // 读不到时守卫 fail-open（物理输出判定放行），由渲染端兜底，绝不 500。
+    const aiIndexCache = createModelIndexCache(MODEL_DIR);
 
     route('/dsh-l2d/ai/call', (req, res) => {
       if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
@@ -1029,35 +1032,19 @@ export function apply(root, config = {}) {
         if (!name) {
           return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('name required'));
         }
-        // 只放行已知工具名，避免变成任意函数调用面
-        const ALLOWED = new Set([
-          'l2d_set_expression',
-          'l2d_play_motion',
-          'l2d_look_at',
-          'l2d_set_parameters',
-          'l2d_reset_pose',
-          'l2d_play_keyframes',
-          'l2d_stop_keyframes',
-          'l2d_set_pose',
-          // MCP 薄壳用的高层工具。低层 set_parameters / play_keyframes 仍只留给 HTTP 调试，不进 MCP。
-          'l2d_emote',
-          'l2d_gaze',
-          'l2d_say',
-          'l2d_act',
-          'l2d_get_state',
-          'l2d_reset',
-        ]);
-        if (!ALLOWED.has(name)) {
-          return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('unknown tool: ' + name));
+        // 工具入参守卫（纵深防御，见 docs/Embodied-Behavior.md §7 / docs/M1-D-Adapter-Spec.md）：
+        // 未知工具名、口型参数、物理输出未 own、未索引表情/动作组在入队前就 400；
+        // 模型索引读不到时守卫 fail-open（物理输出判定放行），渲染端仍会再拦一次。
+        let guarded;
+        try {
+          guarded = guardAiCall({ name, args: body.args || {} }, { index: aiIndexCache.get() });
+        } catch (err) {
+          // 守卫自身异常不得影响指令通道：记录后放行，交给渲染端校验。
+          diag('ai/call guard error: ' + String((err && err.message) || err));
+          guarded = { ok: true, warnings: ['guard-error'] };
         }
-        // 口型禁区（纵深防御，见 docs/Embodied-Behavior.md §7）：
-        // 以参数名为键的工具在入队前先拒绝；渲染端仍会再拦一次，这里是宿主侧第一道闸。
-        const RESERVED_GUARDED = new Set(['l2d_set_parameters', 'l2d_play_keyframes']);
-        if (RESERVED_GUARDED.has(name)) {
-          const hits = collectReservedParams(body.args || {});
-          if (hits.length) {
-            return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('reserved-param: ' + hits.join(',')));
-          }
+        if (!guarded.ok) {
+          return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from(guarded.message));
         }
         const queued = aiInbox.call(name, body.args || {});
         sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(queued), 'utf8'));
