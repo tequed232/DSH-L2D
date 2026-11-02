@@ -24,6 +24,7 @@ import { createAiInbox } from './ai-inbox.mjs';
 import { createWorkspaceAgentBridge } from './workspace-agent.mjs';
 import { createReverseLog } from './reverse-log.mjs';
 import { normalizePresencePayload, writeEnvState } from './env-state.mjs';
+import { collectReservedParams } from './param-guards.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
 import { isActionTool, summarizeSession } from './session-events.mjs';
 import { setupPetWindow } from './pet-window.mjs';
@@ -1048,6 +1049,15 @@ export function apply(root, config = {}) {
         ]);
         if (!ALLOWED.has(name)) {
           return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('unknown tool: ' + name));
+        }
+        // 口型禁区（纵深防御，见 docs/Embodied-Behavior.md §7）：
+        // 以参数名为键的工具在入队前先拒绝；渲染端仍会再拦一次，这里是宿主侧第一道闸。
+        const RESERVED_GUARDED = new Set(['l2d_set_parameters', 'l2d_play_keyframes']);
+        if (RESERVED_GUARDED.has(name)) {
+          const hits = collectReservedParams(body.args || {});
+          if (hits.length) {
+            return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('reserved-param: ' + hits.join(',')));
+          }
         }
         const queued = aiInbox.call(name, body.args || {});
         sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(queued), 'utf8'));

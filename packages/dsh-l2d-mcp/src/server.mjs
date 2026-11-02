@@ -14,6 +14,7 @@ import { resolveBase } from './discover.mjs';
 import { actSettled, mergeActEvents, shapeActReceipt } from './act-result.mjs';
 import { executeActionSequence, validateActionSequence } from './action-sequence.mjs';
 import { CHOREOGRAPHY } from '../../dsh-l2d-plugin/lib/choreography.mjs';
+import { findReservedParams, validateActChain, validateExpressionName, validateMotionGroup } from './validate.mjs';
 
 let cachedBase = '';
 
@@ -126,7 +127,13 @@ server.registerTool(
       name: z.string().describe('表情名'),
     },
   },
-  async ({ name }) => toolResult(await forward('l2d_set_expression', { name }, 3000)),
+  async ({ name }) => {
+    const check = validateExpressionName(name);
+    if (!check.ok) {
+      return toolResult({ ok: false, reason: check.reason, name, allowed: check.allowed });
+    }
+    return toolResult(await forward('l2d_set_expression', { name }, 3000));
+  },
 );
 
 server.registerTool(
@@ -139,8 +146,13 @@ server.registerTool(
       awaitFinish: z.boolean().optional().describe('是否等到动作时长结束再返回'),
     },
   },
-  async ({ group, index, awaitFinish }) =>
-    toolResult(await forward('l2d_play_motion', { group, index, awaitFinish }, awaitFinish ? 15000 : 4000)),
+  async ({ group, index, awaitFinish }) => {
+    const check = validateMotionGroup(group);
+    if (!check.ok) {
+      return toolResult({ ok: false, reason: check.reason, group, allowed: check.allowed });
+    }
+    return toolResult(await forward('l2d_play_motion', { group, index, awaitFinish }, awaitFinish ? 15000 : 4000));
+  },
 );
 
 server.registerTool(
@@ -214,6 +226,10 @@ server.registerTool(
     if ((!chain || !chain.length) && !phase) {
       return toolResult({ ok: false, accepted: false, reason: 'empty-chain', outcome: 'rejected', settled: false, events: [] });
     }
+    const check = validateActChain(chain);
+    if (!check.ok) {
+      return toolResult({ ok: false, accepted: false, reason: 'invalid-chain', errors: check.errors, outcome: 'rejected', settled: false, events: [] });
+    }
     return toolResult(await forward('l2d_act', { chain, bubble, priority, phase }, 12000, 'act'));
   },
 );
@@ -255,6 +271,10 @@ server.registerTool(
         ? [{ chain: selected.chain, priority: selected.priority, bubble: selected.bubble || undefined }]
         : segments,
     };
+    const reserved = findReservedParams(plan.segments);
+    if (reserved.length) {
+      return toolResult({ ok: false, status: 'rejected', reason: 'reserved-param', reserved, receipts: [] });
+    }
     const validation = validateActionSequence(plan);
     if (!validation.ok) return toolResult({ ok: false, status: 'rejected', reason: 'invalid-sequence', errors: validation.errors, receipts: [] });
     const result = await executeActionSequence(plan, (args) => forward('l2d_act', args, 12000, 'act'));
