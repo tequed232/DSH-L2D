@@ -25,6 +25,7 @@
   var agentLink = { state: 'unknown', lastAt: 0, timer: 0, lastSpokeAt: 0 };
   // 设置热更新：外部 PUT /dsh-l2d/settings.json 后，页面需要自己发现变化（overlay 不再整份覆盖设置）
   var settingsWatch = { timer: 0, lastEyeFollow: null };
+  var gazeNeutralTimer = 0;
 
   // ---- 环境感知层（输入框追踪 / 挂机 / 回归）--------------------------------
   // 与 agentLink 同理：bootOverlay 可能在 IIFE 尾部赋值前被调度，这里必须提前初始化。
@@ -2754,6 +2755,9 @@
     if (next === current) return false;
     settings.eyeFollow = next;
     applyEyeFollowSetting();
+    // 立即把新状态上报一次（关闭后 env 心跳停发，宿主需要这最后一帧知道
+    // inputFocused/away 已停用；否则 env-state 会停留在旧值）
+    postEnvPresence('state', { reason: 'eyeFollow-' + next }, { force: true });
     publishPresence();
     console.info('[dsh-l2d] eyeFollow -> ' + next + '（外部设置热更新）');
     return true;
@@ -2774,6 +2778,26 @@
     }, 2500);
   }
 
+  /**
+   * 关掉 eyeFollow 时把注视平滑拉回中立再清目标：
+   * 只 clearGazeTarget() 会留下上一帧的平滑值（实测 AngleY 冻在 8.4），
+   * 先 gaze(0,0) 让 gazeState.cur 衰减到 0，再清目标交给待机。
+   */
+  function resetGazeToNeutral(settleMs) {
+    var L = window.DSH_L2D;
+    if (gazeNeutralTimer) {
+      clearTimeout(gazeNeutralTimer);
+      gazeNeutralTimer = 0;
+    }
+    if (L && L.gaze) {
+      try { L.gaze(0, 0); } catch (e) { /* ignore */ }
+    }
+    gazeNeutralTimer = setTimeout(function () {
+      gazeNeutralTimer = 0;
+      clearGazeTarget();
+    }, Math.max(200, Number(settleMs) || 800));
+  }
+
   function applyEyeFollowSetting() {
     if (settings.eyeFollow === false) {
       if (env.away) exitAway('eyeFollow-off');
@@ -2781,8 +2805,12 @@
       stopAwayWander();
       env.inputEl = null;
       env.inputRect = null;
-      clearGazeTarget();
+      resetGazeToNeutral(800);
     } else if (env.bound) {
+      if (gazeNeutralTimer) {
+        clearTimeout(gazeNeutralTimer);
+        gazeNeutralTimer = 0;
+      }
       if (env.away) {
         startAwayWander();
       } else {

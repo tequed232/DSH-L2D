@@ -19,6 +19,7 @@ import { SHADER_SOURCES } from './shaders';
 import { mixAdditive } from '../../core/src/angle-mix.ts';
 import { sampleAmbient, type AmbientKind } from '../../core/src/ambient.ts';
 import { LIPSYNC_PARAMS } from '../../core/src/index.ts';
+import { admitKeyframeTrack } from './app/keyframe-admission.ts';
 import {
   ActGate,
   closeMotionsOnPreempt,
@@ -708,9 +709,15 @@ export function playKeyframes(tracks: KeyframeTrack[], opts: KeyframesOptions = 
     try {
       const handle = CubismFramework.getIdManager().getId(tr.param);
       const idx = core.getParameterIndex(handle);
-      // 物理输出默认丢弃；被 Agent 独占时放行（写入仍在 post 相位，后写胜出）
-      if (idx < 0 || (injector.isPhysicsOutput(tr.param) && !injector.isAgentOwned(tr.param))) continue;
-      if (LIPSYNC_BLOCK.has(tr.param)) continue; // 口型禁区，任何调用方都不得写
+      // 准入只排除「参数不存在 / 口型红线」；物理输出照收，准入后统一自动认领
+      // （之前把 isAgentOwned 判断放在自动 own 之前，导致未预先 own 的物理输出轨道
+      //   被整条丢弃，playKeyframes 直接返回 no-valid-tracks）。
+      const admission = admitKeyframeTrack({
+        exists: idx >= 0,
+        lipsync: LIPSYNC_BLOCK.has(tr.param),
+        physicsOutput: injector.isPhysicsOutput(tr.param),
+      });
+      if (!admission.accepted) continue;
 
       const min = core.getParameterMinimumValue(idx);
       const max = core.getParameterMaximumValue(idx);
