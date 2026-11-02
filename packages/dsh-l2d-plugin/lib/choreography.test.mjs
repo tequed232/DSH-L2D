@@ -145,4 +145,49 @@ assert.ok(validateChoreography(longChain).errors.some((text) => text.includes('�
 const other = validateChoreography(CHOREOGRAPHY, { expressions: ['兔牙'], motionGroups: ['竖手指打开', '竖手指关闭'] });
 assert.ok(other.errors.some((text) => text.includes('不在当前模型表')));
 
+// 14. 回归：refreshMs 门禁。持续态没到刷新周期不重播——即使 cooldown 已经过了。
+//     working 的 cooldown 只有 8s、refreshMs 是 25s；修复前这里会在 10s 时就补脉冲。
+const notYetRefresh = decide({
+  state: 'working',
+  previousState: 'working',
+  stateSince: t0 - 30000,
+  now: t0,
+  lastFireAtByState: { working: t0 - 10000 },
+  lastAnyFireAt: t0 - 10000,
+});
+assert.equal(notYetRefresh.fire, false);
+assert.equal(notYetRefresh.reason, 'refresh');
+assert.ok(notYetRefresh.retryAfterMs > 0 && notYetRefresh.retryAfterMs <= 15000);
+
+// 15. 回归：频次预算跨状态隔离。working 的高频次不能挤占 attention 的额度。
+const isolated = decide({
+  state: 'attention',
+  previousState: 'working',
+  stateSince: t0 - 5000,
+  now: t0,
+  lastFireAtByState: { attention: t0 - 30000 },
+  lastAnyFireAt: t0 - 30000,
+  firesByState: { working: [t0 - 1000, t0 - 2000, t0 - 3000], attention: [t0 - 50000] },
+});
+assert.equal(isolated.fire, true);
+assert.equal(isolated.reason, 'fire');
+// 同一批记录走旧口径（扁平 fires）会命中 rate——证明隔离真的生效，不是记录变少了。
+const flatSame = decide({
+  state: 'attention',
+  previousState: 'working',
+  stateSince: t0 - 5000,
+  now: t0,
+  lastFireAtByState: { attention: t0 - 30000 },
+  lastAnyFireAt: t0 - 30000,
+  fires: [t0 - 1000, t0 - 2000, t0 - 3000],
+});
+assert.equal(flatSame.fire, false);
+assert.equal(flatSame.reason, 'rate');
+
+// 16. 回归：缺 stateSince 时无法证明「已稳定」，按刚进入处理（fail-closed，dwell 挡住）。
+const noSince = decide({ state: 'thinking', previousState: 'idle', now: t0, lastAnyFireAt: 0 });
+assert.equal(noSince.fire, false);
+assert.equal(noSince.reason, 'dwell');
+assert.ok(noSince.retryAfterMs > 0);
+
 console.log('choreography: ok');

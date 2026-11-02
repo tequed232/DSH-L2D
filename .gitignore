@@ -30,3 +30,4 @@ Thumbs.db
 # 临时产物
 tmp/
 coverage/
+last-run.json
