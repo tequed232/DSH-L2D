@@ -118,7 +118,7 @@ const tools = [
     function: {
       name: 'l2d_set_parameters',
       description:
-        '直接设置底层参数，用于表情动作覆盖不到的细微调整。参数值范围通常是 -30 到 30（角度制），面部开合类参数是 0 到 1。不确定参数名时不要调用。',
+        '直接设置可写输入参数。AngleX/Y/Z、PositionX/Y 是物理输入；ParamAngle*、ParamBodyAngle*、HipAngle*、ShoulderY 等是物理输出，写了会被下一帧盖掉。ParamMouthOpenY 留给口型，不要写。眼球 ParamEyeBallX/Y 的数值范围以运行时能力表 min/max 为准，不要猜成 -30~30。不确定参数名时不要调用。',
       parameters: {
         type: 'object',
         properties: {
@@ -150,7 +150,7 @@ const tools = [
               properties: {
                 param: {
                   type: 'string',
-                  description: '参数名，例如 ParamAngleZ、AngleX、ParamEyeLOpen',
+                  description: '参数名，必须是可写输入。头部侧倾用 AngleZ，不要用物理输出 ParamAngleZ。眼球开合可用 ParamEyeLOpen。不要写 ParamMouthOpenY。',
                 },
                 keys: {
                   type: 'array',
@@ -227,6 +227,12 @@ const payload = {
     },
   ],
   tools,
+  paramAccess: cap.paramAccess || {
+    source: 'fallback',
+    note: '模型不在仓库里。可写/只读按 physics3 输出表生成；没有 physics3 时用兜底规则。ParamEyeBallX/Y 的 min/max 待运行时确认，不要写成 -30~30。',
+    writableExamples: ['AngleX', 'AngleY', 'AngleZ', 'PositionX', 'PositionY', 'PositionZ', 'ParamEyeLOpen', 'ParamEyeROpen', 'CheeckPuff', 'Mouthpucker'],
+    readonlyExamples: ['ParamAngleX', 'ParamAngleY', 'ParamAngleZ', 'ParamBodyAngleX', 'ParamBodyAngleY', 'ParamBodyAngleZ', 'ParamMouthOpenY'],
+  },
 };
 
 fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });

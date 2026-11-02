@@ -603,12 +603,17 @@
 
   function zoneAt(e) {
     var p = bodyPoint(e);
-    if (p.nx < 0 || p.nx > 1 || p.ny < 0 || p.ny > 1) return null;
+    // 拖拽放大是绕画布中心缩放模型。分区仍按未缩放的身位划分，
+    // 所以先把点击点除以缩放，避免放大后点到的部位错位。不依赖 model3 的 HitAreas。
+    var z = dragZoom && dragZoom.cur > 0 ? dragZoom.cur : 1;
+    var nx = 0.5 + (p.nx - 0.5) / z;
+    var ny = 0.5 + (p.ny - 0.5) / z;
+    if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return null;
     // 分区按整身画布归一化；以实测截图校准，覆盖头/胸/裙/足四类高频互动。
-    if (p.nx >= 0.38 && p.nx <= 0.68 && p.ny < 0.15) return 'head';
-    if (p.nx >= 0.32 && p.nx <= 0.72 && p.ny >= 0.15 && p.ny < 0.37) return 'chest';
-    if (p.nx >= 0.22 && p.nx <= 0.82 && p.ny >= 0.37 && p.ny < 0.66) return 'skirt';
-    if (p.nx >= 0.28 && p.nx <= 0.76 && p.ny >= 0.66) return 'foot';
+    if (nx >= 0.38 && nx <= 0.68 && ny < 0.15) return 'head';
+    if (nx >= 0.32 && nx <= 0.72 && ny >= 0.15 && ny < 0.37) return 'chest';
+    if (nx >= 0.22 && nx <= 0.82 && ny >= 0.37 && ny < 0.66) return 'skirt';
+    if (nx >= 0.28 && nx <= 0.76 && ny >= 0.66) return 'foot';
     return 'body';
   }
 
@@ -721,7 +726,16 @@
     yandereOn = false;
     yandereArmedAt = 0;
     setYandereFx(false);
-    applyAppearance(null);
+    appearanceCurrent = null;
+    var L = window.DSH_L2D;
+    try {
+      if (L && L.playMotionAsync) L.playMotionAsync('抚胸手关闭').catch(function () { /* 没打开就跳过 */ });
+      if (L && L.clearExpression) L.clearExpression();
+      if (L && L.clearGaze) L.clearGaze();
+      if (L && L.setPose) L.setPose({ right: 'rest', left: 'rest' });
+    } catch (e) {
+      /* 退出失败也不能把特效留在屏幕上 */
+    }
     say('…什么都没看到。', 3000);
     setTimeout(buildMenu, 30); // 刷新菜单文案
   }
@@ -852,6 +866,20 @@
     var y = Math.min(window.innerHeight - h - 8, Math.max(8, e.clientY));
     menuEl.style.left = x + 'px';
     menuEl.style.top = y + 'px';
+  }
+
+  function moodFromText(text) {
+    var raw = String(text || '');
+    var tag = /<mood>([^<]+)<\/mood>/.exec(raw);
+    if (tag && tag[1].trim()) return tag[1].trim();
+    if (/(开心|高兴|哈哈|太好了|喜欢)/.test(raw)) return '开心';
+    if (/(害羞|不好意思|脸红)/.test(raw)) return '害羞';
+    if (/(生气|愤怒|讨厌)/.test(raw)) return '生气';
+    if (/(惊讶|不会吧|震惊|哇)/.test(raw)) return '惊讶';
+    if (/(难过|伤心|抱歉|对不起)/.test(raw)) return '悲伤';
+    if (/(爱你|么么|心心)/.test(raw)) return '爱';
+    if (/(思考|为什么|分析|让我想想|如何)/.test(raw)) return '思考';
+    return '';
   }
 
   function chatActionForReply(text) {
@@ -1206,6 +1234,8 @@
     }, delayMs || 6000));
   }
 
+  var actingTimer = 0;
+
   function executePokeAction(action) {
     var L = window.DSH_L2D;
     if (!L || !action) return;
@@ -1243,6 +1273,8 @@
       }
     }
 
+    if (L.setStageBusy) L.setStageBusy({ acting: true });
+    if (actingTimer) clearTimeout(actingTimer);
     for (var i = 0; i < chain.length; i++) {
       var step = chain[i];
       var delay = Math.max(0, Number(step.delayMs) || 0);
@@ -1255,6 +1287,13 @@
         })(step);
       }
     }
+
+    actingTimer = setTimeout(function () {
+      actingTimer = 0;
+      if (window.DSH_L2D && window.DSH_L2D.setStageBusy) {
+        window.DSH_L2D.setStageBusy({ acting: false });
+      }
+    }, Math.max(400, elapsed + 1800));
 
     if (action.bubble) say(action.bubble, 3200);
     else if (!action.silent) say('戳戳~', 2200);
@@ -1523,6 +1562,7 @@
   // 那种位移会让角色整体漂移，观感是错的。
   // 拖拽面部微放大：拖住时轻微放大贴近（~7%），松手平滑弹回
   var dragZoom = { cur: 1, applied: 1 };
+  var lastDragBusy = false;
 
   function startAnim() {
     var t0 = performance.now();
@@ -1531,6 +1571,12 @@
       // 拖拽放大缓动
       var zoomTarget = physics.dragging ? 1.07 : 1;
       dragZoom.cur += (zoomTarget - dragZoom.cur) * 0.12;
+      var dragBusy = physics.dragging || dragZoom.cur > 1.02;
+      if (dragBusy !== lastDragBusy) {
+        lastDragBusy = dragBusy;
+        var Lbusy = window.DSH_L2D;
+        if (Lbusy && Lbusy.setStageBusy) Lbusy.setStageBusy({ dragging: dragBusy });
+      }
       if (Math.abs(dragZoom.cur - dragZoom.applied) > 0.002) {
         dragZoom.applied = dragZoom.cur;
         var Lz = window.DSH_L2D;
@@ -1882,21 +1928,33 @@
     },
   };
 
+  var lastMoodText = '';
+
+  function feedMoodFromText(text) {
+    var raw = String(text || '');
+    if (!raw || raw === lastMoodText) return;
+    lastMoodText = raw;
+    var name = moodFromText(raw);
+    if (!name || !window.DSH_L2D || !window.DSH_L2D.emotionSignal) return;
+    window.DSH_L2D.emotionSignal({ type: 'mood', data: { mood: name } });
+  }
+
   function reactAgentState(next, meta) {
     var now = Date.now();
+    // 同一状态下的新回复也要喂情绪；有 <mood> 用标签，没有就用关键词
+    try {
+      feedMoodFromText(meta && meta.lastAssistantText);
+    } catch (e2) {
+      /* 情绪信号失败忽略 */
+    }
     if (next === agentLink.state) return;
     agentLink.state = next;
     agentLink.lastAt = now;
-    // <mood>标签 → 情绪路由（大模型隐藏标签驱动表情）
     try {
-      var moodMatch = /<mood>([^<]+)<\/mood>/.exec(String((meta && meta.lastAssistantText) || ''));
-      if (moodMatch && window.DSH_L2D && window.DSH_L2D.emotionSignal) {
-        window.DSH_L2D.emotionSignal({ type: 'mood', data: { mood: moodMatch[1] } });
-      }
       if (next === 'error' && window.DSH_L2D && window.DSH_L2D.emotionSignal) {
         window.DSH_L2D.emotionSignal({ type: 'state', data: { state: 'error' } });
       }
-    } catch (e2) {
+    } catch (e3) {
       /* 情绪信号失败忽略 */
     }
     // 动作链失败不能打断后续状态联动
@@ -2185,10 +2243,27 @@
         .then(function (d) {
           if (!d || !d.calls || !d.calls.length) return;
           d.calls.forEach(function (c) {
-            var res = window.DSH_L2D_AI.exec(c.name, c.args);
-            if (!res || !res.ok) {
-              console.warn('[dsh-l2d] AI 指令执行失败', c.name, res);
-            }
+            Promise.resolve(window.DSH_L2D_AI.exec(c.name, c.args))
+              .then(function (res) {
+                if (!res || res.ok === false) {
+                  // skipped / conflict 是状态机的正常结果，不当成异常刷屏
+                  if (!res || (res.reason !== 'skipped' && res.reason !== 'conflict' && res.status !== 'skipped' && res.status !== 'conflict')) {
+                    console.warn('[dsh-l2d] AI 指令执行失败', c.name, res);
+                  }
+                }
+                fetch('/dsh-l2d/ai/result', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: c.id, result: res || { ok: false, reason: 'empty' } }),
+                }).catch(function () { /* 结果回写失败，MCP 会超时 */ });
+              })
+              .catch(function (err) {
+                fetch('/dsh-l2d/ai/result', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: c.id, result: { ok: false, reason: String(err && err.message ? err.message : err) } }),
+                }).catch(function () { /* ignore */ });
+              });
           });
         })
         .catch(function () {
@@ -2220,8 +2295,56 @@
             return okExp ? { ok: true } : { ok: false, error: 'unknown-expression: ' + a.name };
           }
           case 'l2d_play_motion': {
-            var okMot = L.playMotion(String(a.group || ''), Number(a.index || 0));
-            return okMot ? { ok: true } : { ok: false, error: 'unknown-motion-group: ' + a.group };
+            if (!L.playMotionAsync) return { ok: false, reason: 'motion-unavailable' };
+            return L.playMotionAsync(String(a.group || ''), {
+              index: Number(a.index || 0),
+              awaitFinish: a.awaitFinish === true,
+            }).then(function (r) {
+              if (r.status === 'ok') return { ok: true, status: r.status, group: r.group, slot: r.slot, dir: r.dir };
+              return { ok: false, reason: r.reason || r.status, status: r.status, group: r.group };
+            });
+          }
+          case 'l2d_emote': {
+            var moodName = String(a.mood || a.name || '').trim();
+            if (!moodName) return { ok: false, reason: 'empty-mood' };
+            if (L.emotionSignal) L.emotionSignal({ type: 'mood', data: { mood: moodName } });
+            return { ok: true, mood: moodName };
+          }
+          case 'l2d_gaze': {
+            var gx = Math.max(-1, Math.min(1, Number(a.x) || 0));
+            var gy = Math.max(-1, Math.min(1, Number(a.y) || 0));
+            if (L.gaze) L.gaze(gx, gy);
+            else L.lookAt(gx, gy);
+            return { ok: true, x: gx, y: gy };
+          }
+          case 'l2d_say': {
+            var said = String(a.text || '').slice(0, 200);
+            if (!said) return { ok: false, reason: 'empty-text' };
+            var hold = Math.max(800, Math.min(12000, Number(a.holdMs) || 3600));
+            say(said, hold);
+            return { ok: true };
+          }
+          case 'l2d_act': {
+            var chain = Array.isArray(a.chain) ? a.chain : [];
+            if (!chain.length) return { ok: false, reason: 'empty-chain' };
+            executePokeAction({ chain: chain, bubble: a.bubble || '', silent: !a.bubble });
+            return { ok: true, steps: chain.length };
+          }
+          case 'l2d_get_state': {
+            return {
+              ok: true,
+              ready: !!(L.isReady && L.isReady()),
+              info: L.getInfo ? L.getInfo() : null,
+              emotion: L.getEmotionState ? L.getEmotionState() : null,
+              pose: L.getPose ? L.getPose() : null,
+            };
+          }
+          case 'l2d_reset': {
+            if (L.resetPerformance) return L.resetPerformance();
+            var n = L.resetPose ? L.resetPose() : 0;
+            if (L.clearExpression) L.clearExpression();
+            if (L.clearGaze) L.clearGaze();
+            return { ok: true, params: n };
           }
           case 'l2d_set_pose': {
             if (!L.setPose) return { ok: false, error: 'pose-unavailable' };

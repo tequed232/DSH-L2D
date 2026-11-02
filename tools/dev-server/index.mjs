@@ -96,7 +96,14 @@ const AI_ALLOWED = new Set([
   'l2d_play_keyframes',
   'l2d_stop_keyframes',
   'l2d_set_pose',
+  'l2d_emote',
+  'l2d_gaze',
+  'l2d_say',
+  'l2d_act',
+  'l2d_get_state',
+  'l2d_reset',
 ]);
+const aiResults = new Map();
 
 // 内存态设置（模拟 DSH 侧的 settings 持久化，重启 server 会重置）
 const memSettings = {
@@ -286,6 +293,34 @@ const server = http.createServer((req, res) => {
   if (urlPath === '/ai/poll') {
     const calls = aiQueue.splice(0, aiQueue.length);
     return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ calls }), 'utf8'));
+  }
+
+  if (urlPath === '/ai/result') {
+    if (req.method === 'GET') {
+      const id = Number(new URL(req.url, 'http://127.0.0.1').searchParams.get('id'));
+      if (!aiResults.has(id)) {
+        return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ready: false }), 'utf8'));
+      }
+      const result = aiResults.get(id);
+      aiResults.delete(id);
+      return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ready: true, result }), 'utf8'));
+    }
+    if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      let body = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
+      } catch {
+        return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
+      }
+      const id = Number(body.id);
+      if (!id) return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('id required'));
+      aiResults.set(id, body.result || { ok: false, reason: 'empty' });
+      return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true }), 'utf8'));
+    });
+    return;
   }
 
   // overlay.js（便于在纯浏览器里验证叠加层逻辑）
