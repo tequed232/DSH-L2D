@@ -2613,6 +2613,8 @@
     var current = meta || window.__DSH_L2D_AGENT__ || {};
     var part = Math.max(1, Math.min(3, Number(segment) || 1));
     agentLink.planning = true;
+    // 定位：本地自主反应器。只上报插件事件（工作区状态）和上一段执行回执，
+    // 不读 DSH 会话内容（用户/助手文本、工具名、错误详情），也不承担人设职责。
     fetch('/dsh-l2d/agent-plan.json', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2621,10 +2623,6 @@
         motions: cap.motions,
         context: {
           state: String(current.state || agentLink.state || 'idle'),
-          lastUserText: trimChatText(current.lastUserText, 500),
-          lastAssistantText: trimChatText(current.lastAssistantText, 500),
-          lastTool: String(current.lastTool || '').slice(0, 100),
-          lastError: String(current.lastError || '').slice(0, 160),
           receipt: receipt || null,
           segment: part,
           previousRationale: previousRationale || '',
@@ -2716,7 +2714,7 @@
     } catch (e3) {
       /* 情绪信号失败忽略 */
     }
-    // 完全动态编排：固定状态链不再抢占舞台；由 Agent 结合最近对话上下文生成动作。
+    // 固定状态链不再抢占舞台：由本地自主反应器按工作区状态与执行回执规划动作。
     try {
       requestAgentPlan(meta || {}, null, 1, '');
     } catch (e) {

@@ -758,7 +758,7 @@ async function requestDeepSeekPokeAction(key, payload, style = {}) {
   const system = [
     '你是 Live2D 桌面宠物的动作导演。',
     style.agentPlan === true
-      ? '你是 Live2D 的自主行为导演。根据真实对话上下文和上一段执行回执，动态规划下一段有明确意图的动作；不要套用固定模板。'
+      ? '你是 Live2D 的本地自主反应器。根据插件事件（工作区状态）和上一段执行回执，规划一段低风险的高层动作；不需要对话内容，也不要承担人设或编剧职责。'
       : '用户触发一次角色动作，请返回轻量、可爱、不过度的动作链。',
     '只允许使用给定枚举值和安全参数，不要发明表情、动作组、姿势或参数名。',
     '动作不能同时占用冲突的右臂姿势：finger 和 grass 是右臂互斥；chest 用左臂。',
@@ -771,7 +771,7 @@ async function requestDeepSeekPokeAction(key, payload, style = {}) {
     style.agentPlan === true ? '步骤 kind 只能是 expression / motion / pose / look。' : '步骤 kind 可用：expression / motion / pose / look / keyframes。',
     'expression: { kind, name, delayMs }；motion: { kind, name, closeMotion?, closeAfterMs?, delayMs }；',
     'pose: { kind, pose:{right?,left?}, delayMs }；look: { kind, x, y, delayMs }；',
-    style.agentPlan === true ? '' : 'keyframes: { kind, tracks:[{param,keys:[[ms,value],...]}], duration, loop?, delayMs }。'
+    style.agentPlan === true ? '' : 'keyframes: { kind, tracks:[{param,keys:[[ms,value],...]}], duration, loop?, delayMs }。',
     'delayMs 是相对上一步的等待毫秒，0 表示立刻。',
     'bubble 风格：' + memeToneRules(style.memeLevel),
     style.memeStyle === false

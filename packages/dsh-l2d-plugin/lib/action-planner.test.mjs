@@ -38,14 +38,23 @@ test('rejects too many steps and invalid motion close pair', () => {
   }, caps).ok, false);
 });
 
-test('bounds context and receipt; caps segment index', () => {
+test('bounds event context and receipt; never carries session text; caps segment index', () => {
   const context = buildAgentPlanContext({
     state: 'thinking',
     lastUserText: 'x'.repeat(900),
+    lastAssistantText: 'y'.repeat(900),
+    lastTool: 'read_file',
+    lastError: 'EACCES /home/user/secret',
     segment: 99,
     receipt: { outcome: 'completed', notes: ['a', 'b', 'c', 'd', 'e'] },
   });
-  assert.equal(context.lastUserText.length, 500);
+  // 本地自主反应器只吃事件与回执，不携带任何会话内容
+  assert.equal(context.lastUserText, undefined);
+  assert.equal(context.lastAssistantText, undefined);
+  assert.equal(context.lastTool, undefined);
+  assert.equal(context.lastError, undefined);
+  assert.equal(context.state, 'thinking');
   assert.equal(context.segment, MAX_AGENT_PLAN_SEGMENTS);
   assert.equal(context.receipt.notes.length, 4);
+  assert.equal(context.receipt.outcome, 'completed');
 });

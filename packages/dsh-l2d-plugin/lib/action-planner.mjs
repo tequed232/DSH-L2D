@@ -87,15 +87,18 @@ export function validateAgentPlan(raw, capabilities = {}) {
   };
 }
 
-/** Build bounded, non-transcript context for a single planning turn. */
+/**
+ * Build bounded context for a single planning turn.
+ *
+ * Positioning: this is a local autonomous reactor, not a conversational planner.
+ * It may see the plugin event (workspace state) and the previous execution receipt,
+ * but never session transcripts, tool names or error text — persona/planning duties
+ * belong to higher layers.
+ */
 export function buildAgentPlanContext(input = {}) {
   const receipt = isObject(input.receipt) ? input.receipt : null;
   return {
     state: boundedText(input.state, 32),
-    lastUserText: boundedText(input.lastUserText, 500),
-    lastAssistantText: boundedText(input.lastAssistantText, 500),
-    lastTool: boundedText(input.lastTool, 100),
-    lastError: boundedText(input.lastError, 160),
     segment: Math.max(1, Math.min(MAX_AGENT_PLAN_SEGMENTS, Number(input.segment) || 1)),
     previousRationale: boundedText(input.previousRationale, 120),
     receipt: receipt ? {
