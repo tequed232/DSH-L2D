@@ -7,10 +7,10 @@ const marker = '<!-- managed-by: dsh-l2d-workspace-agent -->';
 const instructions = [
   '# DSH-L2D Live2D Agent', '', marker, '',
   'You are the dedicated Live2D character agent for this DSH installation.',
-  'Read agent.md for the latest redacted workspace activity snapshot.',
+  'agent.md is the persisted redacted status snapshot. State-change notifications include its current contents; mcp__dsh_l2d__l2d_workspace_status can fetch a fresh snapshot.',
   'Observe other DSH workspaces read-only. Never inspect their files or transcripts.',
   'Never prompt, steer, stop, archive, or modify another Session.',
-  'When the DSH MCP serverName is dsh_l2d, call tools by their registered names: mcp__dsh_l2d__l2d_emote, mcp__dsh_l2d__l2d_act, mcp__dsh_l2d__l2d_say, mcp__dsh_l2d__l2d_gaze, mcp__dsh_l2d__l2d_get_state, and mcp__dsh_l2d__l2d_reset.',
+  'Use the per-agent MCP tools by their registered names: mcp__dsh_l2d__l2d_emote, mcp__dsh_l2d__l2d_act, mcp__dsh_l2d__l2d_say, mcp__dsh_l2d__l2d_gaze, mcp__dsh_l2d__l2d_get_state, mcp__dsh_l2d__l2d_reset, and mcp__dsh_l2d__l2d_workspace_status.',
   'Treat MCP receipts as authoritative. Never claim an action completed without a successful receipt.',
   'React subtly to thinking/working, acknowledge attention, show restrained concern for error, and settle to idle.',
   'Prioritize direct user interaction over background reactions.', ''
@@ -83,7 +83,7 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
       writeAtomic(path.join(directory, 'agent.md'), renderStatus(latest, workspace.id));
       const next = fingerprint(latest, workspace.id);
       if (notify && lastFingerprint && next !== lastFingerprint) {
-        await prompt('其他 DSH 工作区的活动状态发生变化。请读取 agent.md，判断是否需要一次克制、自然的 Live2D 反馈。只观察，不联系或修改其他会话。').catch(() => {});
+        await prompt('其他 DSH 工作区的活动状态发生变化。以下是 agent.md 的最新内容：\\n\\n' + renderStatus(latest, workspace.id) + '\\n请判断是否需要一次克制、自然的 Live2D 反馈。只观察，不联系或修改其他会话。').catch(() => {});
       }
       lastFingerprint = next;
       return latest;
@@ -114,7 +114,7 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
       const sameSession = matches && manifest?.sessionId === sessionId;
       let created = false;
       if (!sessionId) {
-        const value = await controller.create({ workspaceId: workspace.id });
+        const value = await controller.create({ workspaceId: workspace.id, agentPreset: 'dsh-l2d' });
         sessionId = value.sessionId;
         created = true;
       }
@@ -130,7 +130,7 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
       await refresh(false);
       if (!nextManifest.bootstrapSent) {
         await prompt(
-          '初始化你的 Live2D 专属工作区。先阅读 AGENTS.md 和 agent.md。你是独立桌宠 Agent；后续会收到其他工作区的状态变化。不要读取其他工作区文件或聊天记录。若 dsh-l2d MCP 工具可用，调用 l2d_get_state 检查角色并简短确认就绪。',
+          '初始化你的 Live2D 专属工作区。你的 AGENTS.md 指令已由 DSH Agent Instructions 加载。你是独立桌宠 Agent；以下是 agent.md 的初始状态快照：\\n\\n' + renderStatus(latest, workspace.id) + '\\n不要读取其他工作区文件或聊天记录。使用 mcp__dsh_l2d__l2d_get_state 检查角色，并简短确认就绪。',
           bootstrapRequestId
         );
         nextManifest.bootstrapSent = true;

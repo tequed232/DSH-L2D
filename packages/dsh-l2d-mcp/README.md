@@ -143,22 +143,13 @@ MCP 不自己判断该不该打断。它转发 `/ai/call`，再把这个 id 上�
 如果 Workspace / Session 服务未加载，原有 Live2D 叠加层和控制工具仍可运行，但 Workspace Agent 功能会返回 `dsh-workspace-services-unavailable`。
 
 
-### 在 DSH 中启用 MCP 工具
+### 专属 MCP 工具作用域
 
-DSH 会给工具名加上 `mcp__<serverName>__` 前缀。建议在 DSH profile 的 `cordis.patch.yml` 中增加一条 MCP Client entry（先确保 profile 已安装 `@deepseek-ai/dsh-mcp-client`）：
+本仓库的 `cordis.patch.yml` 会声明一个独立的 `dsh-l2d` Agent preset，并在该 preset 内加载 `@deepseek-ai/dsh-mcp-client`。因此 `dsh_l2d` MCP 工具只对选择该 preset 的 Live2D Session 可见，不会放进 profile 全局工具集合。
 
-```yaml
-- insert:
-    - id: dsh-l2d-mcp
-      name: '@deepseek-ai/dsh-mcp-client'
-      config:
-        serverName: dsh_l2d
-        transport: stdio
-        command: node
-        cwd: '<DSH-L2D 仓库绝对路径>'
-        args:
-          - '<DSH-L2D 仓库绝对路径>/packages/dsh-l2d-mcp/src/server.mjs'
-```
+- MCP Server 名称：`dsh_l2d`
+- DSH 实际工具名：`mcp__dsh_l2d__l2d_act`、`mcp__dsh_l2d__l2d_get_state`、`mcp__dsh_l2d__l2d_workspace_status` 等。
+- 默认仓库路径：`D:/Desktop/DSH-L2D`。如果仓库放在其他位置，请在启动 DSH 的环境中设置 `DSH_L2D_ROOT`。
+- MCP Client 设置了 `failOnStartupError: true`，服务器无法启动时不会悄悄创建一个缺少 Live2D 工具的专属 Agent。
 
-例如仓库位于 `D:/Desktop/DSH-L2D` 时，将上面的两个路径替换为该目录。重启 DSH 后，专属 Agent 可用的工具名为 `mcp__dsh_l2d__l2d_act`、`mcp__dsh_l2d__l2d_get_state`、`mcp__dsh_l2d__l2d_workspace_status` 等，而不是裸的 `l2d_act`。该 MCP Client entry 位于 profile 全局作用域，因此同一 profile 中其他 Agent 也能看到这些桌宠工具；当前实现通过 `AGENTS.md` 约束专属 Agent 的使用方式，而不是伪称工具已被 DSH 自动限定到单个 Session。
 

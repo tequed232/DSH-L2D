@@ -1460,7 +1460,7 @@ export function apply(root, config = {}) {
 
   // Workspace / Session services are optional in some DSH profiles.
   // Keep the existing overlay operational when those services are absent.
-  root.inject(['workspaceRegistry', 'sessionController'], (ctx) => {
+  root.inject(['workspaceRegistry', 'sessionController', 'agentPresets'], (ctx) => {
     const bridge = createWorkspaceAgentBridge({
       ctx,
       homeDir: process.env.DSH_HOME || path.join(os.homedir(), '.dsh'),
