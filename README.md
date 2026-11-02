@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/icon.png" alt="DSH-L2D 图标" width="160" />
+</p>
+
 ## DSH-L2D
 
 在 DeepSeek Harness（DSH）界面上叠加一个真实渲染的 Live2D 角色：官方 Cubism 5 Web SDK、
