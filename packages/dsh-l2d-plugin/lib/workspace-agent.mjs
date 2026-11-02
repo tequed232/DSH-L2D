@@ -28,7 +28,7 @@ function writeAtomic(file, content) {
 function ensureInstructions(file) {
   let current = '';
   try { current = fs.readFileSync(file, 'utf8'); } catch {}
-  if (!current || current.includes(marker)) writeAtomic(file, instructions);
+  if (!current) writeAtomic(file, instructions);
 }
 function renderStatus(snapshot, ownId) {
   const lines = ['# Live2D Agent — workspace status', '',
@@ -107,20 +107,23 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
       workspace = await registry.create(directory, 'Live2D Agent');
       const manifest = readJson(manifestPath);
       const matches = manifest?.workspaceId === workspace.id;
-      sessionId = matches && workspace.sessionIds.includes(manifest.sessionId)
-        ? manifest.sessionId : (workspace.sessionIds[0] || null);
+      const archived = new Set(registry.archivedSessionIds || []);
+      sessionId = matches && workspace.sessionIds.includes(manifest.sessionId) && !archived.has(manifest.sessionId)
+        ? manifest.sessionId
+        : (workspace.sessionIds.find((id) => !archived.has(id)) || null);
+      const sameSession = matches && manifest?.sessionId === sessionId;
       let created = false;
       if (!sessionId) {
         const value = await controller.create({ workspaceId: workspace.id });
         sessionId = value.sessionId;
         created = true;
       }
-      const bootstrapRequestId = matches && manifest?.bootstrapRequestId
+      const bootstrapRequestId = sameSession && manifest?.bootstrapRequestId
         ? manifest.bootstrapRequestId : randomUUID();
       const nextManifest = {
         version: 1, workspaceId: workspace.id, sessionId, workspacePath: directory,
         bootstrapRequestId,
-        bootstrapSent: matches && manifest?.bootstrapSent === true,
+        bootstrapSent: sameSession && manifest?.bootstrapSent === true,
         updatedAt: new Date().toISOString()
       };
       writeAtomic(manifestPath, JSON.stringify(nextManifest, null, 2) + '\n');
