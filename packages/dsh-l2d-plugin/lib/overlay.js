@@ -2601,7 +2601,11 @@
   }
 
   function requestAgentPlan(meta, receipt, segment, previousRationale) {
-    if (settings.agentLink === false || settings.autoAct === false || agentLink.planning) return;
+    if (settings.agentLink === false || settings.autoAct === false) return;
+    if (agentLink.planning) {
+      agentLink.pendingPlan = { meta: meta, receipt: receipt, segment: segment, previousRationale: previousRationale };
+      return;
+    }
     var L = window.DSH_L2D;
     if (!L || !L.isReady || !L.isReady()) return;
     var cap = pokeCapabilities();
@@ -2649,6 +2653,13 @@
       })
       .finally(function () {
         agentLink.planning = false;
+        if (agentLink.pendingPlan) {
+          var pending = agentLink.pendingPlan;
+          agentLink.pendingPlan = null;
+          setTimeout(function () {
+            requestAgentPlan(pending.meta, pending.receipt, pending.segment, pending.previousRationale);
+          }, 180);
+        }
       });
   }
 
