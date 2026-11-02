@@ -23,6 +23,46 @@
   // "Cannot read properties of undefined (reading 'timer')"，并让下一行
   // initEmotionSensors() 永远不执行——鼠标/注视跟随就整体不绑定（App 页眼追失效的根因）。
   var agentLink = { state: 'unknown', lastAt: 0, timer: 0, lastSpokeAt: 0 };
+
+  // ---- 环境感知层（输入框追踪 / 挂机 / 回归）--------------------------------
+  // 与 agentLink 同理：bootOverlay 可能在 IIFE 尾部赋值前被调度，这里必须提前初始化。
+  // 目标：只产出低成本的原始交互信号（focus/typing/activity/visibility），
+  // 由人设规划层（宿主侧）决定要不要演；本层不调工具、不烧 LLM。
+  var ENV_AWAY_AFTER_MS = 60000; // 离开 60s 才进 away
+  var ENV_TICK_MS = 1000; // 环境层心跳
+  var ENV_TYPING_HOLD_MS = 4000; // 打字后 4s 内仍算「问答中」
+  var ENV_WORK_HOLD_MS = 10000; // 键盘活动后 10s 内算「操作电脑」
+  var ENV_INPUT_SELECTOR = [
+    'textarea',
+    'input[type="text"]',
+    'input[type="search"]',
+    '[contenteditable="true"]',
+    '[contenteditable=""]',
+    '[role="textbox"]'
+  ].join(',');
+  var env = {
+    bound: false,
+    away: false,
+    awaySince: 0,
+    lastActivityAt: Date.now(),
+    lastKeyAt: 0,
+    lastTypingAt: 0,
+    lastPointerAt: 0,
+    lastRestoreAt: 0,
+    hiddenAt: 0,
+    inputEl: null,
+    inputRect: null,
+    inputGazeOn: false,
+    inputFocusedAt: 0,
+    lastAimAt: 0,
+    tickTimer: 0,
+    wanderTimer: 0,
+    manualUntil: 0,
+    lastStateAt: 0,
+    publishAt: 0,
+    lastInputEventAt: 0
+  };
+
   var ROOT_ID = 'dsh-l2d-root';
   var STORAGE_KEY = 'dsh-l2d.overlay.v1';
   var STATES = ['idle', 'conversation', 'work', 'away'];
@@ -258,6 +298,7 @@
     observeRemoval();
     // 先绑鼠标/注视：启动链里任何一步抛错都不能连累眼追（历史事故见文件头注释）
     initEmotionSensors();
+    initEnvironmentSensors();
     startAiPoll();
     startAgentPoll();
   }
@@ -377,6 +418,8 @@
   }
 
   function setState(next) {
+    // 手动切换优先：60s 内环境层不自动改状态，避免刚点完就被覆盖
+    env.manualUntil = Date.now() + 60000;
     prefs.state = next;
     persist();
     if (root) root.className = next;
@@ -2501,6 +2544,7 @@
 
   function speakSpontaneous(text, minGapMs) {
     if (settings.spontaneousChat === false || !text) return false;
+    if (env.away) return false; // 离席：只做低成本表现，不刷气泡
     var now = Date.now();
     if (now - agentLink.lastSpokeAt < (minGapMs || 8000)) return false;
     agentLink.lastSpokeAt = now;
@@ -2556,6 +2600,7 @@
   }
 
   function reactAgentState(next, meta) {
+    if (env.away) return; // 离席：不演工作区状态反应，回来后再按最新状态补
     var now = Date.now();
     // 同一状态下的新回复也要喂情绪；有 <mood> 用标签，没有就用关键词
     try {
@@ -2599,6 +2644,7 @@
       if (
         settings.spontaneousChat !== false &&
         settings.agentLink !== false &&
+        !env.away &&
         agentLink.state === 'idle' &&
         !physics.dragging &&
         !panelOpen &&
@@ -2619,6 +2665,7 @@
       if (
         settings.autoAct !== false &&
         settings.agentLink !== false &&
+        !env.away &&
         agentLink.state === 'idle' &&
         !physics.dragging &&
         !panelOpen &&
@@ -2687,7 +2734,20 @@
 
   /** 「眼睛跟随鼠标」关掉时清一次注视，让视线回待机漂移；开回来由 pointermove 重新驱动 */
   function applyEyeFollowSetting() {
-    if (settings.eyeFollow === false) clearGazeTarget();
+    if (settings.eyeFollow === false) {
+      releaseInputGaze();
+      stopAwayWander();
+      env.inputEl = null;
+      env.inputRect = null;
+      clearGazeTarget();
+    } else if (env.bound) {
+      if (env.away) {
+        startAwayWander();
+      } else {
+        refreshInputTarget();
+        if (env.inputGazeOn) aimAtInput();
+      }
+    }
   }
 
   /** 最近一次指针位置：拖动结束/窗口变化后用它重算注视（锚点变了，旧目标会错位） */
@@ -2734,6 +2794,8 @@
       probe.rawX = Math.round(e.clientX);
       probe.rawY = Math.round(e.clientY);
     } catch (err) { /* ignore */ }
+    // 输入框聚焦且可见时，注视由 aimAtInput 接管；鼠标只更新诊断计数器，不抢目标
+    if (env.inputGazeOn) return;
     // 屏幕坐标 y 向下，模型 AngleY/EyeBallY 正值是「抬头」——取反
     L.gaze(nx, -ny);
   }
@@ -2753,6 +2815,390 @@
   }
   document.addEventListener('pointerleave', clearGazeTarget);
   window.addEventListener('blur', clearGazeTarget);
+
+  // ---------------------------------------------------------------- 环境感知层
+  //
+  // 只做「原始交互信号」：输入框聚焦/输入 -> 注视输入框；60s 无活动 -> away；
+  // 任意活动/可见性恢复 -> 回归。不调工具、不烧 LLM；全部经 eyeFollow 开关与
+  // 动作门闩（currentAct）过滤，动作播放期不抢镜。
+  // 原始信号通过 window.__DSH_L2D_ENV__ 与 dsh-l2d:presence / user-input / away / return
+  // 事件暴露，供宿主侧人设规划层消费（本层不负责规划）。
+
+  function envEnabled() {
+    return settings.eyeFollow !== false;
+  }
+
+  /**
+   * 屏幕点 -> 注视归一化。与 driveGaze 同一套口径：
+   * 锚点 = 角色脸部（updateMouseGeometry 的 cx/cy，随角色移动自动重锚），
+   * 参考半径 R = max(360, min(窗口宽, 高) × 0.45)，死区 28px + 62px 渐入。
+   * 输入框注视走这条换算，才能和鼠标跟随保持一致的「往哪看」语义。
+   */
+  function screenToGaze(clientX, clientY) {
+    var probe = updateMouseGeometry();
+    if (!probe) return { x: 0, y: 0 };
+    var R = Math.max(360, Math.min(probe.winW || 1, probe.winH || 1) * 0.45);
+    var dx = clientX - probe.cx;
+    var dy = clientY - probe.cy;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    var DEAD = 28;
+    var RAMP = 62;
+    var nx = 0;
+    var ny = 0;
+    if (dist > DEAD) {
+      var mag = Math.min(1, (dist - DEAD) / Math.max(1, R - DEAD));
+      var ramp = Math.min(1, (dist - DEAD) / RAMP);
+      nx = (dx / dist) * mag * ramp;
+      ny = (dy / dist) * mag * ramp;
+    }
+    return { x: Math.max(-1, Math.min(1, nx)), y: Math.max(-1, Math.min(1, ny)) };
+  }
+
+  function isTextInput(el) {
+    if (!el || el.nodeType !== 1 || !el.matches) return false;
+    try {
+      if (el.closest('#dsh-l2d-root,.l2d-panel,.l2d-menu')) return false; // 自己的面板不算聊天输入
+      return el.matches(ENV_INPUT_SELECTOR);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** 当前聚焦的聊天输入框：textarea / input / contenteditable / role=textbox 多选择器探测 */
+  function findChatInput() {
+    var active = null;
+    try {
+      active = document.activeElement;
+    } catch (e) {
+      return null;
+    }
+    if (isTextInput(active)) return active;
+    if (active && active.closest) {
+      try {
+        var ce = active.closest('[contenteditable="true"],[contenteditable=""],[role="textbox"]');
+        if (ce && isTextInput(ce)) return ce;
+      } catch (e2) { /* ignore */ }
+    }
+    return null;
+  }
+
+  /** 从事件目标（含 shadow DOM composedPath）向上找聊天输入框 */
+  function closestTextInput(node) {
+    var el = node;
+    for (var i = 0; el && i < 6; i++) {
+      if (isTextInput(el)) return el;
+      if (el.closest) {
+        try {
+          var ce = el.closest('[contenteditable="true"],[contenteditable=""],[role="textbox"]');
+          if (ce && isTextInput(ce)) return ce;
+        } catch (e) { /* ignore */ }
+      }
+      el = el.parentElement || (el.getRootNode && el.getRootNode().host) || null;
+    }
+    return null;
+  }
+
+  /** 焦点是否仍在 el 内（含 shadow host 情况） */
+  function focusStillIn(el) {
+    var active = null;
+    try { active = document.activeElement; } catch (e) { return false; }
+    if (!active || !el) return false;
+    if (active === el || (el.contains && el.contains(active))) return true;
+    try {
+      if (active.shadowRoot && active.shadowRoot.contains && active.shadowRoot.contains(el)) return true;
+    } catch (e2) { /* ignore */ }
+    return false;
+  }
+
+  function refreshInputTarget() {
+    // 先看已记录的输入框是否仍持有焦点（shadow DOM 里 activeElement 只会是 host）
+    if (env.inputEl && focusStillIn(env.inputEl)) {
+      var keep = env.inputEl.getBoundingClientRect ? env.inputEl.getBoundingClientRect() : null;
+      if (keep && keep.width >= 16 && keep.height >= 10) {
+        env.inputRect = { left: keep.left, top: keep.top, width: keep.width, height: keep.height };
+        env.inputGazeOn = true;
+        return true;
+      }
+    }
+    var el = findChatInput();
+    if (!el || !el.getBoundingClientRect) {
+      env.inputEl = null;
+      env.inputRect = null;
+      env.inputGazeOn = false;
+      return false;
+    }
+    var r = el.getBoundingClientRect();
+    if (!r || r.width < 16 || r.height < 10) {
+      env.inputEl = null;
+      env.inputRect = null;
+      env.inputGazeOn = false;
+      return false;
+    }
+    env.inputEl = el;
+    env.inputRect = { left: r.left, top: r.top, width: r.width, height: r.height };
+    env.inputGazeOn = true;
+    return true;
+  }
+
+  /** 注视输入框中心（覆盖鼠标跟随）；返回是否生效 */
+  function aimAtInput() {
+    var L = window.DSH_L2D;
+    if (!L || !L.gaze || !envEnabled()) return false;
+    if (!refreshInputTarget()) return false;
+    var r = env.inputRect;
+    var p = screenToGaze(r.left + r.width / 2, r.top + r.height / 2);
+    try {
+      L.gaze(p.x, -p.y);
+    } catch (e) {
+      return false;
+    }
+    env.lastAimAt = Date.now();
+    return true;
+  }
+
+  function releaseInputGaze() {
+    var had = env.inputGazeOn || !!env.inputEl;
+    env.inputEl = null;
+    env.inputRect = null;
+    env.inputGazeOn = false;
+    if (!had || !envEnabled()) return;
+    // 焦点离开输入框：立刻回到鼠标驱动；没有历史指针就回正脸
+    if (lastPointer) {
+      driveGaze(lastPointer);
+    } else {
+      var L = window.DSH_L2D;
+      if (L && L.gaze) {
+        try { L.gaze(0, 0); } catch (e) { /* ignore */ }
+      }
+    }
+  }
+
+  function noteActivity(kind) {
+    var now = Date.now();
+    env.lastActivityAt = now;
+    if (kind === 'key' || kind === 'typing') env.lastKeyAt = now;
+    if (kind === 'typing') env.lastTypingAt = now;
+    if (kind === 'pointer') env.lastPointerAt = now;
+    if (env.away) exitAway(kind);
+  }
+
+  function computeEnvState(now) {
+    if (env.away) return 'away';
+    if (env.inputGazeOn || now - env.lastTypingAt < ENV_TYPING_HOLD_MS) return 'conversation';
+    if (now - env.lastKeyAt < ENV_WORK_HOLD_MS) return 'work';
+    return 'idle';
+  }
+
+  /** 环境层改状态：只动 class/chip（不持久化、不弹气泡，避免焦点切换刷屏） */
+  function applyEnvState(next) {
+    if (prefs.state === next) return;
+    prefs.state = next;
+    // 不写 localStorage：远离/回归是瞬态，别让下次启动卡在 away；手动切换仍由 setState 持久化
+    if (root) root.className = next;
+    if (chipEl) chipEl.textContent = LABEL[next] || next;
+    env.lastStateAt = Date.now();
+  }
+
+  function startAwayWander() {
+    stopAwayWander();
+    var tick = function () {
+      if (!env.away || !envEnabled()) {
+        env.wanderTimer = 0;
+        return;
+      }
+      var L = window.DSH_L2D;
+      if (L && L.gaze) {
+        // 张望：小幅慢扫，不用动作链/表情（低成本，且不占舞台）
+        try {
+          L.gaze((Math.random() - 0.5) * 0.7, -0.05 + (Math.random() - 0.5) * 0.25);
+        } catch (e) { /* ignore */ }
+      }
+      env.wanderTimer = setTimeout(tick, 5000 + Math.random() * 4000);
+    };
+    env.wanderTimer = setTimeout(tick, 2500);
+  }
+
+  function stopAwayWander() {
+    if (env.wanderTimer) {
+      clearTimeout(env.wanderTimer);
+      env.wanderTimer = 0;
+    }
+  }
+
+  function enterAway(reason) {
+    if (env.away || !envEnabled()) return;
+    env.away = true;
+    env.awaySince = Date.now();
+    releaseInputGaze();
+    clearGazeTarget();
+    applyEnvState('away');
+    say(BUBBLE.away[Math.floor(Math.random() * BUBBLE.away.length)], 2400);
+    startAwayWander();
+    publishPresence();
+    dispatchEnvEvent('dsh-l2d:away', { reason: reason || 'idle' });
+  }
+
+  function exitAway(reason) {
+    if (!env.away) return;
+    env.away = false;
+    env.lastRestoreAt = Date.now();
+    stopAwayWander();
+    if (!envEnabled()) {
+      applyEnvState('idle');
+      publishPresence();
+      return;
+    }
+    // 回归：先看输入框（有的话），再给一个轻表情；有演出占槽时不抢
+    var aimed = aimAtInput();
+    var L = window.DSH_L2D;
+    if (!aimed && L && L.gaze) {
+      try { L.gaze(0, -0.05); } catch (e) { /* ignore */ }
+    }
+    var busy = L && L.currentAct ? L.currentAct() : null;
+    if (!busy) agentAct('NORMAL', 'return', [{ kind: 'expression', name: '兔牙' }]);
+    say('我回来啦', 2200);
+    // 按回归瞬间的实际状态落：焦点还在输入框就是 conversation，刚敲键盘就是 work
+    applyEnvState(computeEnvState(Date.now()));
+    publishPresence();
+    dispatchEnvEvent('dsh-l2d:return', { reason: reason || 'activity' });
+  }
+
+  function dispatchEnvEvent(name, detail) {
+    try {
+      window.dispatchEvent(new CustomEvent(name, { detail: detail || {} }));
+    } catch (e) { /* ignore */ }
+  }
+
+  function publishUserInput(el) {
+    var now = Date.now();
+    if (now - env.lastInputEventAt < 200) return;
+    env.lastInputEventAt = now;
+    var len = 0;
+    try {
+      len = el && typeof el.value === 'string' ? el.value.length : (el && el.textContent ? el.textContent.length : 0);
+    } catch (e) { /* ignore */ }
+    dispatchEnvEvent('dsh-l2d:user-input', { length: len });
+  }
+
+  function publishPresence() {
+    var now = Date.now();
+    var snap = {
+      state: prefs.state,
+      away: env.away,
+      idleMs: now - env.lastActivityAt,
+      hidden: document.hidden === true,
+      inputFocused: !!env.inputGazeOn,
+      inputRect: env.inputRect
+        ? {
+            left: Math.round(env.inputRect.left),
+            top: Math.round(env.inputRect.top),
+            width: Math.round(env.inputRect.width),
+            height: Math.round(env.inputRect.height)
+          }
+        : null,
+      lastKeyAt: env.lastKeyAt,
+      lastTypingAt: env.lastTypingAt,
+      updatedAt: now
+    };
+    window.__DSH_L2D_ENV__ = snap;
+    if (now - env.publishAt >= 1000) {
+      env.publishAt = now;
+      dispatchEnvEvent('dsh-l2d:presence', snap);
+    }
+  }
+
+  function presenceTick() {
+    var now = Date.now();
+    if (envEnabled()) {
+      // 每秒同步一次焦点：覆盖 focus 事件丢失、输入框重建、布局漂移。
+      // 离席期间不追输入框，否则会一直盯着输入框、away 就形同虚设。
+      if (!env.away) {
+        refreshInputTarget();
+        if (env.inputGazeOn && now - env.lastAimAt > 600) aimAtInput();
+      }
+      var idleMs = now - env.lastActivityAt;
+      if (!env.away && idleMs >= ENV_AWAY_AFTER_MS) enterAway('idle');
+      if (env.away && idleMs < ENV_AWAY_AFTER_MS) exitAway('active');
+      if (now >= env.manualUntil) applyEnvState(computeEnvState(now));
+    }
+    publishPresence();
+  }
+
+  function initEnvironmentSensors() {
+    if (env.bound) return;
+    env.bound = true;
+    window.addEventListener('pointermove', function () { noteActivity('pointer'); }, { passive: true, capture: true });
+    window.addEventListener('pointerdown', function () { noteActivity('pointer'); }, { passive: true, capture: true });
+    window.addEventListener('wheel', function () { noteActivity('pointer'); }, { passive: true, capture: true });
+    document.addEventListener(
+      'keydown',
+      function () {
+        noteActivity('key');
+        if (findChatInput()) noteActivity('typing');
+      },
+      true
+    );
+    document.addEventListener(
+      'focusin',
+      function (e) {
+        var path = e.composedPath && e.composedPath();
+        var target = path && path.length ? path[0] : e.target;
+        var el = closestTextInput(target) || findChatInput();
+        if (!el) return;
+        env.inputFocusedAt = Date.now();
+        noteActivity('typing');
+        refreshInputTarget();
+        aimAtInput();
+      },
+      true
+    );
+    document.addEventListener(
+      'focusout',
+      function () {
+        // 焦点可能在输入框内部节点间移动，下一拍再判断
+        setTimeout(function () {
+          if (findChatInput()) {
+            refreshInputTarget();
+            aimAtInput();
+          } else {
+            releaseInputGaze();
+          }
+        }, 0);
+      },
+      true
+    );
+    document.addEventListener(
+      'input',
+      function (e) {
+        var path = e.composedPath && e.composedPath();
+        var target = path && path.length ? path[0] : e.target;
+        var el = closestTextInput(target) || findChatInput();
+        if (!el) return;
+        noteActivity('typing');
+        refreshInputTarget();
+        aimAtInput();
+        publishUserInput(el);
+      },
+      true
+    );
+    document.addEventListener(
+      'visibilitychange',
+      function () {
+        if (document.hidden) {
+          env.hiddenAt = Date.now();
+        } else {
+          env.hiddenAt = 0;
+          noteActivity('visible');
+          if (env.away) exitAway('visible');
+          if (env.inputGazeOn) aimAtInput();
+        }
+      },
+      true
+    );
+    window.addEventListener('focus', function () { noteActivity('focus'); }, { passive: true });
+    env.tickTimer = setInterval(presenceTick, ENV_TICK_MS);
+    publishPresence();
+  }
 
   function initEmotionSensors() {
     var L = window.DSH_L2D;
