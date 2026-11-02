@@ -140,7 +140,7 @@ getCapabilities() / getInfo() / isReady() / readParameters(ids)
    低层参数工具不暴露（参照 §4.2）。
 3. **微动作库**（参考 `ikaikaihub/VTS-AI-Plugin` 的随机微动作）：
    在 idleDrift 基础上加"歪头（AngleZ ±3° 缓动）/耸肩/重心转移（PositionX ±5）"，
-   走 Emotion_Rooter 的 ambient 优先级 20，冷却 20~40s，禁止与拖拽/动作并发。
+   走 Emotion_Router 的 ambient 优先级 20，冷却 20~40s，禁止与拖拽/动作并发。
 4. **情绪惯性接聊天**：attention 回流的文本除了 chatActionForReply 的关键词映射，
    再喂 `emotionSignal({type:'mood', ...})`（LLM 有 `<mood>` 标签就用标签，没有就关键词）。
 5. **MCP 驱动的连续演出**：`l2d_act` 的 chain 已支持 delayMs 序列 + runId 打断；

@@ -75,20 +75,26 @@ Idle              待机（特效类，几乎看不出姿态变化）
 
 参数系统有两个坑，必须知道：
 
-1. **角度类参数范围是 -30 ~ 30，不是 -1 ~ 1。** 写 `{"AngleX": 1}` 几乎等于没动，
-   要转头 15° 就写 `{"AngleX": 15}`。
-2. **参数名是这个模型自定义的**，混用了两套命名。已验证存在的：
+1. **只写物理输入。** 头部用 `AngleX` / `AngleY` / `AngleZ`，不要写 `ParamAngleX` / `ParamAngleZ`。
+   后者是物理算出来的输出，写进去下一帧就被盖掉。身体角 `ParamBodyAngle*`、`HipAngle*`、`ShoulderY` 同样是输出。
+   对照表见 `docs/参数读写对照.md`。
+2. **头部输入大约是 -30 ~ 30**（交接时对这个模型实测过，仍以运行时 min/max 钳制为准）。
+   写 `{"AngleX": 1}` 几乎等于没动，转头大约 15° 就写 `{"AngleX": 15}`。侧倾写 `AngleZ`，不是 `ParamAngleZ`。
+3. **`ParamEyeBallX` / `ParamEyeBallY` 的输出范围是 ±1**（本机 `.vtube.json` 的 OutputRange）。
+   跟踪输入大约是 X ±0.6、Y ±0.7，不要把这个输入幅度当成参数值，更不要写成 -30~30。
+   注视优先用 `l2d_gaze`（x、y 都是 -1 ~ 1，和眼球输出范围一致）。
+4. **`ParamMouthOpenY` 不要写。** 它留给以后的口型。`ParamMouthForm` 也尽量别和表情抢。
+
+可以写的例子（名字来自这套模型的绑定，不是标准 Cubism 名）：
 
 | 参数 | 范围 | 含义 |
 |---|---|---|
-| `AngleX` / `AngleY` / `AngleZ` | -30 ~ 30 | 头部旋转（左右/上下/倾斜） |
-| `ParamBodyAngleX/Y/Z` | -30 ~ 30 | 身体旋转 |
-| `ParamEyeBallX/Y` | -30 ~ 30 | 眼球位置 |
-| `ParamEyeLOpen` / `ParamEyeROpen` | 0 ~ 1 | 眼皮开合（0 闭眼，1 睁眼） |
-| `ParamMouthOpenY` | 0 ~ 1 | 嘴巴张开（口型用） |
-| `ParamMouthForm` | -1 ~ 1 | 嘴角形状（笑/撇嘴） |
-| `ParamBrowLY` / `ParamBrowRY` | -1 ~ 1 | 眉毛高度 |
-| `ParamBreath` | 0 ~ 1 | 呼吸起伏 |
+| `AngleX` / `AngleY` / `AngleZ` | 约 -30 ~ 30，以运行时为准 | 头部左右 / 上下 / 侧倾（物理输入） |
+| `PositionX` / `PositionY` | 以运行时 min/max 为准 | 重心、轻微上下 |
+| `ParamEyeLOpen` / `ParamEyeROpen` | 通常 0 ~ 1，以运行时为准 | 眼皮开合 |
+| `ParamEyeBallX` / `ParamEyeBallY` | **±1**（`.vtube.json` 实测输出范围；跟踪输入约 ±0.6 / ±0.7） | 眼球。优先用 `l2d_gaze` |
+| `CheeckPuff` | 以运行时为准 | 鼓腮（拼写就是 Cheeck，不要改） |
+| `Mouthpucker` | 以运行时为准 | 嘟嘴。不是 `ParamMouthOpenY` |
 
 **不要猜参数名。** 名字不存在时写入会被拒绝（工具会返回失败），但更糟的是你可能猜中
 一个语义完全不同的参数。不确定就用表情和视线。
@@ -107,7 +113,7 @@ Idle              待机（特效类，几乎看不出姿态变化）
 ```json
 {
   "tracks": [
-    { "param": "ParamAngleZ", "keys": [[0, 0], [180, 12], [420, -8], [700, 0]] },
+    { "param": "AngleZ", "keys": [[0, 0], [180, 12], [420, -8], [700, 0]] },
     { "param": "ParamEyeLOpen", "keys": [[0, 1], [120, 0.1], [260, 1]] }
   ],
   "duration": 700
@@ -195,7 +201,8 @@ l2d_reset_pose()
 ❌ l2d_set_parameters({"AngleX": 1, "AngleY": -1})   // 幅度太小，等于没动
 ❌ l2d_play_motion("抚胸手打开") 之后再也没播 关闭
 ❌ 一次回复里调用 4 个工具
-❌ 猜一个参数名 l2d_set_parameters({"MouthOpen": 0.5})  // 真名是 ParamMouthOpenY
+❌ 猜一个参数名，或去写 ParamMouthOpenY（口型禁区，即使名字猜对也不要写）
+❌ l2d_play_keyframes 里写 ParamAngleZ（那是物理输出，应写 AngleZ）
 ```
 
 ---

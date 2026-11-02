@@ -166,9 +166,14 @@ curl -X POST http://127.0.0.1:<port>/dsh-l2d/ai/call \
 可用工具（白名单，其余一律拒绝）：
 
 ```
-l2d_set_expression   l2d_play_motion     l2d_look_at
+l2d_set_expression   l2d_play_motion     l2d_look_at          l2d_set_pose
 l2d_set_parameters   l2d_play_keyframes  l2d_stop_keyframes   l2d_reset_pose
+l2d_emote            l2d_gaze            l2d_say              l2d_act
+l2d_get_state        l2d_reset
 ```
+
+MCP 只转发高层那一组（`l2d_emote` / `l2d_gaze` / `l2d_say` / `l2d_act` / `l2d_get_state` / `l2d_reset`，外加表情、动作、姿势），不转发 `l2d_set_parameters` 和 `l2d_play_keyframes`。
+动作返回 `skipped` 或 `conflict` 时不要当故障重试。
 
 工具定义见仓库 `dist/ai-tools.json`，提示词见 `docs/AI-模型控制提示词.md`。
 

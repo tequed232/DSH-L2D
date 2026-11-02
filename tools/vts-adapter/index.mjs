@@ -249,6 +249,35 @@ const semantic = (inputName, standardCandidates) => {
   return std ? { id: std, all: [std], from: 'standard' } : { id: null, all: [], from: 'none' };
 };
 
+// 物理输出从 physics3.json 的 Output.Destination.Id 收集。
+// 模型不在仓库里时，适配器按同一规则在用户本机生成，不把参数表写死进代码。
+const FALLBACK_PHYSICS_OUTPUT = /^(?:ParamAngle[XYZ]|ParamBodyAngle[XYZ]|HipAngle[XYZ]|LEG\s*AngleZ2|ShoulderY|RArm|LArm|RForearm|LForearm|RHand|LHand)$/;
+const LIP_READONLY = new Set(['ParamMouthOpenY', 'ParamMouthOpen']);
+const physicsOut = new Set();
+const physicsName = model3.FileReferences?.Physics;
+if (physicsName && fs.existsSync(path.join(MODEL_DIR, physicsName))) {
+  try {
+    const physics = readJson(path.join(MODEL_DIR, physicsName));
+    for (const setting of physics.PhysicsSettings || []) {
+      for (const output of setting.Output || []) {
+        const id = output?.Destination?.Id;
+        if (typeof id === 'string' && id) physicsOut.add(id);
+      }
+    }
+  } catch {
+    /* 读不到就退回兜底正则 */
+  }
+}
+function accessOf(id) {
+  if (!id) return 'unknown';
+  if (LIP_READONLY.has(id)) return 'readonly';
+  if (physicsOut.size) return physicsOut.has(id) ? 'readonly' : 'writable';
+  return FALLBACK_PHYSICS_OUTPUT.test(id) ? 'readonly' : 'writable';
+}
+for (const row of mappingReport) {
+  row.access = accessOf(row.resolvedTarget);
+}
+
 const capabilities = {
   modelId: vtube.ModelID,
   name: vtube.Name || baseName,
@@ -283,6 +312,16 @@ const capabilities = {
     breath: semantic('(none)', ['ParamBreath']),
   },
   faceTracking: mappingReport.filter((r) => r.resolvedTarget),
+  paramAccess: {
+    source: physicsOut.size ? 'physics3' : 'fallback',
+    note: '只读 = physics3 输出或口型 ParamMouthOpenY。眼球取值范围不在这里臆造，看运行时参数 min/max。',
+    writable: [...new Set(mappingReport.map((r) => r.resolvedTarget).filter((id) => accessOf(id) === 'writable'))],
+    readonly: [...new Set([
+      ...mappingReport.map((r) => r.resolvedTarget).filter((id) => accessOf(id) === 'readonly'),
+      ...physicsOut,
+      ...LIP_READONLY,
+    ])],
+  },
   textures: texList,
   stats: {
     paramCount: paramIds.length,

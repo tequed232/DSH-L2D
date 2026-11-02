@@ -1,5 +1,10 @@
 export { ParamMixer } from './mixer.ts';
 export type { ChannelSpec, BlendMode, MixerOptions, ParamId, ParamRange, StepSnapshot } from './mixer.ts';
+export { easeInOutCubic } from './ease.ts';
+export { mixAdditive } from './angle-mix.ts';
+export type { AngleLayer } from './angle-mix.ts';
+export { sampleAmbient, AMBIENT_KINDS, AMBIENT_FORBIDDEN } from './ambient.ts';
+export type { AmbientKind } from './ambient.ts';
 
 /**
  * 通道优先级。数值越大越后求值、越能覆盖前面的通道。

@@ -90,6 +90,13 @@ export interface EmotionIntent {
   pose?: { right?: string; left?: string } | null;
   look?: { x: number; y: number } | null;
   bubble?: string | null;
+  /**
+   * 待机微动作。只在没有拖拽、媒体律动、成对动作、戳一戳链时由执行器播放。
+   * tilt 歪头 / shift 重心 / shrug 耸肩 / puff 鼓腮 / pucker 嘟嘴。
+   */
+  ambient?: 'tilt' | 'shift' | 'shrug' | 'puff' | 'pucker' | null;
+  /** 覆盖规则表上的冷却，用于把微动作间隔打散到 20~40 秒 */
+  rearmMs?: number;
   /** 该意图拥有“脸面”的时长；期间低优先级意图被压制 */
   holdMs?: number;
 }
@@ -138,6 +145,13 @@ export interface RouterSnapshot {
   lastMoodTag: { name: string; at: number } | null;
   lastErrorAt: number;
   lastChatAt: number;
+  /** 微动作互斥门闩。任一为真就不要再叠待机小动作。 */
+  gate: {
+    drag: boolean;
+    media: boolean;
+    motion: boolean;
+    acting: boolean;
+  };
 }
 
 export interface EmotionRouterOptions {
@@ -298,6 +312,26 @@ export const DEFAULT_RULES: EmotionRule[] = [
       holdMs: 3000,
     }),
   },
+  {
+    id: 'ambient-micro',
+    priority: 20,
+    cooldownMs: 20000,
+    match: (s) =>
+      !s.gate.drag && !s.gate.media && !s.gate.motion && !s.gate.acting,
+    produce: () => {
+      const kinds = ['tilt', 'shift', 'shrug', 'puff', 'pucker'] as const;
+      const kind = kinds[Math.floor(Math.random() * kinds.length)] || 'tilt';
+      return {
+        ruleId: 'ambient-micro',
+        source: 'ambient',
+        priority: 20,
+        ambient: kind,
+        // 一次微动作大约 2.4 秒，期间不再叠第二条
+        holdMs: 2400,
+        rearmMs: 20000 + Math.floor(Math.random() * 20001),
+      };
+    },
+  },
 ];
 
 // ---------------------------------------------------------------- Router
@@ -340,6 +374,7 @@ export class EmotionRouter {
   private lastTickAt = 0;
   private clicksWindow: number[] = [];
   private lastIntentAt = 0;
+  private gate = { drag: false, media: false, motion: false, acting: false };
 
   constructor(opts: EmotionRouterOptions = {}) {
     this.rules = opts.rules || DEFAULT_RULES;
@@ -348,6 +383,16 @@ export class EmotionRouter {
     this.highForMs = opts.highForMs ?? 8000;
     this.batteryLow = opts.batteryLow ?? 0.2;
     this.debug = !!opts.debug;
+    // 进页面不要立刻做第一个微动作，先等一轮冷却
+    this.lastFired.set('ambient-micro', Date.now());
+  }
+
+  /** 拖拽、媒体律动、成对动作、戳一戳进行中时关掉微动作。 */
+  setGate(partial: Partial<RouterSnapshot['gate']>): void {
+    if (typeof partial.drag === 'boolean') this.gate.drag = partial.drag;
+    if (typeof partial.media === 'boolean') this.gate.media = partial.media;
+    if (typeof partial.motion === 'boolean') this.gate.motion = partial.motion;
+    if (typeof partial.acting === 'boolean') this.gate.acting = partial.acting;
   }
 
   // ---- 订阅（执行器注册在这里）----
@@ -503,6 +548,7 @@ export class EmotionRouter {
       lastMoodTag: this.lastMoodTag ? { ...this.lastMoodTag } : null,
       lastErrorAt: this.lastErrorAt,
       lastChatAt: this.lastChatAt,
+      gate: { ...this.gate },
     };
   }
 
@@ -525,7 +571,11 @@ export class EmotionRouter {
   // ---- 内部 ----
 
   private emit(intent: EmotionIntent, now: number): void {
-    this.lastFired.set(intent.ruleId, now);
+    const rule = this.rules.find((item) => item.id === intent.ruleId);
+    const base = rule ? rule.cooldownMs : 0;
+    const want = intent.rearmMs && intent.rearmMs > 0 ? intent.rearmMs : base;
+    // last + base = now + want，这样下一次放行正好落在 want 毫秒之后
+    this.lastFired.set(intent.ruleId, want > base ? now + want - base : now);
     this.lastIntentAt = now;
     const holdMs = intent.holdMs ?? 4000;
     this.active = { intent, expiresAt: now + holdMs };

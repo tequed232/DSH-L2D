@@ -805,6 +805,7 @@ export function apply(root, config = {}) {
     let aiSeq = 0;
     const AI_QUEUE_MAX = 32;
     const aiQueue = [];
+    const aiResults = new Map();
 
     route('/dsh-l2d/ai/call', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
@@ -837,6 +838,13 @@ export function apply(root, config = {}) {
           'l2d_play_keyframes',
           'l2d_stop_keyframes',
           'l2d_set_pose',
+          // MCP 薄壳用的高层工具。低层 set_parameters / play_keyframes 仍只留给 HTTP 调试，不进 MCP。
+          'l2d_emote',
+          'l2d_gaze',
+          'l2d_say',
+          'l2d_act',
+          'l2d_get_state',
+          'l2d_reset',
         ]);
         if (!ALLOWED.has(name)) {
           return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('unknown tool: ' + name));
@@ -852,6 +860,49 @@ export function apply(root, config = {}) {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       const calls = aiQueue.splice(0, aiQueue.length);
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ calls }), 'utf8'));
+    });
+
+    // 浏览器执行完后把结果放回来，MCP 用 id 取走。skipped/conflict 原样保留。
+    route('/dsh-l2d/ai/result', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method === 'GET') {
+        let id = 0;
+        try {
+          id = Number(new URL(req.url, 'http://127.0.0.1').searchParams.get('id'));
+        } catch {
+          id = 0;
+        }
+        if (!aiResults.has(id)) {
+          return sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ready: false }), 'utf8'));
+        }
+        const result = aiResults.get(id);
+        aiResults.delete(id);
+        return sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ready: true, result }), 'utf8'));
+      }
+      if (req.method !== 'POST') {
+        return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      }
+      const chunks = [];
+      req.on('data', (c) => {
+        chunks.push(c);
+        if (chunks.reduce((n, b) => n + b.length, 0) > 64 * 1024) req.destroy();
+      });
+      req.on('end', () => {
+        let body = {};
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
+        } catch {
+          return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
+        }
+        const id = Number(body.id);
+        if (!id) return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('id required'));
+        aiResults.set(id, body.result || { ok: false, reason: 'empty' });
+        while (aiResults.size > 64) {
+          const oldest = aiResults.keys().next().value;
+          aiResults.delete(oldest);
+        }
+        sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true }), 'utf8'));
+      });
     });
 
     route('/dsh-l2d/status.json', (req, res) => {

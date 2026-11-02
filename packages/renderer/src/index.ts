@@ -16,6 +16,8 @@ import { EmotionRouter, EmotionIntent, EmotionSignal } from './app/emotion-route
 import { MotionDirector } from './app/motion-director';
 import { PoseController, POSE_IDS } from './app/pose-controller';
 import { SHADER_SOURCES } from './shaders';
+import { mixAdditive } from '../../core/src/angle-mix.ts';
+import { sampleAmbient, type AmbientKind } from '../../core/src/ambient.ts';
 
 let sub: LAppSubdelegate | null = null;
 let model: LAppModel | null = null;
@@ -287,9 +289,10 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
   model.setPreLateUpdateHook((core) => {
     phaseDiag.pre++;
     if (preUpdateHook) preUpdateHook();
+    // 拖拽刚写入的 AngleZ/Position 在这里和微动作、媒体律动加在一起，只注入一次
+    flushAngleBus(core);
     injector.apply(core, 'pre');
     applyGazeBody(core);
-    applyMediaSway(core);
   });
   model.setPostLateUpdateHook((core, deltaTimeSeconds) => {
     phaseDiag.post++;
@@ -297,6 +300,7 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
     if (!poseOwnedByMotion) {
       poseController.update(core, deltaTimeSeconds, injector);
     }
+    applyAmbientFace(core);
     injector.apply(core, 'post');
     applyGazeEyes(core);
   });
@@ -373,17 +377,20 @@ emotionRouter.subscribe((intent) => {
   try {
     if (intent.expression) setExpression(intent.expression);
     if (intent.motion) {
-      const started = playMotion(intent.motion, 0, 3);
-      if (started && intent.motionClose) {
-        if (emotionCloseTimer) window.clearTimeout(emotionCloseTimer);
-        emotionCloseTimer = window.setTimeout(() => {
-          emotionCloseTimer = 0;
-          playMotion(intent.motionClose as string, 0, 3);
-        }, intent.closeAfterMs ?? 6000);
-      }
+      // 成对动作必须走状态机，不能直接 startMotion，否则 Loop 会卡在半截
+      void playMotionAsync(intent.motion, { interrupt: false }).then((result) => {
+        if (result.status === 'ok' && intent.motionClose) {
+          if (emotionCloseTimer) window.clearTimeout(emotionCloseTimer);
+          emotionCloseTimer = window.setTimeout(() => {
+            emotionCloseTimer = 0;
+            void playMotionAsync(intent.motionClose as string, { interrupt: false });
+          }, intent.closeAfterMs ?? 6000);
+        }
+      });
     }
     if (intent.pose) setPose(intent.pose);
     if (intent.look) lookAt(intent.look.x, intent.look.y);
+    if (intent.ambient) startAmbient(intent.ambient);
     if (intent.bubble && emotionBubble) emotionBubble(intent.bubble, 3600);
   } catch {
     /* 意图执行失败不能影响渲染 */
@@ -446,6 +453,7 @@ function tick(): void {
   // 帧率上限：防重入 + 控帧合并在一个判断里
   if (now - lastTickAt < 1000 / targetFps - 1) return;
   lastTickAt = now;
+  syncStageGate();
   emotionRouter.tick(Date.now()); // 情绪路由心跳（内部自带 200ms 限频）
   if (!sub) return;
 
@@ -456,7 +464,9 @@ function tick(): void {
   // 长时间挂起（切标签页、休眠）后恢复时步长会很大，会让动作瞬移、物理爆炸，做一次钳制
   const dt = LAppPal.getDeltaTime();
   if (!(dt > 0) || dt > 0.1) LAppPal.deltaTime = 0.016;
-  gazeFrame(dt > 0 && dt <= 0.1 ? dt : 0.016);
+  const stepDt = dt > 0 && dt <= 0.1 ? dt : 0.016;
+  gazeFrame(stepDt);
+  updateAmbient(stepDt);
 
   try {
     sub.update();
@@ -689,12 +699,191 @@ function handleOf(id: string): ReturnType<ReturnType<typeof CubismFramework.getI
 const clamp = (v: number): number => (v < -1 ? -1 : v > 1 ? 1 : v);
 
 /**
+ * AngleZ / PositionX / PositionY 的三路加法。
+ * body：拖拽或 setParameters；ambient：待机微动作；media：媒体律动。
+ * 优先级 body > ambient > media，超出幅度从低优先级往下砍。
+ */
+const ANGLE_BUS_CAP = { AngleZ: 15, PositionX: 10, PositionY: 10 } as const;
+type BusParam = keyof typeof ANGLE_BUS_CAP;
+type BusChannel = 'body' | 'ambient' | 'media';
+const angleBus: Record<BusParam, Record<BusChannel, number>> = {
+  AngleZ: { body: 0, ambient: 0, media: 0 },
+  PositionX: { body: 0, ambient: 0, media: 0 },
+  PositionY: { body: 0, ambient: 0, media: 0 },
+};
+const angleBusLive: Record<BusParam, boolean> = { AngleZ: false, PositionX: false, PositionY: false };
+const missingAmbient = new Set<string>();
+
+function paramExists(core: CoreModel, id: string): boolean {
+  try {
+    const handle = handleOf(id);
+    if (!handle) return false;
+    return core.getParameterIndex(handle) >= 0;
+  } catch {
+    return false;
+  }
+}
+
+function zeroAngleBus(): void {
+  (Object.keys(angleBus) as BusParam[]).forEach((id) => {
+    angleBus[id].body = 0;
+    angleBus[id].ambient = 0;
+    angleBus[id].media = 0;
+    angleBusLive[id] = false;
+  });
+}
+
+function flushAngleBus(core: CoreModel): void {
+  applyMediaLayer();
+  (Object.keys(ANGLE_BUS_CAP) as BusParam[]).forEach((id) => {
+    const row = angleBus[id];
+    const sum = mixAdditive(
+      [
+        { id: 'body', priority: 40, value: row.body },
+        { id: 'ambient', priority: 20, value: row.ambient },
+        { id: 'media', priority: 10, value: row.media },
+      ],
+      ANGLE_BUS_CAP[id],
+    );
+    if (sum === 0) {
+      if (angleBusLive[id]) {
+        injector.clear([id]);
+        angleBusLive[id] = false;
+      }
+      return;
+    }
+    if (!paramExists(core, id) || injector.isPhysicsOutput(id)) {
+      if (!missingAmbient.has(id)) {
+        missingAmbient.add(id);
+        console.info('[dsh-l2d] 参数不存在或是物理输出，已跳过: ' + id);
+      }
+      return;
+    }
+    injector.set(core, id, sum, 1);
+    angleBusLive[id] = true;
+  });
+}
+
+const stageBusy = { dragging: false, acting: false };
+
+function syncStageGate(): void {
+  emotionRouter.setGate({
+    drag: stageBusy.dragging,
+    acting: stageBusy.acting,
+    media: mediaState.on,
+    motion: poseOwnedByMotion || isUserMotionPlaying(),
+  });
+}
+
+/** 拖拽缩放、戳一戳动作链进行时通知渲染端，微动作让路。 */
+export function setStageBusy(flags: { dragging?: boolean; acting?: boolean }): void {
+  if (typeof flags.dragging === 'boolean') stageBusy.dragging = flags.dragging;
+  if (typeof flags.acting === 'boolean') stageBusy.acting = flags.acting;
+  if (stageBusy.dragging || stageBusy.acting) stopAmbient();
+  syncStageGate();
+}
+
+interface AmbientPlay {
+  kind: AmbientKind;
+  sign: number;
+  elapsed: number;
+  duration: number;
+}
+
+let ambientPlay: AmbientPlay | null = null;
+const AMBIENT_SEC = 2.4;
+
+function startAmbient(kind: AmbientKind): void {
+  if (stageBusy.dragging || stageBusy.acting || mediaState.on || poseOwnedByMotion || isUserMotionPlaying()) {
+    return;
+  }
+  ambientPlay = {
+    kind,
+    sign: Math.random() < 0.5 ? -1 : 1,
+    elapsed: 0,
+    duration: AMBIENT_SEC,
+  };
+}
+
+function stopAmbient(): void {
+  ambientPlay = null;
+  angleBus.AngleZ.ambient = 0;
+  angleBus.PositionX.ambient = 0;
+  angleBus.PositionY.ambient = 0;
+  ambientFace = {};
+}
+
+let ambientFace: Record<string, number> = {};
+let ambientFaceArmed = false;
+
+function updateAmbient(dt: number): void {
+  const blocked =
+    stageBusy.dragging || stageBusy.acting || mediaState.on || poseOwnedByMotion || isUserMotionPlaying();
+  if (!ambientPlay || blocked) {
+    if (ambientPlay && blocked) stopAmbient();
+    else {
+      angleBus.AngleZ.ambient = 0;
+      angleBus.PositionX.ambient = 0;
+      angleBus.PositionY.ambient = 0;
+      if (!ambientPlay) ambientFace = {};
+    }
+    return;
+  }
+  ambientPlay.elapsed += dt;
+  const t = ambientPlay.elapsed / ambientPlay.duration;
+  if (t >= 1) {
+    stopAmbient();
+    return;
+  }
+  const sample = sampleAmbient(ambientPlay.kind, t, ambientPlay.sign);
+  angleBus.AngleZ.ambient = sample.AngleZ || 0;
+  angleBus.PositionX.ambient = sample.PositionX || 0;
+  angleBus.PositionY.ambient = sample.PositionY || 0;
+  ambientFace = {};
+  if (sample.CheeckPuff) ambientFace.CheeckPuff = sample.CheeckPuff;
+  if (sample.Mouthpucker) ambientFace.Mouthpucker = sample.Mouthpucker;
+}
+
+function applyAmbientFace(core: CoreModel): void {
+  const ids = ['CheeckPuff', 'Mouthpucker'];
+  let wrote = false;
+  for (const id of ids) {
+    const value = ambientFace[id];
+    if (!(value > 0.001)) continue;
+    if (injector.isPhysicsOutput(id) || !paramExists(core, id)) {
+      if (!missingAmbient.has(id)) {
+        missingAmbient.add(id);
+        console.info('[dsh-l2d] 微表情参数不存在，已跳过: ' + id);
+      }
+      continue;
+    }
+    injector.set(core, id, value, 1);
+    wrote = true;
+  }
+  if (wrote) {
+    ambientFaceArmed = true;
+    return;
+  }
+  // 微表情结束后清掉粘滞值，避免腮帮子一直鼓着，也避免每帧去清别人写的参数
+  if (ambientFaceArmed) {
+    injector.clear(ids);
+    ambientFaceArmed = false;
+  }
+}
+
+/**
  * 设置单个参数并逐帧保持；参数不存在或是物理输出时返回 false。
  * 写入会在下一个正确的帧相位生效，而不是在这里直接改 Core。
  */
 export function setParameter(id: string, value: number, weight = 1): boolean {
   const core = model?.getModel();
   if (!core) return false;
+  // AngleZ / PositionX / PositionY 可能被拖拽、微动作、媒体同时写，先记账再统一注入
+  if (id === 'AngleZ' || id === 'PositionX' || id === 'PositionY') {
+    if (!paramExists(core, id) || injector.isPhysicsOutput(id)) return false;
+    angleBus[id].body = Number(value) || 0;
+    return true;
+  }
   return injector.set(core, id, Number(value), weight);
 }
 
@@ -959,7 +1148,13 @@ export function clearGaze(): void {
 /** 媒体律动开关（音乐播放时随节拍轻摆）；摆动幅度固定轻柔，避免喧宾夺主 */
 export function setMediaSway(on: boolean): void {
   mediaState.on = !!on;
-  if (!on) mediaState.phase = 0;
+  if (!on) {
+    mediaState.phase = 0;
+    angleBus.AngleZ.media = 0;
+  } else {
+    stopAmbient();
+  }
+  syncStageGate();
 }
 
 // 自然待机微动作（拟人化）：没有注视目标时，视线每 2.5~4.5s 漂到附近随机点，
@@ -1013,9 +1208,9 @@ function applyGazeEyes(core: CoreModel): void {
   writeParam(core, 'ParamEyeBallY', gazeState.cur.y);
 }
 
-function applyMediaSway(core: CoreModel): void {
-  if (!mediaState.on) return;
-  writeParam(core, 'AngleZ', Math.sin(mediaState.phase) * 5.5, true);
+function applyMediaLayer(): void {
+  // 媒体律动只贡献 AngleZ。关掉传感器时这一路必须是 0，不能留在注入器里。
+  angleBus.AngleZ.media = mediaState.on ? Math.sin(mediaState.phase) * 5.5 : 0;
 }
 
 /** 仅改缩放，不动画布尺寸（拖拽面部微放大用；layout 会重设画布，太重） */
@@ -1030,11 +1225,21 @@ export function resetPose(): number {
   const core = model?.getModel();
   if (!core) return 0;
   stopKeyframes();
+  stopAmbient();
+  zeroAngleBus();
   injector.clear();
   injector.unlock();
   poseController.resetToRest();
   markActive();
   return core.getParameterCount();
+}
+
+/** 收尾：姿势、表情、注视一起回到待机。邪神退出和 l2d_reset 用这一条。 */
+export function resetPerformance(): { ok: boolean; params: number } {
+  const params = resetPose();
+  clearExpression();
+  clearGaze();
+  return { ok: true, params };
 }
 
 export interface SetPoseInput {
@@ -1378,6 +1583,8 @@ const api = {
   gaze,
   clearGaze,
   setMediaSway,
+  setStageBusy,
+  resetPerformance,
   setZoom,
   getEmotionState,
   injectEmotionIntent,

@@ -116,9 +116,30 @@ docs/                      技术方案、行为设计、提示词
 
 ---
 
+## MCP
+
+`packages/dsh-l2d-mcp` 是一个 stdio 薄壳，把工具转发到本机 `POST /dsh-l2d/ai/call`。
+端口用 `DSH_L2D_URL`，否则在 `~/.dsh` 里找端口，最后试调试服 `127.0.0.1:5300`。只接受回环地址。
+
+给 Agent 的工具只有：`l2d_emote`、`l2d_set_expression`、`l2d_play_motion`、`l2d_set_pose`、`l2d_gaze`、`l2d_say`、`l2d_act`、`l2d_get_state`、`l2d_reset`。
+`l2d_set_parameters` 和 `l2d_play_keyframes` 不进 MCP。`skipped` / `conflict` 是成对动作的正常返回。
+MCP 不会打开 `systemSensor` / `mediaSensor`，这两个开关默认关。
+
+安装与客户端配置见 `packages/dsh-l2d-mcp/README.md`。
+
+## 灵动
+
+姿势切换走三次缓动，停住大约 6 秒后缓回 rest（动作状态机收养的终态不会被自动收回）。
+待机微动作由 **Emotion_Router** 以优先级 20 触发：歪头、重心、耸肩、鼓腮、嘟嘴，间隔 20～40 秒。
+拖拽、媒体律动、成对动作、戳一戳进行时不做微动作。
+`AngleZ` 由身体跟随、微动作、媒体律动三路相加并限幅；关掉媒体律动时这一路回到 0。
+
+可写参数和只读输出的分法见 `docs/参数读写对照.md`。
+
 ## 设计文档
 
 - `docs/DSH-L2D-技术方案-v0.1.md`
 - `docs/DSH-L2D-技术栈方案-v0.2.md`
 - `docs/DSH-L2D-行为系统设计-v0.1.md`
 - `docs/AI-模型控制提示词.md`
+- `docs/参数读写对照.md`
