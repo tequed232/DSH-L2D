@@ -89,6 +89,10 @@
     'padding:8px 10px;border-radius:10px;font-size:12px;cursor:pointer;}',
     '.l2d-menu button:hover{background:rgba(208,188,255,.18);color:#f3edf7;}',
     '.l2d-menu .l2d-menu-title{padding:4px 10px 2px;font-size:10.5px;color:#938f99;}',
+    '.l2d-yandere-fx{position:fixed;inset:0;pointer-events:none;z-index:2147483200;',
+    'background:radial-gradient(ellipse at center,rgba(0,0,0,0) 38%,rgba(45,0,14,.6) 100%);',
+    'opacity:0;transition:opacity .7s;}',
+    '.l2d-yandere-fx.on{opacity:1;}',
     '#' + ROOT_ID + '.away .l2d-body{filter:grayscale(.55) brightness(.72);opacity:.8;}',
     '#' + ROOT_ID + '.conversation .l2d-chip{background:rgba(208,188,255,.94);color:#381e72;',
     'border-color:rgba(56,30,114,.22);}',
@@ -207,6 +211,7 @@
     observeRemoval();
     startAiPoll();
     startAgentPoll();
+    initEmotionSensors();
   }
 
   function usePlaceholder() {
@@ -279,7 +284,9 @@
     function axis(x, v, d) {
       var b = v + omega * d;
       var e = Math.exp(-omega * dt);
-      return { x: x + (d + b * dt) * e, v: (v - omega * b * dt) * e };
+      // 闭式解：x_new = target + (d + b*dt)*e，target = x - d。
+      // 上一版漏了「- d」，误差每帧被放大（60fps 下 ×1.6），就是“飞走”的根因。
+      return { x: x - d + (d + b * dt) * e, v: (v - omega * b * dt) * e };
     }
 
     var rx = axis(spring.x, spring.vx, dx);
@@ -644,19 +651,94 @@
   }
 
   // ---------------------------------------------------------------- 右键菜单
+  // 外观调整全部收进「模型外观」子菜单，避免与拖拽/分区手势冲突。
+  var menuView = 'root';
+  var appearanceCurrent = null; // 当前外观表情名；null = 默认
+  var FACE_OPTIONS = ['兔牙', '脸红', '爱心眼', '黑脸', '＞＜', '加载', '屑', '圈圈眼'];
+  var APPEARANCE_OPTIONS = [
+    { name: '胸口衣服', label: '胸口衣服' },
+    { name: '裙长切换', label: '裙摆样式' },
+    { name: '脱鞋', label: '脱鞋' },
+  ];
+  var yandereOn = false;
+  var yandereArmedAt = 0;
+  var yandereFx = null;
+
+  function applyAppearance(name) {
+    var L = window.DSH_L2D;
+    if (!L) return;
+    try {
+      if (name) {
+        if (L.setExpression) L.setExpression(name);
+        appearanceCurrent = name;
+      } else {
+        if (L.clearExpression) L.clearExpression();
+        appearanceCurrent = null;
+      }
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function setYandereFx(on) {
+    if (on && !yandereFx) {
+      yandereFx = document.createElement('div');
+      yandereFx.className = 'l2d-yandere-fx';
+      document.body.appendChild(yandereFx);
+    }
+    if (yandereFx) yandereFx.classList[on ? 'add' : 'remove']('on');
+  }
+
+  function enableYandere() {
+    yandereOn = true;
+    var L = window.DSH_L2D;
+    try {
+      if (L && L.injectEmotionIntent) {
+        L.injectEmotionIntent({
+          ruleId: 'yandere-mode',
+          source: 'menu',
+          priority: 95,
+          expression: '黑脸',
+          motion: '抚胸手打开',
+          motionClose: '抚胸手关闭',
+          closeAfterMs: 8000,
+          pose: { right: 'finger' },
+          look: { x: 0, y: 0.35 },
+          bubble: '(ÒωÓ) 让我看看用户硬盘里有什么好东西',
+          holdMs: 9000,
+        });
+      } else {
+        applyAppearance('黑脸');
+        say('(ÒωÓ) 让我看看用户硬盘里有什么好东西', 6000);
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    setYandereFx(true);
+  }
+
+  function disableYandere() {
+    yandereOn = false;
+    yandereArmedAt = 0;
+    setYandereFx(false);
+    applyAppearance(null);
+    say('…什么都没看到。', 3000);
+    setTimeout(buildMenu, 30); // 刷新菜单文案
+  }
+
   function closeMenu() {
     if (!menuEl) return;
     menuEl.classList.remove('open');
     menuEl.setAttribute('aria-hidden', 'true');
   }
 
-  function menuButton(text, onClick) {
+  function menuButton(text, onClick, keepOpen) {
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.textContent = text;
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
-      closeMenu();
+      if (!keepOpen) closeMenu();
       onClick();
     });
     return btn;
@@ -667,8 +749,56 @@
     menuEl.innerHTML = '';
     var title = document.createElement('div');
     title.className = 'l2d-menu-title';
-    title.textContent = 'DSH-L2D';
+    title.textContent = menuView === 'root' ? 'DSH-L2D' : menuView === 'appearance' ? '模型外观' : '面部';
     menuEl.appendChild(title);
+
+    if (menuView === 'appearance') {
+      menuEl.appendChild(menuButton('← 返回', function () {
+        menuView = 'root';
+        setTimeout(buildMenu, 30);
+      }, true));
+      var faceLabel = '面部' + (appearanceCurrent && FACE_OPTIONS.indexOf(appearanceCurrent) >= 0 ? '（✓ ' + appearanceCurrent + '）' : '');
+      menuEl.appendChild(menuButton(faceLabel, function () {
+        menuView = 'face';
+        setTimeout(buildMenu, 30);
+      }, true));
+      for (var ai = 0; ai < APPEARANCE_OPTIONS.length; ai++) {
+        (function (opt) {
+          var mark = appearanceCurrent === opt.name ? '（✓）' : '';
+          menuEl.appendChild(menuButton(opt.label + mark, function () {
+            applyAppearance(appearanceCurrent === opt.name ? null : opt.name);
+            setTimeout(buildMenu, 30);
+          }, true));
+        })(APPEARANCE_OPTIONS[ai]);
+      }
+      menuEl.appendChild(menuButton('恢复默认外观', function () {
+        applyAppearance(null);
+        setTimeout(buildMenu, 30);
+      }, true));
+      return;
+    }
+
+    if (menuView === 'face') {
+      menuEl.appendChild(menuButton('← 返回', function () {
+        menuView = 'appearance';
+        setTimeout(buildMenu, 30);
+      }, true));
+      for (var fi = 0; fi < FACE_OPTIONS.length; fi++) {
+        (function (name) {
+          var mark = appearanceCurrent === name ? '（✓）' : '';
+          menuEl.appendChild(menuButton(name + mark, function () {
+            applyAppearance(name);
+            setTimeout(buildMenu, 30);
+          }, true));
+        })(FACE_OPTIONS[fi]);
+      }
+      menuEl.appendChild(menuButton('恢复默认脸', function () {
+        applyAppearance(null);
+        setTimeout(buildMenu, 30);
+      }, true));
+      return;
+    }
+
     menuEl.appendChild(menuButton('设置', openPanel));
     menuEl.appendChild(menuButton('对话', function () {
       var agent = window.__DSH_L2D_AGENT__ || {};
@@ -677,6 +807,32 @@
       if (window.DSH_L2D && window.DSH_L2D.setExpression) window.DSH_L2D.setExpression('兔牙');
     }));
     menuEl.appendChild(menuButton('随机动作', pokeRandom));
+    menuEl.appendChild(menuButton('模型外观', function () {
+      menuView = 'appearance';
+      setTimeout(buildMenu, 30);
+    }, true));
+    menuEl.appendChild(
+      menuButton(
+        yandereOn
+          ? '关闭邪神模式'
+          : yandereArmedAt && Date.now() - yandereArmedAt < 6000
+            ? '⚠ 再点一次确认开启'
+            : '邪神模式（勿点）',
+        function () {
+          if (yandereOn) return disableYandere();
+          if (yandereArmedAt && Date.now() - yandereArmedAt < 6000) {
+            yandereArmedAt = 0;
+            enableYandere();
+            setTimeout(buildMenu, 30);
+          } else {
+            yandereArmedAt = Date.now();
+            say('真的要开吗？再点一次确认', 4000);
+            setTimeout(buildMenu, 30);
+          }
+        },
+        true
+      )
+    );
     var bodyLabel = (BODY_TYPES[Number(prefs.bodyType) || 0] || BODY_TYPES[0]).label;
     menuEl.appendChild(menuButton('切换体型（' + bodyLabel + '）', function () {
       cycleBodyType();
@@ -854,7 +1010,7 @@
     if (physParams.posX) vals[physParams.posX.id] = normToValue(physParams.posX, physics.posX);
     if (physParams.posY) vals[physParams.posY.id] = normToValue(physParams.posY, physics.posY);
     L.setParameters(vals);
-    if (L.lookAt) L.lookAt(physics.lookX, physics.lookY);
+    // 头部朝向已交给 gaze（眼神/躯体跟随）统一处理，这里不再双写 AngleX/Y
   }
 
   function bindPhysics() {
@@ -1212,6 +1368,7 @@
     bodyEl.addEventListener('contextmenu', function (e) {
       e.preventDefault();
       e.stopPropagation();
+      menuView = 'root'; // 右键始终回到根菜单
       openMenuAt(e);
     });
 
@@ -1364,10 +1521,21 @@
   // 说明：当前是静态立绘，无法只动眼球。真眼动需要写 ParamEyeBallX/Y，
   // 必须等 Cubism 渲染接入后由 ParamMixer 仲裁输出。在此之前不做任何「整图跟随鼠标」，
   // 那种位移会让角色整体漂移，观感是错的。
+  // 拖拽面部微放大：拖住时轻微放大贴近（~7%），松手平滑弹回
+  var dragZoom = { cur: 1, applied: 1 };
+
   function startAnim() {
     var t0 = performance.now();
     function frame(now) {
       var t = (now - t0) / 1000;
+      // 拖拽放大缓动
+      var zoomTarget = physics.dragging ? 1.07 : 1;
+      dragZoom.cur += (zoomTarget - dragZoom.cur) * 0.12;
+      if (Math.abs(dragZoom.cur - dragZoom.applied) > 0.002) {
+        dragZoom.applied = dragZoom.cur;
+        var Lz = window.DSH_L2D;
+        if (Lz && Lz.setZoom && rendererReady) Lz.setZoom(dragZoom.cur);
+      }
       // 真实模型由 Cubism 物理/动作驱动，不再叠加 CSS 位移
       if (!rendererReady && imgEl && imgEl.style.display !== 'none') {
         var speed = prefs.state === 'conversation' ? 2.2 : prefs.state === 'away' ? 0.45 : 1.05;
@@ -1402,7 +1570,7 @@
   // ---------------------------------------------------------------- 设置面板
   // 用户自填 API Key / 音效 / 缩放 / 刷新间隔；宿主侧落盘（$DSH_HOME/l2d-settings.json）。
   var panelEl = null;
-  var settings = { scale: 1, soundEnabled: true, soundVolume: 0.7, refreshSeconds: 60, hasApiKey: false, agentLink: true, clickMode: 'random', spontaneousChat: true, memeStyle: true, memeLevel: 50, autoAct: true };
+  var settings = { scale: 1, soundEnabled: true, soundVolume: 0.7, refreshSeconds: 60, hasApiKey: false, agentLink: true, clickMode: 'random', spontaneousChat: true, memeStyle: true, memeLevel: 50, autoAct: true, systemSensor: false, mediaSensor: false };
   var panelOpen = false;
 
   // 体型系数：三个体型的可见轮廓不同，用一个统一系数把视觉高度拉回一致。
@@ -1452,6 +1620,8 @@
         if (!data) return;
         settings = data;
         applyScale(settings.scale);
+        syncSystemSensor();
+        syncMediaSensor();
       })
       .catch(function () { /* ignore */ });
   }
@@ -1534,6 +1704,14 @@
     agentToggle.type = 'checkbox';
     agentToggle.checked = settings.agentLink !== false;
     panelEl.appendChild(row('工作区联动', agentToggle));
+    var sysToggle = document.createElement('input');
+    sysToggle.type = 'checkbox';
+    sysToggle.checked = settings.systemSensor === true;
+    panelEl.appendChild(row('系统联动（CPU/内存/电量/断网）', sysToggle));
+    var mediaToggle = document.createElement('input');
+    mediaToggle.type = 'checkbox';
+    mediaToggle.checked = settings.mediaSensor === true;
+    panelEl.appendChild(row('媒体律动（音乐播放时轻摆）', mediaToggle));
 
     var clickMode = document.createElement('select');
     var modeRandom = document.createElement('option');
@@ -1601,7 +1779,9 @@
         spontaneousChat: spontaneousChat.checked,
         memeStyle: memeToggle.checked,
         memeLevel: Number(memeLevel.value),
-        autoAct: autoAct.checked
+        autoAct: autoAct.checked,
+        systemSensor: sysToggle.checked,
+        mediaSensor: mediaToggle.checked
       };
       if (keyInput.value.trim()) patch.apiKey = keyInput.value.trim();
       fetch('/dsh-l2d/settings.json', {
@@ -1614,6 +1794,8 @@
           if (data) {
             settings = data;
             applyScale(settings.scale);
+            syncSystemSensor();
+            syncMediaSensor();
           }
           say('设置已保存', 1800);
           buildPanel();
@@ -1651,6 +1833,7 @@
 
   function trimChatText(text, max) {
     return String(text || '')
+      .replace(/<mood>[^<]*<\/mood>/g, '')
       .replace(/\s+/g, ' ')
       .replace(/^[\r\n\s`>*#\-\[\]]+/, '')
       .trim()
@@ -1704,6 +1887,18 @@
     if (next === agentLink.state) return;
     agentLink.state = next;
     agentLink.lastAt = now;
+    // <mood>标签 → 情绪路由（大模型隐藏标签驱动表情）
+    try {
+      var moodMatch = /<mood>([^<]+)<\/mood>/.exec(String((meta && meta.lastAssistantText) || ''));
+      if (moodMatch && window.DSH_L2D && window.DSH_L2D.emotionSignal) {
+        window.DSH_L2D.emotionSignal({ type: 'mood', data: { mood: moodMatch[1] } });
+      }
+      if (next === 'error' && window.DSH_L2D && window.DSH_L2D.emotionSignal) {
+        window.DSH_L2D.emotionSignal({ type: 'state', data: { state: 'error' } });
+      }
+    } catch (e2) {
+      /* 情绪信号失败忽略 */
+    }
     // 动作链失败不能打断后续状态联动
     try {
       if (AGENT_CHAIN[next]) AGENT_CHAIN[next]();
@@ -1778,6 +1973,199 @@
     }, 2500);
     startIdleChat();
     startIdleAutoAct();
+  }
+
+  // ---------------------------------------------------------------- 情绪传感器
+  //
+  // Emotion_Router 的信号源。鼠标传感器常开（眼神/躯体跟随的基础，开销可忽略）；
+  // 系统硬件监听（CPU/内存/电量/断网）按约束默认关闭，设置面板可开。
+  var emotionSensors = { mouseBound: false, sysTimer: 0, batteryBound: false, vx: 0, vy: 0 };
+
+  function emotionPush(signal) {
+    var L = window.DSH_L2D;
+    if (L && L.emotionSignal) {
+      try {
+        L.emotionSignal(signal);
+      } catch (e) {
+        /* 信号失败忽略 */
+      }
+    }
+  }
+
+  /** 眼神/躯体跟随：把鼠标位置换算成模型注视目标（含边缘死区），喂给渲染包平滑执行 */
+  function driveGaze(e) {
+    var L = window.DSH_L2D;
+    if (!L || !L.gaze || !L.isReady || !L.isReady()) return;
+    var rect = root ? root.getBoundingClientRect() : null;
+    if (!rect || !rect.width) return;
+    // 近似以「脸部」为注视原点（模型上部 35% 处）
+    var cx = rect.left + rect.width / 2;
+    var cy = rect.top + rect.height * 0.35;
+    var nx = (e.clientX - cx) / (window.innerWidth * 0.45);
+    var ny = (e.clientY - cy) / (window.innerHeight * 0.45);
+    // 死区：正对模型 12% 半径内不转头，防止注视抖动
+    var dist = Math.sqrt(nx * nx + ny * ny);
+    if (dist < 0.12) {
+      nx = 0;
+      ny = 0;
+    } else {
+      nx = (nx - (nx < 0 ? -0.12 : 0.12)) / 0.88;
+      ny = (ny - (ny < 0 ? -0.12 : 0.12)) / 0.88;
+    }
+    nx = Math.max(-1, Math.min(1, nx));
+    ny = Math.max(-1, Math.min(1, ny));
+    // 屏幕坐标 y 向下，模型 AngleY/EyeBallY 正值是「抬头」——取反
+    L.gaze(nx, -ny);
+  }
+
+  function initEmotionSensors() {
+    var L = window.DSH_L2D;
+    // 气泡回调：router 的 bubble 意图由 say() 上屏
+    if (L && L.setEmotionBubble) L.setEmotionBubble(say);
+
+    if (!emotionSensors.mouseBound) {
+      emotionSensors.mouseBound = true;
+      var lastX = null;
+      var lastY = null;
+      var lastT = 0;
+      var pushT = 0;
+      window.addEventListener(
+        'pointermove',
+        function (e) {
+          var now = Date.now();
+          var dt = lastT ? now - lastT : 0;
+          if (lastX !== null && dt > 0) {
+            emotionSensors.vx = ((e.clientX - lastX) / dt) * 1000;
+            emotionSensors.vy = ((e.clientY - lastY) / dt) * 1000;
+          }
+          lastX = e.clientX;
+          lastY = e.clientY;
+          lastT = now;
+          driveGaze(e); // 注视要跟手，节流放到渲染端平滑
+          if (now - pushT < 250) return;
+          pushT = now;
+          emotionPush({
+            type: 'mouse',
+            data: { x: e.clientX, y: e.clientY, vx: emotionSensors.vx || 0, vy: emotionSensors.vy || 0 },
+          });
+        },
+        { passive: true }
+      );
+      window.addEventListener(
+        'pointerdown',
+        function () {
+          emotionPush({ type: 'mouse', data: { click: true } });
+        },
+        { passive: true }
+      );
+    }
+    syncSystemSensor();
+    syncMediaSensor();
+  }
+
+  // 媒体律动（默认关）：检测页面内 <video>/<audio> 播放状态，
+  // 播放中让模型随节拍轻摆。说明：DSH 插件环境拿不到系统级音频/媒体进程，
+  // 这里降级为「页面内媒体元素」侦测；系统级留待原生模块。
+  var mediaSensorState = { bound: false, timer: 0 };
+
+  function anyMediaPlaying() {
+    var nodes = document.querySelectorAll('video, audio');
+    for (var i = 0; i < nodes.length; i++) {
+      if (!nodes[i].paused && !nodes[i].muted) return true;
+    }
+    return false;
+  }
+
+  function syncMediaSway() {
+    var L = window.DSH_L2D;
+    if (L && L.setMediaSway) {
+      try {
+        L.setMediaSway(anyMediaPlaying());
+      } catch (e) {
+        /* ignore */
+      }
+    }
+  }
+
+  function syncMediaSensor() {
+    var want = settings.mediaSensor === true;
+    if (!want) {
+      if (mediaSensorState.timer) {
+        clearInterval(mediaSensorState.timer);
+        mediaSensorState.timer = 0;
+        document.removeEventListener('play', syncMediaSway, true);
+        document.removeEventListener('pause', syncMediaSway, true);
+        var L = window.DSH_L2D;
+        if (L && L.setMediaSway) L.setMediaSway(false);
+      }
+      return;
+    }
+    if (mediaSensorState.timer) return;
+    document.addEventListener('play', syncMediaSway, true);
+    document.addEventListener('pause', syncMediaSway, true);
+    // 兜底轮询：媒体元素可能在监听挂上之前就开始播了
+    mediaSensorState.timer = setInterval(syncMediaSway, 4000);
+    syncMediaSway();
+  }
+
+  /** 系统传感器开关（默认关）：5s 轮询 CPU/内存 + 电量/断网监听 */
+  function syncSystemSensor() {
+    var want = settings.systemSensor === true;
+    if (!want) {
+      if (emotionSensors.sysTimer) {
+        clearInterval(emotionSensors.sysTimer);
+        emotionSensors.sysTimer = 0;
+        window.removeEventListener('online', onNetChange);
+        window.removeEventListener('offline', onNetChange);
+      }
+      return;
+    }
+    if (emotionSensors.sysTimer) return;
+    emotionSensors.sysTimer = setInterval(function () {
+      fetch('/dsh-l2d/sys-metrics.json', { cache: 'no-store' })
+        .then(function (r) {
+          return r.ok ? r.json() : null;
+        })
+        .then(function (d) {
+          if (!d || !d.ok) return;
+          emotionPush({
+            type: 'system',
+            data: {
+              cpu: typeof d.cpu === 'number' ? d.cpu : undefined,
+              mem: typeof d.mem === 'number' ? d.mem : undefined,
+              online: typeof navigator.onLine === 'boolean' ? navigator.onLine : true,
+            },
+          });
+        })
+        .catch(function () {
+          /* 下一轮再试 */
+        });
+    }, 5000);
+    window.addEventListener('online', onNetChange);
+    window.addEventListener('offline', onNetChange);
+    bindBattery();
+  }
+
+  function onNetChange() {
+    emotionPush({ type: 'system', data: { online: navigator.onLine } });
+  }
+
+  function bindBattery() {
+    if (emotionSensors.batteryBound || !navigator.getBattery) return;
+    emotionSensors.batteryBound = true;
+    navigator
+      .getBattery()
+      .then(function (bat) {
+        var push = function () {
+          emotionPush({ type: 'system', data: { battery: bat.level, charging: bat.charging } });
+        };
+        push();
+        bat.addEventListener('levelchange', push);
+        bat.addEventListener('chargingchange', push);
+      })
+      .catch(function () {
+        /* 无电池设备忽略 */
+      });
   }
 
   // ---------------------------------------------------------------- AI 指令轮询

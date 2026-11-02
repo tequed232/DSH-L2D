@@ -12,6 +12,7 @@ import { LAppSubdelegate } from './app/lappsubdelegate';
 import { LAppPal } from './app/lapppal';
 import type { LAppModel } from './app/lappmodel';
 import { ParamInjector } from './app/param-injector';
+import { EmotionRouter, EmotionIntent, EmotionSignal } from './app/emotion-router';
 import { MotionDirector } from './app/motion-director';
 import { PoseController, POSE_IDS } from './app/pose-controller';
 import { SHADER_SOURCES } from './shaders';
@@ -287,6 +288,8 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
     phaseDiag.pre++;
     if (preUpdateHook) preUpdateHook();
     injector.apply(core, 'pre');
+    applyGazeBody(core);
+    applyMediaSway(core);
   });
   model.setPostLateUpdateHook((core, deltaTimeSeconds) => {
     phaseDiag.post++;
@@ -295,6 +298,7 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
       poseController.update(core, deltaTimeSeconds, injector);
     }
     injector.apply(core, 'post');
+    applyGazeEyes(core);
   });
 
   // 从模型自己的 physics3.json 读取输出表，禁止把无效写入误报为成功。
@@ -357,6 +361,63 @@ export function setPreUpdate(fn: (() => void) | null): void {
   preUpdateHook = fn;
 }
 
+// ---------------------------------------------------------------- Emotion_Router
+// 情绪路由：传感器信号（鼠标/系统/媒体/<mood>标签）→ 意图 → 现有接口。
+// 规则表/词典/优先级都在 emotion-router.ts，这里只做「意图执行器」。
+const emotionRouter = new EmotionRouter();
+let emotionBubble: ((text: string, holdMs: number) => void) | null = null;
+let emotionCloseTimer = 0;
+
+emotionRouter.subscribe((intent) => {
+  markActive();
+  try {
+    if (intent.expression) setExpression(intent.expression);
+    if (intent.motion) {
+      const started = playMotion(intent.motion, 0, 3);
+      if (started && intent.motionClose) {
+        if (emotionCloseTimer) window.clearTimeout(emotionCloseTimer);
+        emotionCloseTimer = window.setTimeout(() => {
+          emotionCloseTimer = 0;
+          playMotion(intent.motionClose as string, 0, 3);
+        }, intent.closeAfterMs ?? 6000);
+      }
+    }
+    if (intent.pose) setPose(intent.pose);
+    if (intent.look) lookAt(intent.look.x, intent.look.y);
+    if (intent.bubble && emotionBubble) emotionBubble(intent.bubble, 3600);
+  } catch {
+    /* 意图执行失败不能影响渲染 */
+  }
+});
+
+/** 情绪信号统一入口：overlay / 宿主 / AI 回流都从这里喂 */
+export function emotionSignal(signal: EmotionSignal): void {
+  emotionRouter.ingest(signal);
+}
+
+/** 注册气泡回调（overlay 的 say()），router 的 bubble 字段由它上屏 */
+export function setEmotionBubble(fn: ((text: string, holdMs: number) => void) | null): void {
+  emotionBubble = fn;
+}
+
+/** 诊断/调试：情绪状态快照 */
+export function getEmotionState(): {
+  context: string;
+  mood: { valence: number; arousal: number };
+  diag: string;
+} {
+  return {
+    context: emotionRouter.getContext(),
+    mood: { ...emotionRouter.getMood() },
+    diag: emotionRouter.diagnostics(),
+  };
+}
+
+/** 特殊动作链注入口（病娇彩蛋等显式触发的意图，仍走优先级仲裁） */
+export function injectEmotionIntent(intent: EmotionIntent): boolean {
+  return emotionRouter.injectIntent(intent);
+}
+
 /** 动作诊断，不参与渲染决策。 */
 let motionDiag = { group: 'none', startedAt: 0, playing: false };
 /** 动作播放期间姿势层让位；Loop 动作靠定时器交还。 */
@@ -385,6 +446,7 @@ function tick(): void {
   // 帧率上限：防重入 + 控帧合并在一个判断里
   if (now - lastTickAt < 1000 / targetFps - 1) return;
   lastTickAt = now;
+  emotionRouter.tick(Date.now()); // 情绪路由心跳（内部自带 200ms 限频）
   if (!sub) return;
 
   // 推进帧时间。Cubism 的动作、物理、呼吸、眨眼全部依赖 LAppPal.getDeltaTime()；
@@ -394,6 +456,7 @@ function tick(): void {
   // 长时间挂起（切标签页、休眠）后恢复时步长会很大，会让动作瞬移、物理爆炸，做一次钳制
   const dt = LAppPal.getDeltaTime();
   if (!(dt > 0) || dt > 0.1) LAppPal.deltaTime = 0.016;
+  gazeFrame(dt > 0 && dt <= 0.1 ? dt : 0.016);
 
   try {
     sub.update();
@@ -860,6 +923,108 @@ export function setExpression(name: string): boolean {
   }
 }
 
+/**
+ * 清除表情：脸回到默认（右键菜单「恢复默认脸」用）。
+ */
+export function clearExpression(): boolean {
+  if (!model) return false;
+  markActive();
+  try {
+    model.clearExpression();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------- 注视与媒体律动
+// 眼神/躯体跟随：overlay 只喂归一化目标点（已含死区处理），
+// 这里负责平滑并在正确的帧相位写入 —— 眼球在 post 相位（压过动作），
+// AngleX/Y 在 pre 相位（作为物理输入，转头会带动头发等次级摆动）。
+type CoreModel = NonNullable<ReturnType<LAppModel['getModel']>>;
+const gazeState = { target: null as { x: number; y: number } | null, cur: { x: 0, y: 0 } };
+const mediaState = { on: false, phase: 0 };
+
+/** 注视目标：x、y ∈ [-1,1]，相对模型中心；[0,0] 是正对镜头 */
+export function gaze(x: number, y: number): void {
+  gazeState.target = { x: clamp(Number(x) || 0), y: clamp(Number(y) || 0) };
+  markActive();
+}
+
+/** 停止注视（眼与头平滑回正） */
+export function clearGaze(): void {
+  gazeState.target = null;
+}
+
+/** 媒体律动开关（音乐播放时随节拍轻摆）；摆动幅度固定轻柔，避免喧宾夺主 */
+export function setMediaSway(on: boolean): void {
+  mediaState.on = !!on;
+  if (!on) mediaState.phase = 0;
+}
+
+// 自然待机微动作（拟人化）：没有注视目标时，视线每 2.5~4.5s 漂到附近随机点，
+// 像人在走神。参考 SoulLink 的平滑过渡与 VTS-AI 的随机微动作思路。
+const idleDrift = { nextAt: 1.5, x: 0, y: 0 };
+
+function gazeFrame(dt: number): void {
+  if (gazeState.target) {
+    // 主动注视：平滑时间常数 ~110ms，眼神要快过头部，但都不能「瞬移」
+    const k = 1 - Math.exp(-dt * 9);
+    gazeState.cur.x += (gazeState.target.x - gazeState.cur.x) * k;
+    gazeState.cur.y += (gazeState.target.y - gazeState.cur.y) * k;
+  } else {
+    // 待机漂移：换目标点更快（一次性跳变感），但移动慢（走神感）
+    idleDrift.nextAt -= dt;
+    if (idleDrift.nextAt <= 0) {
+      idleDrift.nextAt = 2.5 + Math.random() * 2;
+      idleDrift.x = (Math.random() - 0.5) * 0.5;
+      idleDrift.y = (Math.random() - 0.5) * 0.3;
+    }
+    const kd = 1 - Math.exp(-dt * 2.2);
+    gazeState.cur.x += (idleDrift.x - gazeState.cur.x) * kd;
+    gazeState.cur.y += (idleDrift.y - gazeState.cur.y) * kd;
+  }
+  if (mediaState.on) mediaState.phase += dt * Math.PI * 2 * 1.05;
+}
+
+function writeParam(core: CoreModel, id: string, value: number, add = false): void {
+  try {
+    const handle = handleOf(id);
+    if (!handle) return;
+    const idx = core.getParameterIndex(handle);
+    if (idx < 0) return;
+    const v = add ? core.getParameterValueById(handle) + value : value;
+    core.setParameterValueById(handle, v, 1);
+  } catch {
+    /* ignore */
+  }
+}
+
+function applyGazeBody(core: CoreModel): void {
+  if (!gazeState.target && Math.abs(gazeState.cur.x) < 0.005 && Math.abs(gazeState.cur.y) < 0.005) return;
+  // 躯干权重小：小幅度移动只动眼睛，大范围移动才带动头/身体
+  writeParam(core, 'AngleX', gazeState.cur.x * 14, true);
+  writeParam(core, 'AngleY', gazeState.cur.y * 16, true);
+}
+
+function applyGazeEyes(core: CoreModel): void {
+  if (!gazeState.target && Math.abs(gazeState.cur.x) < 0.005 && Math.abs(gazeState.cur.y) < 0.005) return;
+  writeParam(core, 'ParamEyeBallX', gazeState.cur.x);
+  writeParam(core, 'ParamEyeBallY', gazeState.cur.y);
+}
+
+function applyMediaSway(core: CoreModel): void {
+  if (!mediaState.on) return;
+  writeParam(core, 'AngleZ', Math.sin(mediaState.phase) * 5.5, true);
+}
+
+/** 仅改缩放，不动画布尺寸（拖拽面部微放大用；layout 会重设画布，太重） */
+export function setZoom(zoom: number): void {
+  if (!sub || !canvasEl) return;
+  currentZoom = Math.max(0.5, Math.min(2, Number(zoom) || 1));
+  fitModel(canvasEl.width, canvasEl.height, currentZoom);
+}
+
 /** 清除所有外部姿势/关键帧，交还模型自身的动作与物理。 */
 export function resetPose(): number {
   const core = model?.getModel();
@@ -1168,6 +1333,7 @@ export function getInfo(): Record<string, number | string> | null {
       motionElapsed +
       ' slots=' +
       (slotText || 'none'),
+    emotion: emotionRouter.diagnostics(),
     lastError: lastError || 'none',
     shader: shaderDiag,
     fit: fitDiag,
@@ -1206,6 +1372,15 @@ const api = {
   stopKeyframes,
   markActive,
   setPreUpdate,
+  emotionSignal,
+  setEmotionBubble,
+  clearExpression,
+  gaze,
+  clearGaze,
+  setMediaSway,
+  setZoom,
+  getEmotionState,
+  injectEmotionIntent,
   getCapabilities,
   // 生命周期
   destroy,

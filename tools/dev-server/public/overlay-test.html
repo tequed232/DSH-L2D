@@ -327,6 +327,99 @@
           }, 300);
         }
 
+        // ?gaze=1 注视探针： gaze(0,-1)/gaze(0,1) 各保持 800ms，读关键参数实际值
+        if (new URLSearchParams(location.search).get('gaze') === '1') {
+          var gzLog = [];
+          var gzEl = null;
+          function gzReport() {
+            if (!gzEl) {
+              gzEl = document.createElement('div');
+              gzEl.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99999;padding:10px 12px;border-radius:12px;background:#100f14;border:1px solid rgba(143,217,168,.4);font:11px/1.6 ui-monospace,Consolas,monospace;color:#8fd9a8;white-space:pre-wrap;';
+              document.body.appendChild(gzEl);
+            }
+            gzEl.textContent = 'Gaze 探针\n' + gzLog.join('\n');
+          }
+          gzReport();
+          var gzWait = setInterval(function () {
+            var L = window.DSH_L2D;
+            if (!L || !L.isReady || !L.isReady() || !L.gaze || !L.readParameters) return;
+            clearInterval(gzWait);
+            var ids = ['ParamEyeBallX', 'ParamEyeBallY', 'AngleX', 'AngleY', 'ParamAngleX', 'ParamAngleY'];
+            function read(tag) {
+              var v = L.readParameters(ids);
+              gzLog.push(tag + ' eyeY=' + (v.ParamEyeBallY || 0).toFixed(2) + ' angleY=' + (v.AngleY || 0).toFixed(1) + ' paramAngleY=' + (v.ParamAngleY || 0).toFixed(1) + ' angleX=' + (v.AngleX || 0).toFixed(1) + ' paramAngleX=' + (v.ParamAngleX || 0).toFixed(1));
+              gzReport();
+            }
+            read('中心');
+            L.gaze(0, -1);
+            setTimeout(function () { read('上'); }, 900);
+            setTimeout(function () {
+              L.gaze(0, 1);
+              setTimeout(function () {
+                read('下');
+                // 清除注视后观察待机漂移（拟人微动作）：3s 与 6s 各采样一次
+                L.clearGaze();
+                setTimeout(function () { read('漂移1'); }, 3000);
+                setTimeout(function () { read('漂移2'); }, 6000);
+              }, 900);
+            }, 1400);
+          }, 400);
+        }
+
+        // ?emo=1 情绪路由自动验收：mood 标签 → 表情；连点 → 圈圈眼
+        if (new URLSearchParams(location.search).get('emo') === '1') {
+          var emoLog = [];
+          var emoEl = null;
+          function emoReport() {
+            if (!emoEl) {
+              emoEl = document.createElement('div');
+              emoEl.style.cssText = 'position:fixed;right:8px;top:8px;z-index:99999;padding:10px 12px;max-width:420px;border-radius:12px;background:#100f14;border:1px solid rgba(143,217,168,.4);font:11px/1.6 ui-monospace,Consolas,monospace;color:#8fd9a8;white-space:pre-wrap;';
+              document.body.appendChild(emoEl);
+            }
+            emoEl.textContent = 'Emotion_Router 验收\n' + emoLog.join('\n');
+          }
+          emoReport();
+          var emoWait = setInterval(function () {
+            var L = window.DSH_L2D;
+            if (!L || !L.isReady || !L.isReady() || !L.emotionSignal) return;
+            clearInterval(emoWait);
+
+            // ① mood 标签：开心 → 兔牙
+            L.emotionSignal({ type: 'mood', data: { mood: '开心' } });
+            setTimeout(function () {
+              var info = L.getInfo();
+              emoLog.push('1. mood=开心 → ' + (info && info.emotion || 'n/a'));
+              emoReport();
+
+              // ② 连点 6 次 → click-hyper 圈圈眼
+              var n = 0;
+              var clickTimer = setInterval(function () {
+                L.emotionSignal({ type: 'mouse', data: { click: true } });
+                if (++n >= 6) {
+                  clearInterval(clickTimer);
+                  setTimeout(function () {
+                    var info2 = L.getInfo();
+                    emoLog.push('2. 连点6次 → ' + (info2 && info2.emotion || 'n/a'));
+                    emoReport();
+                    // ③ 断网信号 → 钢盆（等 click-hyper 持有期结束）
+                    setTimeout(function () {
+                      L.emotionSignal({ type: 'system', data: { online: false } });
+                      // 推送后等路由下一拍再读（tick 限频 200ms）
+                      setTimeout(function () {
+                        var info3 = L.getInfo();
+                        emoLog.push('3. offline → ' + (info3 && info3.emotion || 'n/a'));
+                        emoLog.push('done');
+                        emoReport();
+                        window.__EMO_PASS__ = true;
+                      }, 800);
+                    }, 4200);
+                  }, 600);
+                }
+              }, 120);
+            }, 700);
+          }, 400);
+        }
+
         // 等 overlay 挂载后报告状态
         var n = 0;
         var timer = setInterval(function () {

@@ -77,6 +77,8 @@ const SETTINGS_SHAPE = {
   memeStyle: { type: 'boolean', default: true, description: '让动作/气泡带梗味人设' },
   memeLevel: { type: 'number', default: 50, description: '玩梗程度 0~100' },
   autoAct: { type: 'boolean', default: true, description: '空闲时让 API 定期编排小动作' },
+  systemSensor: { type: 'boolean', default: false, description: '系统硬件监听（CPU/内存/电量/断网驱动表情），默认关' },
+  mediaSensor: { type: 'boolean', default: false, description: '媒体律动（音乐节拍摇摆），默认关' },
 };
 
 let z = null;
@@ -100,6 +102,8 @@ export const Config = z
       memeStyle: z.boolean().default(true).description('让动作/气泡带梗味人设').extra('volatile', true),
       memeLevel: z.number().default(50).description('玩梗程度 0~100').extra('volatile', true),
       autoAct: z.boolean().default(true).description('空闲时让 API 定期编排小动作').extra('volatile', true),
+      systemSensor: z.boolean().default(false).description('系统硬件监听（CPU/内存/电量/断网驱动表情），默认关').extra('volatile', true),
+      mediaSensor: z.boolean().default(false).description('媒体律动（音乐节拍摇摆），默认关').extra('volatile', true),
     })
   : { ...SETTINGS_SHAPE };
 
@@ -335,6 +339,8 @@ const SETTINGS_DEFAULT = {
   scale: 1,
   eyeFollow: false,
   agentLink: true,
+  systemSensor: false,
+  mediaSensor: false,
 };
 
 function readSettings() {
@@ -359,6 +365,8 @@ function writeSettings(patch) {
   next.memeStyle = next.memeStyle !== false;
   next.memeLevel = Math.min(100, Math.max(0, Number(next.memeLevel) || 0));
   next.autoAct = next.autoAct !== false;
+  next.systemSensor = next.systemSensor === true;
+  next.mediaSensor = next.mediaSensor === true;
   try {
     fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf8');
@@ -986,6 +994,42 @@ export function apply(root, config = {}) {
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(data), 'utf8'));
     });
 
+    // 系统硬件采样（Emotion_Router 的 system 信号源）。
+    // CPU 用 /proc 式采样：两次 os.cpus() 时间差；内存用 freemem/totalmem。
+    // 开销极低（每 5s 由前端轮询一次），但仍受 systemSensor 开关约束。
+    let cpuSample = null;
+    route('/dsh-l2d/sys-metrics.json', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (readSettings().systemSensor !== true) {
+        return sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'disabled' }), 'utf8'));
+      }
+      let idle = 0;
+      let total = 0;
+      try {
+        for (const c of os.cpus()) {
+          for (const k of Object.keys(c.times)) total += c.times[k];
+          idle += c.times.idle;
+        }
+      } catch {
+        /* ignore */
+      }
+      let cpu = null;
+      if (cpuSample && total > cpuSample.total) {
+        const dTotal = total - cpuSample.total;
+        const dIdle = idle - cpuSample.idle;
+        if (dTotal > 0) cpu = Math.min(1, Math.max(0, 1 - dIdle / dTotal));
+      }
+      cpuSample = { idle, total };
+      let mem = null;
+      try {
+        mem = 1 - os.freemem() / os.totalmem();
+      } catch {
+        /* ignore */
+      }
+      const body = { ok: true, cpu, mem, ts: Date.now() };
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(body), 'utf8'));
+    });
+
     route('/dsh-l2d/settings.json', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
 
@@ -1023,6 +1067,8 @@ export function apply(root, config = {}) {
             memeStyle: saved.memeStyle !== false,
             memeLevel: Math.min(100, Math.max(0, Number(saved.memeLevel) || 0)),
             autoAct: saved.autoAct !== false,
+            systemSensor: saved.systemSensor === true,
+            mediaSensor: saved.mediaSensor === true,
             hasApiKey: !!String(saved.apiKey || '').trim(),
           };
           sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(view), 'utf8'));
@@ -1043,6 +1089,8 @@ export function apply(root, config = {}) {
         memeStyle: st.memeStyle !== false,
         memeLevel: Math.min(100, Math.max(0, Number(st.memeLevel) || 0)),
         autoAct: st.autoAct !== false,
+        systemSensor: st.systemSensor === true,
+        mediaSensor: st.mediaSensor === true,
         hasApiKey: !!String(st.apiKey || '').trim(),
       };
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(view), 'utf8'));
@@ -1101,6 +1149,8 @@ export function apply(root, config = {}) {
         memeStyle: st.memeStyle !== false,
         memeLevel: Math.min(100, Math.max(0, Number(st.memeLevel) || 0)),
         autoAct: st.autoAct !== false,
+        systemSensor: st.systemSensor === true,
+        mediaSensor: st.mediaSensor === true,
         hasApiKey: !!String(st.apiKey || '').trim(),
       };
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(payload), 'utf8'));

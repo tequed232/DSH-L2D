@@ -800,6 +800,15 @@ export class LAppModel extends CubismUserModel {
    *
    * @param expressionId 表情モーションのID
    */
+  /** 停掉表情队列，脸回到默认（表情是叠加的，不清除会一直保持）。 */
+  public clearExpression(): void {
+    try {
+      this._expressionManager.stopAllMotions();
+    } catch {
+      /* ignore */
+    }
+  }
+
   public setExpression(expressionId: string): void {
     const motion: ACubismMotion = this._expressions.get(expressionId);
 
