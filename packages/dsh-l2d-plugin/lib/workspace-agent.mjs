@@ -28,6 +28,7 @@ const instructions = [
   '# DSH-L2D Live2D Agent',
   '', marker, '',
   'You are the dedicated Live2D character agent for this DSH installation.',
+  '所有回复、行为分析、角色台词必须使用简体中文（简体中文是唯一输出语言）。',
   'agent.md is the persisted redacted status snapshot (persona, user presence, other workspaces). State-change notifications include its current contents.',
   'Observe other DSH workspaces read-only. Never inspect their files or transcripts.',
   'Never prompt, steer, stop, archive, or modify another Session.',
@@ -135,6 +136,7 @@ export function buildNotifyPrompt({ status, persona, env, receipt, notifyState, 
     receipt || '【上次动作回执】无',
     '',
     '规划要求：',
+    '- 所有输出（行为分析、气泡台词）必须使用简体中文。',
     '- 所有表情、动作、气泡都要符合上述人设（性格关键词、情绪表达强度、主动程度、亲密程度、动作偏好）。',
     '- 用 mcp__dsh_l2d__l2d_choreograph：简单状态反应传 presetState，复杂编排传 segments（1~3 段，每段最多 8 步）。',
     '- 上次回执是 interrupted / priority-blocked / conflict / pending 时不要原样重试；换一条链，或等下一轮。',
@@ -419,7 +421,7 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
         const env = readEnvSafe();
         const persona = readPersonaSafe();
         await prompt(
-          '初始化你的 Live2D 专属工作区。你的 AGENTS.md 指令已由 DSH Agent Instructions 加载。你是独立桌宠 Agent；' +
+          '初始化你的 Live2D 专属工作区。你的 AGENTS.md 指令已由 DSH Agent Instructions 加载。你是独立桌宠 Agent；所有输出（行为分析、气泡台词）必须使用简体中文。' +
             '以下是当前状态快照：\n\n' + renderStatus(latest, workspace.id, persona, env) +
             '\n\n' + (persona ? personaPromptBlock(persona) : '') +
             '\n\n不要读取其他工作区文件或聊天记录。用 mcp__dsh_l2d__l2d_choreograph 的 presetState=bootstrap 做一次简短的登场，并用 mcp__dsh_l2d__l2d_get_state 确认角色就绪。',
