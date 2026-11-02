@@ -367,7 +367,13 @@ export function decide(input = {}, gate = DEFAULT_GATE) {
   const stateSince = Number.isFinite(Number(input.stateSince)) ? Number(input.stateSince) : now;
   const lastFireAtByState = input.lastFireAtByState || {};
   const lastAnyFireAt = Number(input.lastAnyFireAt) || 0;
-  const fires = Array.isArray(input.fires) ? input.fires : [];
+  // 频次预算按状态隔离：一个状态的触发不能挤占另一个状态的额度。
+  // 兼容旧调用方：只给扁平 fires 时视为当前状态的记录。
+  const firedForState = Array.isArray(input.firesByState?.[state])
+    ? input.firesByState[state]
+    : Array.isArray(input.fires)
+      ? input.fires
+      : [];
   const flips = Array.isArray(input.flips) ? input.flips : [];
 
   // 1. 抖动风暴：只压环境状态，事件状态照常（但后面还有冷却和频次上限）。
@@ -378,12 +384,15 @@ export function decide(input = {}, gate = DEFAULT_GATE) {
     if (recent.length >= maxFlips) return { ...base, reason: 'jitter' };
   }
 
-  // 2. 状态没变就只在 refreshMs 到点后补脉冲（持续态），其余不重播。
+  // 2. 状态没变：无 refreshMs 的状态不重播；有 refreshMs 的持续态必须等到刷新周期。
+  //    （只靠 cooldown 不够：working 的 cooldown 只有 8s，但刷新节拍是 25s。）
   const refreshMs = Number(entry.refreshMs) || 0;
   const sameState = input.previousState != null && String(input.previousState) === state;
   const lastStateFireAt = Number(lastFireAtByState[state]) || 0;
-  if (!force && sameState && refreshMs <= 0) {
-    return { ...base, reason: 'same-state' };
+  if (!force && sameState) {
+    if (refreshMs <= 0) return { ...base, reason: 'same-state' };
+    const since = now - lastStateFireAt;
+    if (since < refreshMs) return { ...base, reason: 'refresh', retryAfterMs: refreshMs - since };
   }
 
   // 3. 状态稳定时间（防「刚进入就触发、马上又切走」的空动作）。
@@ -407,7 +416,7 @@ export function decide(input = {}, gate = DEFAULT_GATE) {
   // 6. 频次上限。
   const windowMs = Number(entry.windowMs) || 60000;
   const maxInWindow = Math.max(1, Number(entry.maxInWindow) || 1);
-  const inWindow = fires.filter((at) => typeof at === 'number' && now - at <= windowMs);
+  const inWindow = firedForState.filter((at) => typeof at === 'number' && now - at <= windowMs);
   if (!force && inWindow.length >= maxInWindow) {
     return { ...base, reason: 'rate', retryAfterMs: windowMs - (now - Math.min(...inWindow)) };
   }
