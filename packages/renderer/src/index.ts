@@ -72,6 +72,15 @@ export interface MountOptions {
   width?: number;
   height?: number;
   zoom?: number;
+  /** 渲染倍率（CSS → 设备像素）：高 DPI/Retina 用 devicePixelRatio，普通屏可传 2 做超采样。0 = 交给浏览器。 */
+  dpr?: number;
+}
+
+/** 渲染倍率护栏：1~8 倍；8K 像素上限在 subdelegate.resizeCanvas 内统一钳制。 */
+function clampRenderScale(value: number | undefined): number {
+  const v = Number(value);
+  if (!Number.isFinite(v) || v <= 0) return 0;
+  return Math.min(8, Math.max(1, v));
 }
 
 function splitUrl(url: string): { dir: string; file: string } {
@@ -269,13 +278,15 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
 
   bootFramework();
 
-  // 先设定 CSS 尺寸：subdelegate 初始化时会按 clientWidth/Height 决定画布尺寸
+  // 先设定 CSS 尺寸：subdelegate 初始化时会按 clientWidth/Height 决定画布分辨率
   canvas.style.width = width + 'px';
   canvas.style.height = height + 'px';
   canvas.width = width;
   canvas.height = height;
 
   sub = new LAppSubdelegate();
+  // 高 DPI 适配：画布分辨率 = CSS 尺寸 × 倍率（上层传 devicePixelRatio 或超采样倍数）
+  sub.renderScale = clampRenderScale(opts.dpr);
   if (!sub.initialize(canvas)) throw new Error('WebGL 初始化失败');
 
   // 必须在拿到 gl 之后、第一次 draw 之前注入 shader
@@ -285,6 +296,11 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
   canvas.width = width;
   canvas.height = height;
   sub.onResize();
+  // onResize 会按 clientWidth × 倍率重算分辨率；极端情况下拿不到布局尺寸时保底
+  if (!canvas.width || !canvas.height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
 
   const { dir, file } = splitUrl(opts.modelUrl);
   const mgr = sub.getLive2DManager();
@@ -348,7 +364,7 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
       });
   }
 
-  fitModel(width, height, currentZoom);
+  fitModel(canvasEl.width || width, canvasEl.height || height, currentZoom);
   refitLeft = 6;
   startLoop();
 }
@@ -592,15 +608,15 @@ function installSchedulingGuards(): void {
   window.addEventListener('wheel', markActive, { passive: true });
 }
 
-export function layout(width: number, height: number, zoom = 1): void {
+export function layout(width: number, height: number, zoom = 1, dpr = 0): void {
   if (!sub || !canvasEl) return;
-  canvasEl.width = Math.round(width);
-  canvasEl.height = Math.round(height);
+  // CSS 尺寸与画布分辨率分开：分辨率 = CSS × 倍率，由 subdelegate 统一钳到 8K 上限
+  sub.renderScale = clampRenderScale(dpr);
   canvasEl.style.width = width + 'px';
   canvasEl.style.height = height + 'px';
   currentZoom = zoom;
   sub.onResize();
-  fitModel(width, height, zoom);
+  fitModel(canvasEl.width, canvasEl.height, zoom);
 }
 
 // ---------------------------------------------------------------- 关键帧播放器
@@ -1745,6 +1761,7 @@ export function getInfo(): Record<string, number | string> | null {
     zoom: currentZoom,
     pxW: canvasEl ? canvasEl.width : 0,
     pxH: canvasEl ? canvasEl.height : 0,
+    dpr: typeof window !== 'undefined' ? Math.round((window.devicePixelRatio || 1) * 100) / 100 : 1,
     maxTex,
     glErr,
   };
