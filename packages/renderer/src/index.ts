@@ -18,6 +18,12 @@ import { PoseController, POSE_IDS } from './app/pose-controller';
 import { SHADER_SOURCES } from './shaders';
 import { mixAdditive } from '../../core/src/angle-mix.ts';
 import { sampleAmbient, type AmbientKind } from '../../core/src/ambient.ts';
+import {
+  ActGate,
+  getActPhaseTemplate,
+  type ActAdmitInput,
+  type ActPhaseTemplate,
+} from '../../core/src/action-chain.ts';
 
 let sub: LAppSubdelegate | null = null;
 let model: LAppModel | null = null;
@@ -423,6 +429,32 @@ export function getEmotionState(): {
 /** 特殊动作链注入口（病娇彩蛋等显式触发的意图，仍走优先级仲裁） */
 export function injectEmotionIntent(intent: EmotionIntent): boolean {
   return emotionRouter.injectIntent(intent);
+}
+
+/**
+ * 动作链优先级门闩。步骤定时仍在 overlay 的 executePokeAction。
+ * 这里只回答「能不能占上当前槽」，并给出 start / interrupted 回执。
+ */
+const actGate = new ActGate();
+
+export function admitAct(input: ActAdmitInput = {}) {
+  return actGate.admit(input);
+}
+
+export function finishAct(runId: number) {
+  return actGate.finish(runId);
+}
+
+export function releaseAct(runId?: number, reason?: string) {
+  return actGate.release(runId, reason);
+}
+
+export function currentAct() {
+  return actGate.current();
+}
+
+export function actPhaseTemplate(name: string): ActPhaseTemplate | null {
+  return getActPhaseTemplate(name);
 }
 
 /** 动作诊断，不参与渲染决策。 */
@@ -1588,6 +1620,11 @@ const api = {
   setZoom,
   getEmotionState,
   injectEmotionIntent,
+  admitAct,
+  finishAct,
+  releaseAct,
+  currentAct,
+  actPhaseTemplate,
   getCapabilities,
   // 生命周期
   destroy,

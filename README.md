@@ -125,6 +125,8 @@ docs/                      技术方案、行为设计、提示词
 `l2d_set_parameters` 和 `l2d_play_keyframes` 不进 MCP。`skipped` / `conflict` 是成对动作的正常返回。
 MCP 不会打开 `systemSensor` / `mediaSensor`，这两个开关默认关。
 
+`l2d_act` 的 `priority` 是 `BACKGROUND`、`NORMAL`、`FORCE`。低的不能打断高的，同级可以。`accepted` 只表示占上了槽，播完或被打断看 `action-done` 事件（`start` / `end` / `interrupted`）。`phase` 可用 `listening`、`thinking`、`speaking`、`settle` 四段短链，口型参数仍然不写。
+
 安装与客户端配置见 `packages/dsh-l2d-mcp/README.md`。
 
 ## 灵动

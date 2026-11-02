@@ -175,6 +175,8 @@ l2d_get_state        l2d_reset
 MCP 只转发高层那一组（`l2d_emote` / `l2d_gaze` / `l2d_say` / `l2d_act` / `l2d_get_state` / `l2d_reset`，外加表情、动作、姿势），不转发 `l2d_set_parameters` 和 `l2d_play_keyframes`。
 动作返回 `skipped` 或 `conflict` 时不要当故障重试。
 
+`l2d_act` 走原来的 `executePokeAction`。`priority` 为 `BACKGROUND` | `NORMAL` | `FORCE`：低优先级不能打断高优先级，同级可以。对话演出和邪神是 `FORCE`，待机视线是 `BACKGROUND`。`POST /ai/result` 的 `result` 只表示受理；`event` 才是 `action-done`（`phase` 为 `start`、`end` 或 `interrupted`）。被挡住时 `reason` 是 `priority-blocked`。
+
 工具定义见仓库 `dist/ai-tools.json`，提示词见 `docs/AI-模型控制提示词.md`。
 
 ## 性能

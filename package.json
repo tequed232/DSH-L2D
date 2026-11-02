@@ -9,7 +9,7 @@
     "dev": "pnpm -F @dsh/stage-web dev",
     "build": "pnpm -F @dsh/stage-web build",
     "typecheck": "pnpm -F @dsh/stage-web typecheck",
-    "test:core": "node --experimental-strip-types packages/core/test/smoke.ts && node --experimental-strip-types packages/core/test/liveliness.ts && node packages/dsh-l2d-mcp/src/discover.test.mjs",
+    "test:core": "node --experimental-strip-types packages/core/test/smoke.ts && node --experimental-strip-types packages/core/test/liveliness.ts && node --experimental-strip-types packages/core/test/action-chain.ts && node packages/dsh-l2d-plugin/lib/ai-inbox.test.mjs && node packages/dsh-l2d-mcp/src/discover.test.mjs && node packages/dsh-l2d-mcp/src/act-result.test.mjs",
     "adapter": "node tools/vts-adapter/index.mjs",
     "texture": "node tools/texture-opt/index.mjs",
     "build:renderer": "pnpm -F @dsh/renderer build",

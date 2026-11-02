@@ -39,7 +39,7 @@ docs/AI-模型控制提示词.md  # 给 LLM 的动作使用规范（成对动作
 | 眼神+躯体跟随鼠标 | `gaze(x,y)`（眼球 post 相位全权，AngleX×14/AngleY×16 pre 相位） | ✅ |
 | 待机视线漂移（走神） | 渲染包 idleDrift，每 2.5~4.5s 换随机点 | ✅ |
 | Emotion_Router | `emotionSignal({type,data})`；规则表/词典/仲裁 | ✅ mood标签/连点/断网 |
-| 戳一戳动作链（kind 化 chain） | overlay `executePokeAction`，runId 打断旧链 | ✅ |
+| 戳一戳动作链（kind 化 chain） | overlay `executePokeAction`。`priority` 为 BACKGROUND / NORMAL / FORCE：低的不能打断高的，同级可以 | ✅ |
 | 成对动作状态机 | `motion-director.ts`，重复打开幂等、右臂冲突拒绝 | ✅ |
 | 系统传感器（CPU/内存/电量/断网） | 设置面板开关，默认**关**；`/dsh-l2d/sys-metrics.json` | ✅ |
 | 媒体律动（页面内媒体播放→轻摆） | 设置开关，默认**关**；`setMediaSway(on)` | ✅（系统级媒体需原生模块，未做） |
@@ -143,8 +143,9 @@ getCapabilities() / getInfo() / isReady() / readParameters(ids)
    走 Emotion_Router 的 ambient 优先级 20，冷却 20~40s，禁止与拖拽/动作并发。
 4. **情绪惯性接聊天**：attention 回流的文本除了 chatActionForReply 的关键词映射，
    再喂 `emotionSignal({type:'mood', ...})`（LLM 有 `<mood>` 标签就用标签，没有就关键词）。
-5. **MCP 驱动的连续演出**：`l2d_act` 的 chain 已支持 delayMs 序列 + runId 打断；
-   让 Agent 在回答前后各发一条短 chain（思考态/收尾态），参考 docs/行为系统设计-v0.1.md §4.2 四子阶段。
+5. **MCP 驱动的连续演出**：`l2d_act` 支持 delayMs 序列，并用 `priority` 挡住「低打断高」。
+   `phase` 可直接用 listening / thinking / speaking / settle 四段短链（不写 `ParamMouthOpenY`）。
+   `accepted` 只表示占上槽，播完或被打断看 `/ai/result` 上的 `action-done`。
 6. （远期）B 站弹幕接入（AILiveVTuber-Stage）、系统级媒体侦测（原生模块）、口型同步（TTS RMS → ParamMouthOpenY，需先拆掉表情对嘴型的占用）。
 
 ## 7. 构建 / 验证命令

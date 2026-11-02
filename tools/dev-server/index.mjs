@@ -16,6 +16,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createAiInbox } from '../../packages/dsh-l2d-plugin/lib/ai-inbox.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
@@ -84,9 +85,8 @@ function resolveInside(baseDir, relRaw) {
   return full;
 }
 
-/** AI 指令队列：与 DSH 插件宿主里那套保持同样的语义，便于本地验证 */
-const aiQueue = [];
-let aiSeq = 0;
+/** AI 指令队列：与 DSH 插件宿主共用 ai-inbox，回执语义保持一致 */
+const aiInbox = createAiInbox();
 const AI_ALLOWED = new Set([
   'l2d_set_expression',
   'l2d_play_motion',
@@ -103,7 +103,6 @@ const AI_ALLOWED = new Set([
   'l2d_get_state',
   'l2d_reset',
 ]);
-const aiResults = new Map();
 
 // 内存态设置（模拟 DSH 侧的 settings 持久化，重启 server 会重置）
 const memSettings = {
@@ -277,33 +276,20 @@ const server = http.createServer((req, res) => {
       if (!AI_ALLOWED.has(name)) {
         return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('unknown tool: ' + name));
       }
-      const item = { id: ++aiSeq, name, args: body.args || {}, ts: Date.now() };
-      aiQueue.push(item);
-      while (aiQueue.length > 32) aiQueue.shift();
-      return send(
-        res,
-        200,
-        MIME['.json'],
-        Buffer.from(JSON.stringify({ ok: true, id: item.id, queued: aiQueue.length }), 'utf8'),
-      );
+      const queued = aiInbox.call(name, body.args || {});
+      return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(queued), 'utf8'));
     });
     return;
   }
 
   if (urlPath === '/ai/poll') {
-    const calls = aiQueue.splice(0, aiQueue.length);
-    return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ calls }), 'utf8'));
+    return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(aiInbox.poll()), 'utf8'));
   }
 
   if (urlPath === '/ai/result') {
     if (req.method === 'GET') {
       const id = Number(new URL(req.url, 'http://127.0.0.1').searchParams.get('id'));
-      if (!aiResults.has(id)) {
-        return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ready: false }), 'utf8'));
-      }
-      const result = aiResults.get(id);
-      aiResults.delete(id);
-      return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ready: true, result }), 'utf8'));
+      return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(aiInbox.read(id)), 'utf8'));
     }
     if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
     const chunks = [];
@@ -315,9 +301,10 @@ const server = http.createServer((req, res) => {
       } catch {
         return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
       }
-      const id = Number(body.id);
-      if (!id) return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('id required'));
-      aiResults.set(id, body.result || { ok: false, reason: 'empty' });
+      const saved = aiInbox.post(body);
+      if (!saved.ok) {
+        return send(res, 400, 'text/plain; charset=utf-8', Buffer.from(saved.reason || 'id required'));
+      }
       return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true }), 'utf8'));
     });
     return;
