@@ -22,7 +22,7 @@
   // 只在 IIFE 后段声明，会以 var 提升的 undefined 被读到，startAgentPoll 抛
   // "Cannot read properties of undefined (reading 'timer')"，并让下一行
   // initEmotionSensors() 永远不执行——鼠标/注视跟随就整体不绑定（App 页眼追失效的根因）。
-  var agentLink = { state: 'unknown', lastAt: 0, timer: 0, lastSpokeAt: 0 };
+  var agentLink = { state: 'unknown', lastAt: 0, timer: 0, lastSpokeAt: 0, planSeq: 0, planRuns: Object.create(null), planning: false, pendingPlan: null };
 
   // ---- 环境感知层（输入框追踪 / 挂机 / 回归）--------------------------------
   // 与 agentLink 同理：bootOverlay 可能在 IIFE 尾部赋值前被调度，这里必须提前初始化。
@@ -1419,6 +1419,7 @@
 
   function postActEvent(event) {
     if (!event || !event.callId) return;
+    try { onAgentPlanEvent(event); } catch (err) { console.warn('[dsh-l2d] agent plan receipt failed', err); }
     fetch('/dsh-l2d/ai/result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2523,7 +2524,7 @@
   //
   // 参照 dsh-pet-indesktop 的 Agent Link：读取 DSH 会话事件并聚合为状态，
   // 状态切换时触发一条轻量动作链（表情/视线/姿势），不做高频重播。
-  // agentLink 已在模块顶部初始化（见文件头注释）。
+  // agentLink 已在模块顶部初始化（见文件头注释）；#9 的规划状态也挂在同一个对象上。
   var IDLE_LINES = [
     '我在呢～',
     '你继续忙，我陪你。',
@@ -2599,6 +2600,94 @@
     window.DSH_L2D.emotionSignal({ type: 'mood', data: { mood: name } });
   }
 
+  function requestAgentPlan(meta, receipt, segment, previousRationale) {
+    if (settings.agentLink === false || settings.autoAct === false || agentLink.planning) return;
+    var L = window.DSH_L2D;
+    if (!L || !L.isReady || !L.isReady()) return;
+    var cap = pokeCapabilities();
+    if (!cap.expressions.length || !cap.motions.length) return;
+    var current = meta || window.__DSH_L2D_AGENT__ || {};
+    var part = Math.max(1, Math.min(3, Number(segment) || 1));
+    agentLink.planning = true;
+    fetch('/dsh-l2d/agent-plan.json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expressions: cap.expressions,
+        motions: cap.motions,
+        context: {
+          state: String(current.state || agentLink.state || 'idle'),
+          lastUserText: trimChatText(current.lastUserText, 500),
+          lastAssistantText: trimChatText(current.lastAssistantText, 500),
+          lastTool: String(current.lastTool || '').slice(0, 100),
+          lastError: String(current.lastError || '').slice(0, 160),
+          receipt: receipt || null,
+          segment: part,
+          previousRationale: previousRationale || '',
+        },
+      }),
+      cache: 'no-store',
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (plan) {
+        if (!plan || !plan.ok || !Array.isArray(plan.chain) || !plan.chain.length) {
+          if (plan && plan.reason && plan.reason !== 'planner-cooldown') {
+            console.warn('[dsh-l2d] autonomous planner declined', plan.reason, plan.errors || '');
+          }
+          return;
+        }
+        var callId = Date.now() * 1000 + (++agentLink.planSeq % 1000);
+        var state = String(current.state || agentLink.state || 'idle');
+        var priority = state === 'attention' || state === 'error' ? 'NORMAL' : 'BACKGROUND';
+        var run = { meta: current, segment: part, plan: plan, priority: priority };
+        if (plan.continue === true && part < 3) agentLink.planRuns[String(callId)] = run;
+        var result = executePokeAction({
+          chain: plan.chain,
+          bubble: plan.bubble || '',
+          priority: priority,
+          source: 'agent-autonomous',
+          callId: callId,
+          silent: true,
+        });
+        if (!result || result.accepted !== true) {
+          delete agentLink.planRuns[String(callId)];
+          // 资源冲突时允许 Agent 根据真实回执调整一次；优先级拒绝不重试，避免抢占循环。
+          if (plan.continue === true && part < 3 && result && result.reason === 'conflict') {
+            setTimeout(function () {
+              requestAgentPlan(current, {
+                outcome: 'rejected',
+                reason: result.reason,
+                current: result.current || null,
+              }, part + 1, plan.rationale);
+            }, 350);
+          }
+        }
+      })
+      .catch(function (err) {
+        console.warn('[dsh-l2d] autonomous planner request failed', err);
+      })
+      .finally(function () {
+        agentLink.planning = false;
+      });
+  }
+
+  function onAgentPlanEvent(event) {
+    var callId = String(event && event.callId || '');
+    var run = agentLink.planRuns && agentLink.planRuns[callId];
+    if (!run) return;
+    var phase = String(event.type || event.kind || event.phase || event.status || '').toLowerCase();
+    if (!/(end|interrupted|finish|complete)/.test(phase)) return;
+    delete agentLink.planRuns[callId];
+    if (run.plan.continue !== true || run.segment >= 3) return;
+    setTimeout(function () {
+      requestAgentPlan(run.meta, {
+        outcome: phase,
+        reason: String(event.reason || event.outcome || '').slice(0, 120),
+        notes: Array.isArray(event.notes) ? event.notes.slice(0, 4) : [],
+      }, run.segment + 1, run.plan.rationale);
+    }, 450);
+  }
+
   function reactAgentState(next, meta) {
     if (env.away) return; // 离席：不演工作区状态反应，回来后再按最新状态补
     var now = Date.now();
@@ -2618,22 +2707,11 @@
     } catch (e3) {
       /* 情绪信号失败忽略 */
     }
-    // 动作链失败不能打断后续状态联动
+    // 完全动态编排：固定状态链不再抢占舞台；由 Agent 结合最近对话上下文生成动作。
     try {
-      if (AGENT_CHAIN[next]) AGENT_CHAIN[next]();
-      if (next === 'working' && meta && meta.lastTool) {
-        say('正在' + meta.lastTool + '…', 2400);
-      } else if (next === 'error' && meta && meta.lastError) {
-        say('出错了：' + String(meta.lastError).slice(0, 60), 4200);
-      } else if (next === 'attention') {
-        // 自发聊天：回复回流短气泡，并根据文本映射一条轻量动作链
-        var reply = trimChatText(meta && meta.lastAssistantText, 60);
-        var chatAction = chatActionForReply(reply);
-        executePokeAction(chatAction);
-        if (!speakSpontaneous(reply, 3000)) say('我看完啦，等你下一句', 2400);
-      }
+      requestAgentPlan(meta || {}, null, 1, '');
     } catch (e) {
-      console.warn('[dsh-l2d] agent chain failed', e);
+      console.warn('[dsh-l2d] autonomous agent plan failed', e);
     }
   }
 
@@ -2672,7 +2750,7 @@
         window.DSH_L2D && window.DSH_L2D.isReady && window.DSH_L2D.isReady() &&
         Date.now() - agentLink.lastSpokeAt > 10000
       ) {
-        pokeByApi(true);
+        requestAgentPlan(window.__DSH_L2D_AGENT__ || { state: 'idle' }, null, 1, 'idle auto-act');
       }
       agentLink.autoActTimer = setTimeout(tick, 42000 + Math.random() * 45000);
     };
