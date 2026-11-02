@@ -32,6 +32,10 @@
   var ENV_TICK_MS = 1000; // 环境层心跳
   var ENV_TYPING_HOLD_MS = 4000; // 打字后 4s 内仍算「问答中」
   var ENV_WORK_HOLD_MS = 10000; // 键盘活动后 10s 内算「操作电脑」
+  var ENV_REVERSE_EVENT_URL = '/dsh-l2d/reverse/event'; // 环境事件 → 宿主反向桥
+  var ENV_PRESENCE_MIN_MS = 1000; // presence 节流
+  var ENV_INPUT_MIN_MS = 200; // user-input 节流
+  var ENV_HEARTBEAT_MS = 10000; // 可见时每 10s 一次心跳
   var ENV_INPUT_SELECTOR = [
     'textarea',
     'input[type="text"]',
@@ -60,7 +64,11 @@
     manualUntil: 0,
     lastStateAt: 0,
     publishAt: 0,
-    lastInputEventAt: 0
+    lastInputEventAt: 0,
+    lastPresencePostAt: 0,
+    lastInputPostAt: 0,
+    lastHeartbeatAt: 0,
+    pendingPresence: null
   };
 
   var ROOT_ID = 'dsh-l2d-root';
@@ -2997,6 +3005,7 @@
     if (root) root.className = next;
     if (chipEl) chipEl.textContent = LABEL[next] || next;
     env.lastStateAt = Date.now();
+    postEnvPresence('state'); // conversation/work/idle 切换时上报（≥1s 节流）
   }
 
   function startAwayWander() {
@@ -3035,6 +3044,7 @@
     say(BUBBLE.away[Math.floor(Math.random() * BUBBLE.away.length)], 2400);
     startAwayWander();
     publishPresence();
+    postEnvPresence('away', { reason: reason || 'idle' }, { force: true });
     dispatchEnvEvent('dsh-l2d:away', { reason: reason || 'idle' });
   }
 
@@ -3060,6 +3070,7 @@
     // 按回归瞬间的实际状态落：焦点还在输入框就是 conversation，刚敲键盘就是 work
     applyEnvState(computeEnvState(Date.now()));
     publishPresence();
+    postEnvPresence('return', { reason: reason || 'activity' }, { force: true });
     dispatchEnvEvent('dsh-l2d:return', { reason: reason || 'activity' });
   }
 
@@ -3078,6 +3089,7 @@
       len = el && typeof el.value === 'string' ? el.value.length : (el && el.textContent ? el.textContent.length : 0);
     } catch (e) { /* ignore */ }
     dispatchEnvEvent('dsh-l2d:user-input', { length: len });
+    postEnvPresence('user-input', { inputLength: len }); // ≥200ms 节流，只上报长度
   }
 
   function publishPresence() {
@@ -3107,6 +3119,52 @@
     }
   }
 
+  /** 环境事件 → 宿主反向桥；失败静默（宿主未开反向桥或白名单未更新都不影响本地表现） */
+  function envPresencePayload(kind, extra) {
+    var now = Date.now();
+    var payload = {
+      kind: kind || 'presence',
+      state: String(prefs.state || 'idle'),
+      away: !!env.away,
+      idleMs: Math.max(0, now - env.lastActivityAt),
+      hidden: document.hidden === true,
+      inputFocused: !!env.inputGazeOn,
+      lastTypingAt: env.lastTypingAt || 0,
+      at: now
+    };
+    if (extra) {
+      for (var key in extra) {
+        if (Object.prototype.hasOwnProperty.call(extra, key)) payload[key] = extra[key];
+      }
+    }
+    return payload;
+  }
+
+  function postEnvPresence(kind, extra, options) {
+    var now = Date.now();
+    var force = !!(options && options.force);
+    var isInput = kind === 'user-input';
+    var lastAt = isInput ? env.lastInputPostAt : env.lastPresencePostAt;
+    var minGap = isInput ? ENV_INPUT_MIN_MS : ENV_PRESENCE_MIN_MS;
+    if (!force && now - lastAt < minGap) {
+      // 被节流的状态变化留一份最新快照，下一次 tick 补发，避免切换事件被吞掉。
+      // 心跳不排队：hidden 期间不应有延迟心跳，下一轮 10s 到点自然会补。
+      if (!isInput && kind === 'state') env.pendingPresence = { kind: kind, extra: extra || null };
+      return false;
+    }
+    if (force) env.pendingPresence = null;
+    if (isInput) env.lastInputPostAt = now;
+    else env.lastPresencePostAt = now;
+    try {
+      fetch(ENV_REVERSE_EVENT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'presence', payload: envPresencePayload(kind, extra) })
+      }).catch(function () { /* 静默：宿主侧可能还没把 presence 加进白名单 */ });
+    } catch (e) { /* ignore */ }
+    return true;
+  }
+
   function presenceTick() {
     var now = Date.now();
     if (envEnabled()) {
@@ -3120,6 +3178,16 @@
       if (!env.away && idleMs >= ENV_AWAY_AFTER_MS) enterAway('idle');
       if (env.away && idleMs < ENV_AWAY_AFTER_MS) exitAway('active');
       if (now >= env.manualUntil) applyEnvState(computeEnvState(now));
+      // 被节流掉的状态变化补发（仍然 ≥1s 一次）
+      if (env.pendingPresence && now - env.lastPresencePostAt >= ENV_PRESENCE_MIN_MS) {
+        var pending = env.pendingPresence;
+        env.pendingPresence = null;
+        postEnvPresence(pending.kind, pending.extra);
+      }
+      // 心跳只在页面可见时发；hidden 时停，恢复可见后由活动/状态事件补
+      if (!document.hidden && now - env.lastHeartbeatAt >= ENV_HEARTBEAT_MS && postEnvPresence('heartbeat')) {
+        env.lastHeartbeatAt = now;
+      }
     }
     publishPresence();
   }
@@ -3198,6 +3266,7 @@
     window.addEventListener('focus', function () { noteActivity('focus'); }, { passive: true });
     env.tickTimer = setInterval(presenceTick, ENV_TICK_MS);
     publishPresence();
+    postEnvPresence('init', null, { force: true }); // 初始快照，宿主不用等第一个心跳
   }
 
   function initEmotionSensors() {
