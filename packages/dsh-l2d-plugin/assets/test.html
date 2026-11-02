@@ -4,15 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>DSH-L2D · 渲染自检</title>
+    <link rel="stylesheet" href="/dsh-l2d/ui-tokens.css" />
     <style>
       html,
       body {
         margin: 0;
         height: 100%;
-        background:
-          repeating-conic-gradient(#2a2730 0% 25%, #211f26 0% 50%) 50% / 24px 24px;
-        font-family: system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-        color: #e6e0e9;
+        background-color: var(--dsh-bg);
+        background-image: repeating-conic-gradient(var(--dsh-surface) 0% 25%, var(--dsh-surface-raised) 0% 50%);
+        background-size: 24px 24px;
+        font: var(--dsh-text-sm);
+        color: var(--dsh-ink);
         overflow: hidden;
       }
       #stage {
@@ -26,22 +28,22 @@
       }
       #hud {
         position: fixed;
-        left: 12px;
-        top: 12px;
-        padding: 8px 12px;
-        border-radius: 12px;
-        background: rgba(20, 18, 24, 0.82);
-        border: 1px solid rgba(230, 224, 233, 0.14);
-        font-size: 12px;
-        line-height: 1.6;
+        left: var(--dsh-space-3);
+        top: var(--dsh-space-3);
+        padding: var(--dsh-space-2) var(--dsh-space-3);
+        border-radius: var(--dsh-radius-lg);
+        background: var(--dsh-surface);
+        border: 1px solid var(--dsh-line);
+        font: var(--dsh-text-xs);
+        font-family: var(--dsh-font-mono);
         white-space: pre-wrap;
         max-width: 60vw;
       }
       .ok {
-        color: #9fe1cb;
+        color: var(--dsh-ok);
       }
       .err {
-        color: #f2b8b5;
+        color: var(--dsh-danger);
       }
     </style>
   </head>

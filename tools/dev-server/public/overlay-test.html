@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>overlay 端到端测试</title>
+    <link rel="stylesheet" href="/ui-tokens.css" />
     <style>
       html,
       body {
@@ -11,49 +12,77 @@
         margin: 0;
       }
       body {
-        background: #16151a;
-        color: #cac4d0;
-        font: 13px/1.6 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-        padding: 20px 22px;
+        background: var(--dsh-bg);
+        color: var(--dsh-ink-muted);
+        font: var(--dsh-text-sm);
+        padding: var(--dsh-space-5);
         box-sizing: border-box;
         overflow: hidden;
       }
       h1 {
-        margin: 0 0 6px;
-        font-size: 15px;
-        font-weight: 600;
-        color: #e6e0e9;
+        margin: 0 0 var(--dsh-space-2);
+        font: var(--dsh-text-lg);
+        color: var(--dsh-ink);
       }
       .sub {
-        margin: 0 0 16px;
-        font-size: 12px;
-        color: #938f99;
+        margin: 0 0 var(--dsh-space-4);
+        font: var(--dsh-text-xs);
+        color: var(--dsh-ink-muted);
       }
       ul {
-        margin: 0 0 16px;
-        padding-left: 18px;
-        font-size: 12.5px;
-        color: #cac4d0;
+        margin: 0 0 var(--dsh-space-4);
+        padding-left: var(--dsh-space-4);
+        font: var(--dsh-text-sm);
+        color: var(--dsh-ink-muted);
       }
       li {
-        margin-bottom: 4px;
+        margin-bottom: var(--dsh-space-1);
       }
-      #log {
-        margin-top: 14px;
-        padding: 10px 12px;
-        border-radius: 12px;
-        background: #100f14;
-        border: 1px solid rgba(230, 224, 233, 0.14);
-        font: 11px/1.65 ui-monospace, Consolas, monospace;
+      code {
+        font-family: var(--dsh-font-mono);
+        color: var(--dsh-accent);
+      }
+      .probe {
+        margin-top: var(--dsh-space-3);
+        padding: var(--dsh-space-3);
+        border-radius: var(--dsh-radius-lg);
+        background: var(--dsh-surface-sunken);
+        border: 1px solid var(--dsh-line);
+        font: var(--dsh-text-xs);
+        font-family: var(--dsh-font-mono);
         white-space: pre-wrap;
         word-break: break-all;
-        color: #cac4d0;
+        color: var(--dsh-ink-muted);
         max-height: 220px;
         overflow: auto;
       }
-      code {
-        font-family: ui-monospace, Consolas, monospace;
-        color: #d0bcff;
+      .probe-ok {
+        border-color: color-mix(in srgb, var(--dsh-ok) 45%, transparent);
+        color: var(--dsh-ok);
+      }
+      .probe-warn {
+        border-color: color-mix(in srgb, var(--dsh-warn) 45%, transparent);
+        color: var(--dsh-warn);
+      }
+      .probe-accent {
+        border-color: color-mix(in srgb, var(--dsh-accent) 45%, transparent);
+        color: var(--dsh-accent);
+      }
+      .probe-danger {
+        border-color: color-mix(in srgb, var(--dsh-danger) 45%, transparent);
+        color: var(--dsh-danger);
+      }
+      .probe-float {
+        position: fixed;
+        top: var(--dsh-space-2);
+        left: var(--dsh-space-2);
+        z-index: 99999;
+        margin-top: 0;
+      }
+      .probe-right {
+        right: var(--dsh-space-2);
+        left: auto;
+        max-width: 420px;
       }
     </style>
   </head>
@@ -68,12 +97,12 @@
       <li><b>位置记忆</b>：拖动后刷新页面，应停在上次位置</li>
     </ul>
 
-    <div id="log">等待 overlay 启动…</div>
-    <div id="params" style="margin-top:10px;padding:10px 12px;border-radius:12px;background:#100f14;border:1px solid rgba(143,217,168,.28);font:10.5px/1.45 ui-monospace,Consolas,monospace;color:#8fd9a8;white-space:pre-wrap;max-height:220px;overflow:auto;">参数探测中…</div>
-    <div id="phys" style="margin-top:10px;padding:10px 12px;border-radius:12px;background:#100f14;border:1px solid rgba(208,188,255,.25);font:11px/1.7 ui-monospace,Consolas,monospace;color:#d0bcff;white-space:pre-wrap;">物理状态：等待拖动…</div>
-    <div id="s1" style="margin-top:10px;padding:10px 12px;border-radius:12px;background:#100f14;border:1px solid rgba(255,200,120,.3);font:11px/1.6 ui-monospace,Consolas,monospace;color:#ffc878;white-space:pre-wrap;">S1：带上 ?s1=1 自动验收</div>
-    <div id="s2" style="margin-top:10px;padding:10px 12px;border-radius:12px;background:#100f14;border:1px solid rgba(120,200,255,.3);font:11px/1.6 ui-monospace,Consolas,monospace;color:#78c8ff;white-space:pre-wrap;">S2：带上 ?s2=1 自动验收</div>
-    <div id="s4" style="margin-top:10px;padding:10px 12px;border-radius:12px;background:#100f14;border:1px solid rgba(255,150,190,.3);font:11px/1.6 ui-monospace,Consolas,monospace;color:#ff96be;white-space:pre-wrap;">S4：带上 ?s4=1 自动验收</div>
+    <div id="log" class="probe">等待 overlay 启动…</div>
+    <div id="params" class="probe probe-ok">参数探测中…</div>
+    <div id="phys" class="probe probe-accent">物理状态：等待拖动…</div>
+    <div id="s1" class="probe probe-warn">S1：带上 ?s1=1 自动验收</div>
+    <div id="s2" class="probe probe-accent">S2：带上 ?s2=1 自动验收</div>
+    <div id="s4" class="probe probe-danger">S4：带上 ?s4=1 自动验收</div>
 
     <script>
       (function () {
@@ -334,7 +363,7 @@
           function gzReport() {
             if (!gzEl) {
               gzEl = document.createElement('div');
-              gzEl.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99999;padding:10px 12px;border-radius:12px;background:#100f14;border:1px solid rgba(143,217,168,.4);font:11px/1.6 ui-monospace,Consolas,monospace;color:#8fd9a8;white-space:pre-wrap;';
+              gzEl.className = 'probe probe-ok probe-float';
               document.body.appendChild(gzEl);
             }
             gzEl.textContent = 'Gaze 探针\n' + gzLog.join('\n');
@@ -373,7 +402,7 @@
           function emoReport() {
             if (!emoEl) {
               emoEl = document.createElement('div');
-              emoEl.style.cssText = 'position:fixed;right:8px;top:8px;z-index:99999;padding:10px 12px;max-width:420px;border-radius:12px;background:#100f14;border:1px solid rgba(143,217,168,.4);font:11px/1.6 ui-monospace,Consolas,monospace;color:#8fd9a8;white-space:pre-wrap;';
+              emoEl.className = 'probe probe-ok probe-float probe-right';
               document.body.appendChild(emoEl);
             }
             emoEl.textContent = 'Emotion_Router 验收\n' + emoLog.join('\n');

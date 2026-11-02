@@ -34,6 +34,7 @@ const CORE_FILE =
   path.join(L2D_ROOT, 'vendor', 'cubism', 'CubismSdkForWeb-5-r.5', 'Core', 'live2dcubismcore.min.js');
 const RENDERER_FILE = path.join(PKG_ROOT, 'assets', 'renderer.js');
 const TEST_FILE = path.join(PKG_ROOT, 'assets', 'test.html');
+const TOKENS_FILE = path.join(PKG_ROOT, 'assets', 'ui-tokens.css');
 const MODEL_EXT = new Set(['.json', '.moc3', '.png', '.jpg', '.jpeg']);
 
 const AVATAR_CANDIDATES = [
@@ -780,6 +781,13 @@ export function apply(root, config = {}) {
       const buf = readIfExists(OVERLAY_FILE);
       if (!buf) return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('overlay.js missing'));
       sendBuffer(res, 200, MIME['.js'], buf);
+    });
+
+    route('/dsh-l2d/ui-tokens.css', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const buf = readIfExists(TOKENS_FILE);
+      if (!buf) return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('ui-tokens.css missing'));
+      sendBuffer(res, 200, MIME['.css'], buf);
     });
 
     route('/dsh-l2d/avatar.png', (req, res) => {

@@ -44,7 +44,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
       <div class="row col">
         <div class="text">
           <span class="k">主题</span>
-          <span class="d">M3 Expressive · 跟随选择</span>
+          <span class="d">跟随所选主题</span>
         </div>
         <M3Segmented v-model="themeModel" :options="themeOptions" full />
       </div>
@@ -147,7 +147,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
       </div>
 
       <div class="note">
-        <M3Icon name="info" :size="18" />
+        <M3Icon name="info" :size="16" />
         <p>
           全局键鼠感知只统计「是否有输入」与输入速率，<strong>不记录按键内容、不落盘、不上传</strong>；
           前台窗口只判断是否全屏，不读取窗口标题。可随时关闭。
@@ -173,28 +173,27 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 .settings {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: var(--dsh-space-5);
 }
 
 .group + .group {
-  padding-top: 22px;
-  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--dsh-space-5);
+  border-top: 1px solid var(--dsh-line);
 }
 
 .group h3 {
-  margin: 0 0 12px;
-  font: var(--type-title);
-  color: var(--primary);
-  letter-spacing: 0.2px;
+  margin: 0 0 var(--dsh-space-3);
+  font: var(--dsh-text-lg);
+  color: var(--dsh-ink);
 }
 
 .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 0;
-  border-top: 1px solid var(--outline-variant);
+  gap: var(--dsh-space-4);
+  padding: var(--dsh-space-3) 0;
+  border-top: 1px solid var(--dsh-line);
 }
 
 .row:first-of-type {
@@ -204,69 +203,68 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 .row.col {
   flex-direction: column;
   align-items: stretch;
-  gap: 12px;
+  gap: var(--dsh-space-3);
 }
 
 .text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--dsh-space-1);
   min-width: 0;
 }
 
 .k {
-  font: var(--type-label);
-  color: var(--on-surface);
+  font: var(--dsh-text-label);
+  color: var(--dsh-ink);
 }
 
 .d {
-  font: var(--type-caption);
-  color: var(--on-surface-variant);
+  font: var(--dsh-text-xs);
+  color: var(--dsh-ink-muted);
 }
 
 .note {
   display: flex;
-  gap: 10px;
-  margin-top: 12px;
-  padding: 14px 16px;
-  border-radius: var(--shape-md);
-  background: var(--surface-container);
-  color: var(--on-surface-variant);
+  gap: var(--dsh-space-3);
+  margin-top: var(--dsh-space-3);
+  padding: var(--dsh-space-4);
+  border-radius: var(--dsh-radius-lg);
+  background: var(--dsh-surface-raised);
+  color: var(--dsh-ink-muted);
 }
 
 .note p {
   margin: 0;
-  font: var(--type-caption);
+  font: var(--dsh-text-xs);
 }
 
 .note strong {
-  color: var(--on-surface);
+  color: var(--dsh-ink);
   font-weight: 500;
 }
 
 .about {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  border-radius: var(--shape-md);
-  background: var(--surface-container);
+  gap: var(--dsh-space-2);
+  padding: var(--dsh-space-4);
+  border-radius: var(--dsh-radius-lg);
+  background: var(--dsh-surface-raised);
 }
 
 .about-row {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
-  font: var(--type-caption);
-  color: var(--on-surface-variant);
+  gap: var(--dsh-space-4);
+  font: var(--dsh-text-xs);
+  color: var(--dsh-ink-muted);
 }
 
 .about-row code {
   max-width: 68%;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--on-surface);
+  font: var(--dsh-text-xs);
+  font-family: var(--dsh-font-mono);
+  color: var(--dsh-ink);
   text-align: right;
   word-break: break-word;
 }
@@ -274,6 +272,6 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 .actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 16px;
+  margin-top: var(--dsh-space-4);
 }
 </style>

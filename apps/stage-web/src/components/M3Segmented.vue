@@ -29,7 +29,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
       type="button"
       @click="emit('update:modelValue', opt.value)"
     >
-      <M3Icon v-if="opt.icon" :name="opt.icon" :size="17" />
+      <M3Icon v-if="opt.icon" :name="opt.icon" :size="16" />
       <span>{{ opt.label }}</span>
     </button>
   </div>
@@ -38,10 +38,10 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 <style scoped>
 .m3-segmented {
   display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: var(--shape-full);
-  background: var(--surface-container-high);
+  gap: var(--dsh-space-1);
+  padding: var(--dsh-space-1);
+  border-radius: var(--dsh-radius-md);
+  background: var(--dsh-surface-sunken);
 }
 
 .m3-segmented.full {
@@ -57,27 +57,30 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 14px;
+  gap: var(--dsh-space-2);
+  height: var(--dsh-control-sm);
+  padding: 0 var(--dsh-space-3);
   border: none;
-  border-radius: var(--shape-full);
+  border-radius: var(--dsh-radius-sm);
   background: transparent;
-  color: var(--on-surface-variant);
-  font: var(--type-caption);
+  color: var(--dsh-ink-muted);
+  font: var(--dsh-text-xs);
   font-weight: 500;
   cursor: pointer;
   transition:
-    background var(--dur-medium) var(--ease-standard),
-    color var(--dur-medium) var(--ease-standard);
+    background var(--dsh-dur) var(--dsh-ease),
+    color var(--dsh-dur) var(--dsh-ease),
+    box-shadow var(--dsh-dur) var(--dsh-ease);
 }
 
 .seg:hover:not(.active) {
-  background: color-mix(in srgb, var(--on-surface) 6%, transparent);
+  background: var(--dsh-hover);
+  color: var(--dsh-ink);
 }
 
 .seg.active {
-  background: var(--primary-container);
-  color: var(--on-primary-container);
+  background: var(--dsh-surface);
+  color: var(--dsh-ink);
+  box-shadow: var(--dsh-shadow-1);
 }
 </style>
