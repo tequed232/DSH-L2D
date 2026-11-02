@@ -728,6 +728,10 @@ function sanitizePokeAction(raw, allowed, options = {}) {
     }
   }
 
+  if (options.fallback === false && Array.isArray(raw.chain) && sanitizedChain.length !== raw.chain.length) {
+    return { ok: false, reason: 'invalid-step' };
+  }
+
   if (!sanitizedChain.length && allowed.expressions.length && options.fallback !== false) {
     sanitizedChain.push({ kind: 'expression', name: allowed.expressions[0], delayMs: 0 });
   }
