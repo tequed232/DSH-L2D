@@ -207,7 +207,32 @@ l2d_reset_pose()
 
 ---
 
-## 六、给接入方的实现说明
+## 六、对话四段短链（`l2d_act`）
+
+MCP 上的 `l2d_act` 用来演一小段，不要用它写 `ParamMouthOpenY` 或别的底层参数。
+
+优先级：
+
+- `FORCE`：聆听、思考、说话，以及你明确不想被待机动作砍掉的演出
+- `NORMAL`：省略时的默认。可以打断另一条普通链，打断不了 `FORCE`
+- `BACKGROUND`：可有可无的待机小动作。角色正在说话或开着邪神时不要用它硬切
+
+邪神是常驻模式，只能从菜单关掉。你发一条链不会收掉暗角和黑脸。那 9 秒只是开场不被待机打断。新动作如果是另一只手，左手的抚胸会等新动作播完再收回；新动作本身就是抚胸手时，不会再补一次关闭。
+
+`accepted: true` 只说明这条链已经排上。看返回里的 `events`：`start` 是开始，`end` 是播完，`interrupted` 是被打断。`reason: priority-blocked` 表示没播成，等当前演出结束再发，或者改用更高优先级。`end.reason` 只有 `start-rejected`、`conflict` 这种才是动作没播成。`notes` 里的 `already-open` 表示手本来就举着，不是失败。
+
+四段可以直接用 `phase`，不必自己拼步骤：
+
+```json
+{ "phase": "listening" }
+{ "phase": "thinking" }
+{ "phase": "speaking" }
+{ "phase": "settle" }
+```
+
+聆听是看向用户并把手放下，思考是歪向右上并带 `＞＜`，说话是正视加一次竖手指（几秒后放下）。这三段是 `FORCE`。收尾把视线和手收回去，表情回到默认，优先级是 `NORMAL`，所以下一句说话可以把它接掉。四段都没有口型。口型仍然不要写 `ParamMouthOpenY`。
+
+## 七、给接入方的实现说明
 
 - 工具定义：`dist/ai-tools.json`
 - 执行入口（浏览器侧）：`window.DSH_L2D` 暴露 `setExpression / playMotion / lookAt / setParameters / resetPose / getCapabilities`

@@ -13,11 +13,20 @@ import { LAppPal } from './app/lapppal';
 import type { LAppModel } from './app/lappmodel';
 import { ParamInjector } from './app/param-injector';
 import { EmotionRouter, EmotionIntent, EmotionSignal } from './app/emotion-router';
-import { MotionDirector } from './app/motion-director';
+import { MotionDirector, motionsShareArm } from './app/motion-director';
 import { PoseController, POSE_IDS } from './app/pose-controller';
 import { SHADER_SOURCES } from './shaders';
 import { mixAdditive } from '../../core/src/angle-mix.ts';
 import { sampleAmbient, type AmbientKind } from '../../core/src/ambient.ts';
+import {
+  ActGate,
+  closeMotionsOnPreempt,
+  getActPhaseTemplate,
+  motionResultKind,
+  preemptedYandere,
+  type ActAdmitInput,
+  type ActPhaseTemplate,
+} from '../../core/src/action-chain.ts';
 
 let sub: LAppSubdelegate | null = null;
 let model: LAppModel | null = null;
@@ -424,6 +433,39 @@ export function getEmotionState(): {
 export function injectEmotionIntent(intent: EmotionIntent): boolean {
   return emotionRouter.injectIntent(intent);
 }
+
+/**
+ * 动作链优先级门闩。步骤定时仍在 overlay 的 executePokeAction。
+ * 这里只回答「能不能占上当前槽」，并给出 start / interrupted 回执。
+ */
+const actGate = new ActGate();
+
+export function admitAct(input: ActAdmitInput = {}) {
+  return actGate.admit(input);
+}
+
+export function finishAct(runId: number) {
+  return actGate.finish(runId);
+}
+
+export function releaseAct(runId?: number, reason?: string) {
+  return actGate.release(runId, reason);
+}
+
+export function currentAct() {
+  return actGate.current();
+}
+
+export function actPhaseTemplate(name: string): ActPhaseTemplate | null {
+  return getActPhaseTemplate(name);
+}
+
+export function noteActMotion(runId: number, reason: string, kind?: 'fail' | 'skip'): void {
+  if (!runId || !reason) return;
+  actGate.noteMotion(runId, reason, kind === 'skip' ? 'skip' : 'fail');
+}
+
+export { closeMotionsOnPreempt, preemptedYandere, motionsShareArm, motionResultKind };
 
 /** 动作诊断，不参与渲染决策。 */
 let motionDiag = { group: 'none', startedAt: 0, playing: false };
@@ -1236,6 +1278,10 @@ export function resetPose(): number {
 
 /** 收尾：姿势、表情、注视一起回到待机。邪神退出和 l2d_reset 用这一条。 */
 export function resetPerformance(): { ok: boolean; params: number } {
+  if (emotionCloseTimer) {
+    window.clearTimeout(emotionCloseTimer);
+    emotionCloseTimer = 0;
+  }
   const params = resetPose();
   clearExpression();
   clearGaze();
@@ -1588,6 +1634,16 @@ const api = {
   setZoom,
   getEmotionState,
   injectEmotionIntent,
+  admitAct,
+  finishAct,
+  releaseAct,
+  currentAct,
+  actPhaseTemplate,
+  closeMotionsOnPreempt,
+  preemptedYandere,
+  motionsShareArm,
+  motionResultKind,
+  noteActMotion,
   getCapabilities,
   // 生命周期
   destroy,

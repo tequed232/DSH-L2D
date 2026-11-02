@@ -5,6 +5,31 @@ export { mixAdditive } from './angle-mix.ts';
 export type { AngleLayer } from './angle-mix.ts';
 export { sampleAmbient, AMBIENT_KINDS, AMBIENT_FORBIDDEN } from './ambient.ts';
 export type { AmbientKind } from './ambient.ts';
+export {
+  ACT_PRIORITIES,
+  ACT_PRIORITY_RANK,
+  ACT_PHASE_TEMPLATES,
+  ActGate,
+  parseActPriority,
+  canInterruptAct,
+  chainHasMotion,
+  motionResultKind,
+  closeMotionsOnPreempt,
+  preemptedYandere,
+  getActPhaseTemplate,
+  actTemplateWritesMouth,
+} from './action-chain.ts';
+export type {
+  ActPriority,
+  ActPhaseName,
+  ActEventPhase,
+  ActStep,
+  ActPhaseTemplate,
+  ActionDoneEvent,
+  ActiveAct,
+  ActAdmission,
+  ActAdmitInput,
+} from './action-chain.ts';
 
 /**
  * 通道优先级。数值越大越后求值、越能覆盖前面的通道。

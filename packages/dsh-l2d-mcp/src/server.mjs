@@ -11,6 +11,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { resolveBase } from './discover.mjs';
+import { actSettled, mergeActEvents, shapeActReceipt } from './act-result.mjs';
 
 let cachedBase = '';
 
@@ -28,7 +29,7 @@ function normalize(result) {
   return result;
 }
 
-async function forward(name, args, timeoutMs) {
+async function forward(name, args, timeoutMs, mode) {
   const base = await baseUrl();
   if (!base) {
     return { ok: false, reason: 'plugin-offline' };
@@ -51,24 +52,48 @@ async function forward(name, args, timeoutMs) {
 
   const id = queued.id;
   const started = Date.now();
+  let events = [];
+  let acceptResult = null;
   while (Date.now() - started < timeoutMs) {
     try {
       const res = await fetch(base + '/dsh-l2d/ai/result?id=' + encodeURIComponent(id), { cache: 'no-store' });
       if (res.ok) {
         const body = await res.json();
-        if (body && body.ready) return normalize(body.result);
+        if (body && Array.isArray(body.events)) events = mergeActEvents(events, body.events);
+        if (body && body.ready) {
+          acceptResult = normalize(body.result);
+          if (acceptResult && Array.isArray(acceptResult.events)) {
+            events = mergeActEvents(events, acceptResult.events);
+          }
+        }
+        if (acceptResult) {
+          const waitForTerminal = mode === 'act' && acceptResult.accepted === true;
+          if (!waitForTerminal || actSettled(events, acceptResult.runId)) {
+            return mode === 'act' ? shapeActReceipt(acceptResult, events) : acceptResult;
+          }
+        }
       }
     } catch {
       /* 下一轮再取 */
     }
     await new Promise((resolve) => setTimeout(resolve, 120));
   }
-  return { ok: false, reason: 'timeout' };
+  if (mode === 'act' && acceptResult && acceptResult.accepted === true) {
+    return shapeActReceipt(acceptResult, events);
+  }
+  return { ok: false, reason: 'timeout', events };
 }
 
 function toolResult(result) {
   const text = JSON.stringify(result);
-  const benign = result && (result.reason === 'skipped' || result.reason === 'conflict' || result.status === 'skipped' || result.status === 'conflict');
+  const benign =
+    result &&
+    (result.reason === 'skipped' ||
+      result.reason === 'conflict' ||
+      result.reason === 'priority-blocked' ||
+      result.reason === 'pending' ||
+      result.status === 'skipped' ||
+      result.status === 'conflict');
   return {
     content: [{ type: 'text', text }],
     isError: result && result.ok === false && !benign,
@@ -155,7 +180,8 @@ server.registerTool(
 server.registerTool(
   'l2d_act',
   {
-    description: '按顺序演一小段。chain 里每步 kind 可以是 expression、motion、pose、look。delayMs 是相对上一步的等待。后一次调用会打断上一次。不要用来写底层参数。',
+    description:
+      '按顺序演一小段。chain 每步 kind 是 expression、motion、pose、look。priority 取 BACKGROUND、NORMAL、FORCE：低的不能打断高的，同级可以打断，省略是 NORMAL。对话和邪神用 FORCE，待机小动作用 BACKGROUND。accepted 只表示占上了槽；events 里的 action-done 才是 start、end 或 interrupted。phase 可填 listening、thinking、speaking、settle，用内置短链。说话段也不写 ParamMouthOpenY。不要用来写底层参数。',
     inputSchema: {
       chain: z
         .array(
@@ -175,12 +201,19 @@ server.registerTool(
             y: z.number().optional(),
           }),
         )
-        .min(1)
-        .max(8),
+        .max(8)
+        .optional(),
+      priority: z.enum(['BACKGROUND', 'NORMAL', 'FORCE']).optional(),
+      phase: z.enum(['listening', 'thinking', 'speaking', 'settle']).optional(),
       bubble: z.string().optional(),
     },
   },
-  async ({ chain, bubble }) => toolResult(await forward('l2d_act', { chain, bubble }, 4000)),
+  async ({ chain, bubble, priority, phase }) => {
+    if ((!chain || !chain.length) && !phase) {
+      return toolResult({ ok: false, accepted: false, reason: 'empty-chain', outcome: 'rejected', settled: false, events: [] });
+    }
+    return toolResult(await forward('l2d_act', { chain, bubble, priority, phase }, 12000, 'act'));
+  },
 );
 
 server.registerTool(

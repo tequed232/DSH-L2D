@@ -14,7 +14,7 @@
 - 眼神/躯体跟随 + 待机视线漂移（拟人微动作）；拖拽时面部微放大、松手平滑回弹
 - 外观调整集中在右键菜单「模型外观」子菜单（面部/胸口/裙摆/鞋子），不与拖拽冲突
 - 系统联动与媒体律动为可插拔传感器，默认关闭（设置面板开启）
-- 病娇彩蛋：右键「邪神模式」两段确认后生效（暗色特效 + 专属台词），防误触
+- 病娇彩蛋：右键「邪神模式」两段确认后常驻（暗角 + 黑脸 + 开场抚胸），只能再从菜单关掉。9 秒的 FORCE 槽只保护开场不被待机打断
 - 戳一戳动作链：随机动作，或让 DeepSeek 生成表情 / 动作 / 姿势 / 视线 / 关键帧组合；连点中断未完成动作链
 - 分区互动：摸头亲和、摸胸害羞、点脚穿/脱鞋、拖拽裙摆，右键菜单调整形态
 - 体型校正与缩放：基础画布 320×400，缩放 0.6~2.0，三种体型统一视觉系数
@@ -124,6 +124,8 @@ docs/                      技术方案、行为设计、提示词
 给 Agent 的工具只有：`l2d_emote`、`l2d_set_expression`、`l2d_play_motion`、`l2d_set_pose`、`l2d_gaze`、`l2d_say`、`l2d_act`、`l2d_get_state`、`l2d_reset`。
 `l2d_set_parameters` 和 `l2d_play_keyframes` 不进 MCP。`skipped` / `conflict` 是成对动作的正常返回。
 MCP 不会打开 `systemSensor` / `mediaSensor`，这两个开关默认关。
+
+`l2d_act` 的 `priority` 是 `BACKGROUND`、`NORMAL`、`FORCE`。低的不能打断高的，同级可以。`accepted` 只表示占上了槽，播完或被打断看 `action-done` 事件（`start` / `end` / `interrupted`）。`phase` 可用 `listening`、`thinking`、`speaking`、`settle` 四段短链，口型参数仍然不写。
 
 安装与客户端配置见 `packages/dsh-l2d-mcp/README.md`。
 

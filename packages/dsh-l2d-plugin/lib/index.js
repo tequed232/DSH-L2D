@@ -20,6 +20,7 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { createAiInbox } from './ai-inbox.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OVERLAY_FILE = path.join(PKG_ROOT, 'lib', 'overlay.js');
@@ -802,10 +803,7 @@ export function apply(root, config = {}) {
     //   GET  /dsh-l2d/ai/poll  浏览器侧取走待执行队列
     // 用「队列 + 轮询」而不是 WebSocket：插件环境里没有长连接，轮询 400ms 足够，
     // 而且失败可重建，不会因为连接断了就哑掉。
-    let aiSeq = 0;
-    const AI_QUEUE_MAX = 32;
-    const aiQueue = [];
-    const aiResults = new Map();
+    const aiInbox = createAiInbox();
 
     route('/dsh-l2d/ai/call', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
@@ -849,20 +847,18 @@ export function apply(root, config = {}) {
         if (!ALLOWED.has(name)) {
           return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('unknown tool: ' + name));
         }
-        const item = { id: ++aiSeq, name, args: body.args || {}, ts: Date.now() };
-        aiQueue.push(item);
-        while (aiQueue.length > AI_QUEUE_MAX) aiQueue.shift();
-        sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, id: item.id, queued: aiQueue.length }), 'utf8'));
+        const queued = aiInbox.call(name, body.args || {});
+        sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(queued), 'utf8'));
       });
     });
 
     route('/dsh-l2d/ai/poll', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
-      const calls = aiQueue.splice(0, aiQueue.length);
-      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ calls }), 'utf8'));
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(aiInbox.poll()), 'utf8'));
     });
 
-    // 浏览器执行完后把结果放回来，MCP 用 id 取走。skipped/conflict 原样保留。
+    // 浏览器把执行回执和 action-done 事件放回来。MCP 用 id 取走。
+    // result 是受理/失败（一个 id 一份）；event 是 start / end / interrupted，可先到后到。
     route('/dsh-l2d/ai/result', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       if (req.method === 'GET') {
@@ -872,12 +868,7 @@ export function apply(root, config = {}) {
         } catch {
           id = 0;
         }
-        if (!aiResults.has(id)) {
-          return sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ready: false }), 'utf8'));
-        }
-        const result = aiResults.get(id);
-        aiResults.delete(id);
-        return sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ready: true, result }), 'utf8'));
+        return sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(aiInbox.read(id)), 'utf8'));
       }
       if (req.method !== 'POST') {
         return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
@@ -894,12 +885,9 @@ export function apply(root, config = {}) {
         } catch {
           return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
         }
-        const id = Number(body.id);
-        if (!id) return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('id required'));
-        aiResults.set(id, body.result || { ok: false, reason: 'empty' });
-        while (aiResults.size > 64) {
-          const oldest = aiResults.keys().next().value;
-          aiResults.delete(oldest);
+        const saved = aiInbox.post(body);
+        if (!saved.ok) {
+          return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from(saved.reason || 'id required'));
         }
         sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true }), 'utf8'));
       });

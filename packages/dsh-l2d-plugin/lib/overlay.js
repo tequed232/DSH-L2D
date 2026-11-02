@@ -668,6 +668,7 @@
   var yandereOn = false;
   var yandereArmedAt = 0;
   var yandereFx = null;
+  var yandereActRunId = 0;
 
   function applyAppearance(name) {
     var L = window.DSH_L2D;
@@ -697,6 +698,17 @@
   function enableYandere() {
     yandereOn = true;
     var L = window.DSH_L2D;
+    // 9 秒 FORCE 只保护开场不被待机打断。到点或被同级抢走都不会关掉邪神。
+    // 「抚胸手关闭」记进 pendingCloses，和别的收招走同一条 closesToFlush。
+    var held = executePokeAction({
+      priority: 'FORCE',
+      source: 'yandere',
+      silent: true,
+      holdOnly: true,
+      holdMs: 9000,
+    });
+    yandereActRunId = held && held.accepted ? held.runId : 0;
+    if (yandereActRunId) scheduleCloseMotion('抚胸手关闭', 8000, yandereActRunId);
     try {
       if (L && L.injectEmotionIntent) {
         L.injectEmotionIntent({
@@ -705,8 +717,6 @@
           priority: 95,
           expression: '黑脸',
           motion: '抚胸手打开',
-          motionClose: '抚胸手关闭',
-          closeAfterMs: 8000,
           pose: { right: 'finger' },
           look: { x: 0, y: 0.35 },
           bubble: '(ÒωÓ) 让我看看用户硬盘里有什么好东西',
@@ -714,6 +724,7 @@
         });
       } else {
         applyAppearance('黑脸');
+        if (L && L.playMotionAsync) L.playMotionAsync('抚胸手打开');
         say('(ÒωÓ) 让我看看用户硬盘里有什么好东西', 6000);
       }
     } catch (e) {
@@ -722,24 +733,31 @@
     setYandereFx(true);
   }
 
-  function disableYandere() {
+  // 只有菜单关闭才走完整收尾。槽被抢走或 9 秒开场结束都不进这里，暗角和黑脸留着。
+  // resetPerformance 清表情、注视和姿势。抚胸手用 interrupt，避免开场动作还占着状态机时被吞掉。
+  function exitYandereVisual() {
     yandereOn = false;
     yandereArmedAt = 0;
     appearanceCurrent = null;
+    yandereActRunId = 0;
     var L = window.DSH_L2D;
     try {
-      // 邪神退出走 resetPerformance：清关键帧、微动作、Angle 总线、注入器和姿势，再清表情与注视。
-      // 这条不停 Loop 动作。开场播过的「抚胸手打开」还要交给状态机关上，否则手会一直举着。
       if (L && L.resetPerformance) L.resetPerformance();
       if (L && L.playMotionAsync) {
-        L.playMotionAsync('抚胸手关闭').catch(function () { /* 本来就没打开 */ });
+        L.playMotionAsync('抚胸手关闭', { interrupt: true }).catch(function () { /* 本来就没打开 */ });
       }
     } catch (e) {
       /* 复位失败也要把屏幕特效关掉 */
     }
     setYandereFx(false);
+    setTimeout(buildMenu, 30);
+  }
+
+  function disableYandere() {
+    var runId = yandereActRunId;
+    if (runId) releaseActRun(runId, 'yandere-off');
+    exitYandereVisual();
     say('…什么都没看到。', 3000);
-    setTimeout(buildMenu, 30); // 刷新菜单文案
   }
 
   function closeMenu() {
@@ -911,16 +929,29 @@
       add({ kind: 'expression', name: Math.random() < 0.5 ? '兔牙' : '加载' });
       add({ kind: 'look', x: (Math.random() - 0.5) * 0.4, y: Math.random() * 0.2, delayMs: 100 });
     }
-    return { chain: chain, bubble: '', silent: true };
+    return {
+      chain: chain,
+      bubble: '',
+      silent: true,
+      priority: 'FORCE',
+      source: 'dialogue',
+      holdMs: 4500,
+    };
   }
 
   // 调试/自动化测试钩子：不进 AI 工具白名单
   window.DSH_L2D_UI = {
     chatActionForReply: chatActionForReply,
     executePokeAction: executePokeAction,
+    enableYandere: enableYandere,
+    disableYandere: disableYandere,
     setBodyType: setBodyType,
     cycleBodyType: cycleBodyType,
     zoneAt: zoneAt,
+    actState: function () {
+      var L = window.DSH_L2D;
+      return L && L.currentAct ? L.currentAct() : null;
+    },
   };
 
   // ---------------------------------------------------------------- 拖动
@@ -1194,15 +1225,108 @@
   }
 
   // ---------------------------------------------------------------- 戳一戳动作
-  // 动作链批次：每次戳一下生成新 runId，旧链的延时步骤会被打断。
-  // 参考 FULASKA/-live2d- 的 ActionBus 设计：受理成功不等于必须播完，后续高优可打断。
+  // 调度器仍是 executePokeAction。优先级 BACKGROUND < NORMAL < FORCE：
+  // 低的不能打断高的，同级可以打断。accepted 只表示占上了槽；
+  // start / end / interrupted 经 /ai/result 的 event 回给调用方。
   var pokeTimers = [];
-  var pokeRunId = 0;
+  var actingTimer = 0;
+  var legacyGen = 0;
+  // 已经开播、关闭定时器还没跑的 closeMotion。
+  // 抢占时按同一只手决定补不补播，判断来自 motion-director，不在这里写死左右手。
+  var pendingCloses = [];
 
-  function clearPokeTimers() {
-    pokeRunId++;
+  function cancelActTimers() {
     for (var i = 0; i < pokeTimers.length; i++) clearTimeout(pokeTimers[i]);
     pokeTimers = [];
+    if (actingTimer) {
+      clearTimeout(actingTimer);
+      actingTimer = 0;
+    }
+  }
+
+  function postActEvent(event) {
+    if (!event || !event.callId) return;
+    fetch('/dsh-l2d/ai/result', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: event.callId, event: event }),
+    }).catch(function () { /* 回执丢了，调用方会停在 pending */ });
+  }
+
+  function emitActEvents(events) {
+    if (!events) return;
+    for (var i = 0; i < events.length; i++) postActEvent(events[i]);
+  }
+
+  function plannedLifeMs(chain, holdMs) {
+    var cursor = 0;
+    var life = 400;
+    for (var i = 0; i < chain.length; i++) {
+      var step = chain[i] || {};
+      cursor += Math.max(0, Number(step.delayMs) || 0);
+      life = Math.max(life, cursor + 1800);
+      if (step.closeMotion) {
+        life = Math.max(life, cursor + (Number(step.closeAfterMs) || 6000) + 200);
+      }
+    }
+    if (holdMs) life = Math.max(life, Number(holdMs) || 0);
+    return life;
+  }
+
+  function resolveActChain(action, L) {
+    var explicit = Array.isArray(action.chain) && action.chain.length > 0;
+    var chain = explicit ? action.chain.slice() : [];
+    if (!chain.length) {
+      if (action.expression) chain.push({ kind: 'expression', name: action.expression });
+      if (action.motion) chain.push({
+        kind: 'motion',
+        name: action.motion,
+        closeMotion: action.closeMotion,
+        closeAfterMs: action.closeAfterMs,
+      });
+      if (action.pose) chain.push({ kind: 'pose', pose: action.pose });
+      if (action.look) chain.push({ kind: 'look', x: action.look.x, y: action.look.y });
+    }
+    var template = null;
+    if (!chain.length && action.phase && L && L.actPhaseTemplate) {
+      template = L.actPhaseTemplate(String(action.phase));
+      if (template && template.chain && template.chain.length) chain = template.chain.slice();
+      else template = null;
+    }
+    return { chain: chain, template: template };
+  }
+
+  function blockedAct(admission) {
+    return {
+      ok: false,
+      accepted: false,
+      reason: admission && admission.reason ? admission.reason : 'priority-blocked',
+      priority: admission && admission.priority ? admission.priority : 'NORMAL',
+      current: admission ? admission.current : null,
+      runId: null,
+      settled: false,
+      outcome: 'rejected',
+      events: [],
+    };
+  }
+
+  function acceptedAct(admission, steps) {
+    var own = [];
+    var evs = admission && admission.events ? admission.events : [];
+    for (var i = 0; i < evs.length; i++) {
+      if (evs[i] && evs[i].runId === admission.runId) own.push(evs[i]);
+    }
+    return {
+      ok: true,
+      accepted: true,
+      settled: false,
+      outcome: 'pending',
+      runId: admission.runId,
+      priority: admission.priority,
+      steps: steps,
+      source: admission.source || '',
+      events: own,
+    };
   }
 
   var SAFE_MOTION_PARAM = /^(?:Angle[XYZ]bs?|Position[XYZ]|LeanInput|ParamEyeBall[XY]|ParamEyeLOpen|ParamEyeROpen|ParamEyeSmile[LR]?|ParamMouthOpenY|ParamMouthForm|ParamCheek|ParamBreath|Movement[123])$/i;
@@ -1227,41 +1351,156 @@
     return list[Math.floor(Math.random() * list.length)];
   }
 
+  function actStillCurrent(runId) {
+    var L = window.DSH_L2D;
+    if (L && L.currentAct) {
+      var cur = L.currentAct();
+      return !!(cur && cur.runId === runId);
+    }
+    return legacyGen === runId;
+  }
+
+  function rememberClose(name) {
+    if (!name) return;
+    pendingCloses.push(name);
+  }
+
+  function dropPendingClose(name) {
+    var next = [];
+    var removed = false;
+    for (var i = 0; i < pendingCloses.length; i++) {
+      if (!removed && pendingCloses[i] === name) {
+        removed = true;
+        continue;
+      }
+      next.push(pendingCloses[i]);
+    }
+    pendingCloses = next;
+  }
+
+  function chainMotionPlan(chain) {
+    var items = [];
+    var elapsed = 0;
+    for (var i = 0; i < (chain ? chain.length : 0); i++) {
+      var step = chain[i] || {};
+      elapsed += Math.max(0, Number(step.delayMs) || 0);
+      if (step.kind === 'motion' && step.name) items.push({ name: step.name, at: elapsed });
+    }
+    return items;
+  }
+
+  function motionKind(result) {
+    var L = window.DSH_L2D;
+    if (L && L.motionResultKind) return L.motionResultKind(result);
+    if (!result || result.status === 'ok') return 'ok';
+    if (result.status === 'skipped' || result.reason === 'already-open' || result.reason === 'already-closed') return 'skip';
+    return 'fail';
+  }
+
+  function waitMs(ms) {
+    if (!ms || ms <= 0) return Promise.resolve();
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function closesToFlush(chain) {
+    var L = window.DSH_L2D;
+    var shares = L && typeof L.motionsShareArm === 'function'
+      ? function (closeName, motionName) { return !!L.motionsShareArm(closeName, motionName); }
+      : undefined;
+    if (L && L.closeMotionsOnPreempt) return L.closeMotionsOnPreempt(pendingCloses, chain, shares);
+    return [];
+  }
+
+  // ownMotion 才记回执、才可能弹气泡。补播的关闭动作不弹。
+  // 气泡和 reason 只留给真正失败（被拒、被吞）。already-open 这类跳过放 notes。
+  function watchMotion(runId, pending, source, ownMotion) {
+    Promise.resolve(pending).then(function (result) {
+      if (!ownMotion) return;
+      var kind = motionKind(result);
+      if (kind === 'ok') return;
+      var text = (result && (result.reason || result.status)) || 'motion-rejected';
+      var L = window.DSH_L2D;
+      if (L && L.noteActMotion && runId) L.noteActMotion(runId, String(text), kind === 'skip' ? 'skip' : 'fail');
+      if (source === 'poke' && kind === 'fail') say('这个动作先让位', 2200);
+    }).catch(function (err) {
+      if (!ownMotion) return;
+      var reason = err && err.message ? err.message : 'motion-failed';
+      var L = window.DSH_L2D;
+      if (L && L.noteActMotion && runId) L.noteActMotion(runId, String(reason), 'fail');
+      if (source === 'poke') say('这个动作先让位', 2200);
+    });
+  }
+
+  // 新动作按自己的 delayMs 排。后面还有关闭或其他动作时，等 playMotionAsync 返回再播下一个。
+  function playSerial(motions, closes, runId, source) {
+    var L = window.DSH_L2D;
+    var seq = Promise.resolve();
+    var prevAt = 0;
+    for (var i = 0; i < motions.length; i++) {
+      (function (item, index, gap) {
+        var awaitFinish = index < motions.length - 1 || closes.length > 0;
+        seq = seq.then(function () {
+          return waitMs(gap).then(function () {
+            if (runId && !actStillCurrent(runId)) return null;
+            if (!L || !L.playMotionAsync) return null;
+            var pending = L.playMotionAsync(item.name, { awaitFinish: awaitFinish });
+            watchMotion(runId, pending, source, true);
+            return pending;
+          });
+        });
+      })(motions[i], i, motions[i].at - prevAt);
+      prevAt = motions[i].at;
+    }
+    for (var j = 0; j < closes.length; j++) {
+      (function (name, awaitFinish) {
+        seq = seq.then(function () {
+          if (runId && !actStillCurrent(runId)) return null;
+          if (!L || !L.playMotionAsync) return null;
+          var pending = L.playMotionAsync(name, { awaitFinish: awaitFinish });
+          watchMotion(runId, pending, source, false);
+          return pending;
+        });
+      })(closes[j], j < closes.length - 1);
+    }
+    return seq;
+  }
+
+  function preemptYandereIfNeeded(admission) {
+    var L = window.DSH_L2D;
+    var stolen = false;
+    if (L && L.preemptedYandere) {
+      stolen = L.preemptedYandere(admission && admission.current, { on: yandereOn, runId: yandereActRunId });
+    } else if (yandereOn && admission && admission.current) {
+      stolen = admission.current.source === 'yandere' || (!!yandereActRunId && admission.current.runId === yandereActRunId);
+    }
+    if (!stolen) return;
+    // 常驻模式：只标记开场被打断。暗角和黑脸留着，关闭动作留给 closesToFlush。
+    yandereActRunId = 0;
+  }
+
   function scheduleCloseMotion(closeMotion, delayMs, runId) {
     var L = window.DSH_L2D;
     if (!L || !closeMotion || !L.playMotionAsync) return;
+    rememberClose(closeMotion);
     pokeTimers.push(setTimeout(function () {
-      if (runId !== pokeRunId) return;
+      dropPendingClose(closeMotion);
+      if (!actStillCurrent(runId)) return;
       L.playMotionAsync(closeMotion).catch(function () { /* 状态机可能已处理 */ });
     }, delayMs || 6000));
   }
 
-  var actingTimer = 0;
-
-  function executePokeAction(action) {
+  function playActSteps(chain, runId, source, skipMotions) {
     var L = window.DSH_L2D;
-    if (!L || !action) return;
-    var runId = clearPokeTimers();
-
-    // 兼容旧字段；新协议使用 chain：expression / motion / pose / look
-    var chain = Array.isArray(action.chain) ? action.chain : [];
-    if (!chain.length) {
-      if (action.expression) chain.push({ kind: 'expression', name: action.expression });
-      if (action.motion) chain.push({ kind: 'motion', name: action.motion, closeMotion: action.closeMotion, closeAfterMs: action.closeAfterMs });
-      if (action.pose) chain.push({ kind: 'pose', pose: action.pose });
-      if (action.look) chain.push({ kind: 'look', x: action.look.x, y: action.look.y });
-    }
-
     var elapsed = 0;
-    var currentRunId = runId;
     function runStep(step) {
-      if (!L || !step || currentRunId !== pokeRunId) return;
-      if (step.kind === 'expression' && step.name && L.setExpression) {
-        L.setExpression(step.name);
-      } else if (step.kind === 'motion' && step.name && L.playMotionAsync) {
-        L.playMotionAsync(step.name).catch(function () { /* 状态机会拒绝冲突 */ });
+      if (!L || !step || !actStillCurrent(runId)) return;
+      if (step.kind === 'expression') {
+        if (step.clear && L.clearExpression) L.clearExpression();
+        else if (step.name && L.setExpression) L.setExpression(step.name);
+      } else if (step.kind === 'motion' && step.name) {
+        if (!skipMotions && L.playMotionAsync) watchMotion(runId, L.playMotionAsync(step.name), source, true);
         if (step.closeMotion) {
-          scheduleCloseMotion(step.closeMotion, step.closeAfterMs || 6000, currentRunId);
+          scheduleCloseMotion(step.closeMotion, step.closeAfterMs || 6000, runId);
         }
       } else if (step.kind === 'keyframes' && L.playKeyframes) {
         L.playKeyframes(step.tracks || [], {
@@ -1274,9 +1513,6 @@
         L.lookAt(step.x || 0, step.y || 0);
       }
     }
-
-    if (L.setStageBusy) L.setStageBusy({ acting: true });
-    if (actingTimer) clearTimeout(actingTimer);
     for (var i = 0; i < chain.length; i++) {
       var step = chain[i];
       var delay = Math.max(0, Number(step.delayMs) || 0);
@@ -1289,16 +1525,103 @@
         })(step);
       }
     }
+  }
 
+  function armActEnd(runId, life) {
+    var L = window.DSH_L2D;
+    if (L && L.setStageBusy) L.setStageBusy({ acting: true });
     actingTimer = setTimeout(function () {
       actingTimer = 0;
-      if (window.DSH_L2D && window.DSH_L2D.setStageBusy) {
-        window.DSH_L2D.setStageBusy({ acting: false });
+      var api = window.DSH_L2D;
+      if (api && api.finishAct) {
+        var ev = api.finishAct(runId);
+        if (ev) postActEvent(ev);
+      } else if (legacyGen === runId) {
+        legacyGen = 0;
       }
-    }, Math.max(400, elapsed + 1800));
+      if (api && api.setStageBusy) api.setStageBusy({ acting: false });
+    }, life);
+  }
 
+  function releaseActRun(runId, reason) {
+    var L = window.DSH_L2D;
+    if (!L || !L.releaseAct || !runId) return null;
+    var ev = L.releaseAct(runId, reason || 'released');
+    if (!ev) return null;
+    pendingCloses = [];
+    cancelActTimers();
+    postActEvent(ev);
+    if (L.setStageBusy) L.setStageBusy({ acting: false });
+    return ev;
+  }
+
+  function playbackAct(chain, runId, source, holdOnly) {
+    var flush = closesToFlush(chain);
+    var motions = chainMotionPlan(chain);
+    pendingCloses = [];
+    cancelActTimers();
+    if (holdOnly) return;
+    // 另一只手的关闭不能和新动作同时发，否则状态机把后一个吞掉。先播新动作，等它返回再收。
+    if (flush.length && motions.length) {
+      playSerial(motions, flush, runId, source);
+      playActSteps(chain, runId, source, true);
+      return;
+    }
+    if (flush.length) playSerial([], flush, runId, source);
+    playActSteps(chain, runId, source, false);
+  }
+
+  function executePokeAction(action) {
+    var L = window.DSH_L2D;
+    if (!L || !action) return { ok: false, accepted: false, reason: 'renderer-not-ready' };
+    var built = resolveActChain(action, L);
+    var chain = built.chain;
+    if (!chain.length && !action.holdOnly) {
+      return { ok: false, accepted: false, reason: 'empty-chain', settled: false, outcome: 'rejected', events: [] };
+    }
+
+    var priority = action.priority;
+    if ((priority === undefined || priority === null || priority === '') && built.template) {
+      priority = built.template.priority;
+    }
+    var source = action.source || (built.template ? built.template.id : 'act');
+    var life = plannedLifeMs(chain, action.holdMs);
+
+    if (!L.admitAct || !L.currentAct || !L.finishAct) {
+      legacyGen += 1;
+      var legacyId = legacyGen;
+      playbackAct(chain, legacyId, source, !!action.holdOnly);
+      armActEnd(legacyId, life);
+      if (action.bubble) say(action.bubble, 3200);
+      else if (!action.silent) say('戳戳~', 2200);
+      return {
+        ok: true,
+        accepted: true,
+        settled: false,
+        outcome: 'pending',
+        reason: 'no-gate',
+        runId: legacyId,
+        priority: 'NORMAL',
+        steps: chain.length,
+        events: [],
+      };
+    }
+
+    var admission = L.admitAct({
+      priority: priority,
+      callId: action.callId || null,
+      source: source,
+      steps: chain.length,
+    });
+    if (!admission || !admission.accepted) return blockedAct(admission);
+    preemptYandereIfNeeded(admission);
+    playbackAct(chain, admission.runId, source, !!action.holdOnly);
+    emitActEvents(admission.events);
+    // 先挂上结束回执，避免步骤里抛错后槽位一直占着。
+    armActEnd(admission.runId, life);
     if (action.bubble) say(action.bubble, 3200);
     else if (!action.silent) say('戳戳~', 2200);
+    return acceptedAct(admission, action.holdOnly ? 0 : chain.length);
   }
 
   function pokeRandom() {
@@ -1307,7 +1630,6 @@
       say('模型还没准备好', 1800);
       return;
     }
-    var runId = clearPokeTimers();
     var cap = pokeCapabilities();
     var expressions = cap.expressions;
     var motions = cap.motions.filter(function (name) { return name.endsWith('打开'); });
@@ -1316,17 +1638,31 @@
     try {
       if (roll < 0.36 && expressions.length) {
         var expression = randomOf(expressions);
-        L.setExpression(expression);
-        if (L.lookAt) L.lookAt((Math.random() - 0.5) * 0.7, Math.random() * 0.35);
-        say(expression, 2800);
+        executePokeAction({
+          priority: 'FORCE',
+          source: 'poke',
+          bubble: expression,
+          chain: [
+            { kind: 'expression', name: expression },
+            { kind: 'look', x: (Math.random() - 0.5) * 0.7, y: Math.random() * 0.35 },
+          ],
+        });
         return;
       }
 
       if (roll < 0.76 && motions.length) {
         var motion = randomOf(motions);
-        L.playMotionAsync(motion).catch(function () { say('这个动作先让位', 2200); });
-        scheduleCloseMotion(motion.replace(/打开$/, '关闭'), 5200 + Math.random() * 2600, runId);
-        say('看这个~', 2600);
+        executePokeAction({
+          priority: 'FORCE',
+          source: 'poke',
+          bubble: '看这个~',
+          chain: [{
+            kind: 'motion',
+            name: motion,
+            closeMotion: motion.replace(/打开$/, '关闭'),
+            closeAfterMs: 5200 + Math.random() * 2600,
+          }],
+        });
         return;
       }
 
@@ -1335,8 +1671,12 @@
       var pose = poseName === 'chest'
         ? { right: 'rest', left: 'chest' }
         : { right: poseName, left: 'rest' };
-      L.setPose(pose);
-      say(poseName === 'finger' ? '看这里！' : poseName === 'grass' ? '给你草草' : '抱抱~', 2800);
+      executePokeAction({
+        priority: 'FORCE',
+        source: 'poke',
+        bubble: poseName === 'finger' ? '看这里！' : poseName === 'grass' ? '给你草草' : '抱抱~',
+        chain: [{ kind: 'pose', pose: pose }],
+      });
     } catch (err) {
       console.warn('[dsh-l2d] random poke failed', err);
       say('今天不太想动…', 2200);
@@ -1377,6 +1717,8 @@
           }
           throw new Error(data.reason || 'api');
         }
+        data.priority = 'FORCE';
+        data.source = 'poke';
         executePokeAction(data);
       })
       .catch(function (err) {
@@ -1897,36 +2239,39 @@
     return true;
   }
 
+  function agentAct(priority, source, steps) {
+    executePokeAction({
+      priority: priority,
+      source: source,
+      silent: true,
+      chain: steps,
+    });
+  }
+
   var AGENT_CHAIN = {
     thinking: function () {
-      var L = window.DSH_L2D;
-      if (!L) return;
-      if (L.setExpression) L.setExpression('加载');
-      if (L.lookAt) L.lookAt(0, 0.28);
+      agentAct('NORMAL', 'agent', [
+        { kind: 'expression', name: '＞＜' },
+        { kind: 'look', x: 0, y: 0.28, delayMs: 80 },
+      ]);
     },
     working: function () {
-      var L = window.DSH_L2D;
-      if (!L) return;
-      if (L.setExpression) L.setExpression('加载');
-      if (L.lookAt) L.lookAt(0.2, 0.1);
+      agentAct('NORMAL', 'agent', [
+        { kind: 'expression', name: '加载' },
+        { kind: 'look', x: 0.2, y: 0.1, delayMs: 80 },
+      ]);
     },
-    attention: function () {
-      var L = window.DSH_L2D;
-      if (!L) return;
-      if (L.setExpression) L.setExpression('兔牙');
-      if (L.lookAt) L.lookAt(0, 0);
-    },
+    // 回复演出由下面的 chatActionForReply 以 FORCE 占槽，这里不再直接改表情。
+    attention: function () {},
     error: function () {
-      var L = window.DSH_L2D;
-      if (!L) return;
-      if (L.setExpression) L.setExpression('流冷汗');
-      if (L.lookAt) L.lookAt(0, -0.18);
+      agentAct('NORMAL', 'agent', [
+        { kind: 'expression', name: '流冷汗' },
+        { kind: 'look', x: 0, y: -0.18, delayMs: 80 },
+      ]);
     },
     idle: function () {
-      var L = window.DSH_L2D;
-      if (!L) return;
-      // 不在这里复位四肢：会覆盖用户/API 的姿势意图
-      if (L.lookAt) L.lookAt(0, 0);
+      // 待机只做 BACKGROUND。对话演出和邪神占着 FORCE 时，这一眼不会被放行。
+      agentAct('BACKGROUND', 'idle', [{ kind: 'look', x: 0, y: 0 }]);
     },
   };
 
@@ -2245,7 +2590,7 @@
         .then(function (d) {
           if (!d || !d.calls || !d.calls.length) return;
           d.calls.forEach(function (c) {
-            Promise.resolve(window.DSH_L2D_AI.exec(c.name, c.args))
+            Promise.resolve(window.DSH_L2D_AI.exec(c.name, c.args, c.id))
               .then(function (res) {
                 if (!res || res.ok === false) {
                   // skipped / conflict 是状态机的正常结果，不当成异常刷屏
@@ -2283,8 +2628,8 @@
   window.DSH_L2D_AI = {
     version: 1,
 
-    /** 执行一次工具调用 */
-    exec: function (name, args) {
+    /** 执行一次工具调用。callId 是 /ai/call 的队列号，动作链回执靠它写回 /ai/result。 */
+    exec: function (name, args, callId) {
       var a = args || {};
       var L = window.DSH_L2D;
       if (!L) return { ok: false, error: 'renderer-not-ready' };
@@ -2327,10 +2672,17 @@
             return { ok: true };
           }
           case 'l2d_act': {
-            var chain = Array.isArray(a.chain) ? a.chain : [];
-            if (!chain.length) return { ok: false, reason: 'empty-chain' };
-            executePokeAction({ chain: chain, bubble: a.bubble || '', silent: !a.bubble });
-            return { ok: true, steps: chain.length };
+            var actChain = Array.isArray(a.chain) ? a.chain : [];
+            if (!actChain.length && !a.phase) return { ok: false, accepted: false, reason: 'empty-chain' };
+            return executePokeAction({
+              chain: actChain,
+              phase: a.phase,
+              bubble: a.bubble || '',
+              silent: !a.bubble,
+              priority: a.priority,
+              callId: callId,
+              source: a.phase ? String(a.phase) : 'ai',
+            });
           }
           case 'l2d_get_state': {
             return {
