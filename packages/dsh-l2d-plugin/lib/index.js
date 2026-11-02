@@ -672,6 +672,9 @@ function sanitizeKeyframeStep(step, allowedParams) {
 
 function sanitizePokeAction(raw, allowed, options = {}) {
   if (!raw || typeof raw !== 'object') return null;
+  if (options.fallback === false && Array.isArray(raw.chain) && raw.chain.length > 6) {
+    return { ok: false, reason: 'too-many-steps' };
+  }
 
   // 参照 FULASKA/-live2d- 的动作协议：底层用 kind 化的步骤链，
   // 但保留旧字段 expression/motion/pose 兼容现有调用方。
@@ -797,7 +800,7 @@ async function requestDeepSeekPokeAction(key, payload, style = {}) {
         { role: 'user', content: user },
       ],
       temperature: 1.1,
-      max_tokens: 900,
+      max_tokens: style.agentPlan === true ? 1400 : 900,
       response_format: { type: 'json_object' },
     }),
   });
@@ -1145,7 +1148,14 @@ export function apply(root, config = {}) {
           diag('agent-plan rejected: ' + validated.errors.join('; '));
           return sendJson(200, { ok: false, reason: 'invalid-plan', errors: validated.errors });
         }
-        return sendJson(200, validated);
+        const priority = context.state === 'attention' || context.state === 'error' ? 'NORMAL' : 'BACKGROUND';
+        const queued = aiInbox.call('l2d_act', {
+          chain: validated.chain,
+          bubble: validated.bubble,
+          priority,
+          source: 'agent-autonomous',
+        });
+        return sendJson(200, { ...validated, queued: true, callId: queued.id, priority });
       } catch (err) {
         const message = String(err && err.message ? err.message : err);
         diag('agent-plan failed: ' + message);
