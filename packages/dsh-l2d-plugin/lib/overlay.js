@@ -2684,7 +2684,7 @@
     var callId = String(event && event.callId || '');
     var run = agentLink.planRuns && agentLink.planRuns[callId];
     if (!run) return;
-    var phase = String(event.type || event.kind || event.phase || event.status || '').toLowerCase();
+    var phase = String(event.phase || event.kind || event.status || event.type || '').toLowerCase();
     if (!/(end|interrupted|finish|complete)/.test(phase)) return;
     delete agentLink.planRuns[callId];
     if (run.plan.continue !== true || run.segment >= 3) return;
