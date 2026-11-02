@@ -198,3 +198,17 @@ pnpm dev:server          # 127.0.0.1:5300
 - `/overlay-test.html` 原样加载 `lib/overlay.js`，验证拖拽、物理、设置面板
 
 本地服务器会把 `/dsh-l2d/*` 前缀剥离后复用同一套路由，等于复刻了插件环境。
+
+
+## DSH Workspace Agent
+
+当 DSH profile 同时加载 Workspace Registry 和 Session Controller 时，插件会创建或复用独立的 `Live2D Agent` 工作区：
+
+- 默认目录：`$DSH_HOME/workspaces/live2d-agent`。
+- `AGENTS.md`：由 DSH Agent Instructions 加载，定义桌宠 Agent 的职责、MCP 使用方式和只读边界。
+- `agent.md`：由插件定期更新的状态快照，只包含其他工作区标题、会话状态与活动时长，不包含聊天文本、文件路径或错误详情。
+- 专属 Session 通过 DSH 原生 `sessionController.create({ workspaceId })` 创建，并通过 `sessionController.prompt()` 启动初始化对话。
+- 状态变化通过队列消息通知专属 Session；其他工作区不会被写入或控制。
+- 新增路由：`POST /dsh-l2d/workspace/ensure`、`GET /dsh-l2d/workspace/status.json`。
+
+MCP Server 新增 `l2d_workspace_ensure` 和 `l2d_workspace_status`。要让专属 Agent 自己调用 Live2D 控制工具，还需要在 DSH 的 MCP 工具提供端配置本仓库的 MCP Server；本插件不会擅自启动独立 MCP 子进程。

@@ -128,3 +128,16 @@ MCP 不自己判断该不该打断。它转发 `/ai/call`，再把这个 id 上�
 ```
 
 自己写了 `chain` 就用你写的步骤。这时不写 `priority` 就是 `NORMAL`。
+
+
+## DSH Workspace Agent 联动
+
+插件在 DSH 同时提供 `workspaceRegistry` 与 `sessionController` 时，会自动创建或复用真正的 `Live2D Agent` Workspace，并在其中建立独立 Session。目录位于 `$DSH_HOME/workspaces/live2d-agent`（默认 `~/.dsh/workspaces/live2d-agent`）。
+
+- `AGENTS.md`：由 DSH Agent Instructions 原生机制加载，定义专属 Agent 的职责、隐私边界和 Live2D 行为。
+- `agent.md`：插件定期生成的状态快照，只包含其他 Workspace 的标题、Session 状态与活动时长，不包含聊天内容、文件路径或错误详情。
+- 状态变化会以队列消息通知专属 Session；其他 Session 始终只读，不会被提示、修改或停止。
+- MCP 新增 `l2d_workspace_ensure` 与 `l2d_workspace_status`。前者创建/复用专属工作区，后者读取脱敏状态。
+- 专属 Agent 使用 `l2d_*` 工具控制 Live2D。需将本包 MCP Server 配置到 DSH 当前使用的 MCP 工具提供端；插件不会自行启动一个未受 DSH 管理的 MCP 子进程。
+
+如果 Workspace / Session 服务未加载，原有 Live2D 叠加层和控制工具仍可运行，但 Workspace Agent 功能会返回 `dsh-workspace-services-unavailable`。

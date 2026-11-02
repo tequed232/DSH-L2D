@@ -21,6 +21,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { createAiInbox } from './ai-inbox.mjs';
+import { createWorkspaceAgentBridge } from './workspace-agent.mjs';
 import { createReverseLog } from './reverse-log.mjs';
 import { setupPetWindow } from './pet-window.mjs';
 
@@ -496,7 +497,7 @@ function listSessionFiles() {
       const file = path.join(dirPath, entry.name, 'session.v4.jsonl.zstd');
       try {
         const stat = fs.statSync(file);
-        files.push({ file, mtimeMs: stat.mtimeMs, workspace: dir.name });
+        files.push({ file, mtimeMs: stat.mtimeMs, workspace: dir.name, sessionId: entry.name });
       } catch {
         continue;
       }
@@ -588,6 +589,37 @@ function getAgentState(force = false) {
 }
 
 export { getAgentState };
+
+let workspaceBridge = null;
+
+/** Workspace 状态只输出脱敏活动元数据，不向专属 Agent 暴露其他会话文本。 */
+function getWorkspaceAgentStates(registry) {
+  const now = Date.now();
+  const bySession = new Map(listSessionFiles().map((entry) => [entry.sessionId, entry]));
+  const workspaces = [];
+  for (const workspace of registry.list().slice(0, 100)) {
+    const sessions = [];
+    for (const sessionId of workspace.sessionIds.slice(0, 100)) {
+      const entry = bySession.get(String(sessionId));
+      if (!entry) {
+        sessions.push({ sessionIndex: sessions.length + 1, state: 'unknown', ageMs: null, hasError: false });
+        continue;
+      }
+      try {
+        const events = [];
+        for (const line of decompressZstdFrames(fs.readFileSync(entry.file))) {
+          try { events.push(JSON.parse(line)); } catch { /* ignore malformed event */ }
+        }
+        const state = deriveAgentState(events, now - entry.mtimeMs, workspace.title);
+        sessions.push({ sessionIndex: sessions.length + 1, state: state.state, ageMs: state.ageMs, lastEventAt: state.lastEventAt, hasError: state.state === 'error' });
+      } catch {
+        sessions.push({ sessionIndex: sessions.length + 1, state: 'unknown', ageMs: null, hasError: false });
+      }
+    }
+    workspaces.push({ workspaceId: String(workspace.id), title: String(workspace.title || 'Untitled workspace'), sessions });
+  }
+  return { ok: true, generatedAt: new Date().toISOString(), workspaces };
+}
 
 // ---------------------------------------------------------------- 戳一戳 API 动作
 // 用户单击角色时可选择「让 DeepSeek 决定动作」。为避免模型编参数，
@@ -1139,6 +1171,29 @@ export function apply(root, config = {}) {
       diag('model prefix 路由注册失败: ' + String(err && err.message));
     }
 
+    route('/dsh-l2d/workspace/ensure', async (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'POST') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      if (!workspaceBridge) return sendBuffer(res, 503, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'dsh-workspace-services-unavailable' })));
+      try {
+        const result = await workspaceBridge.ensure();
+        sendBuffer(res, result.ok ? 200 : 503, MIME['.json'], Buffer.from(JSON.stringify(result), 'utf8'));
+      } catch (err) {
+        sendBuffer(res, 500, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'workspace-create-failed', hint: String(err?.message || err) }), 'utf8'));
+      }
+    });
+
+    route('/dsh-l2d/workspace/status.json', async (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (!workspaceBridge) return sendBuffer(res, 503, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'dsh-workspace-services-unavailable' })));
+      try {
+        const result = await workspaceBridge.status();
+        sendBuffer(res, result.ok ? 200 : 503, MIME['.json'], Buffer.from(JSON.stringify(result), 'utf8'));
+      } catch (err) {
+        sendBuffer(res, 500, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'workspace-status-failed', hint: String(err?.message || err) }), 'utf8'));
+      }
+    });
+
     route('/dsh-l2d/agent-state.json', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       const enabled = readSettings().agentLink !== false;
@@ -1374,5 +1429,26 @@ export function apply(root, config = {}) {
     }
 
     console.log(`[dsh-l2d] 已挂载：/dsh-l2d/overlay.js（立绘：${AVATAR_CANDIDATES[0]}）`);
+  });
+
+  // Workspace / Session services are optional in some DSH profiles.
+  // Keep the existing overlay operational when those services are absent.
+  root.inject(['workspaceRegistry', 'sessionController'], (ctx) => {
+    const bridge = createWorkspaceAgentBridge({
+      ctx,
+      homeDir: process.env.DSH_HOME || path.join(os.homedir(), '.dsh'),
+      getSnapshot: () => getWorkspaceAgentStates(ctx.workspaceRegistry),
+      intervalMs: 4000,
+    });
+    workspaceBridge = bridge;
+    bridge.ensure().catch((err) => diag('Workspace Agent 初始化失败: ' + String(err?.message || err)));
+    try {
+      ctx.effect(() => () => {
+        bridge.dispose();
+        if (workspaceBridge === bridge) workspaceBridge = null;
+      });
+    } catch {
+      /* Host shutdown also releases the interval. */
+    }
   });
 }
