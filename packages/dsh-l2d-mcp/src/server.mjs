@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { resolveBase } from './discover.mjs';
 import { actSettled, mergeActEvents, shapeActReceipt } from './act-result.mjs';
 import { executeActionSequence, validateActionSequence } from './action-sequence.mjs';
+import { CHOREOGRAPHY } from '../../dsh-l2d-plugin/lib/choreography.mjs';
 
 let cachedBase = '';
 
@@ -218,10 +219,11 @@ server.registerTool(
 );
 
 server.registerTool(
-  'l2d_act_sequence',
+  'l2d_choreograph',
   {
-    description: 'Agent 自主动作编排执行器。先根据当前对话、角色状态和上一段执行回执，自行规划 1~3 段连续动作；每段最多 8 步。程序逐段调用现有 l2d_act，只有上一段明确 completed 才执行下一段。返回 conflict / priority-blocked / interrupted / pending 时必须停止，读取回执后重新规划不同的链，不要原样重试。只允许 expression / motion / pose / look；表情和动作必须使用当前模型真实白名单。可将一个意图拆成回应、动作、收尾等连续演出。',
+    description: '混合动作编排入口。简单状态反应优先传 presetState（error/attention/working/thinking/idle/bootstrap/user-direct），程序复用 choreography.mjs 已验证的预设链；复杂对话、情绪或多阶段演出则由 Agent 自行生成 segments（1~3 段，每段最多 8 步）。两者只能选一个。程序逐段调用现有 l2d_act，只有上一段明确 completed 才执行下一段。返回 conflict / priority-blocked / interrupted / pending 时必须停止，读取回执后重新规划不同的链，不要原样重试。只允许 expression / motion / pose / look；表情和动作必须使用当前模型真实白名单。',
     inputSchema: {
+      presetState: z.enum(['error', 'attention', 'working', 'thinking', 'idle', 'bootstrap', 'user-direct']).optional(),
       segments: z.array(z.object({
         chain: z.array(z.object({
           kind: z.enum(['expression', 'motion', 'pose', 'look']),
@@ -238,14 +240,25 @@ server.registerTool(
         })).min(1).max(8),
         priority: z.enum(['BACKGROUND', 'NORMAL', 'FORCE']).optional(),
         bubble: z.string().max(40).optional(),
-      })).min(1).max(3),
+      })).min(1).max(3).optional(),
     },
   },
-  async ({ segments }) => {
-    const plan = { segments };
+  async ({ presetState, segments }) => {
+    if ((presetState && segments) || (!presetState && !segments)) {
+      return toolResult({ ok: false, status: 'rejected', reason: 'choose-preset-or-segments' });
+    }
+    const selected = presetState
+      ? CHOREOGRAPHY[presetState]
+      : null;
+    const plan = {
+      segments: selected
+        ? [{ chain: selected.chain, priority: selected.priority, bubble: selected.bubble || undefined }]
+        : segments,
+    };
     const validation = validateActionSequence(plan);
     if (!validation.ok) return toolResult({ ok: false, status: 'rejected', reason: 'invalid-sequence', errors: validation.errors, receipts: [] });
-    return toolResult(await executeActionSequence(plan, (args) => forward('l2d_act', args, 12000, 'act')));
+    const result = await executeActionSequence(plan, (args) => forward('l2d_act', args, 12000, 'act'));
+    return toolResult({ ...result, source: selected ? 'preset:' + presetState : 'agent-generated' });
   },
 );
 
