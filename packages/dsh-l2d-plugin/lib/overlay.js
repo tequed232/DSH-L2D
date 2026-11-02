@@ -2636,32 +2636,13 @@
           }
           return;
         }
-        var callId = Date.now() * 1000 + (++agentLink.planSeq % 1000);
-        var state = String(current.state || agentLink.state || 'idle');
-        var priority = state === 'attention' || state === 'error' ? 'NORMAL' : 'BACKGROUND';
-        var run = { meta: current, segment: part, plan: plan, priority: priority };
-        if (plan.continue === true && part < 3) agentLink.planRuns[String(callId)] = run;
-        var result = executePokeAction({
-          chain: plan.chain,
-          bubble: plan.bubble || '',
-          priority: priority,
-          source: 'agent-autonomous',
-          callId: callId,
-          silent: true,
-        });
-        if (!result || result.accepted !== true) {
-          delete agentLink.planRuns[String(callId)];
-          // 资源冲突时允许 Agent 根据真实回执调整一次；优先级拒绝不重试，避免抢占循环。
-          if (plan.continue === true && part < 3 && result && result.reason === 'conflict') {
-            setTimeout(function () {
-              requestAgentPlan(current, {
-                outcome: 'rejected',
-                reason: result.reason,
-                current: result.current || null,
-              }, part + 1, plan.rationale);
-            }, 350);
-          }
+        var callId = Number(plan.callId);
+        if (!plan.queued || !Number.isSafeInteger(callId) || callId <= 0) {
+          console.warn('[dsh-l2d] planner did not enqueue l2d_act');
+          return;
         }
+        var run = { meta: current, segment: part, plan: plan };
+        if (plan.continue === true && part < 3) agentLink.planRuns[String(callId)] = run;
       })
       .catch(function (err) {
         console.warn('[dsh-l2d] autonomous planner request failed', err);
@@ -2669,6 +2650,23 @@
       .finally(function () {
         agentLink.planning = false;
       });
+  }
+
+  function onAgentPlanResult(callId, result) {
+    var key = String(callId || '');
+    var run = agentLink.planRuns && agentLink.planRuns[key];
+    if (!run || (result && result.accepted === true)) return;
+    delete agentLink.planRuns[key];
+    // 仅对资源冲突重规划；优先级拒绝、模型未就绪等情况直接停止。
+    if (run.plan.continue === true && run.segment < 3 && result && result.reason === 'conflict') {
+      setTimeout(function () {
+        requestAgentPlan(run.meta, {
+          outcome: 'rejected',
+          reason: result.reason,
+          current: result.current || null,
+        }, run.segment + 1, run.plan.rationale);
+      }, 350);
+    }
   }
 
   function onAgentPlanEvent(event) {
@@ -3480,6 +3478,7 @@
           d.calls.forEach(function (c) {
             Promise.resolve(window.DSH_L2D_AI.exec(c.name, c.args, c.id))
               .then(function (res) {
+                try { onAgentPlanResult(c.id, res); } catch (receiptError) { /* ignore */ }
                 if (!res || res.ok === false) {
                   // skipped / conflict 是状态机的正常结果，不当成异常刷屏
                   if (!res || (res.reason !== 'skipped' && res.reason !== 'conflict' && res.status !== 'skipped' && res.status !== 'conflict')) {
