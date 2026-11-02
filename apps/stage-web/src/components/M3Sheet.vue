@@ -43,14 +43,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 .scrim {
   position: fixed;
   inset: 0;
-  z-index: var(--z-sheet-scrim);
-  background: var(--scrim);
-  backdrop-filter: blur(2px);
+  z-index: var(--dsh-z-scrim);
+  background: var(--dsh-scrim);
 }
 
 .sheet {
   position: fixed;
-  z-index: var(--z-sheet);
+  z-index: var(--dsh-z-sheet);
   left: 50%;
   bottom: 0;
   translate: -50% 0;
@@ -58,66 +57,64 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
   max-height: 82vh;
   display: flex;
   flex-direction: column;
-  background: var(--surface-container-low);
-  border-radius: var(--shape-xl) var(--shape-xl) 0 0;
-  box-shadow: var(--shadow-3);
+  background: var(--dsh-surface);
+  border: 1px solid var(--dsh-line);
+  border-bottom: none;
+  border-radius: var(--dsh-radius-xl) var(--dsh-radius-xl) 0 0;
+  box-shadow: var(--dsh-shadow-3);
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
 .head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px 6px 24px;
+  gap: var(--dsh-space-2);
+  padding: var(--dsh-space-3) var(--dsh-space-3) var(--dsh-space-2) var(--dsh-space-5);
   flex: none;
 }
 
 .grabber {
   position: absolute;
-  top: 8px;
+  top: var(--dsh-space-2);
   left: 50%;
   translate: -50% 0;
-  width: 32px;
-  height: 4px;
-  border-radius: var(--shape-full);
-  background: var(--outline-variant);
+  width: var(--dsh-space-6);
+  height: var(--dsh-space-1);
+  border-radius: var(--dsh-radius-full);
+  background: var(--dsh-line-strong);
 }
 
 .head h2 {
   flex: 1;
   margin: 0;
-  font: var(--type-title-lg);
-  color: var(--on-surface);
+  font: var(--dsh-text-xl);
+  color: var(--dsh-ink);
 }
 
 .body {
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 8px 24px 32px;
+  padding: var(--dsh-space-2) var(--dsh-space-5) var(--dsh-space-6);
 }
 
 .scrim-enter-active,
 .scrim-leave-active {
-  transition: opacity var(--dur-medium) var(--ease-standard);
+  transition: opacity var(--dsh-dur) var(--dsh-ease);
 }
 .scrim-enter-from,
 .scrim-leave-to {
   opacity: 0;
 }
 
-.sheet-enter-active {
-  transition:
-    translate var(--dur-long) var(--ease-spring),
-    opacity var(--dur-medium) var(--ease-standard);
-}
+.sheet-enter-active,
 .sheet-leave-active {
   transition:
-    translate var(--dur-medium) var(--ease-standard),
-    opacity var(--dur-short) var(--ease-standard);
+    translate var(--dsh-dur-slow) var(--dsh-ease),
+    opacity var(--dsh-dur) var(--dsh-ease);
 }
 .sheet-enter-from,
 .sheet-leave-to {
-  translate: -50% 24px;
+  translate: -50% var(--dsh-space-4);
   opacity: 0;
 }
 </style>

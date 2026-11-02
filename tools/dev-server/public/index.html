@@ -4,28 +4,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>DSH-L2D 渲染调试台</title>
+    <link rel="stylesheet" href="/ui-tokens.css" />
     <style>
-      :root {
-        --bg: #141318;
-        --surface: #1d1b22;
-        --surface-2: #26232d;
-        --on: #e6e0e9;
-        --on-var: #cac4d0;
-        --primary: #d0bcff;
-        --on-primary: #381e72;
-        --outline: rgba(230, 224, 233, 0.16);
-        --ok: #8fd9a8;
-        --warn: #f2cc60;
-        --err: #f28b82;
-      }
       * { box-sizing: border-box; }
       html, body { height: 100%; }
       body {
         margin: 0;
         display: flex;
-        background: var(--bg);
-        color: var(--on);
-        font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: var(--dsh-bg);
+        color: var(--dsh-ink);
+        font: var(--dsh-text-sm);
       }
 
       /* 舞台：棋盘格背景，透明区域一眼可见 */
@@ -35,19 +23,19 @@
         place-items: center;
         position: relative;
         overflow: hidden;
-        background-color: #1a1820;
+        background-color: var(--dsh-bg);
         background-image:
-          linear-gradient(45deg, #232029 25%, transparent 25%),
-          linear-gradient(-45deg, #232029 25%, transparent 25%),
-          linear-gradient(45deg, transparent 75%, #232029 75%),
-          linear-gradient(-45deg, transparent 75%, #232029 75%);
-        background-size: 20px 20px;
-        background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+          linear-gradient(45deg, var(--dsh-surface) 25%, transparent 25%),
+          linear-gradient(-45deg, var(--dsh-surface) 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, var(--dsh-surface) 75%),
+          linear-gradient(-45deg, transparent 75%, var(--dsh-surface) 75%);
+        background-size: 16px 16px;
+        background-position: 0 0, 0 8px, 8px -8px, -8px 0;
       }
       /* 画布边界参考线 */
       #frame {
         position: relative;
-        outline: 1px dashed rgba(208, 188, 255, 0.35);
+        outline: 1px dashed color-mix(in srgb, var(--dsh-accent) 45%, transparent);
         outline-offset: 0;
       }
       #cv { display: block; }
@@ -56,62 +44,61 @@
       #panel {
         width: 320px;
         flex: 0 0 320px;
-        background: var(--surface);
-        border-left: 1px solid var(--outline);
-        padding: 18px 18px 24px;
+        background: var(--dsh-surface);
+        border-left: 1px solid var(--dsh-line);
+        padding: var(--dsh-space-4) var(--dsh-space-4) var(--dsh-space-5);
         overflow-y: auto;
       }
       h1 {
-        margin: 0 0 4px;
-        font-size: 15px;
-        font-weight: 600;
-        letter-spacing: 0.2px;
+        margin: 0 0 var(--dsh-space-1);
+        font: var(--dsh-text-lg);
       }
-      .sub { margin: 0 0 18px; font-size: 11.5px; color: var(--on-var); }
+      .sub { margin: 0 0 var(--dsh-space-4); font: var(--dsh-text-xs); color: var(--dsh-ink-muted); }
       h2 {
-        margin: 18px 0 8px;
-        font-size: 11px;
+        margin: var(--dsh-space-4) 0 var(--dsh-space-2);
+        font: var(--dsh-text-xs);
         font-weight: 600;
-        letter-spacing: 0.8px;
+        letter-spacing: 0.06em;
         text-transform: uppercase;
-        color: var(--primary);
+        color: var(--dsh-ink-muted);
       }
-      .row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
-      .row > label { font-size: 11.5px; color: var(--on-var); }
+      .row { display: flex; flex-direction: column; gap: var(--dsh-space-2); margin-bottom: var(--dsh-space-3); }
+      .row > label { font: var(--dsh-text-xs); color: var(--dsh-ink-muted); }
       select, input[type="number"] {
         width: 100%;
-        padding: 7px 9px;
-        border-radius: 10px;
-        border: 1px solid var(--outline);
-        background: var(--surface-2);
-        color: var(--on);
-        font-size: 12px;
+        padding: var(--dsh-space-2);
+        border-radius: var(--dsh-radius-md);
+        border: 1px solid var(--dsh-line);
+        background: var(--dsh-surface-raised);
+        color: var(--dsh-ink);
+        font: var(--dsh-text-xs);
         outline: none;
       }
-      select:focus, input:focus { border-color: var(--primary); }
-      input[type="range"] { width: 100%; accent-color: var(--primary); }
-      .inline { display: flex; align-items: center; gap: 10px; }
-      .inline b { min-width: 52px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--primary); }
+      select:focus, input:focus { border-color: var(--dsh-accent); }
+      input[type="range"] { width: 100%; accent-color: var(--dsh-accent); }
+      .inline { display: flex; align-items: center; gap: var(--dsh-space-3); }
+      .inline b { min-width: 48px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--dsh-accent); }
+      .dim { color: var(--dsh-ink-muted); }
 
       /* 单个 XY 轴控件：拖圆点同时给水平和垂直，避免两个滑块来回调 */
       .xy-pad {
         position: relative;
         width: 100%;
-        max-width: 170px;
+        max-width: 176px;
         aspect-ratio: 1 / 1;
-        border-radius: 16px;
-        background: radial-gradient(circle at 50% 50%, #272430 0%, #16151a 100%);
-        border: 1px solid var(--outline);
+        border-radius: var(--dsh-radius-lg);
+        background: radial-gradient(circle at 50% 50%, var(--dsh-surface-raised) 0%, var(--dsh-surface-sunken) 100%);
+        border: 1px solid var(--dsh-line);
         cursor: crosshair;
         touch-action: none;
         overflow: hidden;
-        margin-bottom: 6px;
+        margin-bottom: var(--dsh-space-2);
       }
       .xy-pad::before,
       .xy-pad::after {
         content: '';
         position: absolute;
-        background: rgba(230, 224, 233, 0.1);
+        background: var(--dsh-line);
         pointer-events: none;
       }
       .xy-pad::before { left: 50%; top: 0; bottom: 0; width: 1px; }
@@ -120,70 +107,81 @@
         position: absolute;
         left: 50%;
         top: 50%;
-        width: 18px;
-        height: 18px;
-        margin: -9px 0 0 -9px;
-        border-radius: 50%;
-        background: var(--primary);
-        box-shadow: 0 0 14px rgba(208, 188, 255, 0.55);
+        width: var(--dsh-space-4);
+        height: var(--dsh-space-4);
+        margin: calc(var(--dsh-space-4) / -2) 0 0 calc(var(--dsh-space-4) / -2);
+        border-radius: var(--dsh-radius-full);
+        background: var(--dsh-accent);
+        box-shadow: var(--dsh-shadow-1);
         pointer-events: none;
       }
       .xy-val {
-        font: 11px/1.5 ui-monospace, Consolas, monospace;
-        color: #938f99;
+        font: var(--dsh-text-xs);
+        font-family: var(--dsh-font-mono);
+        color: var(--dsh-ink-muted);
         font-variant-numeric: tabular-nums;
       }
 
       button {
-        padding: 8px 14px;
-        border: none;
-        border-radius: 999px;
-        font-size: 12px;
+        height: var(--dsh-control-sm);
+        padding: 0 var(--dsh-space-3);
+        border: 1px solid var(--dsh-line);
+        border-radius: var(--dsh-radius-md);
+        font: var(--dsh-text-xs);
+        font-weight: 500;
         cursor: pointer;
-        background: var(--surface-2);
-        color: var(--on);
-        transition: background 0.15s;
+        background: var(--dsh-surface-raised);
+        color: var(--dsh-ink);
+        transition: background var(--dsh-dur-fast) var(--dsh-ease);
       }
-      button:hover { background: #322e3b; }
-      button.primary { background: var(--primary); color: var(--on-primary); font-weight: 500; }
-      button.primary:hover { filter: brightness(1.08); }
-      .btns { display: flex; gap: 8px; margin-top: 12px; }
+      button:hover { background: color-mix(in srgb, var(--dsh-ink) 8%, var(--dsh-surface-raised)); }
+      button.primary { background: var(--dsh-accent); color: var(--dsh-on-accent); border-color: transparent; }
+      button.primary:hover { background: color-mix(in srgb, var(--dsh-accent) 88%, white); }
+      .btns { display: flex; gap: var(--dsh-space-2); margin-top: var(--dsh-space-3); }
 
       /* 诊断表 */
-      #stats {
+      .mono {
         margin: 0;
-        padding: 10px 12px;
-        border-radius: 12px;
-        background: #100f14;
-        border: 1px solid var(--outline);
-        font: 11.5px/1.7 ui-monospace, "SF Mono", Consolas, monospace;
+        padding: var(--dsh-space-3);
+        border-radius: var(--dsh-radius-lg);
+        background: var(--dsh-surface-sunken);
+        border: 1px solid var(--dsh-line);
+        font: var(--dsh-text-xs);
+        font-family: var(--dsh-font-mono);
         white-space: pre-wrap;
         word-break: break-all;
-        color: var(--on-var);
+        color: var(--dsh-ink-muted);
       }
-      #stats .k { color: #938f99; }
-      #stats .v-ok { color: var(--ok); }
-      #stats .v-warn { color: var(--warn); }
-      #stats .v-err { color: var(--err); }
+      #cap { margin-top: var(--dsh-space-2); }
+      #log { max-height: 220px; overflow: auto; }
+      #stats .k { color: var(--dsh-ink-muted); }
+      #stats .v-ok { color: var(--dsh-ok); }
+      #stats .v-warn { color: var(--dsh-warn); }
+      #stats .v-err { color: var(--dsh-danger); }
       #err {
-        margin-top: 10px;
-        padding: 10px 12px;
-        border-radius: 12px;
-        background: rgba(242, 139, 130, 0.1);
-        border: 1px solid rgba(242, 139, 130, 0.35);
-        color: var(--err);
-        font: 11.5px/1.6 ui-monospace, Consolas, monospace;
-        white-space: pre-wrap;
+        margin-top: var(--dsh-space-2);
+        background: color-mix(in srgb, var(--dsh-danger) 12%, transparent);
+        border-color: color-mix(in srgb, var(--dsh-danger) 40%, transparent);
+        color: var(--dsh-danger);
         display: none;
       }
-      .hint { font-size: 11px; color: #938f99; line-height: 1.6; margin-top: 10px; }
+      .hint { font: var(--dsh-text-xs); color: var(--dsh-ink-muted); margin-top: var(--dsh-space-2); }
       .pill {
         display: inline-block;
-        padding: 1px 8px;
-        border-radius: 999px;
-        font-size: 10.5px;
-        background: rgba(208, 188, 255, 0.14);
-        color: var(--primary);
+        padding: 0 var(--dsh-space-2);
+        border-radius: var(--dsh-radius-full);
+        font: var(--dsh-text-xs);
+        font-weight: 500;
+        background: var(--dsh-accent-soft);
+        color: var(--dsh-on-accent-soft);
+      }
+      .pill.ok {
+        background: color-mix(in srgb, var(--dsh-ok) 18%, transparent);
+        color: var(--dsh-ok);
+      }
+      .pill.err {
+        background: color-mix(in srgb, var(--dsh-danger) 18%, transparent);
+        color: var(--dsh-danger);
       }
     </style>
   </head>
@@ -209,7 +207,7 @@
         <label>尺寸（宽 × 高）</label>
         <div class="inline">
           <input id="w" type="number" value="360" min="80" max="1600" step="10" />
-          <span style="color: #938f99">×</span>
+          <span class="dim">×</span>
           <input id="h" type="number" value="560" min="80" max="1600" step="10" />
         </div>
       </div>
@@ -247,14 +245,14 @@
         <button id="btnReset">恢复站姿</button>
         <button id="btnSwing">甩动测试</button>
       </div>
-      <pre id="cap" style="margin:8px 0 0;padding:8px 10px;border-radius:10px;background:#100f14;border:1px solid rgba(230,224,233,.16);font:11px/1.6 ui-monospace,Consolas,monospace;white-space:pre-wrap;color:#cac4d0;">能力清单加载中…</pre>
+      <pre id="cap" class="mono">能力清单加载中…</pre>
 
       <h2>诊断</h2>
-      <pre id="stats">等待启动…</pre>
-      <div id="err"></div>
+      <pre id="stats" class="mono">等待启动…</pre>
+      <div id="err" class="mono"></div>
 
       <h2>控制台</h2>
-      <pre id="log" style="margin:0;padding:10px 12px;border-radius:12px;background:#100f14;border:1px solid rgba(230,224,233,.16);font:11px/1.6 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all;color:#cac4d0;max-height:220px;overflow:auto;">（等待输出）</pre>
+      <pre id="log" class="mono">（等待输出）</pre>
 
       <h2>说明</h2>
       <p class="hint">
@@ -327,14 +325,8 @@
 
         function setStatus(text, kind) {
           statusEl.textContent = text;
-          statusEl.style.background =
-            kind === 'ok'
-              ? 'rgba(143,217,168,.16)'
-              : kind === 'err'
-                ? 'rgba(242,139,130,.16)'
-                : 'rgba(208,188,255,.14)';
-          statusEl.style.color =
-            kind === 'ok' ? '#8fd9a8' : kind === 'err' ? '#f28b82' : '#d0bcff';
+          statusEl.classList.remove('ok', 'err');
+          if (kind === 'ok' || kind === 'err') statusEl.classList.add(kind);
         }
 
         function showErr(msg) {

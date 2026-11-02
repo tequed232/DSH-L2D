@@ -12,37 +12,38 @@ body,
 
 body {
   margin: 0;
-  font: var(--type-body);
-  color: var(--on-surface);
-  background: var(--surface);
+  font: var(--dsh-text-md);
+  color: var(--dsh-ink);
+  background: var(--dsh-bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow: hidden;
 }
 
-button {
+button,
+input,
+select {
   font: inherit;
   color: inherit;
 }
 
 :focus-visible {
-  outline: 2px solid var(--primary);
+  outline: 2px solid var(--dsh-accent);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: var(--primary-container);
-  color: var(--on-primary-container);
+  background: var(--dsh-accent-soft);
+  color: var(--dsh-on-accent-soft);
 }
 
-/* 细滚动条，贴近 M3 观感 */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--outline-variant);
-  border-radius: var(--shape-full);
+  background: var(--dsh-line-strong);
+  border-radius: var(--dsh-radius-full);
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -53,6 +54,7 @@ button {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }

@@ -19,7 +19,7 @@ const toggleTheme = () => {
   <div class="app">
     <header class="bar">
       <div class="brand">
-        <span class="logo"><M3Icon name="sparkle" :size="17" /></span>
+        <span class="logo"><M3Icon name="sparkle" :size="16" /></span>
         <div class="names">
           <strong>DSH-L2D</strong>
           <span>角色舞台 · P0</span>
@@ -53,31 +53,31 @@ const toggleTheme = () => {
   display: grid;
   grid-template-rows: auto 1fr;
   height: 100%;
-  padding: 14px 18px 16px;
-  gap: 14px;
+  padding: var(--dsh-space-4);
+  gap: var(--dsh-space-4);
 }
 
 .bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--dsh-space-4);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--dsh-space-3);
 }
 
 .logo {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--shape-md);
-  background: var(--primary-container);
-  color: var(--on-primary-container);
+  width: var(--dsh-control-sm);
+  height: var(--dsh-control-sm);
+  border-radius: var(--dsh-radius-md);
+  background: var(--dsh-accent-soft);
+  color: var(--dsh-on-accent-soft);
 }
 
 .names {
@@ -87,20 +87,18 @@ const toggleTheme = () => {
 }
 
 .names strong {
-  font: var(--type-title);
-  font-weight: 500;
-  letter-spacing: 0.3px;
+  font: var(--dsh-text-lg);
 }
 
 .names span {
-  font: var(--type-caption);
-  color: var(--on-surface-variant);
+  font: var(--dsh-text-xs);
+  color: var(--dsh-ink-muted);
 }
 
 .actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--dsh-space-2);
 }
 
 .main {

@@ -35,45 +35,41 @@ const toggle = () => {
 }
 
 .m3-switch:disabled {
-  opacity: 0.38;
+  opacity: var(--dsh-disabled-opacity);
   cursor: not-allowed;
 }
 
 .track {
   display: grid;
   align-items: center;
-  width: 52px;
-  height: 32px;
-  padding: 4px;
-  border-radius: var(--shape-full);
-  background: var(--surface-container-highest);
-  box-shadow: inset 0 0 0 2px var(--outline);
+  width: 44px;
+  height: var(--dsh-space-5);
+  padding: var(--dsh-space-1);
+  border-radius: var(--dsh-radius-full);
+  background: var(--dsh-surface-raised);
+  box-shadow: inset 0 0 0 1px var(--dsh-line-strong);
   transition:
-    background var(--dur-medium) var(--ease-standard),
-    box-shadow var(--dur-medium) var(--ease-standard);
+    background var(--dsh-dur) var(--dsh-ease),
+    box-shadow var(--dsh-dur) var(--dsh-ease);
 }
 
 .on .track {
-  background: var(--primary);
-  box-shadow: inset 0 0 0 2px var(--primary);
+  background: var(--dsh-accent);
+  box-shadow: inset 0 0 0 1px var(--dsh-accent);
 }
 
 .thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: var(--shape-full);
-  background: var(--outline);
+  width: var(--dsh-space-4);
+  height: var(--dsh-space-4);
+  border-radius: var(--dsh-radius-full);
+  background: var(--dsh-ink-muted);
   transition:
-    width var(--dur-medium) var(--ease-spring),
-    height var(--dur-medium) var(--ease-spring),
-    transform var(--dur-medium) var(--ease-spring),
-    background var(--dur-medium) var(--ease-standard);
+    transform var(--dsh-dur) var(--dsh-ease),
+    background var(--dsh-dur) var(--dsh-ease);
 }
 
 .on .thumb {
-  width: 24px;
-  height: 24px;
   transform: translateX(20px);
-  background: var(--on-primary);
+  background: var(--dsh-on-accent);
 }
 </style>
