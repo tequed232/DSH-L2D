@@ -118,6 +118,7 @@ const memSettings = {
   memeStyle: true,
   memeLevel: 50,
   autoAct: true,
+  petMode: true,
 };
 
 function settingsView() {
@@ -133,6 +134,9 @@ function settingsView() {
     memeStyle: memSettings.memeStyle !== false,
     memeLevel: Math.min(100, Math.max(0, Number(memSettings.memeLevel) || 0)),
     autoAct: memSettings.autoAct !== false,
+    petMode: memSettings.petMode !== false, // 与插件宿主同语义：默认开，显式 false 才关
+    petWindow: 'off',
+    reverseEnabled: true,
     hasApiKey: !!String(memSettings.apiKey || '').trim(),
   };
 }

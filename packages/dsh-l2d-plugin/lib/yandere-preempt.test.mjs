@@ -144,6 +144,19 @@ const document = {
   createElement(tag) {
     return new El(tag);
   },
+  getElementsByTagName(tag) {
+    const want = String(tag || '').toLowerCase();
+    const out = [];
+    const walk = (node) => {
+      for (const child of node.children || []) {
+        if (String(child.tagName || '').toLowerCase() === want) out.push(child);
+        walk(child);
+      }
+    };
+    walk(document.head);
+    walk(document.body);
+    return out;
+  },
   getElementById(id) {
     let found = null;
     walkElements(body, (el) => {

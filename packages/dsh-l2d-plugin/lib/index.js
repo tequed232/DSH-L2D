@@ -21,6 +21,8 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { createAiInbox } from './ai-inbox.mjs';
+import { createReverseLog } from './reverse-log.mjs';
+import { setupPetWindow } from './pet-window.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OVERLAY_FILE = path.join(PKG_ROOT, 'lib', 'overlay.js');
@@ -35,6 +37,8 @@ const CORE_FILE =
 const RENDERER_FILE = path.join(PKG_ROOT, 'assets', 'renderer.js');
 const TEST_FILE = path.join(PKG_ROOT, 'assets', 'test.html');
 const TOKENS_FILE = path.join(PKG_ROOT, 'assets', 'ui-tokens.css');
+const PET_HTML_FILE = path.join(PKG_ROOT, 'lib', 'pet.html');
+const PET_PRELOAD_FILE = path.join(PKG_ROOT, 'lib', 'pet-preload.cjs');
 const MODEL_EXT = new Set(['.json', '.moc3', '.png', '.jpg', '.jpeg']);
 
 const AVATAR_CANDIDATES = [
@@ -81,6 +85,8 @@ const SETTINGS_SHAPE = {
   autoAct: { type: 'boolean', default: true, description: '空闲时让 API 定期编排小动作' },
   systemSensor: { type: 'boolean', default: false, description: '系统硬件监听（CPU/内存/电量/断网驱动表情），默认关' },
   mediaSensor: { type: 'boolean', default: false, description: '媒体律动（音乐节拍摇摆），默认关' },
+  petWindow: { type: 'string', default: 'off', description: '桌宠独立窗：off 关闭（页内浮层）/ only 独立透明窗（页内浮层停用，重启生效）' },
+  reverseEnabled: { type: 'boolean', default: true, description: '反向桥：模型交互事件回流宿主（l2d-reverse-state.json + /ai/poll 搭车）' },
 };
 
 let z = null;
@@ -106,6 +112,8 @@ export const Config = z
       autoAct: z.boolean().default(true).description('空闲时让 API 定期编排小动作').extra('volatile', true),
       systemSensor: z.boolean().default(false).description('系统硬件监听（CPU/内存/电量/断网驱动表情），默认关').extra('volatile', true),
       mediaSensor: z.boolean().default(false).description('媒体律动（音乐节拍摇摆），默认关').extra('volatile', true),
+      petWindow: z.string().default('off').description('桌宠独立窗：off 关闭（页内浮层）/ only 独立透明窗（页内浮层停用，重启生效）').extra('volatile', true),
+      reverseEnabled: z.boolean().default(true).description('反向桥：模型交互事件回流宿主（l2d-reverse-state.json + /ai/poll 搭车）').extra('volatile', true),
     })
   : { ...SETTINGS_SHAPE };
 
@@ -162,6 +170,14 @@ function readIfExists(p) {
   } catch {
     return null;
   }
+}
+
+/** 给外部 fetch 一个硬超时：到点 abort，调用方按失败处理，不允许悬挂。 */
+const EXTERNAL_FETCH_TIMEOUT_MS = 10000;
+function fetchWithTimeout(url, options = {}, timeoutMs = EXTERNAL_FETCH_TIMEOUT_MS) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(timer));
 }
 
 // ---------------------------------------------------------------- 余额
@@ -244,7 +260,7 @@ async function getBalance(ctx, cfg = {}) {
       if (!key) key = process.env.DEEPSEEK_API_KEY || null;
 
       if (key) {
-        const res = await fetch('https://api.deepseek.com/user/balance', {
+        const res = await fetchWithTimeout('https://api.deepseek.com/user/balance', {
           headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -285,7 +301,7 @@ async function getBalance(ctx, cfg = {}) {
           const raw = await acct.getBalance(client);
           diag('account.getBalance -> ' + JSON.stringify(raw).slice(0, 900));
           const payload = raw && raw.ok ? raw.value : null;
-          const norm = normalizeBalance(payload);
+          const norm = normalizeLoose(payload);
           if (norm) {
             const out = { ok: true, source: 'account', currency: norm.currency, total: norm.total, ts: Date.now() };
             balanceCache.ts = Date.now();
@@ -303,10 +319,15 @@ async function getBalance(ctx, cfg = {}) {
       return miss;
     } catch (err) {
       const prev = balanceCache.data;
+      const aborted = err && err.name === 'AbortError';
       const fallback =
         prev && prev.ok
           ? { ...prev, stale: true }
-          : { ok: false, reason: 'fetch-failed', hint: String(err && err.message ? err.message : err) };
+          : {
+              ok: false,
+              reason: aborted ? 'timeout' : 'fetch-failed',
+              hint: String(err && err.message ? err.message : err),
+            };
       balanceCache.ts = Date.now();
       balanceCache.data = fallback;
       return fallback;
@@ -343,6 +364,9 @@ const SETTINGS_DEFAULT = {
   agentLink: true,
   systemSensor: false,
   mediaSensor: false,
+  petWindow: 'off',
+  reverseEnabled: true,
+  petMode: true,
 };
 
 function readSettings() {
@@ -369,6 +393,9 @@ function writeSettings(patch) {
   next.autoAct = next.autoAct !== false;
   next.systemSensor = next.systemSensor === true;
   next.mediaSensor = next.mediaSensor === true;
+  next.petWindow = next.petWindow === 'only' ? 'only' : 'off';
+  next.reverseEnabled = next.reverseEnabled !== false;
+  next.petMode = next.petMode !== false; // 默认开：桌宠模式是正式行为，只有显式 false 才关
   try {
     fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf8');
@@ -378,10 +405,23 @@ function writeSettings(patch) {
   return next;
 }
 
-/** 只允许本机回环写入，防止任意网页改设置 */
+/**
+ * 真实连接地址是否回环。Host 头可伪造，访问控制必须看 socket。
+ * Node 侧三种回环形态都放行：IPv4、IPv6、IPv4-mapped IPv6。
+ */
+function isRemoteLoopback(req) {
+  const remote = req.socket && req.socket.remoteAddress;
+  return remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
+}
+
+/**
+ * 只允许本机回环写入：Host 头可伪造，必须同时核对真实连接地址。
+ * Host 层保留，用于挡 DNS-rebinding（此时 remoteAddress 也是回环）。
+ */
 function isLoopback(req) {
   const host = String(req.headers.host || '');
-  return /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(host);
+  if (!/^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(host)) return false;
+  return isRemoteLoopback(req);
 }
 
 function listAudio() {
@@ -567,11 +607,17 @@ function pickAllowed(value, list) {
   return typeof value === 'string' && list.includes(value) ? value : null;
 }
 
-function sanitizeKeyframeStep(step) {
+/** 口型禁区：AI 关键帧一律不得写，留给以后的音频口型链路（与 core 的 LIPSYNC_PARAMS 对齐）。 */
+const KEYFRAME_MOUTH_BLOCKLIST = ['ParamMouthOpenY', 'ParamMouthOpen', 'ParamMouthForm'];
+
+function sanitizeKeyframeStep(step, allowedParams) {
   if (!step || !Array.isArray(step.tracks)) return null;
+  const whitelist = Array.isArray(allowedParams) && allowedParams.length ? allowedParams : null;
   const tracks = [];
   for (const track of step.tracks.slice(0, 5)) {
     if (!track || typeof track.param !== 'string' || !Array.isArray(track.keys)) continue;
+    if (KEYFRAME_MOUTH_BLOCKLIST.indexOf(track.param) >= 0) continue;
+    if (whitelist && whitelist.indexOf(track.param) < 0) continue;
     const keys = [];
     for (const key of track.keys.slice(0, 10)) {
       if (!Array.isArray(key) || key.length < 2) continue;
@@ -635,7 +681,7 @@ function sanitizePokeAction(raw, allowed) {
       } : null;
       if (pose && (pose.right || pose.left)) sanitizedChain.push({ kind: 'pose', pose, delayMs });
     } else if (step.kind === 'keyframes') {
-      const keyframes = sanitizeKeyframeStep(step);
+      const keyframes = sanitizeKeyframeStep(step, allowed.safeParams);
       if (keyframes) sanitizedChain.push(keyframes);
     } else if (step.kind === 'look') {
       sanitizedChain.push({
@@ -701,7 +747,7 @@ async function requestDeepSeekPokeAction(key, payload, style = {}) {
   ].join('\n');
 
   const model = process.env.DSH_L2D_API_MODEL || 'deepseek-chat';
-  const response = await fetch('https://api.deepseek.com/chat/completions', {
+  const response = await fetchWithTimeout('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${key}`,
@@ -749,6 +795,9 @@ export function apply(root, config = {}) {
     root.on('webserver/index-inject', (table) => {
       try {
         if (!Array.isArray(table)) return;
+        // pet 窗 'only' 模式：页内浮层停用。aiInbox.poll 是抢占式取队列，
+        // 双消费者会分食 AI 指令（proposals/pet-window-feasibility.md A8）。
+        if (readSettings().petWindow === 'only') return;
         for (const row of table) {
           if (row && row.kind === 'script' && typeof row.text === 'string') {
             if (row.text.indexOf('/dsh-l2d/overlay.js') >= 0) return; // 已推过，不重复
@@ -812,8 +861,10 @@ export function apply(root, config = {}) {
     // 用「队列 + 轮询」而不是 WebSocket：插件环境里没有长连接，轮询 400ms 足够，
     // 而且失败可重建，不会因为连接断了就哑掉。
     const aiInbox = createAiInbox();
+    const reverseLog = createReverseLog({ diag });
 
     route('/dsh-l2d/ai/call', (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       if (req.method !== 'POST') {
         return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
@@ -862,7 +913,10 @@ export function apply(root, config = {}) {
 
     route('/dsh-l2d/ai/poll', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
-      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(aiInbox.poll()), 'utf8'));
+      // 搭车：把反向桥事件摘要一并带给页面，overlay 可并入 l2d_get_state
+      const polled = aiInbox.poll();
+      polled.reverse = reverseLog.snapshot();
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(polled), 'utf8'));
     });
 
     // 浏览器把执行回执和 action-done 事件放回来。MCP 用 id 取走。
@@ -899,6 +953,57 @@ export function apply(root, config = {}) {
         }
         sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true }), 'utf8'));
       });
+    });
+
+    // ------------------------------------------------------ 桌宠独立窗页面
+    // 只从本机 webServer 同源加载（模型/渲染资源零拷贝）；preload 走文件路径不走路由
+    route('/dsh-l2d/pet.html', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const buf = readIfExists(PET_HTML_FILE);
+      if (!buf) return sendBuffer(res, 404, 'text/html; charset=utf-8', Buffer.from('pet.html missing'));
+      sendBuffer(res, 200, 'text/html; charset=utf-8', buf);
+    });
+
+    // ------------------------------------------------------ 反向桥（模型 → 宿主）
+    // 事件白名单 + 回环 + 跨站栅栏 + 16KB 限流，与 /ai/call 同一套。
+    // v1 只做 state handler（写状态文件 + /ai/poll 搭车）；notify/api-act 待立项。
+    const REVERSE_TYPES = new Set(['pet', 'drag', 'idle', 'motion-done', 'expression-change', 'error']);
+    route('/dsh-l2d/reverse/event', (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'POST') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      if (readSettings().reverseEnabled === false) {
+        return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('reverse disabled'));
+      }
+      const chunks = [];
+      req.on('data', (c) => {
+        chunks.push(c);
+        if (chunks.reduce((n, b) => n + b.length, 0) > 16 * 1024) req.destroy();
+      });
+      req.on('end', () => {
+        let body = {};
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
+        } catch {
+          return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
+        }
+        const type = String(body.type || '').trim();
+        if (!REVERSE_TYPES.has(type)) {
+          return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('unknown type: ' + type.slice(0, 32)));
+        }
+        const ev = reverseLog.record(type, body.payload);
+        sendBuffer(
+          res,
+          200,
+          MIME['.json'],
+          Buffer.from(JSON.stringify({ ok: true, accepted: true, handlers: ['state'], ts: ev.ts }), 'utf8'),
+        );
+      });
+    });
+
+    route('/dsh-l2d/reverse/state.json', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(reverseLog.full()), 'utf8'));
     });
 
     route('/dsh-l2d/status.json', (req, res) => {
@@ -1116,6 +1221,9 @@ export function apply(root, config = {}) {
             autoAct: saved.autoAct !== false,
             systemSensor: saved.systemSensor === true,
             mediaSensor: saved.mediaSensor === true,
+            petWindow: saved.petWindow === 'only' ? 'only' : 'off',
+            reverseEnabled: saved.reverseEnabled !== false,
+            petMode: saved.petMode !== false,
             hasApiKey: !!String(saved.apiKey || '').trim(),
           };
           sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(view), 'utf8'));
@@ -1138,6 +1246,9 @@ export function apply(root, config = {}) {
         autoAct: st.autoAct !== false,
         systemSensor: st.systemSensor === true,
         mediaSensor: st.mediaSensor === true,
+        petWindow: st.petWindow === 'only' ? 'only' : 'off',
+        reverseEnabled: st.reverseEnabled !== false,
+        petMode: st.petMode !== false,
         hasApiKey: !!String(st.apiKey || '').trim(),
       };
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(view), 'utf8'));
@@ -1198,16 +1309,61 @@ export function apply(root, config = {}) {
         autoAct: st.autoAct !== false,
         systemSensor: st.systemSensor === true,
         mediaSensor: st.mediaSensor === true,
+        petWindow: st.petWindow === 'only' ? 'only' : 'off',
+        reverseEnabled: st.reverseEnabled !== false,
+        petMode: st.petMode !== false,
         hasApiKey: !!String(st.apiKey || '').trim(),
       };
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(payload), 'utf8'));
     });
 
+    // ------------------------------------------------------ 桌宠独立窗（petWindow: 'only'）
+    // 探针/建窗/穿透/拖动都在 lib/pet-window.mjs；默认 'off' 时零开销直接返回 null。
+    // 异步启动：若启动完成前插件被卸载，petClosed 先置位，迟到的 dispose 会被立即调用。
+    const petStops = [];
+    let petClosed = false;
+    void setupPetWindow({
+      settings: readSettings(),
+      preloadPath: PET_PRELOAD_FILE,
+      getOrigin: () => {
+        try {
+          if (ctx.webServer && typeof ctx.webServer.getOrigin === 'function') return ctx.webServer.getOrigin();
+          if (ctx.webServer && ctx.webServer.port) return `http://127.0.0.1:${ctx.webServer.port}`;
+        } catch {
+          /* ignore */
+        }
+        return null;
+      },
+      diag,
+    })
+      .then((stop) => {
+        if (petClosed) {
+          if (typeof stop === 'function') {
+            try {
+              stop();
+            } catch {
+              /* ignore */
+            }
+          }
+          return;
+        }
+        if (typeof stop === 'function') petStops.push(stop);
+      })
+      .catch((err) => diag('pet 窗: 启动异常 ' + String(err && err.message ? err.message : err)));
+
     try {
       ctx.effect(() => () => {
+        petClosed = true;
         for (const d of disposers) {
           try {
             d();
+          } catch {
+            /* ignore */
+          }
+        }
+        for (const s of petStops) {
+          try {
+            s();
           } catch {
             /* ignore */
           }

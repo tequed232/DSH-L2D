@@ -1,0 +1,172 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>dsh-l2d pet</title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+    #stage { position: absolute; inset: 0; }
+    #stage canvas { display: block; }
+    #fallback { display: none; position: absolute; right: 8px; bottom: 8px; width: 96px; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div id="stage"></div>
+  <img id="fallback" alt="" src="/dsh-l2d/avatar.png">
+  <script src="/dsh-l2d/core.js"></script>
+  <script src="/dsh-l2d/renderer.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var stage = document.getElementById('stage');
+      var fallback = document.getElementById('fallback');
+      var canvas = document.createElement('canvas');
+      stage.appendChild(canvas);
+
+      // 与 overlay.js:1832 同源同参（模型零拷贝，走既有模型路由）
+      var MODEL_URL = '/dsh-l2d/model/' + encodeURIComponent('大肥鱼.dsl2d.2048.model3.json');
+      var ALPHA_THRESHOLD = 22; // 踩坑补充①实测阈值
+      var mounted = false;
+      var gl = null;
+      var cursor = null; // 主进程送来的窗口内光标坐标；null = 窗外
+      var lastSentHit = null;
+
+      function fit() {
+        canvas.style.width = window.innerWidth + 'px';
+        canvas.style.height = window.innerHeight + 'px';
+        if (window.DSH_L2D && window.DSH_L2D.layout) {
+          try {
+            window.DSH_L2D.layout(window.innerWidth, window.innerHeight, 1);
+          } catch (e) { /* ignore */ }
+        }
+      }
+      window.addEventListener('resize', fit);
+
+      function ensureGl() {
+        if (gl) return gl;
+        try {
+          gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        } catch (e) {
+          gl = null;
+        }
+        return gl;
+      }
+
+      // 光标在窗内时逐像素读 alpha：WebGL 原点在左下，y 需翻转
+      function readAlpha(x, y) {
+        var g = ensureGl();
+        if (!g) return false;
+        try {
+          var px = new Uint8Array(4);
+          g.readPixels(Math.round(x), Math.round(window.innerHeight - 1 - y), 1, 1, g.RGBA, g.UNSIGNED_BYTE, px);
+          return px[3] > ALPHA_THRESHOLD;
+        } catch (e) {
+          return false;
+        }
+      }
+
+      function reportHit(hit) {
+        if (hit === lastSentHit) return;
+        lastSentHit = hit;
+        if (window.l2dPet && window.l2dPet.reportHit) window.l2dPet.reportHit(hit);
+      }
+
+      function checkHit() {
+        if (!mounted || !cursor) {
+          reportHit(false);
+          return;
+        }
+        reportHit(readAlpha(cursor.x, cursor.y));
+      }
+
+      // 帧末判定：优先渲染包的 post 钩子（紧跟渲染最准）；没有则自跑 rAF
+      // （同一帧内排在渲染包 rAF 之后执行，同样能读到当帧像素）
+      var hookInstalled = false;
+      try {
+        if (window.DSH_L2D && typeof window.DSH_L2D.setPostLateUpdateHook === 'function') {
+          window.DSH_L2D.setPostLateUpdateHook(checkHit);
+          hookInstalled = true;
+        }
+      } catch (e) {
+        hookInstalled = false;
+      }
+      if (!hookInstalled) {
+        (function loop() {
+          checkHit();
+          requestAnimationFrame(loop);
+        })();
+      }
+
+      if (window.l2dPet && window.l2dPet.onCursor) {
+        window.l2dPet.onCursor(function (v) {
+          cursor = v;
+          if (!v) reportHit(false);
+        });
+      }
+
+      // 拖动：页面只报起止，移动由主进程按光标增量完成（不用 app-region，右键保得住）
+      var dragging = false;
+      canvas.addEventListener('mousedown', function (e) {
+        if (e.button !== 0 || !lastSentHit || dragging) return;
+        dragging = true;
+        if (window.l2dPet && window.l2dPet.drag) window.l2dPet.drag('start');
+        e.preventDefault();
+      });
+      window.addEventListener('mouseup', function (e) {
+        if (!dragging) return;
+        dragging = false;
+        if (window.l2dPet && window.l2dPet.drag) window.l2dPet.drag('end');
+        if (e.button === 0) poke(); // v1：左键松开即视为一次「摸」，先打通反向桥自测通道
+      });
+      window.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+      // 反向桥 v1 自测通道：pet 窗里的点击直接回流宿主（overlay 侧接线后同样走这条）
+      function poke() {
+        try {
+          fetch('/dsh-l2d/reverse/event', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ type: 'pet', payload: { region: 'pet-window' } }),
+          }).catch(function () {});
+        } catch (e) { /* ignore */ }
+      }
+
+      function fallbackToImage(reason) {
+        canvas.style.display = 'none';
+        fallback.style.display = 'block';
+        console.warn('[dsh-l2d pet] 回退静态立绘: ' + reason);
+      }
+
+      // 引导与 overlay.js:1903-1922 同构：core → renderer → mount
+      function boot() {
+        if (!window.Live2DCubismCore) return fallbackToImage('Core 未挂载');
+        if (!window.DSH_L2D || !window.DSH_L2D.mount) return fallbackToImage('渲染包未挂载');
+        try {
+          Promise.resolve(
+            window.DSH_L2D.mount(canvas, {
+              modelUrl: MODEL_URL,
+              width: window.innerWidth,
+              height: window.innerHeight,
+              zoom: 1,
+            }),
+          )
+            .then(function () {
+              mounted = true;
+              fit();
+              console.log('[dsh-l2d pet] renderer ready');
+            })
+            .catch(function (err) {
+              fallbackToImage(err && err.message ? err.message : String(err));
+            });
+        } catch (err) {
+          fallbackToImage(err && err.message ? err.message : String(err));
+        }
+      }
+
+      fit();
+      if (window.DSH_L2D && window.DSH_L2D.mount) boot();
+      else window.addEventListener('load', boot);
+    })();
+  </script>
+</body>
+</html>

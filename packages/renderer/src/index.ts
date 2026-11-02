@@ -18,6 +18,7 @@ import { PoseController, POSE_IDS } from './app/pose-controller';
 import { SHADER_SOURCES } from './shaders';
 import { mixAdditive } from '../../core/src/angle-mix.ts';
 import { sampleAmbient, type AmbientKind } from '../../core/src/ambient.ts';
+import { LIPSYNC_PARAMS } from '../../core/src/index.ts';
 import {
   ActGate,
   closeMotionsOnPreempt,
@@ -101,6 +102,8 @@ function bootFramework(): void {
  */
 let shaderDiag = 'not-run';
 let fitDiag = 'not-run';
+/** fitModel 的数值快照，供同步包围盒命中（右键菜单）使用 */
+let fitState: { x0: number; y0: number; w: number; h: number; sx: number; sy: number; tx: number; ty: number } | null = null;
 
 function installEmbeddedShaders(gl: WebGLRenderingContext | WebGL2RenderingContext): void {
   try {
@@ -238,6 +241,16 @@ function fitModel(width: number, height: number, zoom: number): void {
   matrix.scale(sx, sy);
   // 顶点变换 x' = sx * x + tx；要让包围盒中心落在原点，即 tx = -sx * (x0 + w/2)
   matrix.translate(-(x0 + boxW / 2) * sx, -(y0 + boxH / 2) * sy);
+  fitState = {
+    x0,
+    y0,
+    w: boxW,
+    h: boxH,
+    sx,
+    sy,
+    tx: -(x0 + boxW / 2) * sx,
+    ty: -(y0 + boxH / 2) * sy,
+  };
 
   const a = matrix.getArray();
   fitDiag =
@@ -512,6 +525,7 @@ function tick(): void {
 
   try {
     sub.update();
+    sampleHitProbe(); // readPixels 必须紧跟本帧渲染（同一任务），否则恒为 0
     frames++;
     // 首帧的部件可见性/不透明度可能还没稳定，包围盒会偏。跑几帧后重排一次。
     if (refitLeft > 0) {
@@ -627,6 +641,8 @@ let kfActive = false;
 const KF_MAX_TRACKS = 8;
 const KF_MAX_KEYS = 32;
 const KF_MAX_MS = 10000;
+/** 口型禁区：关键帧任何调用方都不得写口型参数，统一在轨道准入处拦截。 */
+const LIPSYNC_BLOCK = new Set<string>(LIPSYNC_PARAMS);
 
 function sampleTrack(keys: Array<[number, number]>, t: number): number {
   if (!keys.length) return 0;
@@ -663,6 +679,7 @@ export function playKeyframes(tracks: KeyframeTrack[], opts: KeyframesOptions = 
       const handle = CubismFramework.getIdManager().getId(tr.param);
       const idx = core.getParameterIndex(handle);
       if (idx < 0 || injector.isPhysicsOutput(tr.param)) continue; // 不存在或物理输出直接丢弃
+      if (LIPSYNC_BLOCK.has(tr.param)) continue; // 口型禁区，任何调用方都不得写
 
       const min = core.getParameterMinimumValue(idx);
       const max = core.getParameterMaximumValue(idx);
@@ -1174,6 +1191,9 @@ export function clearExpression(): boolean {
 // AngleX/Y 在 pre 相位（作为物理输入，转头会带动头发等次级摆动）。
 type CoreModel = NonNullable<ReturnType<LAppModel['getModel']>>;
 const gazeState = { target: null as { x: number; y: number } | null, cur: { x: 0, y: 0 } };
+// 肢体跟随：比头部更惰性的平滑值（~400ms 时间常数），只在大范围注视时启用（见 applyGazeBody）。
+// 只跟主动目标：走神漂移（idleDrift）不摆身体。
+const bodyState = { x: 0, y: 0 };
 const mediaState = { on: false, phase: 0 };
 
 /** 注视目标：x、y ∈ [-1,1]，相对模型中心；[0,0] 是正对镜头 */
@@ -1221,6 +1241,11 @@ function gazeFrame(dt: number): void {
     gazeState.cur.x += (idleDrift.x - gazeState.cur.x) * kd;
     gazeState.cur.y += (idleDrift.y - gazeState.cur.y) * kd;
   }
+  // 肢体跟随平滑：身体比头慢半拍（~400ms 时间常数），只跟主动目标（走神漂移不摆身体）
+  const bt = gazeState.target || { x: 0, y: 0 };
+  const kb = 1 - Math.exp(-dt * 2.5);
+  bodyState.x += (bt.x - bodyState.x) * kb;
+  bodyState.y += (bt.y - bodyState.y) * kb;
   if (mediaState.on) mediaState.phase += dt * Math.PI * 2 * 1.05;
 }
 
@@ -1238,16 +1263,132 @@ function writeParam(core: CoreModel, id: string, value: number, add = false): vo
 }
 
 function applyGazeBody(core: CoreModel): void {
-  if (!gazeState.target && Math.abs(gazeState.cur.x) < 0.005 && Math.abs(gazeState.cur.y) < 0.005) return;
-  // 躯干权重小：小幅度移动只动眼睛，大范围移动才带动头/身体
-  writeParam(core, 'AngleX', gazeState.cur.x * 14, true);
-  writeParam(core, 'AngleY', gazeState.cur.y * 16, true);
+  const gx = gazeState.cur.x;
+  const gy = gazeState.cur.y;
+  if (
+    !gazeState.target &&
+    Math.abs(gx) < 0.005 && Math.abs(gy) < 0.005 &&
+    Math.abs(bodyState.x) < 0.005 && Math.abs(bodyState.y) < 0.005
+  ) {
+    return;
+  }
+  // 分档跟随：|g|<0.25 只动眼球（近处对视）；0.25~0.6 眼+头；>0.6 再牵动身体
+  const g = Math.sqrt(gx * gx + gy * gy);
+  if (g >= 0.25) {
+    // 躯干权重小：小幅度移动只动眼睛，大范围移动才带动头
+    writeParam(core, 'AngleX', gx * 14, true);
+    writeParam(core, 'AngleY', gy * 16, true);
+  }
+  if (g >= 0.6 && !poseOwnedByMotion && !isUserMotionPlaying()) {
+    // 身体通道走物理上游：本模型 ParamBodyAngleX/Y 是物理输出
+    // （大肥鱼.physics3.json：PhysicsSetting4 PositionX→BodyAngleX Scale30；
+    //   LeanInput→BodyAngleY Scale35），直写会被物理每帧覆盖。
+    // 改写上游 PositionX / LeanInput，物理自然带出倾斜与前倾，肩/发/裙次级联动保持正确。
+    // 动作播放期不写，避免与动作曲线打架。
+    writeParam(core, 'PositionX', bodyState.x * 2);
+    writeParam(core, 'LeanInput', bodyState.y * 1.5);
+  }
 }
 
 function applyGazeEyes(core: CoreModel): void {
   if (!gazeState.target && Math.abs(gazeState.cur.x) < 0.005 && Math.abs(gazeState.cur.y) < 0.005) return;
   writeParam(core, 'ParamEyeBallX', gazeState.cur.x);
   writeParam(core, 'ParamEyeBallY', gazeState.cur.y);
+}
+
+// ---------------------------------------------------------------- 命中判定（alpha 采样）
+// overlay 把光标位置设为探针（setHitProbe），本包在每帧渲染完的同一任务里
+// readPixels 1×1 缓存 alpha——默认 drawingBuffer 会在合成后被清，事件回调里临时读恒为 0，
+// 必须紧跟渲染。点击时 overlay 用 hitTestAt 判定：真点在模型像素上才拦事件，
+// 空白处放行，鼠标直接透过到下层页面。
+// 注意：探针（输入坐标）与采样点（实际读像素的坐标）分开记录。pointerdown 会先把探针
+// 更新成点击点，若用探针坐标比较，就会拿旧位置的 alpha 判新点——快速移动后点按必误判。
+const hitProbe = {
+  x: 0,
+  y: 0,
+  on: false,
+  alpha: 0,
+  sampledX: 0,
+  sampledY: 0,
+  hasSample: false,
+  buf: null as Uint8Array | null,
+};
+
+/** 设置命中探针（客户端坐标）；每帧渲染后自动采样该点 alpha */
+export function setHitProbe(clientX: number, clientY: number): void {
+  hitProbe.x = clientX;
+  hitProbe.y = clientY;
+  hitProbe.on = true;
+}
+
+/**
+ * 该客户端坐标是否落在模型不透明像素上。
+ * 采样点与判定点相差 ≤16px 才用缓存的 alpha；差太多（快速移动后立刻点按）
+ * 判定不可靠，按「未命中」放行——穿透优先：宁可让页面收到这次点击，
+ * 也不吞掉对下层界面的操作。采样还没就绪时保守放行互动（兼容旧调用方）。
+ */
+export function hitTestAt(clientX: number, clientY: number): boolean {
+  if (!hitProbe.on || !hitProbe.hasSample) return true;
+  if (Math.abs(hitProbe.sampledX - clientX) > 16 || Math.abs(hitProbe.sampledY - clientY) > 16) return false;
+  return hitProbe.alpha > 22 / 255;
+}
+
+/**
+ * 同步包围盒命中：右键菜单专用，不依赖上一帧 alpha 采样。
+ * contextmenu 与 pointerdown 在同一事件循环里，alpha 采样根本来不及更新；
+ * 用 fitModel 的模型矩阵把可见包围盒投影到画布像素，再映射回客户端坐标。
+ * 比 alpha 采样粗（包含包围盒内的透明区），但同步、稳定，不会全屏误判。
+ */
+export function hitTestBox(clientX: number, clientY: number): boolean {
+  if (!canvasEl || !fitState) return false;
+  try {
+    const rect = canvasEl.getBoundingClientRect();
+    if (!rect.width || !rect.height || !canvasEl.width || !canvasEl.height) return false;
+    const W = canvasEl.width;
+    const H = canvasEl.height;
+    const b = fitState;
+    const ndcX0 = b.sx * b.x0 + b.tx;
+    const ndcX1 = b.sx * (b.x0 + b.w) + b.tx;
+    const ndcY0 = b.sy * b.y0 + b.ty;
+    const ndcY1 = b.sy * (b.y0 + b.h) + b.ty;
+    const px0 = ((Math.min(ndcX0, ndcX1) + 1) / 2) * W;
+    const px1 = ((Math.max(ndcX0, ndcX1) + 1) / 2) * W;
+    // GL 像素坐标原点在左下；clientY 原点在左上，用 rect.bottom 翻转
+    const py0 = ((Math.min(ndcY0, ndcY1) + 1) / 2) * H;
+    const py1 = ((Math.max(ndcY0, ndcY1) + 1) / 2) * H;
+    const cx = ((clientX - rect.left) / rect.width) * W;
+    const cy = ((rect.bottom - clientY) / rect.height) * H;
+    return cx >= px0 && cx <= px1 && cy >= py0 && cy <= py1;
+  } catch {
+    return false;
+  }
+}
+
+function sampleHitProbe(): void {
+  if (!hitProbe.on || !sub || !canvasEl) return;
+  try {
+    const gl = sub.getGl();
+    if (!gl) return;
+    const rect = canvasEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const px = Math.round(((hitProbe.x - rect.left) / rect.width) * canvasEl.width);
+    const py = Math.round(((rect.bottom - hitProbe.y) / rect.height) * canvasEl.height);
+    if (px < 0 || px >= canvasEl.width || py < 0 || py >= canvasEl.height) {
+      hitProbe.alpha = 0;
+      hitProbe.sampledX = hitProbe.x;
+      hitProbe.sampledY = hitProbe.y;
+      hitProbe.hasSample = true;
+      return;
+    }
+    const buf = hitProbe.buf || (hitProbe.buf = new Uint8Array(4));
+    gl.readPixels(px, py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+    hitProbe.alpha = buf[3] / 255;
+    hitProbe.sampledX = hitProbe.x;
+    hitProbe.sampledY = hitProbe.y;
+    hitProbe.hasSample = true;
+  } catch {
+    /* 采样失败保留上次值 */
+  }
 }
 
 function applyMediaLayer(): void {
@@ -1528,6 +1669,12 @@ export function getInfo(): Record<string, number | string> | null {
     /* 保留最近一次动作状态 */
   }
   motionDiag.playing = motionPlaying;
+  // group/startedAt 只在「开始动作」时写入。动作播完后 Idle 会无限续播，
+  // 若只按 isFinished 判定，诊断会一直显示上一个动作名、t 也越滚越大，误导排查。
+  // 这里按「动作是否真的还在播」归零：没在播就清计时，让 t 从 0 重新计。
+  if (!motionPlaying) {
+    motionDiag.startedAt = 0;
+  }
   const motionElapsed = motionDiag.startedAt
     ? ((performance.now() - motionDiag.startedAt) / 1000).toFixed(2)
     : '0.00';
@@ -1628,6 +1775,9 @@ const api = {
   clearExpression,
   gaze,
   clearGaze,
+  setHitProbe,
+  hitTestAt,
+  hitTestBox,
   setMediaSway,
   setStageBusy,
   resetPerformance,

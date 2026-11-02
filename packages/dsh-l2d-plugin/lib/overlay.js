@@ -52,7 +52,9 @@
     'z-index:var(--dsh-z-overlay,2147483000);pointer-events:none;user-select:none;-webkit-user-select:none;',
     'will-change:transform;transform:translate3d(0,0,0);contain:layout style;}',
     '#' + ROOT_ID + ' .l2d-body{position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;',
-    'pointer-events:auto;cursor:grab;transition:filter var(--dsh-dur) var(--dsh-ease),opacity var(--dsh-dur) var(--dsh-ease);}',
+    // 角色盒不再拦事件：交互全部由 window 捕获层 + 渲染包 alpha 命中判定接管，
+    // 这样空白处鼠标直接透过到下层页面（点 DSH 按钮等）。
+    'pointer-events:none;cursor:grab;transition:filter var(--dsh-dur) var(--dsh-ease),opacity var(--dsh-dur) var(--dsh-ease);}',
     '#' + ROOT_ID + ' .l2d-body.dragging{cursor:grabbing;}',
     '#' + ROOT_ID + ' .l2d-canvas{width:100%;height:100%;display:block;pointer-events:none;}',
     '#' + ROOT_ID + ' .l2d-body img{width:100%;height:100%;object-fit:contain;',
@@ -625,6 +627,40 @@
     say('别、别乱摸啦！', 3200);
   }
 
+  var lastPatAt = 0;
+
+  /** 摸头（桌宠模式专用）：表情+视线+微动作占位；正式 摸头.motion3.json 到位后替换 */
+  function patHead() {
+    var now = Date.now();
+    if (now - lastPatAt < 800) return; // 连点节流，防表情刷屏
+    lastPatAt = now;
+    var L = window.DSH_L2D;
+    if (!L) return;
+    if (L.setExpression) L.setExpression(Math.random() < 0.55 ? '兔牙' : '爱心眼');
+    if (L.lookAt) L.lookAt((Math.random() - 0.5) * 0.2, 0.24);
+    // 微歪头/鼓脸走情绪路由 ambient 通道（复用微动作机制，2400ms 自动回弹）；注入失败不影响表情
+    if (L.injectEmotionIntent) {
+      try {
+        L.injectEmotionIntent({
+          ruleId: 'pat-head',
+          source: 'pet',
+          priority: 20,
+          ambient: Math.random() < 0.5 ? 'tilt' : 'puff',
+          holdMs: 2400,
+        });
+      } catch (err) { /* ignore */ }
+    }
+    say(Math.random() < 0.5 ? '嘿嘿，好痒~' : '再摸头发要乱啦', 2600);
+    // 反向桥上报告知宿主/DSH：用户刚摸了头（fire-and-forget，失败不影响互动）
+    try {
+      fetch('/dsh-l2d/reverse/event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'pet', payload: { region: 'head' } }),
+      }).catch(function () { /* ignore */ });
+    } catch (err) { /* ignore */ }
+  }
+
   function bodyPoint(e) {
     var rect = bodyEl.getBoundingClientRect();
     return {
@@ -681,6 +717,8 @@
   }
 
   function handleZoneClick(e) {
+    // 桌宠模式：全分区只保留摸头；换鞋/害羞/戳一戳仅右键菜单可达
+    if (settings.petMode === true) return patHead();
     var zone = zoneAt(e);
     if (zone === 'foot') return toggleShoes();
     if (zone === 'head') return friendlyHead();
@@ -1115,6 +1153,51 @@
     physics.bound = true;
   }
 
+  // ---------------------------------------------------------------- 命中判定（alpha 采样）
+  // 渲染包每帧把光标点的 alpha 缓存下来（readPixels 必须紧跟渲染）。
+  // 只有真点在模型像素上才拦事件；空白处完全放行，鼠标直接透过到下层页面。
+  function feedHitProbe(e) {
+    var L = window.DSH_L2D;
+    if (L && L.setHitProbe) {
+      try { L.setHitProbe(e.clientX, e.clientY); } catch (err) { /* ignore */ }
+    }
+  }
+
+  function overModel(e) {
+    var L = window.DSH_L2D;
+    if (!L || !L.hitTestAt) return true; // 旧渲染包/静态兜底：保持整盒可交互
+    try { return !!L.hitTestAt(e.clientX, e.clientY); } catch (err) { return true; }
+  }
+
+  /**
+   * 右键菜单的命中判定必须同步：contextmenu 紧跟 pointerdown 触发，
+   * alpha 采样（每帧一次）来不及更新，旧实现拿旧样本或「无样本兜底 true」，
+   * 结果就是全屏右键都弹菜单（用户实测）。有渲染包走同步包围盒；
+   * 静态立绘兜底时按图片元素的实际显示矩形判定。
+   */
+  function overModelRightClick(e) {
+    var L = window.DSH_L2D;
+    if (L && L.hitTestBox) {
+      try { return !!L.hitTestBox(e.clientX, e.clientY); } catch (err) { /* 落到静态判定 */ }
+    }
+    if (imgEl && imgEl.offsetParent !== null) {
+      var r = imgEl.getBoundingClientRect();
+      if (r.width > 1 && r.height > 1) {
+        return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      }
+    }
+    return false;
+  }
+
+  function isL2dUiTarget(t) {
+    if (!t || !t.closest) return false;
+    return !!t.closest('.l2d-chip,.l2d-price,.l2d-menu,.l2d-panel,.l2d-bubble,.l2d-gear');
+  }
+
+  // 最近一次「拖动结束」的时间戳：拖动后的那次 click 不下传页面，
+  // 避免拖完松手误触下层元素（穿透模式下 click 本会落到页面）。
+  var lastDragMovedAt = 0;
+
   function bindDrag() {
     var dragging = false;
     var startX = 0;
@@ -1147,14 +1230,14 @@
       if (window.DSH_L2D && window.DSH_L2D.markActive) window.DSH_L2D.markActive();
     }
 
-    bodyEl.addEventListener('pointerdown', function (e) {
+    window.addEventListener('pointerdown', function (e) {
       if (!root) return;
-      // 裙摆是独立手势：垂直拖拽调裙长，不拖动容器
-      if (zoneAt(e) === 'skirt') {
-        e.preventDefault();
-        startSkirtDrag(e);
-        return;
-      }
+      if (isL2dUiTarget(e.target)) return;
+      if (e.button !== 0) return;
+      feedHitProbe(e);
+      if (!overModel(e)) return; // 空白处：不拦，事件照常落到下层页面
+      e.stopPropagation(); // 命中模型：不传给下层界面
+      // 裙摆拖拽手势取消：衣着只走右键菜单（点击/拖动位置冲突太多）
 
       loadCustomAudio();
       playSound('press');
@@ -1185,7 +1268,7 @@
       } catch (err) { /* ignore */ }
     });
 
-    bodyEl.addEventListener('pointermove', function (e) {
+    window.addEventListener('pointermove', function (e) {
       if (!dragging) return;
       var dx = e.clientX - startX;
       var dy = e.clientY - startY;
@@ -1228,6 +1311,7 @@
       rafPending = false;
       if (bodyEl) bodyEl.classList.remove('dragging');
       if (!moved) playSound('release');
+      if (moved) lastDragMovedAt = Date.now();
 
       // 惯性恢复：松手不追加初速度；弹簧带着当前速度收敛到松手点，不超调不飞走。
       if (moved) {
@@ -1244,8 +1328,9 @@
       if (moved && e && e.preventDefault) e.preventDefault();
     }
 
-    bodyEl.addEventListener('pointerup', endDrag);
-    bodyEl.addEventListener('pointercancel', endDrag);
+    window.addEventListener('pointerup', endDrag, true);
+    window.addEventListener('pointercancel', endDrag, true);
+    window.addEventListener('blur', endDrag);
 
     // 窗口尺寸变化时直接吸附；缩放/换体型不做“慢慢滑回”。
     window.addEventListener('resize', function () {
@@ -1771,22 +1856,35 @@
     // 单击身体：分区互动；右键：选项卡菜单；拖动后的 click 不算戳一戳。
     var downX = 0;
     var downY = 0;
-    bodyEl.addEventListener('pointerdown', function (e) {
+    window.addEventListener('pointerdown', function (e) {
+      if (isL2dUiTarget(e.target)) return;
       downX = e.clientX;
       downY = e.clientY;
     });
-    bodyEl.addEventListener('click', function (e) {
+    window.addEventListener('click', function (e) {
+      if (isL2dUiTarget(e.target)) return;
+      // 拖动后的那次 click 视为移动手势，不下传页面（否则拖完松手会误触下层元素）
+      if (Date.now() - lastDragMovedAt < 150) {
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+      }
       if (Math.abs(e.clientX - downX) > 5 || Math.abs(e.clientY - downY) > 5) return;
       if (Date.now() - Number(window.__DSH_L2D_SKIRT_DRAGGED__ || 0) < 120) return;
+      if (!overModel(e)) return; // 空白处：放行给下层页面
+      e.stopPropagation();
+      e.preventDefault();
       handleZoneClick(e);
-    });
+    }, true);
 
-    bodyEl.addEventListener('contextmenu', function (e) {
+    window.addEventListener('contextmenu', function (e) {
+      if (isL2dUiTarget(e.target)) return;
+      if (!overModelRightClick(e)) return; // 空白处：保留下层默认行为
       e.preventDefault();
       e.stopPropagation();
       menuView = 'root'; // 右键始终回到根菜单
       openMenuAt(e);
-    });
+    }, true);
 
     document.addEventListener('click', function (e) {
       if (!menuEl || !menuEl.classList.contains('open')) return;
@@ -1799,6 +1897,7 @@
     // 悬停 350ms 更新底部价格条；不再抢对话框。
     var hoverTimer = null;
     bodyEl.addEventListener('mouseenter', function () {
+      if (settings.petMode === true) return; // 桌宠模式：悬停零触发（余额条也不弹）
       if (hoverTimer) clearTimeout(hoverTimer);
       hoverTimer = setTimeout(function () {
         hoverTimer = null;
@@ -1993,7 +2092,7 @@
   // ---------------------------------------------------------------- 设置面板
   // 用户自填 API Key / 音效 / 缩放 / 刷新间隔；宿主侧落盘（$DSH_HOME/l2d-settings.json）。
   var panelEl = null;
-  var settings = { scale: 1, soundEnabled: true, soundVolume: 0.7, refreshSeconds: 60, hasApiKey: false, agentLink: true, clickMode: 'random', spontaneousChat: true, memeStyle: true, memeLevel: 50, autoAct: true, systemSensor: false, mediaSensor: false };
+  var settings = { scale: 1, soundEnabled: true, soundVolume: 0.7, refreshSeconds: 60, hasApiKey: false, agentLink: true, clickMode: 'random', spontaneousChat: true, memeStyle: true, memeLevel: 50, autoAct: true, systemSensor: false, mediaSensor: false, petMode: true };
   var panelOpen = false;
 
   // 体型系数：三个体型的可见轮廓不同，用一个统一系数把视觉高度拉回一致。
@@ -2042,12 +2141,44 @@
       .then(function (data) {
         if (!data) return;
         settings = data;
+        // 宿主视图可能不含 petMode（旧宿主/精简宿主）：缺省按正式行为（默认开），显式 false 才关
+        settings.petMode = data.petMode !== false;
         applyScale(settings.scale);
         syncSystemSensor();
         syncMediaSensor();
       })
       .catch(function () { /* ignore */ });
   }
+
+  /**
+   * 强制刷新状态（调试用）：重新拉宿主设置 + 销毁并重新挂载渲染包，
+   * 不重载整个 DSH 页面。修改设置后状态没生效、渲染卡住、或改了 overlay.js
+   * 想当场复位时用它。也挂在 window.__DSH_L2D_FORCE_REFRESH__ 上，控制台可直接调。
+   */
+  function forceRefreshState() {
+    say('正在强制刷新…', 1200);
+    // 1) 重拉宿主设置（缩放/传感器开关重新生效）
+    loadSettings();
+    // 2) 销毁渲染包，清掉旧挂载状态
+    var L = window.DSH_L2D;
+    if (L && L.destroy) {
+      try { L.destroy(); } catch (err) { /* ignore */ }
+    }
+    rendererReady = false;
+    rendererFailed = false;
+    if (canvasEl) {
+      canvasEl.style.display = '';
+      canvasEl.classList.remove('dragging');
+    }
+    if (imgEl) {
+      imgEl.style.display = 'none';
+      imgEl.removeAttribute('src');
+    }
+    // 3) 重挂（initRenderer 里会重新走 Core/渲染包加载与 mount）
+    initRenderer();
+    say('已强制刷新', 1800);
+  }
+  try { window.__DSH_L2D_FORCE_REFRESH__ = forceRefreshState; } catch (err) { /* ignore */ }
 
   function closePanel() {
     if (!panelEl) return;
@@ -2136,6 +2267,11 @@
     mediaToggle.checked = settings.mediaSensor === true;
     panelEl.appendChild(row('媒体律动（音乐播放时轻摆）', mediaToggle));
 
+    var petToggle = document.createElement('input');
+    petToggle.type = 'checkbox';
+    petToggle.checked = settings.petMode !== false; // 默认开（桌宠模式为正式行为）
+    panelEl.appendChild(row('桌宠模式（悬停零触发 · 点击只摸头）', petToggle));
+
     var clickMode = document.createElement('select');
     var modeRandom = document.createElement('option');
     modeRandom.value = 'random';
@@ -2176,6 +2312,17 @@
     hint.textContent = '单击角色播放动作；悬停显示余额与当前峰/谷价。开启自发聊天后，完成状态会回流最新回复，空闲时偶尔说话。';
     panelEl.appendChild(hint);
 
+    // 调试：强制刷新状态（不重载页面，重拉宿主设置 + 重挂渲染包）
+    var forceBtn = document.createElement('button');
+    forceBtn.type = 'button';
+    forceBtn.textContent = '↻ 强制刷新状态';
+    forceBtn.title = '重新拉取宿主设置并销毁/重挂渲染包（调试用，不重载页面）';
+    forceBtn.addEventListener('click', function () {
+      closePanel();
+      forceRefreshState();
+    });
+    panelEl.appendChild(forceBtn);
+
     var actions = document.createElement('div');
     actions.className = 'l2d-actions';
 
@@ -2204,7 +2351,8 @@
         memeLevel: Number(memeLevel.value),
         autoAct: autoAct.checked,
         systemSensor: sysToggle.checked,
-        mediaSensor: mediaToggle.checked
+        mediaSensor: mediaToggle.checked,
+        petMode: petToggle.checked
       };
       if (keyInput.value.trim()) patch.apiKey = keyInput.value.trim();
       fetch('/dsh-l2d/settings.json', {
@@ -2234,10 +2382,32 @@
     panelEl.appendChild(actions);
   }
 
+  // 启动：初始化链任何一步抛错都不能让整个 IIFE 死掉——否则后面的 DSH_L2D_AI
+  // 赋值、AI 轮询、事件桥全部不执行（App 页"角色可见但桥死"就是这种形态）。
+  // catch 里做两件事：① 把原因送回宿主（error 在反向桥白名单内，落 reverse/state.json，
+  // 以后不用 F12 也能查）；② 补挂 AI 轮询，保证 MCP 指令通道活着。
+  function bootOverlay() {
+    try {
+      ensureMounted();
+    } catch (err) {
+      try {
+        fetch('/dsh-l2d/reverse/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'error',
+            payload: { reason: String((err && err.message) || err).slice(0, 120) },
+          }),
+        }).catch(function () { /* 宿主不可达时静默 */ });
+      } catch (e2) { /* ignore */ }
+      try { startAiPoll(); } catch (e3) { /* ignore */ }
+    }
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', ensureMounted);
+    document.addEventListener('DOMContentLoaded', bootOverlay);
   } else {
-    ensureMounted();
+    bootOverlay();
   }
 
   // ---------------------------------------------------------------- 工作区会话联动
@@ -2479,9 +2649,11 @@
           lastX = e.clientX;
           lastY = e.clientY;
           lastT = now;
-          driveGaze(e); // 注视要跟手，节流放到渲染端平滑
+          driveGaze(e); // 注视要跟手，节流放到渲染端平滑（桌宠模式下保留眼神跟随）
+          feedHitProbe(e); // 命中探针（供 alpha 采样），悬停时也刷新
           if (now - pushT < 250) return;
           pushT = now;
+          if (settings.petMode === true) return; // 桌宠模式：停发鼠标情绪信号（速度/连点类规则随之失效）
           emotionPush({
             type: 'mouse',
             data: { x: e.clientX, y: e.clientY, vx: emotionSensors.vx || 0, vy: emotionSensors.vy || 0 },
@@ -2492,6 +2664,7 @@
       window.addEventListener(
         'pointerdown',
         function () {
+          if (settings.petMode === true) return; // 桌宠模式：点击信号不发（click-hyper 规则随之失效）
           emotionPush({ type: 'mouse', data: { click: true } });
         },
         { passive: true }
@@ -2611,6 +2784,8 @@
   // 宿主侧 /dsh-l2d/ai/call 收到的指令入队，这里每 400ms 取一次并执行。
   // 用轮询而不是长连接：插件环境没有稳定的 WebSocket，轮询失败可以自愈。
   var aiPollTimer = 0;
+  // /ai/poll 搭车下发的反向桥快照（模型→宿主事件最近记录），供 l2d_get_state 查询
+  var aiReverseState = null;
 
   function startAiPoll() {
     if (aiPollTimer) return;
@@ -2621,6 +2796,8 @@
           return r.ok ? r.json() : null;
         })
         .then(function (d) {
+          // 先消费搭车的反向桥快照（必须在无指令提前 return 之前，否则没指令时永远不更新）
+          if (d && d.reverse) aiReverseState = d.reverse;
           if (!d || !d.calls || !d.calls.length) return;
           d.calls.forEach(function (c) {
             Promise.resolve(window.DSH_L2D_AI.exec(c.name, c.args, c.id))
@@ -2724,6 +2901,7 @@
               info: L.getInfo ? L.getInfo() : null,
               emotion: L.getEmotionState ? L.getEmotionState() : null,
               pose: L.getPose ? L.getPose() : null,
+              reverse: aiReverseState,
             };
           }
           case 'l2d_reset': {

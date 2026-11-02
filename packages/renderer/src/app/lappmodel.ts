@@ -327,8 +327,10 @@ export class LAppModel extends CubismUserModel {
       this._breath = CubismBreath.create();
 
       const breathParameters: Array<BreathParameterData> = [
-        new BreathParameterData(this._idParamAngleX, 0.0, 15.0, 6.5345, 0.5),
-        new BreathParameterData(this._idParamAngleY, 0.0, 8.0, 3.5345, 0.5),
+        // breath 幅度 15/8→4/3：gaze 头部写入（14/16°）与 breath 常驻叠加，峰值曾达 ~30° 发飘；
+        // 压低呼吸后转头可读、呼吸仍可感（Z/BodyAngleX/ParamBreath 不动）
+        new BreathParameterData(this._idParamAngleX, 0.0, 4.0, 6.5345, 0.5),
+        new BreathParameterData(this._idParamAngleY, 0.0, 3.0, 3.5345, 0.5),
         new BreathParameterData(this._idParamAngleZ, 0.0, 10.0, 5.5345, 0.5),
         new BreathParameterData(
           this._idParamBodyAngleX,
