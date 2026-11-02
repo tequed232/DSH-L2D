@@ -80,8 +80,9 @@ Idle              待机（特效类，几乎看不出姿态变化）
    对照表见 `docs/参数读写对照.md`。
 2. **头部输入大约是 -30 ~ 30**（交接时对这个模型实测过，仍以运行时 min/max 钳制为准）。
    写 `{"AngleX": 1}` 几乎等于没动，转头大约 15° 就写 `{"AngleX": 15}`。侧倾写 `AngleZ`，不是 `ParamAngleZ`。
-3. **`ParamEyeBallX` / `ParamEyeBallY` 不要按 -30 ~ 30 填。** 仓库里没有模型，读不到 cdi 的真实 min/max，这个范围**待确认**。
-   注视请用 `l2d_gaze`（x、y 都是 -1 ~ 1）。若一定要写眼球参数，先看运行时 `getCapabilities().params` 里的 min/max。
+3. **`ParamEyeBallX` / `ParamEyeBallY` 的输出范围是 ±1**（本机 `.vtube.json` 的 OutputRange）。
+   跟踪输入大约是 X ±0.6、Y ±0.7，不要把这个输入幅度当成参数值，更不要写成 -30~30。
+   注视优先用 `l2d_gaze`（x、y 都是 -1 ~ 1，和眼球输出范围一致）。
 4. **`ParamMouthOpenY` 不要写。** 它留给以后的口型。`ParamMouthForm` 也尽量别和表情抢。
 
 可以写的例子（名字来自这套模型的绑定，不是标准 Cubism 名）：
@@ -91,7 +92,7 @@ Idle              待机（特效类，几乎看不出姿态变化）
 | `AngleX` / `AngleY` / `AngleZ` | 约 -30 ~ 30，以运行时为准 | 头部左右 / 上下 / 侧倾（物理输入） |
 | `PositionX` / `PositionY` | 以运行时 min/max 为准 | 重心、轻微上下 |
 | `ParamEyeLOpen` / `ParamEyeROpen` | 通常 0 ~ 1，以运行时为准 | 眼皮开合 |
-| `ParamEyeBallX` / `ParamEyeBallY` | **待确认**，不要臆造 -30 ~ 30 | 眼球。优先用 `l2d_gaze` |
+| `ParamEyeBallX` / `ParamEyeBallY` | **±1**（`.vtube.json` 实测输出范围；跟踪输入约 ±0.6 / ±0.7） | 眼球。优先用 `l2d_gaze` |
 | `CheeckPuff` | 以运行时为准 | 鼓腮（拼写就是 Cheeck，不要改） |
 | `Mouthpucker` | 以运行时为准 | 嘟嘴。不是 `ParamMouthOpenY` |
 

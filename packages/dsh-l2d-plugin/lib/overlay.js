@@ -725,17 +725,19 @@
   function disableYandere() {
     yandereOn = false;
     yandereArmedAt = 0;
-    setYandereFx(false);
     appearanceCurrent = null;
     var L = window.DSH_L2D;
     try {
-      if (L && L.playMotionAsync) L.playMotionAsync('抚胸手关闭').catch(function () { /* 没打开就跳过 */ });
-      if (L && L.clearExpression) L.clearExpression();
-      if (L && L.clearGaze) L.clearGaze();
-      if (L && L.setPose) L.setPose({ right: 'rest', left: 'rest' });
+      // 邪神退出走 resetPerformance：清关键帧、微动作、Angle 总线、注入器和姿势，再清表情与注视。
+      // 这条不停 Loop 动作。开场播过的「抚胸手打开」还要交给状态机关上，否则手会一直举着。
+      if (L && L.resetPerformance) L.resetPerformance();
+      if (L && L.playMotionAsync) {
+        L.playMotionAsync('抚胸手关闭').catch(function () { /* 本来就没打开 */ });
+      }
     } catch (e) {
-      /* 退出失败也不能把特效留在屏幕上 */
+      /* 复位失败也要把屏幕特效关掉 */
     }
+    setYandereFx(false);
     say('…什么都没看到。', 3000);
     setTimeout(buildMenu, 30); // 刷新菜单文案
   }

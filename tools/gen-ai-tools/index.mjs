@@ -118,7 +118,7 @@ const tools = [
     function: {
       name: 'l2d_set_parameters',
       description:
-        '直接设置可写输入参数。AngleX/Y/Z、PositionX/Y 是物理输入；ParamAngle*、ParamBodyAngle*、HipAngle*、ShoulderY 等是物理输出，写了会被下一帧盖掉。ParamMouthOpenY 留给口型，不要写。眼球 ParamEyeBallX/Y 的数值范围以运行时能力表 min/max 为准，不要猜成 -30~30。不确定参数名时不要调用。',
+        '直接设置可写输入参数。AngleX/Y/Z、PositionX/Y 是物理输入；ParamAngle*、ParamBodyAngle*、HipAngle*、ShoulderY 等是物理输出，写了会被下一帧盖掉。ParamMouthOpenY 留给口型，不要写。眼球 ParamEyeBallX/Y 输出范围是 ±1（.vtube.json 实测），跟踪输入约 ±0.6/±0.7，不要写成 -30~30。注视优先用视线工具，不要手写眼球。不确定参数名时不要调用。',
       parameters: {
         type: 'object',
         properties: {
@@ -229,7 +229,7 @@ const payload = {
   tools,
   paramAccess: cap.paramAccess || {
     source: 'fallback',
-    note: '模型不在仓库里。可写/只读按 physics3 输出表生成；没有 physics3 时用兜底规则。ParamEyeBallX/Y 的 min/max 待运行时确认，不要写成 -30~30。',
+    note: '可写/只读按 physics3 输出表生成；没有 physics3 时用兜底规则。ParamEyeBallX/Y 输出范围是 ±1（.vtube.json 实测），跟踪输入约 ±0.6/±0.7。注视优先走视线，不要写成 -30~30。',
     writableExamples: ['AngleX', 'AngleY', 'AngleZ', 'PositionX', 'PositionY', 'PositionZ', 'ParamEyeLOpen', 'ParamEyeROpen', 'CheeckPuff', 'Mouthpucker'],
     readonlyExamples: ['ParamAngleX', 'ParamAngleY', 'ParamAngleZ', 'ParamBodyAngleX', 'ParamBodyAngleY', 'ParamBodyAngleZ', 'ParamMouthOpenY'],
   },
