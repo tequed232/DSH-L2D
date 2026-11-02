@@ -23,6 +23,8 @@
   // "Cannot read properties of undefined (reading 'timer')"，并让下一行
   // initEmotionSensors() 永远不执行——鼠标/注视跟随就整体不绑定（App 页眼追失效的根因）。
   var agentLink = { state: 'unknown', lastAt: 0, timer: 0, lastSpokeAt: 0 };
+  // 设置热更新：外部 PUT /dsh-l2d/settings.json 后，页面需要自己发现变化（overlay 不再整份覆盖设置）
+  var settingsWatch = { timer: 0, lastEyeFollow: null };
 
   // ---- 环境感知层（输入框追踪 / 挂机 / 回归）--------------------------------
   // 与 agentLink 同理：bootOverlay 可能在 IIFE 尾部赋值前被调度，这里必须提前初始化。
@@ -307,6 +309,7 @@
     // 先绑鼠标/注视：启动链里任何一步抛错都不能连累眼追（历史事故见文件头注释）
     initEmotionSensors();
     initEnvironmentSensors();
+    startSettingsWatch();
     startAiPoll();
     startAgentPoll();
   }
@@ -2741,8 +2744,39 @@
   }
 
   /** 「眼睛跟随鼠标」关掉时清一次注视，让视线回待机漂移；开回来由 pointermove 重新驱动 */
+  /**
+   * 设置热更新：overlay 只在 boot/面板保存时读 settings.json，外部 PUT 不会通知页面。
+   * 这里每 2.5s 轻量拉一次，只关心 eyeFollow（变化才应用），避免整份覆盖设置与面板改动打架。
+   */
+  function applyRemoteEyeFollow(value) {
+    var next = value !== false;
+    var current = settings.eyeFollow !== false;
+    if (next === current) return false;
+    settings.eyeFollow = next;
+    applyEyeFollowSetting();
+    publishPresence();
+    console.info('[dsh-l2d] eyeFollow -> ' + next + '（外部设置热更新）');
+    return true;
+  }
+
+  function startSettingsWatch() {
+    if (settingsWatch.timer) return;
+    settingsWatch.lastEyeFollow = settings.eyeFollow !== false;
+    settingsWatch.timer = setInterval(function () {
+      fetch('/dsh-l2d/settings.json', { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data || typeof data.eyeFollow !== 'boolean') return;
+          settingsWatch.lastEyeFollow = data.eyeFollow;
+          applyRemoteEyeFollow(data.eyeFollow);
+        })
+        .catch(function () { /* 宿主不在或网络抖动：下一轮再试 */ });
+    }, 2500);
+  }
+
   function applyEyeFollowSetting() {
     if (settings.eyeFollow === false) {
+      if (env.away) exitAway('eyeFollow-off');
       releaseInputGaze();
       stopAwayWander();
       env.inputEl = null;

@@ -1,7 +1,7 @@
 import type { CubismModel } from '@framework/model/cubismmodel';
 import type { CubismIdHandle } from '@framework/id/cubismid';
 import { CubismFramework } from '@framework/live2dcubismframework';
-import { ParamOwnership, DEFAULT_OWN_DURATION_MS } from './param-ownership.ts';
+import { ParamOwnership, DEFAULT_OWN_DURATION_MS, selectOwnableIds } from './param-ownership.ts';
 import { LIPSYNC_PARAMS } from '../../../core/src/index.ts';
 
 export type InjectionMode = 'set' | 'add';
@@ -88,12 +88,12 @@ export class ParamInjector {
   /** 认领参数；到期自动释放，避免永久脱离物理。返回实际登记的 id。 */
   public own(ids: Iterable<string>, durationMs: number = DEFAULT_OWN_DURATION_MS, phase: 'pre' | 'post' = 'post'): string[] {
     // 只有物理输出需要「物理默认 + Agent 覆盖」；非物理参数保持普通写入（add/set 语义不变）。
-    // 口型参数不允许被任何通道认领。
-    const filtered = Array.from(ids).filter((raw) => {
+    // 口型参数不允许被任何通道认领。筛选逻辑抽成纯函数，便于单测。
+    const candidates = Array.from(ids).filter((raw) => {
       const id = typeof raw === 'string' ? raw.trim() : '';
-      if (!id || MOUTH_PARAMS.has(id)) return false;
-      return this.isPhysicsOutput(id);
+      return !!id && !MOUTH_PARAMS.has(id);
     });
+    const filtered = selectOwnableIds(candidates, (id) => this.isPhysicsOutput(id));
     return this.ownership.own(filtered, { durationMs, phase });
   }
 

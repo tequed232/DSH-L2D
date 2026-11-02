@@ -47,6 +47,21 @@ export interface OwnershipEntry {
   runId?: string;
 }
 
+/**
+ * 从候选 id 中筛出可被 Agent 独占的参数：只认物理输出（物理默认、Agent 覆盖）。
+ * 判定函数由调用方注入，便于单测；非物理参数请走普通 setParameters（保持 add/set 语义）。
+ */
+export function selectOwnableIds(ids: Iterable<string>, isPhysicsOutput: (id: string) => boolean): string[] {
+  const out: string[] = [];
+  for (const raw of ids) {
+    const id = typeof raw === 'string' ? raw.trim() : '';
+    if (!id) continue;
+    if (!isPhysicsOutput(id)) continue;
+    out.push(id);
+  }
+  return out;
+}
+
 export class ParamOwnership {
   /** id -> expiresAt（0 = 永久） */
   private owned = new Map<string, { expiresAt: number; phase: OwnPhase; owner: WriteSource; runId?: string }>();

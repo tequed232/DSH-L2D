@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_OWN_DURATION_MS, ParamOwnership } from './param-ownership.ts';
+import { DEFAULT_OWN_DURATION_MS, ParamOwnership, selectOwnableIds } from './param-ownership.ts';
 
 test('own / isOwned / release：认领、持有、主动释放', () => {
   const o = new ParamOwnership();
@@ -75,4 +75,15 @@ test('snapshot：给出 id 与到期时间（0 = 长期）', () => {
   const snap = Object.fromEntries(o.snapshot(t0).map((e) => [e.id, e.expiresAt]));
   assert.equal(snap.RArm, t0 + 1200);
   assert.equal(snap.LArm, 0);
+});
+
+test('selectOwnableIds：只登记物理输出，非物理/口型/空值被过滤', () => {
+  const physics = new Set(['RArm', 'LArm', 'ShoulderX', 'ParamBodyAngleX']);
+  const picked = selectOwnableIds(
+    ['RArm', ' AngleX ', 'LArm', '', null, undefined, 'ShoulderX', 'ParamBodyAngleX', 'ParamMouthOpenY'],
+    (id) => physics.has(id),
+  );
+  assert.deepEqual(picked, ['RArm', 'LArm', 'ShoulderX', 'ParamBodyAngleX']);
+  // 非物理参数不会被 own，保持普通 setParameters(add/set) 语义
+  assert.deepEqual(selectOwnableIds(['AngleX', 'PositionX'], () => false), []);
 });
