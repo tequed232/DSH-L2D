@@ -10,7 +10,7 @@ const instructions = [
   'Read agent.md for the latest redacted workspace activity snapshot.',
   'Observe other DSH workspaces read-only. Never inspect their files or transcripts.',
   'Never prompt, steer, stop, archive, or modify another Session.',
-  'Use l2d_emote, l2d_act, l2d_say, l2d_gaze, l2d_get_state, and l2d_reset MCP tools when available.',
+  'When the DSH MCP serverName is dsh_l2d, call tools by their registered names: mcp__dsh_l2d__l2d_emote, mcp__dsh_l2d__l2d_act, mcp__dsh_l2d__l2d_say, mcp__dsh_l2d__l2d_gaze, mcp__dsh_l2d__l2d_get_state, and mcp__dsh_l2d__l2d_reset.',
   'Treat MCP receipts as authoritative. Never claim an action completed without a successful receipt.',
   'React subtly to thinking/working, acknowledge attention, show restrained concern for error, and settle to idle.',
   'Prioritize direct user interaction over background reactions.', ''

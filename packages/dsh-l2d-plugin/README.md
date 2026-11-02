@@ -211,4 +211,24 @@ pnpm dev:server          # 127.0.0.1:5300
 - 状态变化通过队列消息通知专属 Session；其他工作区不会被写入或控制。
 - 新增路由：`POST /dsh-l2d/workspace/ensure`、`GET /dsh-l2d/workspace/status.json`。
 
-MCP Server 新增 `l2d_workspace_ensure` 和 `l2d_workspace_status`。要让专属 Agent 自己调用 Live2D 控制工具，还需要在 DSH 的 MCP 工具提供端配置本仓库的 MCP Server；本插件不会擅自启动独立 MCP 子进程。
+MCP Server 新增 `l2d_workspace_ensure` 和 `l2d_workspace_status`。要让专属 Agent 自己调用 Live2D 控制工具，需要按下方配置 DSH MCP Client；本插件不会擅自启动独立 MCP 子进程。
+
+### 在 DSH 中启用 MCP 工具
+
+DSH 会给工具名加上 `mcp__<serverName>__` 前缀。建议在 DSH profile 的 `cordis.patch.yml` 中增加一条 MCP Client entry（先确保 profile 已安装 `@deepseek-ai/dsh-mcp-client`）：
+
+```yaml
+- insert:
+    - id: dsh-l2d-mcp
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: dsh_l2d
+        transport: stdio
+        command: node
+        cwd: '<DSH-L2D 仓库绝对路径>'
+        args:
+          - '<DSH-L2D 仓库绝对路径>/packages/dsh-l2d-mcp/src/server.mjs'
+```
+
+例如仓库位于 `D:/Desktop/DSH-L2D` 时，将上面的两个路径替换为该目录。重启 DSH 后，专属 Agent 可用的工具名为 `mcp__dsh_l2d__l2d_act`、`mcp__dsh_l2d__l2d_get_state`、`mcp__dsh_l2d__l2d_workspace_status` 等，而不是裸的 `l2d_act`。该 MCP Client entry 位于 profile 全局作用域，因此同一 profile 中其他 Agent 也能看到这些桌宠工具；当前实现通过 `AGENTS.md` 约束专属 Agent 的使用方式，而不是伪称工具已被 DSH 自动限定到单个 Session。
+
