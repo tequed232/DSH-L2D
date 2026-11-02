@@ -44,7 +44,7 @@ const ADDITIVE_INPUTS = new Set([
 ]);
 
 /** 未拿到 physics3.json 时的保守兜底；拿到后会使用模型的真实输出表。 */
-const FALLBACK_PHYSICS_OUTPUT = /^(?:ParamAngle[XYZ]|ParamBodyAngle[XYZ]|HipAngle[XYZ]|LEG\s*AngleZ2|ShoulderY|RArm|LArm|RForearm|LForearm|RHand|LHand)$/;
+const FALLBACK_PHYSICS_OUTPUT = /^(?:ParamAngle[XYZ]|ParamBodyAngle[XYZ]|ParamBodyAngleRX|HipAngle[XYZ]|HipZ[12]|LEG\s*AngleZ2|Shoulder[XYZ]|ShoulderYy|RArm|LArm|RForearm|LForearm|RWrist|LWrist|RHand|LHand|RHand2|LHand2)$/;
 
 /**
  * 外部参数的唯一写入入口。
@@ -87,8 +87,13 @@ export class ParamInjector {
 
   /** 认领参数；到期自动释放，避免永久脱离物理。返回实际登记的 id。 */
   public own(ids: Iterable<string>, durationMs: number = DEFAULT_OWN_DURATION_MS, phase: 'pre' | 'post' = 'post'): string[] {
-    // 口型参数不允许被任何通道认领
-    const filtered = Array.from(ids).filter((id) => typeof id === 'string' && !MOUTH_PARAMS.has(id.trim()));
+    // 只有物理输出需要「物理默认 + Agent 覆盖」；非物理参数保持普通写入（add/set 语义不变）。
+    // 口型参数不允许被任何通道认领。
+    const filtered = Array.from(ids).filter((raw) => {
+      const id = typeof raw === 'string' ? raw.trim() : '';
+      if (!id || MOUTH_PARAMS.has(id)) return false;
+      return this.isPhysicsOutput(id);
+    });
     return this.ownership.own(filtered, { durationMs, phase });
   }
 

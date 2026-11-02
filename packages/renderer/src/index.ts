@@ -984,11 +984,14 @@ export function setParameters(values: Record<string, number>, weight = 1): Apply
 }
 
 /**
- * Agent 独占参数：允许写物理输出，并且只在 post 相位（Physics600 之后）写入，
- * 同一参数同一帧只有一条写入路径。到期自动释放，不写永久状态。
+ * Agent 独占参数：允许写物理输出，并且只在 ownership 指定的相位写入
+ * （叶子四肢 post，Physics600 之后后写胜出），同一参数同一帧只有一条写入路径。
+ * 只有物理输出会被登记；非物理参数请走普通 setParameters（保持 add/set 语义）。
+ * 到期自动释放，不写永久状态。
  * @param ids 参数名
  * @param durationMs 占用时长（毫秒，<=0 表示长期持有），缺省 1200ms
- * @returns 实际登记的 id
+ * @param phase 缺省 post；Hip 类参数 M1-b 用 pre
+ * @returns 实际登记的 id（非物理输出会被忽略）
  */
 export function ownParameters(ids: string[], durationMs = 1200, phase: 'pre' | 'post' = 'post'): string[] {
   if (!model?.getModel()) return [];
