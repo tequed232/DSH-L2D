@@ -77,7 +77,7 @@ const SETTINGS_SHAPE = {
   soundEnabled: { type: 'boolean', default: true, description: '按下/松开角色时的音效' },
   soundVolume: { type: 'number', default: 0.7, description: '音效音量 0~1' },
   scale: { type: 'number', default: 1, description: '角色显示缩放 0.6~1.6' },
-  eyeFollow: { type: 'boolean', default: false, description: '眼睛跟随鼠标' },
+  eyeFollow: { type: 'boolean', default: true, description: '眼睛跟随鼠标（默认开；关掉则视线回到待机）' },
   agentLink: { type: 'boolean', default: true, description: '读取 DSH 工作区会话状态，驱动角色表情/动作链' },
   clickMode: { type: 'string', default: 'random', description: '单击角色动作：random 随机动作 / api DeepSeek 决定' },
   spontaneousChat: { type: 'boolean', default: true, description: '空闲/完成时让角色主动冒泡' },
@@ -104,7 +104,7 @@ export const Config = z
       soundEnabled: z.boolean().default(true).description('按下/松开角色时的音效').extra('volatile', true),
       soundVolume: z.number().default(0.7).description('音效音量 0~1').extra('volatile', true),
       scale: z.number().default(1).description('角色显示缩放 0.6~1.6').extra('volatile', true),
-      eyeFollow: z.boolean().default(false).description('眼睛跟随鼠标（需接入 Cubism 渲染后生效）').extra('volatile', true),
+      eyeFollow: z.boolean().default(true).description('眼睛跟随鼠标（默认开；关掉则视线回到待机）').extra('volatile', true),
       agentLink: z.boolean().default(true).description('读取 DSH 工作区会话状态，驱动角色表情/动作链').extra('volatile', true),
       clickMode: z.string().default('random').description('单击角色动作：random 随机动作 / api DeepSeek 决定').extra('volatile', true),
       spontaneousChat: z.boolean().default(true).description('空闲/完成时让角色主动冒泡').extra('volatile', true),
@@ -361,7 +361,7 @@ const SETTINGS_DEFAULT = {
   soundEnabled: true,
   soundVolume: 0.7,
   scale: 1,
-  eyeFollow: false,
+  eyeFollow: true,
   agentLink: true,
   systemSensor: false,
   mediaSensor: false,
@@ -377,16 +377,47 @@ function readSettings() {
   } catch {
     stored = {};
   }
+  // 一次性迁移：eyeFollow / petMode 都曾是「旧默认噪音」（eyeFollow 是死配置无消费方，
+  // petMode 是后来才变成正式行为），存量文件里的 false 不是用户选择。
+  // 无标记时强制置 true 并打标；之后用户在面板里显式关掉才被尊重。
+  // apiKey 脏值：历史上有对象被直接塞进这个字符串字段（存成 "[object Object]"），
+  // 会让余额接口 401；这里统一清成空串（等价未配置，余额链路回落到 credentials/env）。
+  let migrated = false;
+  if (stored.eyeFollowMigrated !== true) {
+    if (stored.eyeFollow === false) stored.eyeFollow = true;
+    stored.eyeFollowMigrated = true;
+    migrated = true;
+  }
+  if (stored.petModeMigrated !== true) {
+    if (stored.petMode === false) stored.petMode = true;
+    stored.petModeMigrated = true;
+    migrated = true;
+  }
+  if (typeof stored.apiKey === 'string' && /^\[object /i.test(stored.apiKey.trim())) {
+    stored.apiKey = '';
+    migrated = true;
+  }
+  if (migrated) {
+    try {
+      fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
+      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(stored, null, 2), 'utf8');
+    } catch {
+      /* 迁移写盘失败不影响读取，下次再试 */
+    }
+  }
   return { ...SETTINGS_DEFAULT, ...stored };
 }
 
 function writeSettings(patch) {
   const next = { ...readSettings(), ...(patch || {}) };
+  // apiKey 脏值归一化（写路径兜底）：对象被塞进字符串字段会存成 "[object Object]"，会让余额 401。
+  if (typeof next.apiKey === 'string' && /^\[object /i.test(next.apiKey.trim())) next.apiKey = '';
   // 约束取值范围，避免脏数据把前端弄坏
   next.soundVolume = Math.min(1, Math.max(0, Number(next.soundVolume) || 0));
   next.scale = Math.min(2.0, Math.max(0.6, Number(next.scale) || 1));
   next.refreshSeconds = Math.min(3600, Math.max(15, Number(next.refreshSeconds) || 60));
   next.agentLink = next.agentLink !== false;
+  next.eyeFollow = next.eyeFollow !== false; // 默认开，显式 false 才关
   next.clickMode = next.clickMode === 'api' ? 'api' : 'random';
   next.spontaneousChat = next.spontaneousChat !== false;
   next.memeStyle = next.memeStyle !== false;
@@ -1316,7 +1347,7 @@ export function apply(root, config = {}) {
             soundEnabled: saved.soundEnabled,
             soundVolume: saved.soundVolume,
             refreshSeconds: saved.refreshSeconds,
-            eyeFollow: saved.eyeFollow,
+            eyeFollow: saved.eyeFollow !== false,
             agentLink: saved.agentLink !== false,
             clickMode: saved.clickMode === 'api' ? 'api' : 'random',
             spontaneousChat: saved.spontaneousChat !== false,
@@ -1341,7 +1372,7 @@ export function apply(root, config = {}) {
         soundEnabled: st.soundEnabled,
         soundVolume: st.soundVolume,
         refreshSeconds: st.refreshSeconds,
-        eyeFollow: st.eyeFollow,
+        eyeFollow: st.eyeFollow !== false,
         agentLink: st.agentLink !== false,
         clickMode: st.clickMode === 'api' ? 'api' : 'random',
         spontaneousChat: st.spontaneousChat !== false,
@@ -1404,7 +1435,7 @@ export function apply(root, config = {}) {
         soundEnabled: st.soundEnabled,
         soundVolume: st.soundVolume,
         refreshSeconds: st.refreshSeconds,
-        eyeFollow: st.eyeFollow,
+        eyeFollow: st.eyeFollow !== false,
         agentLink: st.agentLink !== false,
         clickMode: st.clickMode === 'api' ? 'api' : 'random',
         spontaneousChat: st.spontaneousChat !== false,

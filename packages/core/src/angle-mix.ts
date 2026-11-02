@@ -3,7 +3,7 @@
  *
  * 优先级高的通道先占额度；总和超出 cap 时，从低优先级开始削减。
  * 某一路写成 0 就不会残留。用于 AngleZ / PositionX / PositionY：
- * 身体跟随 > 待机微动作 > 媒体律动。
+ * 拖拽身体跟随 > 鼠标注视 > 待机微动作 > 媒体律动。
  */
 export interface AngleLayer {
   id: string;

@@ -31,12 +31,19 @@
       var cursor = null; // 主进程送来的窗口内光标坐标；null = 窗外
       var lastSentHit = null;
 
+      // 与 overlay.js 的 renderScale 同语义：2~4× 超采样（画布单边/总像素护栏在渲染包内钳制）。
+      // 两窗清晰度统一——独立窗若回退 devicePixelRatio（150% 屏只有 1.5×）会比页内糊。
+      function renderScale() {
+        var dpr = Number(window.devicePixelRatio) || 1;
+        return Math.min(4, Math.max(2, Math.round(dpr * 100) / 100));
+      }
+
       function fit() {
         canvas.style.width = window.innerWidth + 'px';
         canvas.style.height = window.innerHeight + 'px';
         if (window.DSH_L2D && window.DSH_L2D.layout) {
           try {
-            window.DSH_L2D.layout(window.innerWidth, window.innerHeight, 1);
+            window.DSH_L2D.layout(window.innerWidth, window.innerHeight, 1, renderScale());
           } catch (e) { /* ignore */ }
         }
       }
@@ -52,13 +59,25 @@
         return gl;
       }
 
-      // 光标在窗内时逐像素读 alpha：WebGL 原点在左下，y 需翻转
+      // 光标在窗内时逐像素读 alpha：坐标三级换算——屏幕/窗口逻辑坐标 → CSS 像素 → drawingBuffer 像素。
+      // 高 DPI（2~4 倍渲染倍率）下三者不再天然相等，必须按 drawingBufferWidth/rect.width 换算，
+      // 否则命中点错位，直接导致穿透/点击/拖拽不稳。WebGL 原点在左下，读取前 y 翻转。
       function readAlpha(x, y) {
         var g = ensureGl();
         if (!g) return false;
+        var rect = canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return false;
+        var sx = g.drawingBufferWidth / rect.width;
+        var sy = g.drawingBufferHeight / rect.height;
+        var bufW = g.drawingBufferWidth;
+        var bufH = g.drawingBufferHeight;
+        var pxX = Math.round((x - rect.left) * sx);
+        var pxY = Math.round((y - rect.top) * sy);
+        pxX = Math.max(0, Math.min(bufW - 1, pxX));
+        pxY = Math.max(0, Math.min(bufH - 1, pxY));
         try {
           var px = new Uint8Array(4);
-          g.readPixels(Math.round(x), Math.round(window.innerHeight - 1 - y), 1, 1, g.RGBA, g.UNSIGNED_BYTE, px);
+          g.readPixels(pxX, bufH - 1 - pxY, 1, 1, g.RGBA, g.UNSIGNED_BYTE, px);
           return px[3] > ALPHA_THRESHOLD;
         } catch (e) {
           return false;
@@ -77,6 +96,35 @@
           return;
         }
         reportHit(readAlpha(cursor.x, cursor.y));
+      }
+
+      // 眼神跟随：主进程 16ms 光标坐标 → 归一化 → DSH_L2D.gaze。
+      // 参数与页内 overlay.driveGaze 对齐：脸部按容器上部 35% 估算、12% 中心死区、y 取反。
+      function driveGaze(c) {
+        var L = window.DSH_L2D;
+        if (!mounted || !L || !L.gaze) return;
+        if (!c) {
+          if (L.clearGaze) L.clearGaze(); // 光标离开窗口：视线平滑回正
+          return;
+        }
+        var rect = canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        var cx = rect.left + rect.width * 0.5;
+        var cy = rect.top + rect.height * 0.35;
+        var nx = (c.x - cx) / (rect.width * 0.45);
+        var ny = (c.y - cy) / (rect.height * 0.45);
+        var dist = Math.sqrt(nx * nx + ny * ny);
+        if (dist < 0.12) {
+          nx = 0;
+          ny = 0;
+        } else {
+          nx = (nx - (nx < 0 ? -0.12 : 0.12)) / 0.88;
+          ny = (ny - (ny < 0 ? -0.12 : 0.12)) / 0.88;
+        }
+        nx = Math.max(-1, Math.min(1, nx));
+        ny = Math.max(-1, Math.min(1, ny));
+        // 屏幕坐标 y 向下，模型 AngleY/EyeBallY 正值是「抬头」——取反
+        L.gaze(nx, -ny);
       }
 
       // 帧末判定：优先渲染包的 post 钩子（紧跟渲染最准）；没有则自跑 rAF
@@ -101,6 +149,7 @@
         window.l2dPet.onCursor(function (v) {
           cursor = v;
           if (!v) reportHit(false);
+          driveGaze(v); // 光标坐标喂给注视控制器（null 时内部 clearGaze 复位）
         });
       }
 
@@ -148,11 +197,14 @@
               width: window.innerWidth,
               height: window.innerHeight,
               zoom: 1,
+              dpr: renderScale(), // 与页内浮层同倍率，清晰度对齐
             }),
           )
             .then(function () {
               mounted = true;
               fit();
+              // 模型加载完成前光标可能已经动过：补一帧最新注视目标
+              driveGaze(cursor);
               console.log('[dsh-l2d pet] renderer ready');
             })
             .catch(function (err) {
