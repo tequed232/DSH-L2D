@@ -656,12 +656,15 @@ let kfLoop = false;
 let kfActive = false;
 /** 关键帧自动认领的物理输出参数（播放结束/停止时释放，不碰调用方自己 own 的） */
 let kfAutoOwned: string[] = [];
+/** 本次 keyframes 涉及的、已被 ownership 覆盖的物理输出（回执用，含调用方原本就 own 的） */
+let kfOwnedForTracks: string[] = [];
 let kfRenewAt = 0;
 
 function releaseKfOwnership(): void {
   if (!kfAutoOwned.length) return;
   injector.release(kfAutoOwned);
   kfAutoOwned = [];
+  kfOwnedForTracks = [];
   kfRenewAt = 0;
 }
 
@@ -734,12 +737,14 @@ export function playKeyframes(tracks: KeyframeTrack[], opts: KeyframesOptions = 
   // 这里按轨道时长自动认领（loop 时在 kfTick 里续期），播放结束/停止再释放。
   releaseKfOwnership();
   const ownedNow: string[] = [];
+  const ownedForTracks: string[] = [];
   const ttl = Math.max(16, Math.min(KF_MAX_MS, Number(opts.duration) || maxT)) + 600;
   for (const tr of accepted) {
     const id = tr.handle.getString();
     if (!injector.isPhysicsOutput(id)) continue;
     const already = injector.isAgentOwned(id);
     injector.own([id], ttl);
+    ownedForTracks.push(id);
     if (!already) ownedNow.push(id);
   }
 
@@ -749,9 +754,15 @@ export function playKeyframes(tracks: KeyframeTrack[], opts: KeyframesOptions = 
   kfStart = performance.now();
   kfActive = true;
   kfAutoOwned = ownedNow;
+  kfOwnedForTracks = ownedForTracks;
   kfRenewAt = kfStart + Math.max(400, kfDuration / 2);
   markActive();
   return accepted.length;
+}
+
+/** 当前 keyframes 占用的物理输出（回执用；播放结束/停止后清空）。 */
+export function getKeyframeOwnedParameters(): string[] {
+  return kfOwnedForTracks.slice();
 }
 
 export function stopKeyframes(): void {
@@ -1971,6 +1982,7 @@ const api = {
   resetPose,
   playKeyframes,
   stopKeyframes,
+  getKeyframeOwnedParameters,
   markActive,
   setPreUpdate,
   emotionSignal,

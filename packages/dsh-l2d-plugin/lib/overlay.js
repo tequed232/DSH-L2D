@@ -3647,13 +3647,18 @@
               L.releaseParameters(owned);
               owned = [];
             }
-            return { ok: r.failed.length === 0, applied: r.ok, failed: r.failed, owned: owned, durationMs: durationMs };
+            // ignored：未登记独占、但按普通 add/set 写入成功的参数（非物理输出）
+            var ignored = r.ok.filter(function (id) { return owned.indexOf(id) < 0; });
+            return { ok: r.failed.length === 0, applied: r.ok, failed: r.failed, owned: owned, ignored: ignored, durationMs: durationMs };
           }
           case 'l2d_play_keyframes': {
             // AI 自编动作：tracks = [{ param, keys: [[t_ms, value], ...] }]
             var tracks = Array.isArray(a.tracks) ? a.tracks : [];
             var n = L.playKeyframes(tracks, { duration: a.duration, loop: a.loop === true });
-            return n > 0 ? { ok: true, tracks: n } : { ok: false, error: 'no-valid-tracks' };
+            if (n <= 0) return { ok: false, error: 'no-valid-tracks' };
+            // keyframes 播放时按轨道时长自动认领物理输出（loop 会续期），回执列出被覆盖的参数
+            var kfOwned = L.getKeyframeOwnedParameters ? L.getKeyframeOwnedParameters() : [];
+            return { ok: true, tracks: n, owned: kfOwned };
           }
           case 'l2d_stop_keyframes': {
             L.stopKeyframes();

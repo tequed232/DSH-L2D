@@ -44,7 +44,10 @@ const ADDITIVE_INPUTS = new Set([
 ]);
 
 /** 未拿到 physics3.json 时的保守兜底；拿到后会使用模型的真实输出表。 */
-const FALLBACK_PHYSICS_OUTPUT = /^(?:ParamAngle[XYZ]|ParamBodyAngle[XYZ]|ParamBodyAngleRX|HipAngle[XYZ]|HipZ[12]|LEG\s*AngleZ2|Shoulder[XYZ]|ShoulderYy|RArm|LArm|RForearm|LForearm|RWrist|LWrist|RHand|LHand|RHand2|LHand2)$/;
+// 仅用于 physics3.json 尚未加载完的启动窗口；加载完成后以模型真实输出表为准。
+// 已按 509 参数 × physics3 输出表核对：不含 ShoulderX/ShoulderYy（可写输入），
+// 补齐 HipAngleX2/ParamHipAngleZ/ParamHipAngleZ2/HipAngleYDOWN/HipAngleYUP。
+const FALLBACK_PHYSICS_OUTPUT = /^(?:ParamAngle[XYZ]|ParamBodyAngle[XYZ]|ParamBodyAngleRX|HipAngle[XYZ]|HipAngleX2|HipAngleYUP|HipAngleYDOWN|ParamHipAngleZ2?|HipZ[12]|LEGs*AngleZ2|ShoulderY|ShoulderZ|RArm|LArm|RForearm|LForearm|RWrist|LWrist|RHand|LHand|RHand2|LHand2)$/;
 
 /**
  * 外部参数的唯一写入入口。
