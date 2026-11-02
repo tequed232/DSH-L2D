@@ -17,6 +17,7 @@ const ctx = {
   },
   sessionController: {
     async create(request) {
+      assert.equal(request.agentPreset, 'dsh-l2d');
       calls.push(['create', request]);
       workspace.sessionIds = ['session-live2d'];
       return { sessionId: 'session-live2d' };
@@ -46,9 +47,11 @@ try {
   assert.equal(calls.filter(([kind]) => kind === 'prompt').length, 1);
   const instructions = fs.readFileSync(path.join(result.workspacePath, 'AGENTS.md'), 'utf8');
   assert.match(instructions, /Live2D character agent/);
+  assert.match(instructions, /mcp__dsh_l2d__l2d_act/);
   const status = fs.readFileSync(path.join(result.workspacePath, 'agent.md'), 'utf8');
   assert.match(status, /Other project/);
   assert.match(status, /working/);
+  assert.doesNotMatch(status, /session-other/);
   const again = await bridge.ensure();
   assert.equal(again.sessionId, 'session-live2d');
   assert.equal(calls.filter(([kind]) => kind === 'create').length, 1);
