@@ -1929,7 +1929,17 @@
   var rendererReady = false;
   var rendererFailed = false;
   var MODEL_URL =
-    '/dsh-l2d/model/' + encodeURIComponent('大肥鱼.dsl2d.2048.model3.json');
+    '/dsh-l2d/model/' + encodeURIComponent('大肥鱼.dsl2d.model3.json'); // 4096 贴图高清版；2048 降档版是 大肥鱼.dsl2d.2048.model3.json
+
+  /**
+   * 渲染倍率：高 DPI/Retina 用 devicePixelRatio（Mac Retina=2、Windows 150%=1.5），
+   * 普通 1080p 屏（dpr=1）至少 2× 超采样，缩小显示时更锐利；
+   * 上限 4×，画布单边/总像素的 8K 护栏在渲染包 resizeCanvas 内统一钳制。
+   */
+  function renderScale() {
+    var dpr = Number(window.devicePixelRatio) || 1;
+    return Math.min(4, Math.max(2, Math.round(dpr * 100) / 100));
+  }
 
   function loadScriptOnce(id, src) {
     return new Promise(function (resolve, reject) {
@@ -1983,10 +1993,29 @@
           canvasEl.style.width = box.w + 'px';
           canvasEl.style.height = box.h + 'px';
         }
-        if (window.DSH_L2D && window.DSH_L2D.layout) window.DSH_L2D.layout(box.w, box.h, 1);
+        if (window.DSH_L2D && window.DSH_L2D.layout) window.DSH_L2D.layout(box.w, box.h, 1, renderScale());
       });
       ro.observe(root);
     } catch (e) { /* ignore */ }
+  }
+
+  // 跨屏拖动（外接屏切换、Mac 从 Retina 拖到普通屏）时 devicePixelRatio 会变：
+  // 监听分辨率匹配变化，按新倍率重排画布。
+  var dprWatch = null;
+  function watchDpr() {
+    if (typeof window.matchMedia !== 'function') return;
+    if (dprWatch && dprWatch.removeEventListener) dprWatch.removeEventListener('change', onDprChanged);
+    try {
+      dprWatch = window.matchMedia('(resolution: ' + (Number(window.devicePixelRatio) || 1) + 'dppx)');
+      dprWatch.addEventListener('change', onDprChanged);
+    } catch (e) { /* ignore */ }
+  }
+  function onDprChanged() {
+    watchDpr();
+    if (rendererReady && window.DSH_L2D && window.DSH_L2D.layout) {
+      var box = canvasBox();
+      window.DSH_L2D.layout(box.w, box.h, 1, renderScale());
+    }
   }
 
   function fallbackToImage(reason) {
@@ -2016,13 +2045,15 @@
           modelUrl: MODEL_URL,
           width: box.w,
           height: box.h,
-          zoom: 1
+          zoom: 1,
+          dpr: renderScale()
         });
       })
       .then(function () {
         rendererReady = true;
         if (imgEl) imgEl.style.display = 'none';
         watchResize();
+        watchDpr(); // 跨屏/缩放变化时按新 DPI 重排
         bindPhysics(); // 渲染就绪后立刻挂上每帧物理钩子
       })
       .catch(function (err) {

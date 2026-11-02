@@ -246,13 +246,29 @@ export class LAppSubdelegate {
   /**
    * Resize the canvas to fill the screen.
    */
+  /**
+   * 画布分辨率 = CSS 尺寸 × 渲染倍率（高 DPI / Retina / 超采样）。
+   * 倍率由渲染包控制（renderScale，0 = 回退浏览器 devicePixelRatio）：
+   * Mac Retina 的 dpr=2、Windows 150% 的 dpr=1.5 都能拿到原生像素密度；
+   * dpr=1 的普通屏由上层传 2 倍超采样，缩小显示时更锐利。
+   * 单边 8192（8K）、总像素按 8K 面积封顶，避免超大画布吃爆显存。
+   */
   private resizeCanvas(): void {
-    this._canvas.width = this._canvas.clientWidth * window.devicePixelRatio;
-    this._canvas.height = this._canvas.clientHeight * window.devicePixelRatio;
+    const scale = this.renderScale > 0 ? this.renderScale : window.devicePixelRatio || 1;
+    let w = Math.max(1, Math.round(this._canvas.clientWidth * scale));
+    let h = Math.max(1, Math.round(this._canvas.clientHeight * scale));
+    const MAX_DIM = 8192;
+    const MAX_PIXELS = 8192 * 4320;
+    if (w > MAX_DIM || h > MAX_DIM || w * h > MAX_PIXELS) {
+      const k = Math.min(MAX_DIM / w, MAX_DIM / h, Math.sqrt(MAX_PIXELS / (w * h)));
+      w = Math.max(1, Math.floor(w * k));
+      h = Math.max(1, Math.floor(h * k));
+    }
+    this._canvas.width = w;
+    this._canvas.height = h;
 
     const gl = this._glManager.getGl();
-
-    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    if (gl) gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
   }
 
   /**
@@ -324,6 +340,12 @@ export class LAppSubdelegate {
   }
 
   private _canvas: HTMLCanvasElement;
+
+  /**
+   * 渲染倍率（CSS → 设备像素）。0 表示回退浏览器 devicePixelRatio。
+   * 由渲染包在 mount/layout 时写入，适配高 DPI 与超采样。
+   */
+  public renderScale = 0;
 
   /**
    * View情報
