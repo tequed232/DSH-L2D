@@ -20,7 +20,9 @@ import { mixAdditive } from '../../core/src/angle-mix.ts';
 import { sampleAmbient, type AmbientKind } from '../../core/src/ambient.ts';
 import {
   ActGate,
+  closeMotionsOnPreempt,
   getActPhaseTemplate,
+  preemptedYandere,
   type ActAdmitInput,
   type ActPhaseTemplate,
 } from '../../core/src/action-chain.ts';
@@ -456,6 +458,8 @@ export function currentAct() {
 export function actPhaseTemplate(name: string): ActPhaseTemplate | null {
   return getActPhaseTemplate(name);
 }
+
+export { closeMotionsOnPreempt, preemptedYandere };
 
 /** 动作诊断，不参与渲染决策。 */
 let motionDiag = { group: 'none', startedAt: 0, playing: false };
@@ -1268,6 +1272,10 @@ export function resetPose(): number {
 
 /** 收尾：姿势、表情、注视一起回到待机。邪神退出和 l2d_reset 用这一条。 */
 export function resetPerformance(): { ok: boolean; params: number } {
+  if (emotionCloseTimer) {
+    window.clearTimeout(emotionCloseTimer);
+    emotionCloseTimer = 0;
+  }
   const params = resetPose();
   clearExpression();
   clearGaze();
@@ -1625,6 +1633,8 @@ const api = {
   releaseAct,
   currentAct,
   actPhaseTemplate,
+  closeMotionsOnPreempt,
+  preemptedYandere,
   getCapabilities,
   // 生命周期
   destroy,

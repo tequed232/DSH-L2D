@@ -732,28 +732,32 @@
     setYandereFx(true);
   }
 
-  function disableYandere() {
+  // 邪神视觉层：暗角、黑脸、抚胸手。菜单关闭和槽被抢走都走这里。
+  // resetPerformance 清表情、注视和姿势，不停 Loop 动作，所以抚胸手仍交给状态机关上。
+  // 不在这里 release 槽：抢占时新链已经占上，再 release 会打空。
+  function exitYandereVisual() {
     yandereOn = false;
     yandereArmedAt = 0;
     appearanceCurrent = null;
+    yandereActRunId = 0;
     var L = window.DSH_L2D;
     try {
-      if (yandereActRunId) {
-        releaseActRun(yandereActRunId, 'yandere-off');
-        yandereActRunId = 0;
-      }
-      // 邪神退出走 resetPerformance：清关键帧、微动作、Angle 总线、注入器和姿势，再清表情与注视。
-      // 这条不停 Loop 动作。开场播过的「抚胸手打开」还要交给状态机关上，否则手会一直举着。
       if (L && L.resetPerformance) L.resetPerformance();
       if (L && L.playMotionAsync) {
-        L.playMotionAsync('抚胸手关闭').catch(function () { /* 本来就没打开 */ });
+        L.playMotionAsync('抚胸手关闭').catch(function () { /* 本来就没打开，或和新动作不是同一槽 */ });
       }
     } catch (e) {
       /* 复位失败也要把屏幕特效关掉 */
     }
     setYandereFx(false);
+    setTimeout(buildMenu, 30);
+  }
+
+  function disableYandere() {
+    var runId = yandereActRunId;
+    if (runId) releaseActRun(runId, 'yandere-off');
+    exitYandereVisual();
     say('…什么都没看到。', 3000);
-    setTimeout(buildMenu, 30); // 刷新菜单文案
   }
 
   function closeMenu() {
@@ -1225,6 +1229,8 @@
   var pokeTimers = [];
   var actingTimer = 0;
   var legacyGen = 0;
+  // 已经开播、关闭定时器还没跑的 closeMotion。抢占时按新链有没有 motion 决定补不补播。
+  var pendingCloses = [];
 
   function cancelActTimers() {
     for (var i = 0; i < pokeTimers.length; i++) clearTimeout(pokeTimers[i]);
@@ -1351,10 +1357,70 @@
     return legacyGen === runId;
   }
 
+  function rememberClose(name) {
+    if (!name) return;
+    pendingCloses.push(name);
+  }
+
+  function dropPendingClose(name) {
+    var next = [];
+    var removed = false;
+    for (var i = 0; i < pendingCloses.length; i++) {
+      if (!removed && pendingCloses[i] === name) {
+        removed = true;
+        continue;
+      }
+      next.push(pendingCloses[i]);
+    }
+    pendingCloses = next;
+  }
+
+  function closesToFlush(chain) {
+    var L = window.DSH_L2D;
+    if (L && L.closeMotionsOnPreempt) return L.closeMotionsOnPreempt(pendingCloses, chain);
+    var hasMotion = false;
+    for (var i = 0; i < chain.length; i++) {
+      if (chain[i] && chain[i].kind === 'motion') hasMotion = true;
+    }
+    if (hasMotion) return [];
+    var out = [];
+    var seen = {};
+    for (var j = 0; j < pendingCloses.length; j++) {
+      var name = pendingCloses[j];
+      if (!name || seen[name]) continue;
+      seen[name] = true;
+      out.push(name);
+    }
+    return out;
+  }
+
+  function playCloseNow(names) {
+    var L = window.DSH_L2D;
+    if (!L || !L.playMotionAsync || !names || !names.length) return;
+    for (var i = 0; i < names.length; i++) {
+      L.playMotionAsync(names[i]).catch(function () { /* 状态机可能已处理 */ });
+    }
+  }
+
+  function preemptYandereIfNeeded(admission) {
+    var L = window.DSH_L2D;
+    var stolen = false;
+    if (L && L.preemptedYandere) {
+      stolen = L.preemptedYandere(admission && admission.current, { on: yandereOn, runId: yandereActRunId });
+    } else if (yandereOn && admission && admission.current) {
+      stolen = admission.current.source === 'yandere' || (!!yandereActRunId && admission.current.runId === yandereActRunId);
+    }
+    if (!stolen) return;
+    // 新链还没开播。先收暗角和抚胸手，避免 release 把新槽清掉。
+    exitYandereVisual();
+  }
+
   function scheduleCloseMotion(closeMotion, delayMs, runId) {
     var L = window.DSH_L2D;
     if (!L || !closeMotion || !L.playMotionAsync) return;
+    rememberClose(closeMotion);
     pokeTimers.push(setTimeout(function () {
+      dropPendingClose(closeMotion);
       if (!actStillCurrent(runId)) return;
       L.playMotionAsync(closeMotion).catch(function () { /* 状态机可能已处理 */ });
     }, delayMs || 6000));
@@ -1421,6 +1487,7 @@
     if (!L || !L.releaseAct || !runId) return null;
     var ev = L.releaseAct(runId, reason || 'released');
     if (!ev) return null;
+    pendingCloses = [];
     cancelActTimers();
     postActEvent(ev);
     if (L.setStageBusy) L.setStageBusy({ acting: false });
@@ -1444,7 +1511,10 @@
     var life = plannedLifeMs(chain, action.holdMs);
 
     if (!L.admitAct || !L.currentAct || !L.finishAct) {
+      var legacyFlush = closesToFlush(chain);
+      pendingCloses = [];
       cancelActTimers();
+      playCloseNow(legacyFlush);
       legacyGen += 1;
       var legacyId = legacyGen;
       if (!action.holdOnly) playActSteps(chain, legacyId, source);
@@ -1471,7 +1541,11 @@
       steps: chain.length,
     });
     if (!admission || !admission.accepted) return blockedAct(admission);
+    preemptYandereIfNeeded(admission);
+    var flush = closesToFlush(chain);
+    pendingCloses = [];
     cancelActTimers();
+    playCloseNow(flush);
     emitActEvents(admission.events);
     // 先挂上结束回执，避免步骤里抛错后槽位一直占着。
     armActEnd(admission.runId, life);
@@ -2108,7 +2182,7 @@
   var AGENT_CHAIN = {
     thinking: function () {
       agentAct('NORMAL', 'agent', [
-        { kind: 'expression', name: '加载' },
+        { kind: 'expression', name: '＞＜' },
         { kind: 'look', x: 0, y: 0.28, delayMs: 80 },
       ]);
     },

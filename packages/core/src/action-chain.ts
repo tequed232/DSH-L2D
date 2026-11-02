@@ -110,6 +110,44 @@ export function canInterruptAct(current: ActPriority | null, incoming: ActPriori
   return ACT_PRIORITY_RANK[incoming] >= ACT_PRIORITY_RANK[current];
 }
 
+export function chainHasMotion(chain: readonly { kind?: string }[] | null | undefined): boolean {
+  if (!chain) return false;
+  return chain.some((step) => !!step && step.kind === 'motion');
+}
+
+/**
+ * 抢占时要不要立刻补播还挂着的关闭动作。
+ * 新链里只要有 motion 步骤，就交给新动作覆盖，这里返回空，避免和状态机撞车。
+ * 新链不带 motion（表情、视线、姿势）时，把还没跑的 closeMotion 原样补播。
+ */
+export function closeMotionsOnPreempt(
+  pending: readonly string[] | null | undefined,
+  incoming: readonly { kind?: string }[] | null | undefined,
+): string[] {
+  if (chainHasMotion(incoming)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const name of pending || []) {
+    if (typeof name !== 'string' || !name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
+/**
+ * 被抢走的是不是邪神占着的那条槽。
+ * 调度器在 admit 成功之后看 current（被打断的那条），不要对已经换成新 runId 的槽再 release。
+ */
+export function preemptedYandere(
+  current: { source?: string; runId?: number } | null | undefined,
+  yandere: { on?: boolean; runId?: number } | null | undefined,
+): boolean {
+  if (!yandere || !yandere.on || !current) return false;
+  if (current.source === 'yandere') return true;
+  return !!yandere.runId && current.runId === yandere.runId;
+}
+
 export function getActPhaseTemplate(name: unknown): ActPhaseTemplate | null {
   if (typeof name !== 'string') return null;
   const key = name.trim().toLowerCase() as ActPhaseName;

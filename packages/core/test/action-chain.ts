@@ -8,8 +8,10 @@ import {
   ActGate,
   actTemplateWritesMouth,
   canInterruptAct,
+  closeMotionsOnPreempt,
   getActPhaseTemplate,
   parseActPriority,
+  preemptedYandere,
 } from '../src/index.ts';
 
 let passed = 0;
@@ -126,6 +128,41 @@ test('四段短链都是 2～4 步，且不写口型', () => {
   assert.equal(getActPhaseTemplate('nope'), null);
   const speaking = JSON.stringify(getActPhaseTemplate('speaking'));
   assert.equal(speaking.includes('ParamMouthOpenY'), false);
+});
+
+test('新链没有 motion 时，抢占要补播还挂着的关闭动作', () => {
+  const listening = getActPhaseTemplate('listening');
+  assert.ok(listening);
+  assert.deepEqual(closeMotionsOnPreempt(['竖手指关闭'], listening.chain), ['竖手指关闭']);
+  assert.deepEqual(
+    closeMotionsOnPreempt(['竖手指关闭', '竖手指关闭', '抚胸手关闭'], [{ kind: 'expression' }, { kind: 'look' }]),
+    ['竖手指关闭', '抚胸手关闭'],
+  );
+  assert.deepEqual(closeMotionsOnPreempt(['', '竖手指关闭'], [{ kind: 'pose' }]), ['竖手指关闭']);
+});
+
+test('新链带 motion 时不补播关闭动作，交给新动作覆盖', () => {
+  const speaking = getActPhaseTemplate('speaking');
+  assert.ok(speaking);
+  assert.equal(
+    speaking.chain.some((step) => step.kind === 'motion'),
+    true,
+  );
+  assert.deepEqual(closeMotionsOnPreempt(['竖手指关闭'], speaking.chain), []);
+  assert.deepEqual(
+    closeMotionsOnPreempt(['竖手指关闭'], [{ kind: 'motion', name: '抚胸手打开' }]),
+    [],
+  );
+  assert.deepEqual(closeMotionsOnPreempt([], [{ kind: 'look' }]), []);
+});
+
+test('只有邪神自己那条槽被抢走时才要收视觉层', () => {
+  const held = { on: true, runId: 4 };
+  assert.equal(preemptedYandere({ source: 'yandere', runId: 4 }, held), true);
+  assert.equal(preemptedYandere({ source: 'dialogue', runId: 4 }, held), true);
+  assert.equal(preemptedYandere({ source: 'poke', runId: 9 }, held), false);
+  assert.equal(preemptedYandere({ source: 'yandere', runId: 4 }, { on: false, runId: 4 }), false);
+  assert.equal(preemptedYandere(null, held), false);
 });
 
 if (process.exitCode) {

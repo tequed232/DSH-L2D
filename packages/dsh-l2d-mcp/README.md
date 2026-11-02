@@ -68,6 +68,8 @@ node packages/dsh-l2d-mcp/src/server.mjs
 
 `accepted: true` 只表示这条链占上了槽。真正的过程在 `events` 里。
 
+同级抢占会清掉还没跑的关闭定时器。新链里没有 `motion` 步骤时，会立刻补播挂着的关闭动作，避免手指停在半空。新链自己带 `motion` 时不补播，交给新动作覆盖，免得在成对状态机里撞车。邪神占的槽被抢走时，暗角和抚胸手走和菜单关闭同一条复位，不会留着暗角。
+
 ## `action-done` 回执
 
 浏览器把事件 POST 到现有的 `/dsh-l2d/ai/result`，和执行回执用同一个 `id`：

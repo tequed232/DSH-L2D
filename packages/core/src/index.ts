@@ -12,6 +12,9 @@ export {
   ActGate,
   parseActPriority,
   canInterruptAct,
+  chainHasMotion,
+  closeMotionsOnPreempt,
+  preemptedYandere,
   getActPhaseTemplate,
   actTemplateWritesMouth,
 } from './action-chain.ts';
