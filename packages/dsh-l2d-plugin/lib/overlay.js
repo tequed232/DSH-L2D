@@ -346,6 +346,8 @@
       Math.abs(spring.vy) < 2;
     if (settled) {
       snapSpringToTarget();
+      // 弹簧收敛后位置才真正定下来：此时再重锚一次注视（拖拽中途不跟，避免抢镜）
+      reanchorGaze();
       return false;
     }
     spring.active = true;
@@ -1332,6 +1334,8 @@
       physics.dragging = false;
       physics.vx = 0;
       physics.vy = 0;
+      // 位置变了 → 注视锚点跟着变，用最后指针位置重算一次，避免旧目标错位
+      reanchorGaze();
       if (moved && e && e.preventDefault) e.preventDefault();
     }
 
@@ -1346,6 +1350,7 @@
       pos.x = c.x;
       pos.y = c.y;
       snapSpringToTarget();
+      reanchorGaze();
     });
   }
 
@@ -2001,6 +2006,7 @@
           canvasEl.style.height = box.h + 'px';
         }
         if (window.DSH_L2D && window.DSH_L2D.layout) window.DSH_L2D.layout(box.w, box.h, 1, renderScale());
+        reanchorGaze(); // 容器尺寸变了，脸部锚点也变了
       });
       ro.observe(root);
     } catch (e) { /* ignore */ }
@@ -2022,6 +2028,7 @@
     if (rendererReady && window.DSH_L2D && window.DSH_L2D.layout) {
       var box = canvasBox();
       window.DSH_L2D.layout(box.w, box.h, 1, renderScale());
+      reanchorGaze();
     }
   }
 
@@ -2659,7 +2666,7 @@
     }
   }
 
-  /** 记录鼠标诊断几何（HUD 用）：窗口尺寸、屏幕中心、角色盒位置 */
+  /** 记录鼠标诊断几何（HUD 用）：窗口尺寸、脸部锚点、角色盒位置 */
   function updateMouseGeometry() {
     if (!root) return null;
     var rect = root.getBoundingClientRect();
@@ -2667,8 +2674,10 @@
     var probe = window.__DSH_L2D_MOUSE__ = window.__DSH_L2D_MOUSE__ || { moves: 0 };
     probe.winW = Math.round(window.innerWidth || 0);
     probe.winH = Math.round(window.innerHeight || 0);
-    probe.cx = Math.round(probe.winW / 2);
-    probe.cy = Math.round(probe.winH / 2);
+    // 锚点 = 角色脸部（盒子上部 35%），不是屏幕中心：
+    // 模型被拖走后锚点随盒子自动更新，注视不会错位。
+    probe.cx = Math.round(rect.left + rect.width / 2);
+    probe.cy = Math.round(rect.top + rect.height * 0.35);
     probe.rectW = Math.round(rect.width);
     probe.rectH = Math.round(rect.height);
     probe.rectX = Math.round(rect.left);
@@ -2681,54 +2690,57 @@
     if (settings.eyeFollow === false) clearGazeTarget();
   }
 
+  /** 最近一次指针位置：拖动结束/窗口变化后用它重算注视（锚点变了，旧目标会错位） */
+  var lastPointer = null;
+
   /**
-   * 眼神/躯体跟随：把鼠标位置换算成模型注视目标（屏幕中心半屏归一 + 小死区）。
-   * 以屏幕中心为原点、半屏为量程：角色贴在哪个角都不影响四个方向的可达范围。
-   * 1920 宽下：死区 ≈20px（2%，带 2%~10% 渐入）、转头 0.25→240px、身体 0.45→432px。
-   * 注：死区不能做大——鼠标落在角色身上时若被清零，观感就是「角色突然正对屏幕」。
+   * 眼神/躯体跟随：以「角色脸部锚点」为原点、固定像素半径归一化。
+   * 锚点每次 pointermove 都重读 root 矩形，所以拖动模型后自动重锚，不会错位；
+   * 参考半径 R = max(360, min(窗口宽, 高) × 0.45)，锚点到光标 1R 即满量程。
+   * 死区 28px（带 28~90px 渐入）：鼠标停在角色脸上时自然正视，不会抖。
    */
   function driveGaze(e) {
     var L = window.DSH_L2D;
     if (!L || !L.gaze || !L.isReady || !L.isReady()) return;
     if (settings.eyeFollow === false) return;
-    var winW = window.innerWidth || 1;
-    var winH = window.innerHeight || 1;
-    var nx = (e.clientX - winW / 2) / (winW / 2);
-    var ny = (e.clientY - winH / 2) / (winH / 2);
-    // 死区按屏幕中心归一化后的坐标算：只留 2%（≈20px）抑制微抖，
-    // 2%~10% 做平滑渐入。旧版 12% 硬死区会在鼠标落到角色身上（尤其角色在
-    // 中部附近时）把注视强制清零，表现为「角色突然正对屏幕」。
-    var dist = Math.sqrt(nx * nx + ny * ny);
-    var DEAD = 0.02;
-    var RAMP = 0.08;
-    if (dist < DEAD) {
-      nx = 0;
-      ny = 0;
-    } else {
-      var ramp = Math.min(1, (dist - DEAD) / RAMP); // 渐入权重
-      var mag = (dist - DEAD) / (1 - DEAD); // 死区外重新归一化到 0~1
-      var ux = nx / (dist || 1);
-      var uy = ny / (dist || 1);
-      nx = ux * mag * ramp;
-      ny = uy * mag * ramp;
+    var probe = updateMouseGeometry();
+    if (!probe) return;
+    lastPointer = { clientX: e.clientX, clientY: e.clientY };
+    var cx = probe.cx;
+    var cy = probe.cy;
+    var R = Math.max(360, Math.min(probe.winW || 1, probe.winH || 1) * 0.45);
+    var dx = e.clientX - cx;
+    var dy = e.clientY - cy;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    var DEAD = 28;
+    var RAMP = 62; // 28px ~ 90px 平滑渐入
+    var nx = 0;
+    var ny = 0;
+    if (dist > DEAD) {
+      var mag = Math.min(1, (dist - DEAD) / Math.max(1, R - DEAD));
+      var ramp = Math.min(1, (dist - DEAD) / RAMP);
+      nx = (dx / dist) * mag * ramp;
+      ny = (dy / dist) * mag * ramp;
     }
     nx = Math.max(-1, Math.min(1, nx));
     ny = Math.max(-1, Math.min(1, ny));
     // 诊断计数器（HUD 可见）：moves 增长 = pointermove 真的送到 overlay；
     // g 是归一化后幅度（|g|>=0.25 转头、>=0.45 起身体、>=0.85 身体满）。
     try {
-      var probe = updateMouseGeometry();
-      if (probe) {
-        probe.moves = (probe.moves || 0) + 1;
-        probe.at = Date.now();
-        probe.gx = Math.round(nx * 100) / 100;
-        probe.gy = Math.round(-ny * 100) / 100;
-        probe.rawX = Math.round(e.clientX);
-        probe.rawY = Math.round(e.clientY);
-      }
+      probe.moves = (probe.moves || 0) + 1;
+      probe.at = Date.now();
+      probe.gx = Math.round(nx * 100) / 100;
+      probe.gy = Math.round(-ny * 100) / 100;
+      probe.rawX = Math.round(e.clientX);
+      probe.rawY = Math.round(e.clientY);
     } catch (err) { /* ignore */ }
     // 屏幕坐标 y 向下，模型 AngleY/EyeBallY 正值是「抬头」——取反
     L.gaze(nx, -ny);
+  }
+
+  /** 重锚：位置/窗口变了之后，用最后一次指针位置重算注视，避免旧目标错位 */
+  function reanchorGaze() {
+    if (lastPointer) driveGaze(lastPointer);
   }
 
   // 视线复位：只在「光标离开整个页面」或「窗口失焦」时清注视目标。
