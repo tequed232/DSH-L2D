@@ -333,5 +333,65 @@ server.registerTool(
   },
 );
 
+server.registerTool(
+  'l2d_persona',
+  {
+    description:
+      '读取 / 修改 / 重置角色人设（性格 traits、情绪表达 expression、主动程度 proactivity、亲密程度 intimacy、工作态度 workAttitude、动作偏好 motionPreference、待机习惯 idleHabit、自由描述 description）。action=get 读当前值；action=set 只传要改的字段（patch），返回修改后的完整人设；action=reset 回默认。人设写入宿主文件后，下一次工作区规划立即生效。',
+    inputSchema: {
+      action: z.enum(['get', 'set', 'reset']),
+      patch: z
+        .object({
+          traits: z.array(z.string()).max(8).optional().describe('性格关键词，如 温柔 / 傲娇 / 认真'),
+          expression: z
+            .object({
+              style: z.enum(['gentle', 'lively', 'reserved', 'tsundere', 'calm']).optional(),
+              intensity: z.number().min(0).max(1).optional(),
+            })
+            .optional(),
+          proactivity: z.number().min(0).max(1).optional().describe('主动程度：0 只回应，1 乐于主动'),
+          intimacy: z.number().min(0).max(1).optional(),
+          workAttitude: z.enum(['supportive', 'neutral', 'strict', 'playful']).optional(),
+          motionPreference: z
+            .object({
+              style: z.enum(['subtle', 'balanced', 'expressive']).optional(),
+              avoid: z.array(z.string()).max(8).optional().describe('回避的动作组名'),
+            })
+            .optional(),
+          idleHabit: z
+            .object({
+              style: z.enum(['quiet', 'normal', 'chatty']).optional(),
+              lookAround: z.boolean().optional(),
+            })
+            .optional(),
+          description: z.string().max(500).optional().describe('用户原话的自由描述，如「一只温柔但有点傲娇的蓝鲸女仆」'),
+        })
+        .optional(),
+    },
+  },
+  async ({ action, patch }) => {
+    const base = await baseUrl();
+    if (!base) return toolResult({ ok: false, reason: 'plugin-offline' });
+    try {
+      if (action === 'get') {
+        const res = await fetch(base + '/dsh-l2d/persona.json', { cache: 'no-store' });
+        if (!res.ok) return toolResult({ ok: false, reason: 'http-' + res.status });
+        return toolResult(await res.json());
+      }
+      const body = action === 'reset' ? { reset: true } : { patch: patch || {} };
+      const res = await fetch(base + '/dsh-l2d/persona.json', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) return toolResult({ ok: false, reason: 'http-' + res.status });
+      return toolResult(await res.json());
+    } catch {
+      cachedBase = '';
+      return toolResult({ ok: false, reason: 'unreachable' });
+    }
+  },
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
