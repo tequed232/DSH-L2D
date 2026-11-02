@@ -293,5 +293,45 @@ server.registerTool(
   async () => toolResult(await forward('l2d_reset', {}, 3000)),
 );
 
+server.registerTool(
+  'l2d_workspace_ensure',
+  {
+    description: '在 DSH 中创建或复用独立的 Live2D Agent Workspace 和 Session，并初始化 AGENTS.md / agent.md。',
+    inputSchema: {},
+  },
+  async () => {
+    const base = await baseUrl();
+    if (!base) return toolResult({ ok: false, reason: 'plugin-offline' });
+    try {
+      const response = await fetch(base + '/dsh-l2d/workspace/ensure', { method: 'POST' });
+      const result = await response.json();
+      return toolResult(result && typeof result === 'object' ? result : { ok: false, reason: 'invalid-response' });
+    } catch {
+      cachedBase = '';
+      return toolResult({ ok: false, reason: 'workspace-bridge-unreachable' });
+    }
+  },
+);
+
+server.registerTool(
+  'l2d_workspace_status',
+  {
+    description: '读取 DSH 所有已登记 Workspace 的脱敏 Session 状态。只返回工作区标题、会话状态和活动时长，不读取聊天内容或文件。',
+    inputSchema: {},
+  },
+  async () => {
+    const base = await baseUrl();
+    if (!base) return toolResult({ ok: false, reason: 'plugin-offline' });
+    try {
+      const response = await fetch(base + '/dsh-l2d/workspace/status.json', { cache: 'no-store' });
+      const result = await response.json();
+      return toolResult(result && typeof result === 'object' ? result : { ok: false, reason: 'invalid-response' });
+    } catch {
+      cachedBase = '';
+      return toolResult({ ok: false, reason: 'workspace-status-unreachable' });
+    }
+  },
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);

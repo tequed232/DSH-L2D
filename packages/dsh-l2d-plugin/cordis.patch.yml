@@ -10,3 +10,29 @@
     - id: dsh-l2d
       name: dsh-l2d
       config: {}
+
+# Dedicated per-session preset: the Live2D MCP client is visible only to this
+# Agent preset, not to every DSH Session in the profile.
+- insert:
+    - id: preset-dsh-l2d
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: dsh-l2d
+        name: Live2D Agent
+        description: Dedicated character agent for observing DSH workspace activity and controlling the Live2D model.
+        order: 99
+        plugins:
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: mcp-dsh-l2d
+            name: '@deepseek-ai/dsh-mcp-client'
+            config:
+              serverName: dsh_l2d
+              transport: stdio
+              command: node
+              cwd: !!js process.env.DSH_L2D_ROOT || 'D:/Desktop/DSH-L2D'
+              args:
+                - !!js process.getBuiltinModule('node:path').join(process.env.DSH_L2D_ROOT || 'D:/Desktop/DSH-L2D', 'packages', 'dsh-l2d-mcp', 'src', 'server.mjs')
+              failOnStartupError: true

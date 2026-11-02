@@ -198,3 +198,28 @@ pnpm dev:server          # 127.0.0.1:5300
 - `/overlay-test.html` 原样加载 `lib/overlay.js`，验证拖拽、物理、设置面板
 
 本地服务器会把 `/dsh-l2d/*` 前缀剥离后复用同一套路由，等于复刻了插件环境。
+
+
+## DSH Workspace Agent
+
+当 DSH profile 同时加载 Workspace Registry 和 Session Controller 时，插件会创建或复用独立的 `Live2D Agent` 工作区：
+
+- 默认目录：`$DSH_HOME/workspaces/live2d-agent`。
+- `AGENTS.md`：由 DSH Agent Instructions 加载，定义桌宠 Agent 的职责、MCP 使用方式和只读边界。
+- `agent.md`：由插件定期更新的状态快照，只包含其他工作区标题、会话状态与活动时长，不包含聊天文本、文件路径或错误详情。
+- 专属 Session 通过 DSH 原生 `sessionController.create({ workspaceId })` 创建，并通过 `sessionController.prompt()` 启动初始化对话。
+- 状态变化通过队列消息通知专属 Session；其他工作区不会被写入或控制。
+- 新增路由：`POST /dsh-l2d/workspace/ensure`、`GET /dsh-l2d/workspace/status.json`。
+
+MCP Server 新增 `l2d_workspace_ensure` 和 `l2d_workspace_status`。要让专属 Agent 自己调用 Live2D 控制工具，需要按下方配置 DSH MCP Client；本插件不会擅自启动独立 MCP 子进程。
+
+### 专属 MCP 工具作用域
+
+本仓库的 `cordis.patch.yml` 会声明一个独立的 `dsh-l2d` Agent preset，并在该 preset 内加载 `@deepseek-ai/dsh-mcp-client`。因此 `dsh_l2d` MCP 工具只对选择该 preset 的 Live2D Session 可见，不会放进 profile 全局工具集合。
+
+- MCP Server 名称：`dsh_l2d`
+- DSH 实际工具名：`mcp__dsh_l2d__l2d_act`、`mcp__dsh_l2d__l2d_get_state`、`mcp__dsh_l2d__l2d_workspace_status` 等。
+- 默认仓库路径：`D:/Desktop/DSH-L2D`。如果仓库放在其他位置，请在启动 DSH 的环境中设置 `DSH_L2D_ROOT`。
+- MCP Client 设置了 `failOnStartupError: true`，服务器无法启动时不会悄悄创建一个缺少 Live2D 工具的专属 Agent。
+
+
