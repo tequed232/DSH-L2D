@@ -61,9 +61,12 @@
 | owner | 某参数当前唯一写者：`physics`/`limb`/`pose`/`motion`/`keyframes`/`continuous`/`gaze`/`ambient` |
 | acquire / release | 显式取得/放弃独占；成功后 owner 从 physics 切换，释放后回 physics |
 | phase | `pre`（saveParameters 后、物理前）/ `post`（Pose800 后、model.update 前） |
-| intent | `{id, source, priority, phase, params, runId?}` |
+| intent | `{id, source, priority, phase?, params, runId?}`；写相位以 intent.phase 为准 |
 | winner | `resolveWritePlan` 为某参数选出的唯一写者与值 |
+| ownership 条目 | `{owner, runId?, expiresAt?, phase}`；`phase` 是参数族默认相位（叶子四肢 `post`；Hip* `pre`，M1-b），由 acquire 方写入 |
 | ActGate | BACKGROUND 10 < NORMAL 50 < FORCE 90；低不打断高、同级可 |
+
+**相位解析（ownership.phase 与 intent.phase）**：每帧有效写相位 = `WriteIntent.phase`（提供即权威）→ 否则 `ownership[id].phase`（仅独占时）→ 否则参数族默认（Hip* 与 add 型物理输入 `pre`，其余 `post`）。`ownership.phase` 只是 acquire 时按参数族写入的默认值，**不能**用来绕过参数族的相位约束（叶子四肢必须是 post，Hip* 必须是 pre）；两者冲突时按错误处理（wrong-phase）。
 
 **核心不变量**（完整列表与用例见 `docs/Ownership-Invariants.md`）：
 每参数每帧唯一 winner；口型永不可写；物理输出仅 limb-owned 可写；pre/post 相位按参数族；
@@ -74,7 +77,7 @@
 | 参数族 | 默认 owner | 非默认 owner（条件 / 相位） | 写路径 | 仲裁 |
 |---|---|---|---|---|
 | 物理根输入：AngleX/Y/Z、PositionX/Y/Z、LeanInput、Movement1-3、Param42、ParamBreath | tracking / ambient / motion | expression（LeanInput 前倾）、motion（Movement*） | injector add（pre）；angleBus 限幅（AngleZ/PositionX/Y） | 多路加法：body40>gaze35>ambient20>media10；LeanInput 无总线限幅 → 由 Motion Mixer 统一 |
-| 物理叶子输出（269 个：发/裙/胸/耳/尾/高光/眼细节…） | **physics** | 无 | 只读 | Physics600 后无人覆盖 |
+| 物理叶子输出（269 个：发/裙/胸/耳/尾/高光/眼细节…；= 292 输出 − 23 四肢，Hip 3 个已含在 23 内、不重复减） | **physics** | 无 | 只读 | Physics600 后无人覆盖 |
 | 四肢骨参数（23 个：RArm/RForearm/RWrist/RHand/RHand2、LArm/LForearm/LWrist/LHand/LHand2、ShoulderY/Z、HipAngleX/X2/Y/Z、ParamHipAngleZ/Z2、LEGAngleZ2、HipZ1/Z2、HipAngleYDOWN/UP） | **physics**（待机） | **limb**：acquire 后独占 | `post`（20 个叶子）；`pre`（Hip* 3 个，+生产者让位） | 同帧唯一 winner；release 回 physics |
 | 其中 HipAngleX/HipAngleY/HipAngleZ | physics | limb（pre + 生产者让位，M1-b） | pre + PhysicsGate | chained 消费者 4/1/3 个设置 |
 | 姿态参数 Param36/39/40/41/42/43/59/60/61/62 | motion（曲线）/ pose | pose（post，动作终态收养）；keyframes（post） | injector set（post） | 同帧顺序 kfTick → poseController → injector.post → pose 胜 keyframes；limb 不得写 |
@@ -93,11 +96,11 @@ physics-owned ──────────────────────
           action-done / 超时（最后兜底）
 ```
 
-规则 R1-R12 见 `docs/Ownership-Invariants.md` §2（不变量）与本节表格；要点：
+规则 R1-R12 见 `docs/Ownership-Invariants.md` §2（不变量）与本节表格；要点（R5 的 source 秩与 INV-6 同一份：`physics < continuous/ambient < motion < keyframes < pose < gaze < limb`）：
 默认 physics-owned（R1）；独占时同帧只有一条写路径（R2/R4）；叶子四肢 post、Hip* pre（R3/R6）；
 ActGate 优先级（R5）；打断即释放（R7）；释放回物理（R8）；口型永拒（R9）；
 物理输出默认拒、`own:true` 仅对已 acquire 放行（R10）；未索引拒绝（R11）；runId 绑定（R12）；
-**`own` 仅对物理输出登记（R10b）**：`ownParameters` / `own:true` 只接受当前物理输出表内的参数 id；
+**`own` 仅对物理输出登记（R10b）**：`ownParameters` / `own:true` 只接受当前物理输出表内的参数 id（非物理 id 进回执 `ignored`，仍按普通写入生效）；acquire 可带 `phase`（M1-a 叶子仅 post，M1-b 的 Hip* 用 pre）；
 非物理参数（Angle/Position/Lean/Movement*、姿态、表情、口型）不登记，也不得因此改写其注入语义
 （尤其禁止把 add 型根输入强转 set）。被忽略的 id 必须在回执里返回 `ignored`。
 
@@ -125,10 +128,11 @@ ActGate 优先级（R5）；打断即释放（R7）；释放回物理（R8）；
 1. 收集候选：每个 `(paramId, source)` 同帧只保留最后一条 intent（last-write-wins）。
 2. 过滤：口型 → `lipsync`；未知参数 → `unknown-param`；非有限数 → `invalid-value`；
    非 owner 写物理输出/四肢 → `not-owned`；相位不匹配 → `wrong-phase`。
-3. 选 winner：`priority` desc → source 秩 desc（`physics < continuous/ambient < motion < keyframes < pose < gaze < limb`）
+3. 解析相位：intent.phase → ownership.phase → 参数族默认；再按 INV-7 校验。
+4. 选 winner：`priority` desc → source 秩 desc（`physics < continuous/ambient < motion < keyframes < pose < gaze < limb`）
    → 同 source 后者。
-4. 钳制（可选 bounds）→ 按 id 稳定排序输出。
-5. physics 值只在其参数未被 intent 覆盖且未被 limb 独占时输出（physics-owned 兜底）。
+5. 钳制（可选 bounds）→ 按 id 稳定排序输出。
+6. physics 值只在其参数未被 intent 覆盖且未被 limb 独占时输出（physics-owned 兜底）。
 
 **确定性要求**：同一输入集合任意顺序 → 输出逐字节相同（CASE-22）；无隐式时间/随机依赖。
 

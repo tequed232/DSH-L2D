@@ -328,4 +328,18 @@ export const cases = [
       rejected: [{ id: 'RArm', source: 'limb', reason: 'not-owned' }],
     },
   },
+  {
+    id: 'CASE-25',
+    desc: 'WriteIntent 不带 phase 时用 ownership.phase（Hip pre）；intent 提供 phase 时以 intent 为准',
+    input: {
+      now: 1000,
+      intents: [{ id: 'i1', source: 'limb', priority: 50, params: { HipAngleX: 5 }, runId: 'r1' }],
+      ownership: { HipAngleX: { owner: 'limb', runId: 'r1', phase: 'pre' } },
+      physics: { HipAngleX: 1 },
+    },
+    expect: {
+      writes: [{ id: 'HipAngleX', value: 5, source: 'limb', phase: 'pre' }],
+      rejected: [],
+    },
+  },
 ];

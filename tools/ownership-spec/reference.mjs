@@ -55,7 +55,7 @@ function isValidIntent(intent) {
       typeof intent.params === 'object' &&
       intent.params !== null &&
       (intent.priority === 10 || intent.priority === 50 || intent.priority === 90) &&
-      (intent.phase === 'pre' || intent.phase === 'post'),
+      (intent.phase === undefined || intent.phase === 'pre' || intent.phase === 'post'),
   );
 }
 
@@ -72,6 +72,7 @@ function activeOwnerOf(ownership, id, now) {
 
 /**
  * 每参数唯一 winner。
+ * 写入相位优先级：WriteIntent.phase（若提供，权威）> ownership.phase（独占时）> 参数族默认。
  * @param {{now:number, intents:Array, ownership?:object, physics?:object,
  *          bounds?:object, knownParams?:string[], limbEnabled?:boolean}} input
  */
@@ -107,6 +108,8 @@ export function resolveWritePlan(input = {}) {
         continue;
       }
       const entry = limbEnabled ? activeOwnerOf(ownership, id, now) : null;
+      const familyPhase = preferredPhase(id);
+      const effectivePhase = intent.phase || (entry && entry.owner === 'limb' ? entry.phase : familyPhase);
       const isLimbParam = LIMB_PARAMS.has(id);
       const hasPhysicsValue = Object.prototype.hasOwnProperty.call(physics, id);
 
@@ -120,7 +123,7 @@ export function resolveWritePlan(input = {}) {
           reject(id, intent.source, 'not-owned');
           continue;
         }
-        if (intent.phase !== preferredPhase(id)) {
+        if (effectivePhase !== familyPhase) {
           reject(id, intent.source, 'wrong-phase');
           continue;
         }
@@ -134,7 +137,7 @@ export function resolveWritePlan(input = {}) {
         continue;
       }
       // 非物理参数：相位固定（pre 只给根输入，其余 post）。
-      if (intent.phase !== preferredPhase(id)) {
+      if (effectivePhase !== familyPhase) {
         reject(id, intent.source, 'wrong-phase');
         continue;
       }
@@ -143,6 +146,7 @@ export function resolveWritePlan(input = {}) {
         priority: intent.priority,
         value: rawValue,
         order,
+        phase: effectivePhase,
       });
     }
   }
@@ -160,7 +164,7 @@ export function resolveWritePlan(input = {}) {
         (cand.priority === best.priority && rank > best.rank) ||
         (cand.priority === best.priority && rank === best.rank && cand.order > best.order)
       ) {
-        best = { source, rank, priority: cand.priority, value: cand.value, order: cand.order };
+        best = { source, rank, priority: cand.priority, value: cand.value, order: cand.order, phase: cand.phase };
       }
     }
     if (!best) continue;
@@ -169,7 +173,7 @@ export function resolveWritePlan(input = {}) {
     if (b && Number.isFinite(Number(b.min)) && Number.isFinite(Number(b.max))) {
       value = Math.max(Number(b.min), Math.min(Number(b.max), value));
     }
-    writes.push({ id, value, source: best.source, phase: preferredPhase(id) });
+    writes.push({ id, value, source: best.source, phase: best.phase || preferredPhase(id) });
     written.add(id);
   }
 

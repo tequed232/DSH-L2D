@@ -15,7 +15,7 @@ interface WriteIntent {
   id: string;                 // 稳定标识（同 source 内去重用）
   source: WriteSource;
   priority: 10 | 50 | 90;     // ActGate：BACKGROUND/NORMAL/FORCE
-  phase: 'pre' | 'post';
+  phase?: 'pre' | 'post';     // 提供即权威；缺省用 ownership.phase → 参数族默认
   params: Record<string, number>;
   runId?: string;             // 动作链 runId（limb/动作类）
 }
@@ -23,7 +23,7 @@ interface WriteIntent {
 interface ResolveInput {
   now: number;
   intents: WriteIntent[];
-  ownership: Record<string, { owner: WriteSource; runId?: string; expiresAt?: number }>;
+  ownership: Record<string, { owner: WriteSource; runId?: string; expiresAt?: number; phase?: 'pre' | 'post' }>;
   physics: Record<string, number>;          // 本帧物理输出（仅 physics-owned 参数采信）
   bounds?: Record<string, { min: number; max: number }>; // 可选：模型参数范围
   knownParams?: string[];                   // 可选：不存在则视为未知参数
@@ -64,6 +64,8 @@ type RejectReason =
   同 source 同参数多条 → 后者覆盖前者（同帧 last-write-wins，仍只输出一条）。
 - **INV-7**：相位规则：`HipAngleX/Y/Z` 与全部 add 型物理输入（Angle/Position/Lean/Movement*）只允许 `pre`；
   其余 set 型参数只允许 `post`；违反者进 `rejected(wrong-phase)`。
+  有效相位 = `intent.phase`（提供即权威）→ `ownership[id].phase`（仅独占时）→ 参数族默认；
+  `ownership.phase` 只是 acquire 方按参数族写入的默认值，**不得**绕过族约束（叶子 post / Hip pre）。
 - **INV-8**：输出与 `intents` 数组顺序无关（按 id 稳定排序输出），保证可重放。
 - **INV-9**：数值必须有限；提供 `bounds` 时钳制到 `[min,max]`，否则原值输出。
 - **INV-10**：`knownParams` 提供时，不在名单的参数进 `rejected(unknown-param)`。
@@ -101,6 +103,7 @@ type RejectReason =
 | CASE-22 | 打乱 intents 顺序两次执行 | 两次 writes 完全相同（按 id 排序） | 8 |
 | CASE-23 | limb flag off，acquire 仍存在但 limb intent 出现 | rejected(not-owned)；physics 恢复 | 12 |
 | CASE-24 | 同一参数两个 limb intent 不同 runId（旧 runId 未释放） | 仅当前 runId 的 intent 为 winner；旧 runId 进 rejected(not-owned) | 4,6,12 |
+| CASE-25 | HipAngleX 已 acquire（ownership.phase=pre），intent 不带 phase | winner 相位=pre（用 ownership.phase）；intent 带 phase 时以 intent 为准 | 7,4 |
 
 ## 4. 状态层用例（不属于纯函数，放在 controller/LimbController 单测）
 
