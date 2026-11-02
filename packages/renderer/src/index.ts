@@ -695,7 +695,8 @@ export function playKeyframes(tracks: KeyframeTrack[], opts: KeyframesOptions = 
     try {
       const handle = CubismFramework.getIdManager().getId(tr.param);
       const idx = core.getParameterIndex(handle);
-      if (idx < 0 || injector.isPhysicsOutput(tr.param)) continue; // 不存在或物理输出直接丢弃
+      // 物理输出默认丢弃；被 Agent 独占时放行（写入仍在 post 相位，后写胜出）
+      if (idx < 0 || (injector.isPhysicsOutput(tr.param) && !injector.isAgentOwned(tr.param))) continue;
       if (LIPSYNC_BLOCK.has(tr.param)) continue; // 口型禁区，任何调用方都不得写
 
       const min = core.getParameterMinimumValue(idx);
@@ -980,6 +981,29 @@ export function setParameters(values: Record<string, number>, weight = 1): Apply
     else failed.push(key);
   }
   return { ok, failed };
+}
+
+/**
+ * Agent 独占参数：允许写物理输出，并且只在 post 相位（Physics600 之后）写入，
+ * 同一参数同一帧只有一条写入路径。到期自动释放，不写永久状态。
+ * @param ids 参数名
+ * @param durationMs 占用时长（毫秒，<=0 表示长期持有），缺省 1200ms
+ * @returns 实际登记的 id
+ */
+export function ownParameters(ids: string[], durationMs = 1200, phase: 'pre' | 'post' = 'post'): string[] {
+  if (!model?.getModel()) return [];
+  markActive();
+  return injector.own(ids, durationMs, phase);
+}
+
+/** 主动释放 Agent 独占；下一帧物理自然接管，不需要恢复逻辑。 */
+export function releaseParameters(ids: string[]): string[] {
+  return injector.release(ids);
+}
+
+/** 诊断用：当前被 Agent 独占的参数。 */
+export function getOwnedParameters(): string[] {
+  return injector.getAgentOwned();
 }
 
 /** 视线/头部朝向，x、y ∈ [-1, 1]，走模型自带的拖动逻辑（Angle/EyeBall 一起动） */
@@ -1481,6 +1505,7 @@ export function resetPose(): number {
   stopKeyframes();
   stopAmbient();
   zeroAngleBus();
+  injector.releaseAll();
   injector.clear();
   injector.unlock();
   poseController.resetToRest();
@@ -1691,6 +1716,10 @@ export function getInfo(): Record<string, number | string> | null {
       'ParamBodyAngleX',
       'ParamBodyAngleY',
       'ParamBodyAngleZ',
+      // 四肢所有权验证用：物理输出被 Agent 独占后应保持写入值
+      'RArm',
+      'LArm',
+      'ShoulderX',
       'SideHairRX1',
       'ParamBreath',
       'ParamEyeLOpen',
@@ -1773,6 +1802,8 @@ export function getInfo(): Record<string, number | string> | null {
       inj.sticky +
       ' locked=' +
       inj.locked +
+      ' owned=' +
+      inj.owned +
       ' modes=' +
       inj.modes.set +
       '/' +
@@ -1888,6 +1919,9 @@ const api = {
   // 控制
   setParameter,
   setParameters,
+  ownParameters,
+  releaseParameters,
+  getOwnedParameters,
   lookAt,
   playMotion,
   playMotionAsync,

@@ -3597,8 +3597,15 @@
             return { ok: true, x: x, y: y };
           }
           case 'l2d_set_parameters': {
-            var r = L.setParameters(a.values || {});
-            return { ok: r.failed.length === 0, applied: r.ok, failed: r.failed };
+            var values = a.values || {};
+            var keys = Object.keys(values);
+            // 可选独占：写物理输出前先向渲染包认领，到期自动释放回物理
+            var owned = [];
+            if (a.own === true && L.ownParameters) {
+              owned = L.ownParameters(keys, Number(a.durationMs) || 1200);
+            }
+            var r = L.setParameters(values);
+            return { ok: r.failed.length === 0, applied: r.ok, failed: r.failed, owned: owned };
           }
           case 'l2d_play_keyframes': {
             // AI 自编动作：tracks = [{ param, keys: [[t_ms, value], ...] }]
