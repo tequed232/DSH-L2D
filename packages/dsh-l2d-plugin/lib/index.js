@@ -497,7 +497,7 @@ function listSessionFiles() {
       const file = path.join(dirPath, entry.name, 'session.v4.jsonl.zstd');
       try {
         const stat = fs.statSync(file);
-        files.push({ file, mtimeMs: stat.mtimeMs, workspace: dir.name, sessionId: entry.name });
+        files.push({ file, mtimeMs: stat.mtimeMs, size: stat.size, workspace: dir.name, sessionId: entry.name });
       } catch {
         continue;
       }
@@ -591,32 +591,59 @@ function getAgentState(force = false) {
 export { getAgentState };
 
 let workspaceBridge = null;
+const workspaceEventCache = new Map();
 
 /** Workspace 状态只输出脱敏活动元数据，不向专属 Agent 暴露其他会话文本。 */
 function getWorkspaceAgentStates(registry) {
   const now = Date.now();
   const bySession = new Map(listSessionFiles().map((entry) => [entry.sessionId, entry]));
   const workspaces = [];
+  const activeIds = new Set();
   for (const workspace of registry.list().slice(0, 100)) {
     const sessions = [];
     for (const sessionId of workspace.sessionIds.slice(0, 100)) {
-      const entry = bySession.get(String(sessionId));
+      const id = String(sessionId);
+      activeIds.add(id);
+      const entry = bySession.get(id);
       if (!entry) {
         sessions.push({ sessionIndex: sessions.length + 1, state: 'unknown', ageMs: null, hasError: false });
         continue;
       }
-      try {
-        const events = [];
-        for (const line of decompressZstdFrames(fs.readFileSync(entry.file))) {
-          try { events.push(JSON.parse(line)); } catch { /* ignore malformed event */ }
+      let cached = workspaceEventCache.get(id);
+      if (!cached || cached.mtimeMs !== entry.mtimeMs || cached.size !== entry.size) {
+        try {
+          const events = [];
+          for (const line of decompressZstdFrames(fs.readFileSync(entry.file))) {
+            try { events.push(JSON.parse(line)); } catch { /* ignore malformed event */ }
+          }
+          const derived = deriveAgentState(events, 0, workspace.title);
+          cached = { mtimeMs: entry.mtimeMs, size: entry.size, state: derived.state, lastEventAt: derived.lastEventAt };
+          workspaceEventCache.set(id, cached);
+        } catch {
+          cached = { mtimeMs: entry.mtimeMs, size: entry.size, state: 'unknown', lastEventAt: 0 };
+          workspaceEventCache.set(id, cached);
         }
-        const state = deriveAgentState(events, now - entry.mtimeMs, workspace.title);
-        sessions.push({ sessionIndex: sessions.length + 1, state: state.state, ageMs: state.ageMs, lastEventAt: state.lastEventAt, hasError: state.state === 'error' });
-      } catch {
-        sessions.push({ sessionIndex: sessions.length + 1, state: 'unknown', ageMs: null, hasError: false });
       }
+      const ageMs = Math.max(0, Math.round(now - entry.mtimeMs));
+      let state = cached.state;
+      if (state !== 'error' && ageMs > 120000) state = 'idle';
+      if (state === 'error' && ageMs > 600000) state = 'idle';
+      sessions.push({
+        sessionIndex: sessions.length + 1,
+        state,
+        ageMs,
+        lastEventAt: cached.lastEventAt,
+        hasError: state === 'error',
+      });
     }
-    workspaces.push({ workspaceId: String(workspace.id), title: String(workspace.title || 'Untitled workspace'), sessions });
+    workspaces.push({
+      workspaceId: String(workspace.id),
+      title: String(workspace.title || 'Untitled workspace'),
+      sessions,
+    });
+  }
+  for (const id of workspaceEventCache.keys()) {
+    if (!activeIds.has(id)) workspaceEventCache.delete(id);
   }
   return { ok: true, generatedAt: new Date().toISOString(), workspaces };
 }
