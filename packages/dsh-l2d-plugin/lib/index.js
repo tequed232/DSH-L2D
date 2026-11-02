@@ -670,7 +670,7 @@ function sanitizeKeyframeStep(step, allowedParams) {
   };
 }
 
-function sanitizePokeAction(raw, allowed) {
+function sanitizePokeAction(raw, allowed, options = {}) {
   if (!raw || typeof raw !== 'object') return null;
 
   // 参照 FULASKA/-live2d- 的动作协议：底层用 kind 化的步骤链，
@@ -725,7 +725,7 @@ function sanitizePokeAction(raw, allowed) {
     }
   }
 
-  if (!sanitizedChain.length && allowed.expressions.length) {
+  if (!sanitizedChain.length && allowed.expressions.length && options.fallback !== false) {
     sanitizedChain.push({ kind: 'expression', name: allowed.expressions[0], delayMs: 0 });
   }
 
@@ -813,7 +813,7 @@ async function requestDeepSeekPokeAction(key, payload, style = {}) {
   } catch {
     throw new Error('API 返回不是 JSON');
   }
-  return sanitizePokeAction(raw, payload);
+  return sanitizePokeAction(raw, payload, { fallback: style.agentPlan !== true });
 }
 
 export function apply(root, config = {}) {
