@@ -94,7 +94,10 @@ export class ParamInjector {
       return !!id && !MOUTH_PARAMS.has(id);
     });
     const filtered = selectOwnableIds(candidates, (id) => this.isPhysicsOutput(id));
-    return this.ownership.own(filtered, { durationMs, phase });
+    const accepted = this.ownership.own(filtered, { durationMs, phase });
+    // 相位可能变化（pre↔post）：清掉旧 sticky，下一帧按新相位重写，避免一帧写错位置
+    for (const id of accepted) this.sticky.delete(id);
+    return accepted;
   }
 
   /** 主动释放：同时清掉 sticky，让下一帧物理自然接管。 */
@@ -214,9 +217,19 @@ export class ParamInjector {
     this.debug.firstId = this.sticky.keys().next().value || '';
     this.debug.lastMode = this.sticky.get(this.debug.firstId)?.mode || '';
     for (const [id, target] of this.sticky) {
-      // 独占参数按 ownership 的相位写；其余沿用 pre=add / post=set。
-      const belongsHere = target.ownedPhase
-        ? phase === target.ownedPhase
+      // 独占参数的相位以 ownership 现算为准（重复 own 改相位时不使用旧 sticky 相位）；
+      // 其余沿用 pre=add / post=set。
+      let ownedPhase = target.ownedPhase;
+      if (ownedPhase) {
+        const currentPhase = this.ownership.phaseOf(id);
+        if (!currentPhase) {
+          this.sticky.delete(id);
+          continue;
+        }
+        ownedPhase = currentPhase;
+      }
+      const belongsHere = ownedPhase
+        ? phase === ownedPhase
         : phase === 'pre'
           ? target.mode === 'add'
           : target.mode === 'set';
@@ -234,7 +247,7 @@ export class ParamInjector {
         }
         const current = model.getParameterValueById(handle);
         const value =
-          target.mode === 'add' && !target.ownedPhase
+          target.mode === 'add' && !ownedPhase
             ? current + target.value * target.weight
             : current + (target.value - current) * target.weight;
         const min = model.getParameterMinimumValue(index);

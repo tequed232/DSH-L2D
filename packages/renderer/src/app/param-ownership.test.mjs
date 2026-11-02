@@ -87,3 +87,16 @@ test('selectOwnableIds：只登记物理输出，非物理/口型/空值被过�
   // 非物理参数不会被 own，保持普通 setParameters(add/set) 语义
   assert.deepEqual(selectOwnableIds(['AngleX', 'PositionX'], () => false), []);
 });
+
+test('own 只登记物理输出：传 {RArm, AngleX} 只返回/登记 RArm', () => {
+  const physics = new Set(['RArm']);
+  const o = new ParamOwnership();
+  const picked = selectOwnableIds(['RArm', 'AngleX'], (id) => physics.has(id));
+  assert.deepEqual(picked, ['RArm']);
+  const registered = o.own(picked, { durationMs: 1200, now: 1000 });
+  assert.deepEqual(registered, ['RArm']);
+  assert.deepEqual(o.list(1000), ['RArm']);
+  assert.equal(o.isOwned('AngleX', 1000), false);
+  // 非物理参数保持普通 setParameters(add/set) 语义，不进入 ownership 表
+  assert.deepEqual(o.list(1000), ['RArm']);
+});

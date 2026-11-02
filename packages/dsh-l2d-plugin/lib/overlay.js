@@ -3633,13 +3633,21 @@
           case 'l2d_set_parameters': {
             var values = a.values || {};
             var keys = Object.keys(values);
-            // 可选独占：写物理输出前先向渲染包认领，到期自动释放回物理
+            // 可选独占：写物理输出前先向渲染包认领，到期自动释放回物理。
+            // durationMs 语义：有限数字（含 0/负数）原样传给渲染包；缺省 1200。
+            var requested = Number(a.durationMs);
+            var durationMs = Number.isFinite(requested) ? requested : 1200;
             var owned = [];
             if (a.own === true && L.ownParameters) {
-              owned = L.ownParameters(keys, Number(a.durationMs) || 1200);
+              owned = L.ownParameters(keys, durationMs);
             }
             var r = L.setParameters(values);
-            return { ok: r.failed.length === 0, applied: r.ok, failed: r.failed, owned: owned };
+            // 全部写入失败（口型/未知参数）时回滚本次认领，避免独占残留到 TTL
+            if (owned.length && !r.ok.length && r.failed.length && L.releaseParameters) {
+              L.releaseParameters(owned);
+              owned = [];
+            }
+            return { ok: r.failed.length === 0, applied: r.ok, failed: r.failed, owned: owned, durationMs: durationMs };
           }
           case 'l2d_play_keyframes': {
             // AI 自编动作：tracks = [{ param, keys: [[t_ms, value], ...] }]

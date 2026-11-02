@@ -654,6 +654,16 @@ let kfStart = 0;
 let kfDuration = 0;
 let kfLoop = false;
 let kfActive = false;
+/** 关键帧自动认领的物理输出参数（播放结束/停止时释放，不碰调用方自己 own 的） */
+let kfAutoOwned: string[] = [];
+let kfRenewAt = 0;
+
+function releaseKfOwnership(): void {
+  if (!kfAutoOwned.length) return;
+  injector.release(kfAutoOwned);
+  kfAutoOwned = [];
+  kfRenewAt = 0;
+}
 
 const KF_MAX_TRACKS = 8;
 const KF_MAX_KEYS = 32;
@@ -720,11 +730,26 @@ export function playKeyframes(tracks: KeyframeTrack[], opts: KeyframesOptions = 
 
   if (!accepted.length) return 0;
 
+  // 关键帧跨越所有权 TTL 时后半段会被 injector 当回物理输出拒掉：
+  // 这里按轨道时长自动认领（loop 时在 kfTick 里续期），播放结束/停止再释放。
+  releaseKfOwnership();
+  const ownedNow: string[] = [];
+  const ttl = Math.max(16, Math.min(KF_MAX_MS, Number(opts.duration) || maxT)) + 600;
+  for (const tr of accepted) {
+    const id = tr.handle.getString();
+    if (!injector.isPhysicsOutput(id)) continue;
+    const already = injector.isAgentOwned(id);
+    injector.own([id], ttl);
+    if (!already) ownedNow.push(id);
+  }
+
   kfTracks = accepted;
   kfDuration = Math.max(16, Math.min(KF_MAX_MS, Number(opts.duration) || maxT));
   kfLoop = !!opts.loop;
   kfStart = performance.now();
   kfActive = true;
+  kfAutoOwned = ownedNow;
+  kfRenewAt = kfStart + Math.max(400, kfDuration / 2);
   markActive();
   return accepted.length;
 }
@@ -732,6 +757,7 @@ export function playKeyframes(tracks: KeyframeTrack[], opts: KeyframesOptions = 
 export function stopKeyframes(): void {
   kfActive = false;
   kfTracks = [];
+  releaseKfOwnership();
 }
 
 function kfTick(now: number): void {
@@ -755,7 +781,16 @@ function kfTick(now: number): void {
     }
   }
 
-  if (!kfLoop && elapsed >= kfDuration) kfActive = false;
+  if (!kfLoop && elapsed >= kfDuration) {
+    kfActive = false;
+    releaseKfOwnership();
+    return;
+  }
+  // loop 长时间播放：到期前续期，避免后半段被 injector 拒写
+  if (kfLoop && kfAutoOwned.length && now >= kfRenewAt) {
+    injector.own(kfAutoOwned, kfDuration + 600);
+    kfRenewAt = now + Math.max(400, kfDuration / 2);
+  }
 }
 
 // ---------------------------------------------------------------- 控制接口
