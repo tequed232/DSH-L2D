@@ -62,6 +62,12 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
   let sessionId = null;
   let latest = { ok: true, generatedAt: new Date().toISOString(), workspaces: [] };
   let lastFingerprint = '';
+  // 通知节流：状态位频繁翻转（thinking↔working）时不能每次变化都 prompt 一次，
+  // 否则专属 Agent 会连续烧 token。最小间隔内合并成一次；pendingNotify 保证
+  // 冷却期内发生过变化的话，冷却结束仍会补一次。
+  let lastNotifyAt = 0;
+  let pendingNotify = false;
+  const NOTIFY_MIN_INTERVAL_MS = 30000;
   let timer = null;
   let pendingEnsure = null;
   let refreshing = false;
@@ -82,8 +88,15 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
       latest = await getSnapshot() || latest;
       writeAtomic(path.join(directory, 'agent.md'), renderStatus(latest, workspace.id));
       const next = fingerprint(latest, workspace.id);
-      if (notify && lastFingerprint && next !== lastFingerprint) {
-        await prompt('其他 DSH 工作区的活动状态发生变化。以下是 agent.md 的最新内容：\\n\\n' + renderStatus(latest, workspace.id) + '\\n请判断是否需要一次克制、自然的 Live2D 反馈。只观察，不联系或修改其他会话。').catch(() => {});
+      if (notify && lastFingerprint && next !== lastFingerprint) pendingNotify = true;
+      if (notify && pendingNotify && Date.now() - lastNotifyAt >= NOTIFY_MIN_INTERVAL_MS) {
+        await prompt(
+          '其他 DSH 工作区的活动状态发生变化。以下是 agent.md 的最新内容：\\n\\n' +
+            renderStatus(latest, workspace.id) +
+            '\\n如果值得回应，最多做一次克制、自然的 Live2D 反馈（最多一个工具调用）；否则只回一行结论，不要展开分析。不要联系或修改其他会话。',
+        ).catch(() => {});
+        lastNotifyAt = Date.now();
+        pendingNotify = false;
       }
       lastFingerprint = next;
       return latest;

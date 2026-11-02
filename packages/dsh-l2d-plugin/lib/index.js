@@ -873,6 +873,28 @@ export function apply(root, config = {}) {
 
   // ② 等 webServer / credentials 就绪后再挂路由
   root.inject(['webServer', 'credentials'], (ctx) => {
+    // 头号会合点：把当前 DSH 端口写给 MCP 薄壳。
+    // DSH 每次重启端口都会变，磁盘扫端口只能碰旧端口；MCP 的 discover 优先读这个文件。
+    try {
+      const origin =
+        typeof ctx.webServer.getOrigin === 'function'
+          ? ctx.webServer.getOrigin()
+          : ctx.webServer.port
+            ? `http://127.0.0.1:${ctx.webServer.port}`
+            : '';
+      if (origin) {
+        const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+        fs.mkdirSync(home, { recursive: true });
+        fs.writeFileSync(
+          path.join(home, 'l2d-service.json'),
+          JSON.stringify({ origin: String(origin).replace(/\/$/, ''), updatedAt: Date.now() }) + '\n',
+        );
+        diag('service file: ' + origin);
+      }
+    } catch (err) {
+      diag('service file 写入失败: ' + String(err && err.message ? err.message : err));
+    }
+
     const disposers = [];
 
     const route = (routePath, handler) => {

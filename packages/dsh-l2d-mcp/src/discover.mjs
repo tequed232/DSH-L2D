@@ -70,10 +70,25 @@ export function portsFromDshHome(homeDir = path.join(os.homedir(), '.dsh')) {
   return [...new Set(ports)];
 }
 
+/**
+ * 插件启动时写下的服务地址（$DSH_HOME/l2d-service.json）。
+ * DSH 每次重启端口都会变，扫描 ~/.dsh 只能碰巧命中旧端口；这是唯一稳定会合点。
+ */
+export function serviceOrigin(homeDir = path.join(os.homedir(), '.dsh')) {
+  try {
+    const data = JSON.parse(fs.readFileSync(path.join(homeDir, 'l2d-service.json'), 'utf8'));
+    return data && typeof data.origin === 'string' ? data.origin.replace(/\/$/, '') : '';
+  } catch {
+    return '';
+  }
+}
+
 export function candidateBases(env = process.env) {
   const list = [];
   const explicit = String(env.DSH_L2D_URL || '').trim();
   if (explicit) list.push(explicit.replace(/\/$/, ''));
+  const rendezvous = serviceOrigin();
+  if (rendezvous) list.push(rendezvous);
   for (const port of portsFromDshHome()) {
     list.push(`http://127.0.0.1:${port}`);
   }
