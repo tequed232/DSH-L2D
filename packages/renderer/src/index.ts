@@ -327,10 +327,11 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
   model.setPreLateUpdateHook((core) => {
     phaseDiag.pre++;
     if (preUpdateHook) preUpdateHook();
-    // 拖拽刚写入的 AngleZ/Position 在这里和微动作、媒体律动加在一起，只注入一次
+    // 先算注视（头部直写 + 身体量写 angleBus.gaze），再和拖拽/微动作/媒体律动一起
+    // 走 mixAdditive 限幅并只注入一次——否则 gaze 的 set 写入会把拖拽 PositionX 顶掉。
+    applyGazeBody(core);
     flushAngleBus(core);
     injector.apply(core, 'pre');
-    applyGazeBody(core);
   });
   model.setPostLateUpdateHook((core, deltaTimeSeconds) => {
     phaseDiag.post++;
@@ -780,11 +781,11 @@ const clamp = (v: number): number => (v < -1 ? -1 : v > 1 ? 1 : v);
  */
 const ANGLE_BUS_CAP = { AngleZ: 15, PositionX: 10, PositionY: 10 } as const;
 type BusParam = keyof typeof ANGLE_BUS_CAP;
-type BusChannel = 'body' | 'ambient' | 'media';
+type BusChannel = 'body' | 'gaze' | 'ambient' | 'media';
 const angleBus: Record<BusParam, Record<BusChannel, number>> = {
-  AngleZ: { body: 0, ambient: 0, media: 0 },
-  PositionX: { body: 0, ambient: 0, media: 0 },
-  PositionY: { body: 0, ambient: 0, media: 0 },
+  AngleZ: { body: 0, gaze: 0, ambient: 0, media: 0 },
+  PositionX: { body: 0, gaze: 0, ambient: 0, media: 0 },
+  PositionY: { body: 0, gaze: 0, ambient: 0, media: 0 },
 };
 const angleBusLive: Record<BusParam, boolean> = { AngleZ: false, PositionX: false, PositionY: false };
 const missingAmbient = new Set<string>();
@@ -802,6 +803,7 @@ function paramExists(core: CoreModel, id: string): boolean {
 function zeroAngleBus(): void {
   (Object.keys(angleBus) as BusParam[]).forEach((id) => {
     angleBus[id].body = 0;
+    angleBus[id].gaze = 0;
     angleBus[id].ambient = 0;
     angleBus[id].media = 0;
     angleBusLive[id] = false;
@@ -815,6 +817,7 @@ function flushAngleBus(core: CoreModel): void {
     const sum = mixAdditive(
       [
         { id: 'body', priority: 40, value: row.body },
+        { id: 'gaze', priority: 35, value: row.gaze },
         { id: 'ambient', priority: 20, value: row.ambient },
         { id: 'media', priority: 10, value: row.media },
       ],
@@ -1265,17 +1268,48 @@ function gazeFrame(dt: number): void {
   if (mediaState.on) mediaState.phase += dt * Math.PI * 2 * 1.05;
 }
 
+// 参数写入失败计数（HUD 诊断用）：模型缺参数 / 写入抛错时递增，不再静默。
+let paramWriteFail = 0;
+
 function writeParam(core: CoreModel, id: string, value: number, add = false): void {
   try {
     const handle = handleOf(id);
-    if (!handle) return;
+    if (!handle) {
+      paramWriteFail++;
+      return;
+    }
     const idx = core.getParameterIndex(handle);
-    if (idx < 0) return;
+    if (idx < 0) {
+      paramWriteFail++;
+      return;
+    }
     const v = add ? core.getParameterValueById(handle) + value : value;
     core.setParameterValueById(handle, v, 1);
   } catch {
-    /* ignore */
+    paramWriteFail++;
   }
+}
+
+// 动作自己会写 AngleX 的动作组：动作播放期头让位，避免叠加把头部曲线顶歪。
+// 当前模型只有「脱捕」直接写 AngleX（未进 model3 索引，暂时播不到，留作前置防护）。
+const HEAD_WRITING_MOTIONS = new Set(['脱捕']);
+
+// 身体量锁存：动作播放期间保持动作开始前的 lean，避免 PositionX/LeanInput 掉回 0 的跳变。
+const bodyLatch = { x: 0, y: 0, valid: false };
+
+function motionWritesHead(): boolean {
+  const group = String(motionDiag.group || '').split(/[_s]/)[0];
+  return HEAD_WRITING_MOTIONS.has(group);
+}
+
+function writeGazeBody(core: CoreModel): void {
+  // 身体通道走物理上游：本模型 ParamBodyAngleX/Y 是物理输出
+  // （大肥鱼.physics3.json：PhysicsSetting4 PositionX→BodyAngleX Scale30；
+  //   LeanInput→BodyAngleY Scale35），直写会被物理每帧覆盖。
+  // PositionX 进 angleBus 的 gaze 通道，和拖拽/微动作/媒体律动一起限幅，
+  // 否则这里的 set 写入会把拖拽位移顶掉。
+  angleBus.PositionX.gaze = Math.max(-ANGLE_BUS_CAP.PositionX, Math.min(ANGLE_BUS_CAP.PositionX, bodyLatch.x));
+  writeParam(core, 'LeanInput', Math.max(-30, Math.min(30, bodyLatch.y)));
 }
 
 function applyGazeBody(core: CoreModel): void {
@@ -1286,24 +1320,45 @@ function applyGazeBody(core: CoreModel): void {
     Math.abs(gx) < 0.005 && Math.abs(gy) < 0.005 &&
     Math.abs(bodyState.x) < 0.005 && Math.abs(bodyState.y) < 0.005
   ) {
+    angleBus.PositionX.gaze = 0;
     return;
   }
-  // 分档跟随：|g|<0.25 只动眼球（近处对视）；0.25~0.6 眼+头；>0.6 再牵动身体
   const g = Math.sqrt(gx * gx + gy * gy);
-  if (g >= 0.25) {
-    // 躯干权重小：小幅度移动只动眼睛，大范围移动才带动头
-    writeParam(core, 'AngleX', gx * 14, true);
-    writeParam(core, 'AngleY', gy * 16, true);
+  const motionBusy = poseOwnedByMotion || isUserMotionPlaying();
+  // 头部：|g|>=0.25 起跟随；20°/g 换算（VTS 设计满量程 ±30，14° 只有一半）。
+  if (g >= 0.25 && !(motionBusy && motionWritesHead())) {
+    writeParam(core, 'AngleX', gx * 20, true);
+    writeParam(core, 'AngleY', gy * 20, true);
   }
-  if (g >= 0.6 && !poseOwnedByMotion && !isUserMotionPlaying()) {
-    // 身体通道走物理上游：本模型 ParamBodyAngleX/Y 是物理输出
-    // （大肥鱼.physics3.json：PhysicsSetting4 PositionX→BodyAngleX Scale30；
-    //   LeanInput→BodyAngleY Scale35），直写会被物理每帧覆盖。
-    // 改写上游 PositionX / LeanInput，物理自然带出倾斜与前倾，肩/发/裙次级联动保持正确。
-    // 动作播放期不写，避免与动作曲线打架。
-    writeParam(core, 'PositionX', bodyState.x * 2);
-    writeParam(core, 'LeanInput', bodyState.y * 1.5);
+  // 身体：0.45 起、0.4 内线性斜坡到满；动作播放期锁存最后值（不归零）。
+  const t = Math.max(0, Math.min(1, (g - 0.45) / 0.4));
+  if (t > 0.001) {
+    if (!motionBusy) {
+      bodyLatch.x = bodyState.x * 6 * t;
+      bodyLatch.y = bodyState.y * 4 * t;
+      bodyLatch.valid = true;
+    }
+    writeGazeBody(core);
+    return;
   }
+  // 动作期即使 gaze 回到中心也保持锁存，等动作结束再回落
+  if (motionBusy && bodyLatch.valid) {
+    writeGazeBody(core);
+    return;
+  }
+  if (bodyLatch.valid) {
+    bodyLatch.x *= 0.72;
+    bodyLatch.y *= 0.72;
+    if (Math.abs(bodyLatch.x) < 0.01 && Math.abs(bodyLatch.y) < 0.01) {
+      bodyLatch.x = 0;
+      bodyLatch.y = 0;
+      bodyLatch.valid = false;
+    }
+    writeGazeBody(core);
+    return;
+  }
+  angleBus.PositionX.gaze = 0;
+  writeParam(core, 'LeanInput', 0);
 }
 
 function applyGazeEyes(core: CoreModel): void {
@@ -1628,9 +1683,13 @@ export function getInfo(): Record<string, number | string> | null {
     const idMgr = CubismFramework.getIdManager();
     const ids = [
       'AngleX',
+      'AngleY',
       'AngleZ',
       'PositionX',
+      'LeanInput',
       'ParamAngleX',
+      'ParamBodyAngleX',
+      'ParamBodyAngleY',
       'ParamBodyAngleZ',
       'SideHairRX1',
       'ParamBreath',
@@ -1762,6 +1821,61 @@ export function getInfo(): Record<string, number | string> | null {
     pxW: canvasEl ? canvasEl.width : 0,
     pxH: canvasEl ? canvasEl.height : 0,
     dpr: typeof window !== 'undefined' ? Math.round((window.devicePixelRatio || 1) * 100) / 100 : 1,
+    // overlay 的鼠标诊断计数器：moves 增长说明 DSH 页面确实把 pointermove 送到了 overlay；
+    // g 是归一化后的注视幅度（|g|>=0.25 转头、>=0.6 带身体）。
+    mouse: (() => {
+      try {
+        const probe = (
+          window as unknown as {
+            __DSH_L2D_MOUSE__?: {
+              moves?: number;
+              at?: number;
+              gx?: number;
+              gy?: number;
+              rawX?: number;
+              rawY?: number;
+              winW?: number;
+              winH?: number;
+              cx?: number;
+              cy?: number;
+              rectW?: number;
+              rectH?: number;
+              rectX?: number;
+              rectY?: number;
+            };
+          }
+        ).__DSH_L2D_MOUSE__;
+        if (!probe) return 'none';
+        const age = probe.at ? Math.round((Date.now() - probe.at) / 100) / 10 : -1;
+        return (
+          'moves=' + (probe.moves || 0) +
+          ' age=' + age + 's g=' + (probe.gx || 0) + ',' + (probe.gy || 0) +
+          ' at=' + (probe.rawX == null ? '?' : probe.rawX) + ',' + (probe.rawY == null ? '?' : probe.rawY) +
+          ' win=' + (probe.winW == null ? '?' : probe.winW) + 'x' + (probe.winH == null ? '?' : probe.winH) +
+          ' ctr=' + (probe.cx == null ? '?' : probe.cx) + ',' + (probe.cy == null ? '?' : probe.cy) +
+          ' rect=' + (probe.rectW == null ? '?' : probe.rectW) + 'x' + (probe.rectH == null ? '?' : probe.rectH) +
+          '@' + (probe.rectX == null ? '?' : probe.rectX) + ',' + (probe.rectY == null ? '?' : probe.rectY)
+        );
+      } catch {
+        return 'err';
+      }
+    })(),
+    // 注视参数可用性诊断：缺哪个一眼可见（✗ 前缀）；fail 是 writeParam 累计失败次数，
+    // >0 说明有参数写不进去（模型缺参数/写入异常），不再被静默吞掉。
+    gaze: (() => {
+      try {
+        const want = ['ParamEyeBallX', 'ParamEyeBallY', 'AngleX', 'AngleY', 'PositionX', 'LeanInput'];
+        const out: string[] = [];
+        for (const id of want) {
+          const handle = handleOf(id);
+          const ok = !!(handle && core.getParameterIndex(handle) >= 0);
+          out.push((ok ? '' : '✗') + id);
+        }
+        return out.join(' ') + ' fail=' + paramWriteFail;
+      } catch {
+        return 'err';
+      }
+    })(),
     maxTex,
     glErr,
   };

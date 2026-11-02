@@ -17,6 +17,12 @@
   if (window.__DSH_L2D_OVERLAY__) return;
   window.__DSH_L2D_OVERLAY__ = true;
 
+  // 说明：App 壳（dsh-app://）注入时 readyState 已是 complete，bootOverlay 会走
+  // setTimeout 宏任务；但 ensureMounted / startAiPoll 等还有同步调用路径。agentLink 若
+  // 只在 IIFE 后段声明，会以 var 提升的 undefined 被读到，startAgentPoll 抛
+  // "Cannot read properties of undefined (reading 'timer')"，并让下一行
+  // initEmotionSensors() 永远不执行——鼠标/注视跟随就整体不绑定（App 页眼追失效的根因）。
+  var agentLink = { state: 'unknown', lastAt: 0, timer: 0, lastSpokeAt: 0 };
   var ROOT_ID = 'dsh-l2d-root';
   var STORAGE_KEY = 'dsh-l2d.overlay.v1';
   var STATES = ['idle', 'conversation', 'work', 'away'];
@@ -250,9 +256,10 @@
     bindClick();
     startAnim();
     observeRemoval();
+    // 先绑鼠标/注视：启动链里任何一步抛错都不能连累眼追（历史事故见文件头注释）
+    initEmotionSensors();
     startAiPoll();
     startAgentPoll();
-    initEmotionSensors();
   }
 
   function usePlaceholder() {
@@ -2123,7 +2130,7 @@
   // ---------------------------------------------------------------- 设置面板
   // 用户自填 API Key / 音效 / 缩放 / 刷新间隔；宿主侧落盘（$DSH_HOME/l2d-settings.json）。
   var panelEl = null;
-  var settings = { scale: 1, soundEnabled: true, soundVolume: 0.7, refreshSeconds: 60, hasApiKey: false, agentLink: true, clickMode: 'random', spontaneousChat: true, memeStyle: true, memeLevel: 50, autoAct: true, systemSensor: false, mediaSensor: false, petMode: true };
+  var settings = { scale: 1, soundEnabled: true, soundVolume: 0.7, refreshSeconds: 60, hasApiKey: false, eyeFollow: true, agentLink: true, clickMode: 'random', spontaneousChat: true, memeStyle: true, memeLevel: 50, autoAct: true, systemSensor: false, mediaSensor: false, petMode: true };
   var panelOpen = false;
 
   // 体型系数：三个体型的可见轮廓不同，用一个统一系数把视觉高度拉回一致。
@@ -2177,6 +2184,8 @@
         applyScale(settings.scale);
         syncSystemSensor();
         syncMediaSensor();
+        applyEyeFollowSetting();
+        updateMouseGeometry();
       })
       .catch(function () { /* ignore */ });
   }
@@ -2197,6 +2206,13 @@
     }
     rendererReady = false;
     rendererFailed = false;
+    // 2.5) 丢掉旧的渲染包 <script> 标签：loadScriptOnce 见到同 id 标签会直接返回，
+    //      否则拿到的仍是页面加载时的旧 bundle（改了渲染包后点按钮却不生效的原因）。
+    //      注意：这里只能换渲染包；overlay.js 本身的改动仍需要 F5 整页刷新。
+    try {
+      var stale = document.getElementById('dsh-l2d-renderer');
+      if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+    } catch (err) { /* ignore */ }
     if (canvasEl) {
       canvasEl.style.display = '';
       canvasEl.classList.remove('dragging');
@@ -2303,6 +2319,11 @@
     petToggle.checked = settings.petMode !== false; // 默认开（桌宠模式为正式行为）
     panelEl.appendChild(row('桌宠模式（悬停零触发 · 点击只摸头）', petToggle));
 
+    var eyeFollowToggle = document.createElement('input');
+    eyeFollowToggle.type = 'checkbox';
+    eyeFollowToggle.checked = settings.eyeFollow !== false; // 默认开（与宿主默认值/存量迁移一致）
+    panelEl.appendChild(row('眼神跟随（鼠标驱动视线/头/身体）', eyeFollowToggle));
+
     var clickMode = document.createElement('select');
     var modeRandom = document.createElement('option');
     modeRandom.value = 'random';
@@ -2383,7 +2404,8 @@
         autoAct: autoAct.checked,
         systemSensor: sysToggle.checked,
         mediaSensor: mediaToggle.checked,
-        petMode: petToggle.checked
+        petMode: petToggle.checked,
+        eyeFollow: eyeFollowToggle.checked
       };
       if (keyInput.value.trim()) patch.apiKey = keyInput.value.trim();
       fetch('/dsh-l2d/settings.json', {
@@ -2398,6 +2420,8 @@
             applyScale(settings.scale);
             syncSystemSensor();
             syncMediaSensor();
+            applyEyeFollowSetting();
+            updateMouseGeometry();
           }
           say('设置已保存', 1800);
           buildPanel();
@@ -2438,14 +2462,18 @@
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', bootOverlay);
   } else {
-    bootOverlay();
+    // 脚本被注入到已加载完成的页面（DSH App 的 dsh-app:// 壳）时 readyState 是 complete。
+    // 这里若同步调用 bootOverlay，IIFE 后面的 var 赋值（agentLink / mediaSensorState /
+    // DSH_L2D_AI 等）还没执行，ensureMounted → syncMediaSensor 会因 mediaSensorState
+    // 为 undefined 抛 "reading 'timer'"，整个初始化链中断。推迟到宏任务，保证 IIFE 先跑完。
+    setTimeout(bootOverlay, 0);
   }
 
   // ---------------------------------------------------------------- 工作区会话联动
   //
   // 参照 dsh-pet-indesktop 的 Agent Link：读取 DSH 会话事件并聚合为状态，
   // 状态切换时触发一条轻量动作链（表情/视线/姿势），不做高频重播。
-  var agentLink = { state: 'unknown', lastAt: 0, timer: 0, lastSpokeAt: 0 };
+  // agentLink 已在模块顶部初始化（见文件头注释）。
   var IDLE_LINES = [
     '我在呢～',
     '你继续忙，我陪你。',
@@ -2618,7 +2646,7 @@
   //
   // Emotion_Router 的信号源。鼠标传感器常开（眼神/躯体跟随的基础，开销可忽略）；
   // 系统硬件监听（CPU/内存/电量/断网）按约束默认关闭，设置面板可开。
-  var emotionSensors = { mouseBound: false, sysTimer: 0, batteryBound: false, vx: 0, vy: 0 };
+  var emotionSensors = { mouseBound: false, sysTimer: 0, batteryBound: false, batteryInstance: null, batteryPush: null, sysGen: 0, vx: 0, vy: 0 };
 
   function emotionPush(signal) {
     var L = window.DSH_L2D;
@@ -2631,31 +2659,88 @@
     }
   }
 
-  /** 眼神/躯体跟随：把鼠标位置换算成模型注视目标（含边缘死区），喂给渲染包平滑执行 */
+  /** 记录鼠标诊断几何（HUD 用）：窗口尺寸、屏幕中心、角色盒位置 */
+  function updateMouseGeometry() {
+    if (!root) return null;
+    var rect = root.getBoundingClientRect();
+    if (!rect || !rect.width) return null;
+    var probe = window.__DSH_L2D_MOUSE__ = window.__DSH_L2D_MOUSE__ || { moves: 0 };
+    probe.winW = Math.round(window.innerWidth || 0);
+    probe.winH = Math.round(window.innerHeight || 0);
+    probe.cx = Math.round(probe.winW / 2);
+    probe.cy = Math.round(probe.winH / 2);
+    probe.rectW = Math.round(rect.width);
+    probe.rectH = Math.round(rect.height);
+    probe.rectX = Math.round(rect.left);
+    probe.rectY = Math.round(rect.top);
+    return probe;
+  }
+
+  /** 「眼睛跟随鼠标」关掉时清一次注视，让视线回待机漂移；开回来由 pointermove 重新驱动 */
+  function applyEyeFollowSetting() {
+    if (settings.eyeFollow === false) clearGazeTarget();
+  }
+
+  /**
+   * 眼神/躯体跟随：把鼠标位置换算成模型注视目标（屏幕中心半屏归一 + 小死区）。
+   * 以屏幕中心为原点、半屏为量程：角色贴在哪个角都不影响四个方向的可达范围。
+   * 1920 宽下：死区 ≈20px（2%，带 2%~10% 渐入）、转头 0.25→240px、身体 0.45→432px。
+   * 注：死区不能做大——鼠标落在角色身上时若被清零，观感就是「角色突然正对屏幕」。
+   */
   function driveGaze(e) {
     var L = window.DSH_L2D;
     if (!L || !L.gaze || !L.isReady || !L.isReady()) return;
-    var rect = root ? root.getBoundingClientRect() : null;
-    if (!rect || !rect.width) return;
-    // 近似以「脸部」为注视原点（模型上部 35% 处）
-    var cx = rect.left + rect.width / 2;
-    var cy = rect.top + rect.height * 0.35;
-    var nx = (e.clientX - cx) / (window.innerWidth * 0.45);
-    var ny = (e.clientY - cy) / (window.innerHeight * 0.45);
-    // 死区：正对模型 12% 半径内不转头，防止注视抖动
+    if (settings.eyeFollow === false) return;
+    var winW = window.innerWidth || 1;
+    var winH = window.innerHeight || 1;
+    var nx = (e.clientX - winW / 2) / (winW / 2);
+    var ny = (e.clientY - winH / 2) / (winH / 2);
+    // 死区按屏幕中心归一化后的坐标算：只留 2%（≈20px）抑制微抖，
+    // 2%~10% 做平滑渐入。旧版 12% 硬死区会在鼠标落到角色身上（尤其角色在
+    // 中部附近时）把注视强制清零，表现为「角色突然正对屏幕」。
     var dist = Math.sqrt(nx * nx + ny * ny);
-    if (dist < 0.12) {
+    var DEAD = 0.02;
+    var RAMP = 0.08;
+    if (dist < DEAD) {
       nx = 0;
       ny = 0;
     } else {
-      nx = (nx - (nx < 0 ? -0.12 : 0.12)) / 0.88;
-      ny = (ny - (ny < 0 ? -0.12 : 0.12)) / 0.88;
+      var ramp = Math.min(1, (dist - DEAD) / RAMP); // 渐入权重
+      var mag = (dist - DEAD) / (1 - DEAD); // 死区外重新归一化到 0~1
+      var ux = nx / (dist || 1);
+      var uy = ny / (dist || 1);
+      nx = ux * mag * ramp;
+      ny = uy * mag * ramp;
     }
     nx = Math.max(-1, Math.min(1, nx));
     ny = Math.max(-1, Math.min(1, ny));
+    // 诊断计数器（HUD 可见）：moves 增长 = pointermove 真的送到 overlay；
+    // g 是归一化后幅度（|g|>=0.25 转头、>=0.45 起身体、>=0.85 身体满）。
+    try {
+      var probe = updateMouseGeometry();
+      if (probe) {
+        probe.moves = (probe.moves || 0) + 1;
+        probe.at = Date.now();
+        probe.gx = Math.round(nx * 100) / 100;
+        probe.gy = Math.round(-ny * 100) / 100;
+        probe.rawX = Math.round(e.clientX);
+        probe.rawY = Math.round(e.clientY);
+      }
+    } catch (err) { /* ignore */ }
     // 屏幕坐标 y 向下，模型 AngleY/EyeBallY 正值是「抬头」——取反
     L.gaze(nx, -ny);
   }
+
+  // 视线复位：只在「光标离开整个页面」或「窗口失焦」时清注视目标。
+  // 离开角色身体区域不做处理——否则眼睛会随悬停边界频繁回正、观感抖动。
+  function clearGazeTarget() {
+    var L = window.DSH_L2D;
+    if (L && L.clearGaze) {
+      try { L.clearGaze(); } catch (err) { /* ignore */ }
+    }
+  }
+  document.addEventListener('pointerleave', clearGazeTarget);
+  window.addEventListener('blur', clearGazeTarget);
 
   function initEmotionSensors() {
     var L = window.DSH_L2D;
@@ -2700,7 +2785,11 @@
         },
         { passive: true }
       );
+      // 窗口尺寸/角色位置变了，HUD 的几何诊断跟着更新（没有鼠标移动时也能看）
+      window.addEventListener('resize', updateMouseGeometry, { passive: true });
     }
+    updateMouseGeometry();
+    applyEyeFollowSetting();
     syncSystemSensor();
     syncMediaSensor();
   }
@@ -2754,21 +2843,25 @@
   function syncSystemSensor() {
     var want = settings.systemSensor === true;
     if (!want) {
+      emotionSensors.sysGen++; // 作废所有在飞的采样响应
       if (emotionSensors.sysTimer) {
         clearInterval(emotionSensors.sysTimer);
         emotionSensors.sysTimer = 0;
         window.removeEventListener('online', onNetChange);
         window.removeEventListener('offline', onNetChange);
       }
+      unbindBattery(); // 关闭系统联动时解绑电池事件，避免继续往 Emotion_Router 送旧数据
       return;
     }
     if (emotionSensors.sysTimer) return;
+    var gen = ++emotionSensors.sysGen;
     emotionSensors.sysTimer = setInterval(function () {
       fetch('/dsh-l2d/sys-metrics.json', { cache: 'no-store' })
         .then(function (r) {
           return r.ok ? r.json() : null;
         })
         .then(function (d) {
+          if (gen !== emotionSensors.sysGen) return; // 已关闭/重启：丢弃过期响应
           if (!d || !d.ok) return;
           emotionPush({
             type: 'system',
@@ -2804,10 +2897,28 @@
         push();
         bat.addEventListener('levelchange', push);
         bat.addEventListener('chargingchange', push);
+        // 记下引用：关闭系统联动时要能解绑，否则监听会继续把旧信号送进 Emotion_Router
+        emotionSensors.batteryInstance = bat;
+        emotionSensors.batteryPush = push;
       })
       .catch(function () {
         /* 无电池设备忽略 */
       });
+  }
+
+  /** 解绑电池监听（系统联动关闭时调用；重开时 bindBattery 会重新绑定） */
+  function unbindBattery() {
+    var bat = emotionSensors.batteryInstance;
+    var push = emotionSensors.batteryPush;
+    if (bat && push) {
+      try {
+        bat.removeEventListener('levelchange', push);
+        bat.removeEventListener('chargingchange', push);
+      } catch (e) { /* ignore */ }
+    }
+    emotionSensors.batteryInstance = null;
+    emotionSensors.batteryPush = null;
+    emotionSensors.batteryBound = false; // 允许重新开启时再次绑定
   }
 
   // ---------------------------------------------------------------- AI 指令轮询

@@ -485,6 +485,13 @@ export class EmotionRouter {
     this.mood.valence *= decay;
     this.mood.arousal *= decay;
 
+    // 1.5) 点击 3s 滑动窗口随时间自然过期：停手后 clicks3s 必须能归零，
+    // 否则 click-hyper 之类的规则会一直看到旧计数。
+    while (this.clicksWindow.length && now - this.clicksWindow[0] > 3000) {
+      this.clicksWindow.shift();
+    }
+    this.mouse.clicks3s = this.clicksWindow.length;
+
     // 2) cpu/mem 持续高位计时（进入/退出都带滞回）
     this.sys.cpuHighSince = this.trackHigh(this.sys.cpuHighSince, this.sys.cpu, now);
     this.sys.memHighSince = this.trackHigh(this.sys.memHighSince, this.sys.mem, now);
