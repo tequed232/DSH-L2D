@@ -116,19 +116,29 @@ export function chainHasMotion(chain: readonly { kind?: string }[] | null | unde
 }
 
 /**
- * 抢占时要不要立刻补播还挂着的关闭动作。
- * 新链里只要有 motion 步骤，就交给新动作覆盖，这里返回空，避免和状态机撞车。
- * 新链不带 motion（表情、视线、姿势）时，把还没跑的 closeMotion 原样补播。
+ * 抢占时要补播哪些还挂着的关闭动作。
+ * 新链没有 motion 时，原样补播，避免手停在半空。
+ * 新链有 motion 时，按同一只手判断：和待关闭动作同一只手的不补播，交给新动作覆盖；
+ * 另一只手的关闭留在返回值里，由调用方排在新动作之后再播。
+ * sharesArm 由 motion-director 提供。没拿到手臂判断时，有 motion 就不补播，免得和状态机撞车。
  */
 export function closeMotionsOnPreempt(
   pending: readonly string[] | null | undefined,
-  incoming: readonly { kind?: string }[] | null | undefined,
+  incoming: readonly { kind?: string; name?: string }[] | null | undefined,
+  sharesArm?: (closeName: string, motionName: string) => boolean,
 ): string[] {
-  if (chainHasMotion(incoming)) return [];
+  const motions: string[] = [];
+  for (const step of incoming || []) {
+    if (step && step.kind === 'motion' && typeof step.name === 'string' && step.name) motions.push(step.name);
+  }
   const out: string[] = [];
   const seen = new Set<string>();
   for (const name of pending || []) {
     if (typeof name !== 'string' || !name || seen.has(name)) continue;
+    if (motions.length) {
+      const sameHand = !sharesArm || motions.some((motion) => sharesArm(name, motion));
+      if (sameHand) continue;
+    }
     seen.add(name);
     out.push(name);
   }
@@ -218,6 +228,15 @@ function doneEvent(run: ActiveAct, phase: ActEventPhase, reason?: string): Actio
 export class ActGate {
   private seq = 0;
   private active: ActiveAct | null = null;
+  /** 这条链里有动作被状态机跳过或吞掉。结束回执带上，避免静默。 */
+  private motionNote: { runId: number; reason: string } | null = null;
+
+  /** 记下第一个失败原因。runId 对不上（已经换链）就忽略。 */
+  noteMotion(runId: number, reason: string): void {
+    if (!reason || !this.active || this.active.runId !== runId) return;
+    if (this.motionNote && this.motionNote.runId === runId) return;
+    this.motionNote = { runId, reason };
+  }
 
   current(): ActiveAct | null {
     return this.active ? { ...this.active } : null;
@@ -246,6 +265,7 @@ export class ActGate {
 
     const events: ActionDoneEvent[] = [];
     if (current) events.push(doneEvent(current, 'interrupted', 'preempted'));
+    this.motionNote = null;
 
     const next: ActiveAct = {
       runId: ++this.seq,
@@ -269,7 +289,9 @@ export class ActGate {
   /** 自然播完。runId 对不上（已被打断或本来就不是这条）则忽略。 */
   finish(runId: number): ActionDoneEvent | null {
     if (!this.active || this.active.runId !== runId) return null;
-    const event = doneEvent(this.active, 'end');
+    const reason = this.motionNote && this.motionNote.runId === runId ? this.motionNote.reason : undefined;
+    this.motionNote = null;
+    const event = doneEvent(this.active, 'end', reason);
     this.active = null;
     return event;
   }
@@ -278,6 +300,7 @@ export class ActGate {
   release(runId?: number, reason = 'released'): ActionDoneEvent | null {
     if (!this.active) return null;
     if (runId != null && this.active.runId !== runId) return null;
+    this.motionNote = null;
     const event = doneEvent(this.active, 'interrupted', reason);
     this.active = null;
     return event;

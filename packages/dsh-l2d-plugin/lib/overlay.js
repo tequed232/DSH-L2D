@@ -698,7 +698,8 @@
   function enableYandere() {
     yandereOn = true;
     var L = window.DSH_L2D;
-    // 邪神演出占 FORCE 槽。待机 BACKGROUND 链不能把它砍掉；同级（用户戳、下一句对话）可以。
+    // 9 秒 FORCE 只保护开场不被待机打断。到点或被同级抢走都不会关掉邪神。
+    // 「抚胸手关闭」记进 pendingCloses，和别的收招走同一条 closesToFlush。
     var held = executePokeAction({
       priority: 'FORCE',
       source: 'yandere',
@@ -707,6 +708,7 @@
       holdMs: 9000,
     });
     yandereActRunId = held && held.accepted ? held.runId : 0;
+    if (yandereActRunId) scheduleCloseMotion('抚胸手关闭', 8000, yandereActRunId);
     try {
       if (L && L.injectEmotionIntent) {
         L.injectEmotionIntent({
@@ -715,8 +717,6 @@
           priority: 95,
           expression: '黑脸',
           motion: '抚胸手打开',
-          motionClose: '抚胸手关闭',
-          closeAfterMs: 8000,
           pose: { right: 'finger' },
           look: { x: 0, y: 0.35 },
           bubble: '(ÒωÓ) 让我看看用户硬盘里有什么好东西',
@@ -724,6 +724,7 @@
         });
       } else {
         applyAppearance('黑脸');
+        if (L && L.playMotionAsync) L.playMotionAsync('抚胸手打开');
         say('(ÒωÓ) 让我看看用户硬盘里有什么好东西', 6000);
       }
     } catch (e) {
@@ -732,9 +733,8 @@
     setYandereFx(true);
   }
 
-  // 邪神视觉层：暗角、黑脸、抚胸手。菜单关闭和槽被抢走都走这里。
-  // resetPerformance 清表情、注视和姿势，不停 Loop 动作，所以抚胸手仍交给状态机关上。
-  // 不在这里 release 槽：抢占时新链已经占上，再 release 会打空。
+  // 只有菜单关闭才走完整收尾。槽被抢走或 9 秒开场结束都不进这里，暗角和黑脸留着。
+  // resetPerformance 清表情、注视和姿势。抚胸手用 interrupt，避免开场动作还占着状态机时被吞掉。
   function exitYandereVisual() {
     yandereOn = false;
     yandereArmedAt = 0;
@@ -744,7 +744,7 @@
     try {
       if (L && L.resetPerformance) L.resetPerformance();
       if (L && L.playMotionAsync) {
-        L.playMotionAsync('抚胸手关闭').catch(function () { /* 本来就没打开，或和新动作不是同一槽 */ });
+        L.playMotionAsync('抚胸手关闭', { interrupt: true }).catch(function () { /* 本来就没打开 */ });
       }
     } catch (e) {
       /* 复位失败也要把屏幕特效关掉 */
@@ -943,6 +943,8 @@
   window.DSH_L2D_UI = {
     chatActionForReply: chatActionForReply,
     executePokeAction: executePokeAction,
+    enableYandere: enableYandere,
+    disableYandere: disableYandere,
     setBodyType: setBodyType,
     cycleBodyType: cycleBodyType,
     zoneAt: zoneAt,
@@ -1229,7 +1231,8 @@
   var pokeTimers = [];
   var actingTimer = 0;
   var legacyGen = 0;
-  // 已经开播、关闭定时器还没跑的 closeMotion。抢占时按新链有没有 motion 决定补不补播。
+  // 已经开播、关闭定时器还没跑的 closeMotion。
+  // 抢占时按同一只手决定补不补播，判断来自 motion-director，不在这里写死左右手。
   var pendingCloses = [];
 
   function cancelActTimers() {
@@ -1375,31 +1378,55 @@
     pendingCloses = next;
   }
 
-  function closesToFlush(chain) {
-    var L = window.DSH_L2D;
-    if (L && L.closeMotionsOnPreempt) return L.closeMotionsOnPreempt(pendingCloses, chain);
-    var hasMotion = false;
-    for (var i = 0; i < chain.length; i++) {
-      if (chain[i] && chain[i].kind === 'motion') hasMotion = true;
+  function chainMotionNames(chain) {
+    var names = [];
+    for (var i = 0; i < (chain ? chain.length : 0); i++) {
+      if (chain[i] && chain[i].kind === 'motion' && chain[i].name) names.push(chain[i].name);
     }
-    if (hasMotion) return [];
-    var out = [];
-    var seen = {};
-    for (var j = 0; j < pendingCloses.length; j++) {
-      var name = pendingCloses[j];
-      if (!name || seen[name]) continue;
-      seen[name] = true;
-      out.push(name);
-    }
-    return out;
+    return names;
   }
 
-  function playCloseNow(names) {
+  function closesToFlush(chain) {
     var L = window.DSH_L2D;
-    if (!L || !L.playMotionAsync || !names || !names.length) return;
+    var shares = L && typeof L.motionsShareArm === 'function'
+      ? function (closeName, motionName) { return !!L.motionsShareArm(closeName, motionName); }
+      : undefined;
+    if (L && L.closeMotionsOnPreempt) return L.closeMotionsOnPreempt(pendingCloses, chain, shares);
+    return [];
+  }
+
+  // 状态机同一时刻只收一个普通优先级动作。被跳过、冲突或吞掉时写进这条链的结束回执。
+  function watchMotion(runId, pending, source) {
+    Promise.resolve(pending).then(function (result) {
+      if (!result || result.status === 'ok') return;
+      var reason = result.reason || result.status || 'motion-rejected';
+      var L = window.DSH_L2D;
+      if (L && L.noteActMotion && runId) L.noteActMotion(runId, String(reason));
+      if (source === 'poke') say('这个动作先让位', 2200);
+    }).catch(function (err) {
+      var reason = err && err.message ? err.message : 'motion-failed';
+      var L = window.DSH_L2D;
+      if (L && L.noteActMotion && runId) L.noteActMotion(runId, String(reason));
+      if (source === 'poke') say('这个动作先让位', 2200);
+    });
+  }
+
+  // 前一个 playMotionAsync 返回后再播下一个。有关闭要补时，新动作用 awaitFinish，好让状态机让出优先级。
+  function playSerial(names, runId, source) {
+    var L = window.DSH_L2D;
+    var seq = Promise.resolve();
     for (var i = 0; i < names.length; i++) {
-      L.playMotionAsync(names[i]).catch(function () { /* 状态机可能已处理 */ });
+      (function (name, awaitFinish) {
+        seq = seq.then(function () {
+          if (runId && !actStillCurrent(runId)) return null;
+          if (!L || !L.playMotionAsync) return null;
+          var pending = L.playMotionAsync(name, { awaitFinish: awaitFinish });
+          watchMotion(runId, pending, source);
+          return pending;
+        });
+      })(names[i], i < names.length - 1);
     }
+    return seq;
   }
 
   function preemptYandereIfNeeded(admission) {
@@ -1411,8 +1438,8 @@
       stolen = admission.current.source === 'yandere' || (!!yandereActRunId && admission.current.runId === yandereActRunId);
     }
     if (!stolen) return;
-    // 新链还没开播。先收暗角和抚胸手，避免 release 把新槽清掉。
-    exitYandereVisual();
+    // 常驻模式：只标记开场被打断。暗角和黑脸留着，关闭动作留给 closesToFlush。
+    yandereActRunId = 0;
   }
 
   function scheduleCloseMotion(closeMotion, delayMs, runId) {
@@ -1426,7 +1453,7 @@
     }, delayMs || 6000));
   }
 
-  function playActSteps(chain, runId, source) {
+  function playActSteps(chain, runId, source, skipMotions) {
     var L = window.DSH_L2D;
     var elapsed = 0;
     function runStep(step) {
@@ -1434,10 +1461,8 @@
       if (step.kind === 'expression') {
         if (step.clear && L.clearExpression) L.clearExpression();
         else if (step.name && L.setExpression) L.setExpression(step.name);
-      } else if (step.kind === 'motion' && step.name && L.playMotionAsync) {
-        L.playMotionAsync(step.name).catch(function () {
-          if (source === 'poke') say('这个动作先让位', 2200);
-        });
+      } else if (step.kind === 'motion' && step.name) {
+        if (!skipMotions && L.playMotionAsync) watchMotion(runId, L.playMotionAsync(step.name), source);
         if (step.closeMotion) {
           scheduleCloseMotion(step.closeMotion, step.closeAfterMs || 6000, runId);
         }
@@ -1494,6 +1519,22 @@
     return ev;
   }
 
+  function playbackAct(chain, runId, source, holdOnly) {
+    var flush = closesToFlush(chain);
+    var motions = chainMotionNames(chain);
+    pendingCloses = [];
+    cancelActTimers();
+    if (holdOnly) return;
+    // 另一只手的关闭不能和新动作同时发，否则状态机把后一个吞掉。先播新动作，等它返回再收。
+    if (flush.length && motions.length) {
+      playSerial(motions.concat(flush), runId, source);
+      playActSteps(chain, runId, source, true);
+      return;
+    }
+    if (flush.length) playSerial(flush, runId, source);
+    playActSteps(chain, runId, source, false);
+  }
+
   function executePokeAction(action) {
     var L = window.DSH_L2D;
     if (!L || !action) return { ok: false, accepted: false, reason: 'renderer-not-ready' };
@@ -1511,13 +1552,9 @@
     var life = plannedLifeMs(chain, action.holdMs);
 
     if (!L.admitAct || !L.currentAct || !L.finishAct) {
-      var legacyFlush = closesToFlush(chain);
-      pendingCloses = [];
-      cancelActTimers();
-      playCloseNow(legacyFlush);
       legacyGen += 1;
       var legacyId = legacyGen;
-      if (!action.holdOnly) playActSteps(chain, legacyId, source);
+      playbackAct(chain, legacyId, source, !!action.holdOnly);
       armActEnd(legacyId, life);
       if (action.bubble) say(action.bubble, 3200);
       else if (!action.silent) say('戳戳~', 2200);
@@ -1542,14 +1579,10 @@
     });
     if (!admission || !admission.accepted) return blockedAct(admission);
     preemptYandereIfNeeded(admission);
-    var flush = closesToFlush(chain);
-    pendingCloses = [];
-    cancelActTimers();
-    playCloseNow(flush);
+    playbackAct(chain, admission.runId, source, !!action.holdOnly);
     emitActEvents(admission.events);
     // 先挂上结束回执，避免步骤里抛错后槽位一直占着。
     armActEnd(admission.runId, life);
-    if (!action.holdOnly) playActSteps(chain, admission.runId, source);
     if (action.bubble) say(action.bubble, 3200);
     else if (!action.silent) say('戳戳~', 2200);
     return acceptedAct(admission, action.holdOnly ? 0 : chain.length);

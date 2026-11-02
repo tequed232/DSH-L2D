@@ -51,6 +51,27 @@ function intersect(a: string[], b: string[]): boolean {
   return b.some((id) => set.has(id));
 }
 
+function slotForGroup(group: string): PairedSlot | null {
+  if (!group) return null;
+  for (const slot of PAIRED_SLOTS) {
+    if (group === slot.openGroup || group === slot.closeGroup || group === slot.base) return slot;
+  }
+  return null;
+}
+
+/**
+ * 两个动作是不是同一只手。
+ * 同一对打开/关闭算同一只手；姿态骨相交（竖手指和狗尾巴草都是右臂）也算。
+ * 收招逻辑来问这里，不要在 overlay 里再写一份左右手表。
+ */
+export function motionsShareArm(a: string, b: string): boolean {
+  const left = slotForGroup(a);
+  const right = slotForGroup(b);
+  if (!left || !right) return false;
+  if (left.base === right.base) return true;
+  return intersect(left.poseParams, right.poseParams);
+}
+
 export class MotionDirector {
   private states = new Map<string, 'open' | 'closed'>();
 
@@ -124,5 +145,9 @@ export class MotionDirector {
 
   public reset(): void {
     this.states.clear();
+  }
+
+  public sharesArm(a: string, b: string): boolean {
+    return motionsShareArm(a, b);
   }
 }

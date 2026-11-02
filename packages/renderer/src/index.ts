@@ -13,7 +13,7 @@ import { LAppPal } from './app/lapppal';
 import type { LAppModel } from './app/lappmodel';
 import { ParamInjector } from './app/param-injector';
 import { EmotionRouter, EmotionIntent, EmotionSignal } from './app/emotion-router';
-import { MotionDirector } from './app/motion-director';
+import { MotionDirector, motionsShareArm } from './app/motion-director';
 import { PoseController, POSE_IDS } from './app/pose-controller';
 import { SHADER_SOURCES } from './shaders';
 import { mixAdditive } from '../../core/src/angle-mix.ts';
@@ -459,7 +459,12 @@ export function actPhaseTemplate(name: string): ActPhaseTemplate | null {
   return getActPhaseTemplate(name);
 }
 
-export { closeMotionsOnPreempt, preemptedYandere };
+export function noteActMotion(runId: number, reason: string): void {
+  if (!runId || !reason) return;
+  actGate.noteMotion(runId, reason);
+}
+
+export { closeMotionsOnPreempt, preemptedYandere, motionsShareArm };
 
 /** 动作诊断，不参与渲染决策。 */
 let motionDiag = { group: 'none', startedAt: 0, playing: false };
@@ -1635,6 +1640,8 @@ const api = {
   actPhaseTemplate,
   closeMotionsOnPreempt,
   preemptedYandere,
+  motionsShareArm,
+  noteActMotion,
   getCapabilities,
   // 生命周期
   destroy,

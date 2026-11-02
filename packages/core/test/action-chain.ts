@@ -13,6 +13,7 @@ import {
   parseActPriority,
   preemptedYandere,
 } from '../src/index.ts';
+import { motionsShareArm } from '../../renderer/src/app/motion-director.ts';
 
 let passed = 0;
 const test = (name: string, fn: () => void) => {
@@ -141,7 +142,7 @@ test('新链没有 motion 时，抢占要补播还挂着的关闭动作', () => 
   assert.deepEqual(closeMotionsOnPreempt(['', '竖手指关闭'], [{ kind: 'pose' }]), ['竖手指关闭']);
 });
 
-test('新链带 motion 时不补播关闭动作，交给新动作覆盖', () => {
+test('没有手臂判断时，新链带 motion 就不补播，避免和状态机撞车', () => {
   const speaking = getActPhaseTemplate('speaking');
   assert.ok(speaking);
   assert.equal(
@@ -149,11 +150,52 @@ test('新链带 motion 时不补播关闭动作，交给新动作覆盖', () => 
     true,
   );
   assert.deepEqual(closeMotionsOnPreempt(['竖手指关闭'], speaking.chain), []);
+  assert.deepEqual(closeMotionsOnPreempt([], [{ kind: 'look' }]), []);
+});
+
+test('按同一只手决定补不补播：左手关闭不会挡住右手，同一只手交给新动作', () => {
+  const share = motionsShareArm;
+  assert.equal(share('抚胸手关闭', '抚胸手打开'), true);
+  assert.equal(share('抚胸手关闭', '狗尾巴草打开'), false);
+  assert.equal(share('竖手指关闭', '狗尾巴草打开'), true);
   assert.deepEqual(
-    closeMotionsOnPreempt(['竖手指关闭'], [{ kind: 'motion', name: '抚胸手打开' }]),
+    closeMotionsOnPreempt(['抚胸手关闭'], [{ kind: 'motion', name: '抚胸手打开' }], share),
     [],
   );
-  assert.deepEqual(closeMotionsOnPreempt([], [{ kind: 'look' }]), []);
+  assert.deepEqual(
+    closeMotionsOnPreempt(['抚胸手关闭'], [{ kind: 'motion', name: '狗尾巴草打开' }], share),
+    ['抚胸手关闭'],
+  );
+  assert.deepEqual(
+    closeMotionsOnPreempt(['竖手指关闭'], [{ kind: 'motion', name: '抚胸手打开' }], share),
+    ['竖手指关闭'],
+  );
+  assert.deepEqual(
+    closeMotionsOnPreempt(
+      ['抚胸手关闭', '竖手指关闭'],
+      [{ kind: 'motion', name: '狗尾巴草打开' }],
+      share,
+    ),
+    ['抚胸手关闭'],
+  );
+  const speaking = getActPhaseTemplate('speaking');
+  assert.ok(speaking);
+  assert.deepEqual(closeMotionsOnPreempt(['竖手指关闭'], speaking.chain, share), []);
+});
+
+test('动作被状态机拒绝或吞掉时，结束回执带上 reason', () => {
+  const gate = new ActGate();
+  const admitted = gate.admit({ priority: 'FORCE', source: 'poke', callId: 4, steps: 1 });
+  gate.noteMotion(admitted.runId || 0, 'already-open');
+  const skipped = gate.finish(admitted.runId || 0);
+  assert.equal(skipped?.phase, 'end');
+  assert.equal(skipped?.reason, 'already-open');
+
+  const again = gate.admit({ priority: 'FORCE', source: 'poke', callId: 5, steps: 1 });
+  gate.noteMotion(again.runId || 0, 'start-rejected');
+  gate.noteMotion(again.runId || 0, 'later-reason');
+  const swallowed = gate.finish(again.runId || 0);
+  assert.equal(swallowed?.reason, 'start-rejected');
 });
 
 test('只有邪神自己那条槽被抢走时才要收视觉层', () => {
