@@ -12,6 +12,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { resolveBase } from './discover.mjs';
 import { actSettled, mergeActEvents, shapeActReceipt } from './act-result.mjs';
+import { executeActionSequence, validateActionSequence } from './action-sequence.mjs';
+import { CHOREOGRAPHY } from '../../dsh-l2d-plugin/lib/choreography.mjs';
 
 let cachedBase = '';
 
@@ -217,6 +219,50 @@ server.registerTool(
 );
 
 server.registerTool(
+  'l2d_choreograph',
+  {
+    description: '混合动作编排入口。简单状态反应优先传 presetState（error/attention/working/thinking/idle/bootstrap/user-direct），程序复用 choreography.mjs 已验证的预设链；复杂对话、情绪或多阶段演出则由 Agent 自行生成 segments（1~3 段，每段最多 8 步）。两者只能选一个。程序逐段调用现有 l2d_act，只有上一段明确 completed 才执行下一段。返回 conflict / priority-blocked / interrupted / pending 时必须停止，读取回执后重新规划不同的链，不要原样重试。只允许 expression / motion / pose / look；表情和动作必须使用当前模型真实白名单。',
+    inputSchema: {
+      presetState: z.enum(['error', 'attention', 'working', 'thinking', 'idle', 'bootstrap', 'user-direct']).optional(),
+      segments: z.array(z.object({
+        chain: z.array(z.object({
+          kind: z.enum(['expression', 'motion', 'pose', 'look']),
+          name: z.string().optional(),
+          closeMotion: z.string().optional(),
+          closeAfterMs: z.number().optional(),
+          delayMs: z.number().optional(),
+          pose: z.object({
+            right: z.enum(['rest', 'finger', 'grass', 'chest']).optional(),
+            left: z.enum(['rest', 'finger', 'grass', 'chest']).optional(),
+          }).optional(),
+          x: z.number().optional(),
+          y: z.number().optional(),
+        })).min(1).max(8),
+        priority: z.enum(['BACKGROUND', 'NORMAL', 'FORCE']).optional(),
+        bubble: z.string().max(40).optional(),
+      })).min(1).max(3).optional(),
+    },
+  },
+  async ({ presetState, segments }) => {
+    if ((presetState && segments) || (!presetState && !segments)) {
+      return toolResult({ ok: false, status: 'rejected', reason: 'choose-preset-or-segments' });
+    }
+    const selected = presetState
+      ? CHOREOGRAPHY[presetState]
+      : null;
+    const plan = {
+      segments: selected
+        ? [{ chain: selected.chain, priority: selected.priority, bubble: selected.bubble || undefined }]
+        : segments,
+    };
+    const validation = validateActionSequence(plan);
+    if (!validation.ok) return toolResult({ ok: false, status: 'rejected', reason: 'invalid-sequence', errors: validation.errors, receipts: [] });
+    const result = await executeActionSequence(plan, (args) => forward('l2d_act', args, 12000, 'act'));
+    return toolResult({ ...result, source: selected ? 'preset:' + presetState : 'agent-generated' });
+  },
+);
+
+server.registerTool(
   'l2d_get_state',
   {
     description: '只读快照：渲染信息、情绪、姿势。余额单独查，没有 Key 时余额字段会说明原因。不会打开任何传感器。',
@@ -283,6 +329,66 @@ server.registerTool(
     } catch {
       cachedBase = '';
       return toolResult({ ok: false, reason: 'workspace-status-unreachable' });
+    }
+  },
+);
+
+server.registerTool(
+  'l2d_persona',
+  {
+    description:
+      '读取 / 修改 / 重置角色人设（性格 traits、情绪表达 expression、主动程度 proactivity、亲密程度 intimacy、工作态度 workAttitude、动作偏好 motionPreference、待机习惯 idleHabit、自由描述 description）。action=get 读当前值；action=set 只传要改的字段（patch），返回修改后的完整人设；action=reset 回默认。人设写入宿主文件后，下一次工作区规划立即生效。',
+    inputSchema: {
+      action: z.enum(['get', 'set', 'reset']),
+      patch: z
+        .object({
+          traits: z.array(z.string()).max(8).optional().describe('性格关键词，如 温柔 / 傲娇 / 认真'),
+          expression: z
+            .object({
+              style: z.enum(['gentle', 'lively', 'reserved', 'tsundere', 'calm']).optional(),
+              intensity: z.number().min(0).max(1).optional(),
+            })
+            .optional(),
+          proactivity: z.number().min(0).max(1).optional().describe('主动程度：0 只回应，1 乐于主动'),
+          intimacy: z.number().min(0).max(1).optional(),
+          workAttitude: z.enum(['supportive', 'neutral', 'strict', 'playful']).optional(),
+          motionPreference: z
+            .object({
+              style: z.enum(['subtle', 'balanced', 'expressive']).optional(),
+              avoid: z.array(z.string()).max(8).optional().describe('回避的动作组名'),
+            })
+            .optional(),
+          idleHabit: z
+            .object({
+              style: z.enum(['quiet', 'normal', 'chatty']).optional(),
+              lookAround: z.boolean().optional(),
+            })
+            .optional(),
+          description: z.string().max(500).optional().describe('用户原话的自由描述，如「一只温柔但有点傲娇的蓝鲸女仆」'),
+        })
+        .optional(),
+    },
+  },
+  async ({ action, patch }) => {
+    const base = await baseUrl();
+    if (!base) return toolResult({ ok: false, reason: 'plugin-offline' });
+    try {
+      if (action === 'get') {
+        const res = await fetch(base + '/dsh-l2d/persona.json', { cache: 'no-store' });
+        if (!res.ok) return toolResult({ ok: false, reason: 'http-' + res.status });
+        return toolResult(await res.json());
+      }
+      const body = action === 'reset' ? { reset: true } : { patch: patch || {} };
+      const res = await fetch(base + '/dsh-l2d/persona.json', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) return toolResult({ ok: false, reason: 'http-' + res.status });
+      return toolResult(await res.json());
+    } catch {
+      cachedBase = '';
+      return toolResult({ ok: false, reason: 'unreachable' });
     }
   },
 );

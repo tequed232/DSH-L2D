@@ -23,6 +23,9 @@ import { fileURLToPath } from 'node:url';
 import { createAiInbox } from './ai-inbox.mjs';
 import { createWorkspaceAgentBridge } from './workspace-agent.mjs';
 import { createReverseLog } from './reverse-log.mjs';
+import { normalizePresencePayload, writeEnvState } from './env-state.mjs';
+import { readPersona, resetPersona, writePersona } from './persona.mjs';
+import { isActionTool, summarizeSession } from './session-events.mjs';
 import { setupPetWindow } from './pet-window.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -624,7 +627,9 @@ export { getAgentState };
 let workspaceBridge = null;
 const workspaceEventCache = new Map();
 
-/** Workspace 状态只输出脱敏活动元数据，不向专属 Agent 暴露其他会话文本。 */
+/** Workspace 状态只输出脱敏活动元数据，不向专属 Agent 暴露其他会话文本。
+ *  每个会话额外带：最近一次工具调用（真实回执分类：isError/error.code/超时/中断/退出码）、
+ *  最近 turn/end、上次动作回执、动作是否在途——供 L1 规划上下文使用。 */
 function getWorkspaceAgentStates(registry) {
   const now = Date.now();
   const bySession = new Map(listSessionFiles().map((entry) => [entry.sessionId, entry]));
@@ -637,7 +642,16 @@ function getWorkspaceAgentStates(registry) {
       activeIds.add(id);
       const entry = bySession.get(id);
       if (!entry) {
-        sessions.push({ sessionIndex: sessions.length + 1, state: 'unknown', ageMs: null, hasError: false });
+        sessions.push({
+          sessionIndex: sessions.length + 1,
+          state: 'unknown',
+          ageMs: null,
+          hasError: false,
+          lastTool: null,
+          lastTurnEnd: null,
+          lastAction: null,
+          pendingAction: null,
+        });
         continue;
       }
       let cached = workspaceEventCache.get(id);
@@ -647,11 +661,21 @@ function getWorkspaceAgentStates(registry) {
           for (const line of decompressZstdFrames(fs.readFileSync(entry.file))) {
             try { events.push(JSON.parse(line)); } catch { /* ignore malformed event */ }
           }
-          const derived = deriveAgentState(events, 0, workspace.title);
-          cached = { mtimeMs: entry.mtimeMs, size: entry.size, state: derived.state, lastEventAt: derived.lastEventAt };
+          const summary = summarizeSession(events, { now: entry.mtimeMs });
+          cached = { mtimeMs: entry.mtimeMs, size: entry.size, ...summary };
           workspaceEventCache.set(id, cached);
         } catch {
-          cached = { mtimeMs: entry.mtimeMs, size: entry.size, state: 'unknown', lastEventAt: 0 };
+          cached = {
+            mtimeMs: entry.mtimeMs,
+            size: entry.size,
+            state: 'unknown',
+            lastEventAt: 0,
+            lastTool: null,
+            lastTurnEnd: null,
+            lastAction: null,
+            pendingTool: null,
+            hasError: false,
+          };
           workspaceEventCache.set(id, cached);
         }
       }
@@ -659,12 +683,19 @@ function getWorkspaceAgentStates(registry) {
       let state = cached.state;
       if (state !== 'error' && ageMs > 120000) state = 'idle';
       if (state === 'error' && ageMs > 600000) state = 'idle';
+      const pending = cached.pendingTool && isActionTool(cached.pendingTool.name)
+        ? { name: cached.pendingTool.name, priority: 'NORMAL' }
+        : null;
       sessions.push({
         sessionIndex: sessions.length + 1,
         state,
         ageMs,
         lastEventAt: cached.lastEventAt,
         hasError: state === 'error',
+        lastTool: cached.lastTool || null,
+        lastTurnEnd: cached.lastTurnEnd || null,
+        lastAction: cached.lastAction || null,
+        pendingAction: pending,
       });
     }
     workspaces.push({
@@ -1079,7 +1110,7 @@ export function apply(root, config = {}) {
     // ------------------------------------------------------ 反向桥（模型 → 宿主）
     // 事件白名单 + 回环 + 跨站栅栏 + 16KB 限流，与 /ai/call 同一套。
     // v1 只做 state handler（写状态文件 + /ai/poll 搭车）；notify/api-act 待立项。
-    const REVERSE_TYPES = new Set(['pet', 'drag', 'idle', 'motion-done', 'expression-change', 'error']);
+    const REVERSE_TYPES = new Set(['pet', 'drag', 'idle', 'motion-done', 'expression-change', 'error', 'presence']);
     route('/dsh-l2d/reverse/event', (req, res) => {
       if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
@@ -1102,6 +1133,28 @@ export function apply(root, config = {}) {
         const type = String(body.type || '').trim();
         if (!REVERSE_TYPES.has(type)) {
           return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('unknown type: ' + type.slice(0, 32)));
+        }
+        // 环境交互态：白名单字段 + 类型/范围校验后整份覆盖写 l2d-env-state.json。
+        // 规划层读取时超过 30s 未更新按 unknown 处理，不会拿旧值误导动作规划。
+        if (type === 'presence') {
+          const normalized = normalizePresencePayload(body.payload, { now: Date.now() });
+          if (!normalized.ok) {
+            return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('invalid presence: ' + normalized.error));
+          }
+          let envSaved = false;
+          try {
+            writeEnvState(normalized.payload);
+            envSaved = true;
+          } catch (err) {
+            diag('presence 落盘失败: ' + String(err && err.message ? err.message : err));
+          }
+          const ev = reverseLog.record(type, { name: normalized.payload.state });
+          return sendBuffer(
+            res,
+            200,
+            MIME['.json'],
+            Buffer.from(JSON.stringify({ ok: true, accepted: true, handlers: ['state', 'env'], env: envSaved, ts: ev.ts }), 'utf8'),
+          );
         }
         const ev = reverseLog.record(type, body.payload);
         sendBuffer(
@@ -1389,6 +1442,43 @@ export function apply(root, config = {}) {
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(view), 'utf8'));
     });
 
+    // ---------------------------------------------------------------- 人设（L1）
+    // GET 读当前人设；PUT/POST 接受局部 patch（或 {reset:true}）。
+    // 读侧不缓存：规划层每次组装上下文都重新读文件，所以「改完下一次规划立即生效」。
+    route('/dsh-l2d/persona.json', async (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method === 'GET') {
+        let persona;
+        try {
+          persona = readPersona();
+        } catch (err) {
+          diag('persona 读取失败: ' + String(err && err.message ? err.message : err));
+          return sendBuffer(res, 500, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'read-failed' }), 'utf8'));
+        }
+        return sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, persona }), 'utf8'));
+      }
+      if (req.method !== 'PUT' && req.method !== 'POST') {
+        return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET or PUT'));
+      }
+      if (!isLoopback(req)) {
+        return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      }
+      let body = {};
+      try {
+        body = await readJsonBody(req, 32 * 1024);
+      } catch {
+        return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
+      }
+      try {
+        const patch = body && body.patch && typeof body.patch === 'object' ? body.patch : body || {};
+        const persona = body && body.reset === true ? resetPersona() : writePersona(patch);
+        sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, persona }), 'utf8'));
+      } catch (err) {
+        diag('persona 写入失败: ' + String(err && err.message ? err.message : err));
+        sendBuffer(res, 500, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'write-failed' }), 'utf8'));
+      }
+    });
+
     route('/dsh-l2d/audio/index.json', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       const files = listAudio();
@@ -1513,11 +1603,14 @@ export function apply(root, config = {}) {
 
   // Workspace / Session services are optional in some DSH profiles.
   // Keep the existing overlay operational when those services are absent.
+  // L1：桥每次 refresh 都经 getPersona() 重读人设文件（无缓存），改完下一次规划立即生效；
+  // 通知上下文另含用户交互态（env 状态文件，>30s 过期按 unknown）与工具真实回执。
   root.inject(['workspaceRegistry', 'sessionController', 'agentPresets'], (ctx) => {
     const bridge = createWorkspaceAgentBridge({
       ctx,
       homeDir: process.env.DSH_HOME || path.join(os.homedir(), '.dsh'),
       getSnapshot: () => getWorkspaceAgentStates(ctx.workspaceRegistry),
+      getPersona: () => readPersona(),
       intervalMs: 4000,
     });
     workspaceBridge = bridge;
