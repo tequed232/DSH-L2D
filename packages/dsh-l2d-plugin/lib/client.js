@@ -24,22 +24,39 @@ window.__ModuleLoader__.load({
           window.__L2D_CLIENT_ERROR__ = 'ctx.slots.register is ' + typeof slots.register + '; keys=' + Object.keys(slots).slice(0, 12).join(',');
           return;
         }
+        // 宿主 slot 由 layout 的 root entry 用 children 表声明（shell.overlay 由
+        // @deepseek-ai/dsh-client-ui-layout 声明为 { kind:'list', scope:'root' }）。
+        // 我们的 apply 可能早于 layout 注册执行，直接 register 会抛
+        // `slot "shell.overlay" is not declared`。必须用 slots.inject 等声明就绪：
+        // 已声明则同步执行，未声明则在声明提交时执行。
+        if (typeof slots.inject !== 'function') {
+          window.__L2D_CLIENT_ERROR__ = 'ctx.slots.inject is ' + typeof slots.inject + '; keys=' + Object.keys(slots).slice(0, 12).join(',');
+          return;
+        }
         const React = require('react');
-        slots.register({ name: 'shell.overlay', id: 'dsh-l2d' }, function L2DSlotProbe() {
-          return React.createElement(
-            'div',
-            {
-              'data-dsh-l2d-slot': 'overlay',
-              style: {
-                position: 'fixed', left: '50%', top: '12px', transform: 'translateX(-50%)',
-                zIndex: 2147483647, padding: '6px 14px', borderRadius: '999px',
-                background: '#1d4ed8', color: '#fff',
-                font: '600 14px/1.4 system-ui, sans-serif',
-                border: '2px solid #93c5fd',
-              },
-            },
-            'L2D slot ok · ' + new Date().toLocaleTimeString(),
-          );
+        // inject 回调可能跑在 layout 的 register 调用栈里（宿主 fiber），
+        // 这里绝不能抛异常，否则会把宿主 entry 一起拖垮。
+        slots.inject('shell.overlay', function () {
+          try {
+            slots.register({ name: 'shell.overlay', id: 'dsh-l2d' }, function L2DSlotHost() {
+              return React.createElement('iframe', {
+                src: '/dsh-l2d/test.html',
+                'data-dsh-l2d-slot': 'overlay',
+                title: 'dsh-l2d avatar',
+                style: {
+                  position: 'fixed', right: '24px', bottom: '24px',
+                  width: '320px', height: '480px',
+                  zIndex: 2147483646,
+                  border: '1px solid rgba(147, 197, 253, 0.45)',
+                  borderRadius: '16px',
+                  background: 'transparent',
+                },
+              });
+            });
+            window.__L2D_CLIENT_OK__ = true;
+          } catch (err) {
+            window.__L2D_CLIENT_ERROR__ = String((err && err.stack) || err);
+          }
         });
         window.__L2D_CLIENT_OK__ = true;
       } catch (err) {

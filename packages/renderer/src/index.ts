@@ -11,7 +11,7 @@ import { CubismShaderManager_WebGL } from './fw/rendering/cubismshader_webgl';
 import { LAppSubdelegate } from './app/lappsubdelegate';
 import { LAppPal } from './app/lapppal';
 import type { LAppModel } from './app/lappmodel';
-import { ParamInjector } from './app/param-injector';
+import { ParamInjector, parameterIndexOf } from './app/param-injector';
 import { EmotionRouter, EmotionIntent, EmotionSignal } from './app/emotion-router';
 import { MotionDirector, motionsShareArm } from './app/motion-director';
 import { PoseController, POSE_IDS } from './app/pose-controller';
@@ -512,6 +512,13 @@ export { closeMotionsOnPreempt, preemptedYandere, motionsShareArm, motionResultK
 
 /** 动作诊断，不参与渲染决策。 */
 let motionDiag = { group: 'none', startedAt: 0, playing: false };
+/** playMotionAsync 的收招定时器（Loop 动作回卷前收养终态姿势）；reset 必须能撤掉它。 */
+let motionStopTimer = 0;
+/**
+ * 动作纪元：reset 递增。旧动作的收招定时器看到纪元变化即自行作废，
+ * 避免 reset 之后 adoptAfterMotion 又把终态姿势（如 finger）收养回来。
+ */
+let motionEpoch = 0;
 /** 动作播放期间姿势层让位；Loop 动作靠定时器交还。 */
 let poseOwnedByMotion = false;
 /** 注入相位诊断：确认 pre/post 钩子都在跑。 */
@@ -887,13 +894,9 @@ const angleBusLive: Record<BusParam, boolean> = { AngleZ: false, PositionX: fals
 const missingAmbient = new Set<string>();
 
 function paramExists(core: CoreModel, id: string): boolean {
-  try {
-    const handle = handleOf(id);
-    if (!handle) return false;
-    return core.getParameterIndex(handle) >= 0;
-  } catch {
-    return false;
-  }
+  // 真实下标校验（真机缺陷：Cubism 5 getParameterIndex 对不存在参数返回合成下标，
+  // 旧的 `getParameterIndex(handle) >= 0` 恒真）。见 param-injector.ts 的 parameterIndexOf。
+  return parameterIndexOf(core, id) >= 0;
 }
 
 function zeroAngleBus(): void {
@@ -1046,23 +1049,41 @@ function applyAmbientFace(core: CoreModel): void {
 }
 
 /**
- * 设置单个参数并逐帧保持；参数不存在或是物理输出时返回 false。
+ * 设置单个参数并逐帧保持；成功返回 null，失败返回 reason。
+ * 参数不存在或是物理输出都会被拒——不存在的参数绝不静默 applied。
  * 写入会在下一个正确的帧相位生效，而不是在这里直接改 Core。
+ *
+ * 真机缺陷修复（choreo 复现：真机 l2d_set_parameters 写 ParamArmRA / ParamNotExistXYZ
+ * 都回报 applied）。根因与整体校验见 param-injector.ts 的 parameterIndexOf 注释；
+ * 这里在入口再挡一道并给出 reason，让回执 failed 里能带原因。
+ * 真机复现步骤：真机调 l2d_set_parameters { values: { ParamArmRA: 1, ParamNotExistXYZ: 1 } }，
+ * 修复前两者都在 applied；修复后都进 failed 且 reason=not-exist
+ * （本模型真实手臂参数是 Param36/39/40/41/42/43 与 59~62）。
  */
-export function setParameter(id: string, value: number, weight = 1): boolean {
+function setParameterChecked(id: string, value: number, weight = 1): string | null {
   const core = model?.getModel();
-  if (!core) return false;
+  if (!core) return 'not-ready';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 'invalid-value';
   // AngleZ / PositionX / PositionY 可能被拖拽、微动作、媒体同时写，先记账再统一注入
   if (id === 'AngleZ' || id === 'PositionX' || id === 'PositionY') {
-    if (!paramExists(core, id) || injector.isPhysicsOutput(id)) return false;
-    angleBus[id].body = Number(value) || 0;
-    return true;
+    if (!paramExists(core, id)) return 'not-exist';
+    if (injector.isPhysicsOutput(id)) return 'physics-output';
+    angleBus[id].body = num;
+    return null;
   }
-  return injector.set(core, id, Number(value), weight);
+  // 入口校验：不存在 → not-exist；物理输出未独占 → physics-output（与 injector.set 同判）
+  if (!paramExists(core, id)) return 'not-exist';
+  return injector.set(core, id, num, weight) ? null : 'rejected';
+}
+
+export function setParameter(id: string, value: number, weight = 1): boolean {
+  return setParameterChecked(id, value, weight) === null;
 }
 
 export interface ApplyReport {
   ok: string[];
+  /** 失败项：`参数名:reason`（not-exist / physics-output / mouth-locked / invalid-value / not-ready / rejected） */
   failed: string[];
 }
 
@@ -1072,8 +1093,9 @@ export function setParameters(values: Record<string, number>, weight = 1): Apply
   const failed: string[] = [];
   const src = values || {};
   for (const key of Object.keys(src)) {
-    if (setParameter(key, src[key], weight)) ok.push(key);
-    else failed.push(key);
+    const reason = setParameterChecked(key, src[key], weight);
+    if (reason === null) ok.push(key);
+    else failed.push(key + ':' + reason);
   }
   return { ok, failed };
 }
@@ -1117,9 +1139,10 @@ export function lookAt(x: number, y: number): void {
   // 以默认值为中点、按参数自身范围映射归一化值
   const writeNormalized = (paramId: string, normalized: number): boolean => {
     try {
-      const handle = CubismFramework.getIdManager().getId(paramId);
-      const idx = core.getParameterIndex(handle);
+      // 真实下标校验（合成下标 ≠ 存在，见 param-injector.ts parameterIndexOf 注释）
+      const idx = parameterIndexOf(core, paramId);
       if (idx < 0) return false;
+      const handle = CubismFramework.getIdManager().getId(paramId);
       const min = core.getParameterMinimumValue(idx);
       const max = core.getParameterMaximumValue(idx);
       const def = core.getParameterDefaultValue(idx);
@@ -1246,11 +1269,14 @@ export async function playMotionAsync(
       finishResolve = resolve;
     });
   }
-  let motionStopTimer = 0;
+  const epoch = motionEpoch;
   const adoptAfterMotion = (): void => {
-    if (motionStopTimer) {
-      window.clearTimeout(motionStopTimer);
-      motionStopTimer = 0;
+    motionStopTimer = 0;
+    if (epoch !== motionEpoch) {
+      // reset 已发生：收养作废（停动作/姿势收养都归 reset 负责），只放行 awaitFinish 等待者，
+      // 否则 playMotionAsync 的 finished promise 会永久挂起
+      if (finishResolve) finishResolve();
+      return;
     }
     try {
       model.stopMotions();
@@ -1633,12 +1659,36 @@ export function resetPose(): number {
   return core.getParameterCount();
 }
 
-/** 收尾：姿势、表情、注视一起回到待机。邪神退出和 l2d_reset 用这一条。 */
+/**
+ * 收尾：姿势、表情、注视一起回到待机。邪神退出和 l2d_reset 用这一条。
+ *
+ * 真机缺陷修复（choreo 复现：真机 l2d_reset 后「竖手指:open」残留可见）。
+ * 根因：旧 reset 只清姿势/表情/注视层，没停正在播的动作 —— 竖手指打开是 Loop 动作，
+ * 每帧持续写手臂参数（Param36/39/40/41/42/43），把 poseController 刚复位的手臂又压回去；
+ * motionDirector 的 slot 状态也没归位，调试面板与后续仲裁仍认为 open。
+ * 真机复现步骤：真机播 竖手指打开（不播关闭），直接 l2d_reset ——
+ * 修复前手臂保持抬起、info.motion slots=竖手指:open；修复后手臂回落、slots=竖手指:closed。
+ */
 export function resetPerformance(): { ok: boolean; params: number } {
   if (emotionCloseTimer) {
     window.clearTimeout(emotionCloseTimer);
     emotionCloseTimer = 0;
   }
+  // 停掉 playing motion 并把 slot 状态归位（参考 closeMotionsOnPreempt 的清理语义：
+  // 手臂不再被动作占用）；递增纪元让未触发的收招定时器作废，防止终态姿势在 reset 后复活
+  motionEpoch++;
+  if (motionStopTimer) {
+    window.clearTimeout(motionStopTimer);
+    motionStopTimer = 0;
+  }
+  try {
+    model?.stopMotions();
+  } catch {
+    /* ignore */
+  }
+  poseOwnedByMotion = false;
+  motionDirector.reset();
+  motionDiag = { group: 'none', startedAt: 0, playing: false };
   const params = resetPose();
   clearExpression();
   clearGaze();
@@ -1887,18 +1937,37 @@ export function getInfo(): Record<string, number | string> | null {
     mxNow = 'err';
   }
 
-  let motionPlaying = motionDiag.playing;
+  // 真机缺陷修复（choreo 复现：真机 get_state 的 info.motion playing=1，与
+  // isUserMotionPlaying()（下称 il()）=0 结论矛盾）。
+  // 根因：旧实现 playing = !isFinished()，而 Idle 动作是 Loop 永不 finished，
+  // playing 恒为 1 —— 它只反映「有动作在播（含待机）」，不反映「用户请求的动作还在播」，
+  // 验收脚本据此判断动作状态必误读。另 motionDiag.playing 只在 getInfo 被轮询时刷新，
+  // 两次轮询之间是陈旧值，故不再作为数据源。
+  // 现以 MotionManager 真实状态为准：
+  //   playing = !isFinished() && currentPriority >= 2（用户级动作，与 isUserMotionPlaying 同源）
+  //   idle    = !isFinished()（原始信号，含待机 Loop，仅供人工对照）
+  // 真机复现步骤：真机空闲时调 l2d_get_state —— 修复前 playing=1（实为待机 Loop）；
+  // 修复后 playing=0 idle=1；播 竖手指打开 期间 playing=1，播完回 0。
+  let motionPlaying = false;
+  let motionIdle = false;
   try {
-    const mm = (model as unknown as { _motionManager?: { isFinished?: () => boolean } })
-      ._motionManager;
-    if (mm?.isFinished) motionPlaying = !mm.isFinished();
+    const mm = (model as unknown as {
+      _motionManager?: {
+        isFinished?: () => boolean;
+        getCurrentPriority?: () => number;
+      };
+    })._motionManager;
+    if (mm?.isFinished) {
+      motionIdle = !mm.isFinished();
+      motionPlaying = motionIdle && (mm.getCurrentPriority ? mm.getCurrentPriority() >= 2 : false);
+    }
   } catch {
-    /* 保留最近一次动作状态 */
+    /* MotionManager 读不到时按「没有用户动作在播」处理 */
   }
   motionDiag.playing = motionPlaying;
   // group/startedAt 只在「开始动作」时写入。动作播完后 Idle 会无限续播，
   // 若只按 isFinished 判定，诊断会一直显示上一个动作名、t 也越滚越大，误导排查。
-  // 这里按「动作是否真的还在播」归零：没在播就清计时，让 t 从 0 重新计。
+  // 这里按「用户动作是否真的还在播」归零：没在播就清计时，让 t 从 0 重新计。
   if (!motionPlaying) {
     motionDiag.startedAt = 0;
   }
@@ -1959,6 +2028,8 @@ export function getInfo(): Record<string, number | string> | null {
       motionDiag.group +
       ' playing=' +
       (motionPlaying ? 1 : 0) +
+      ' idle=' +
+      (motionIdle ? 1 : 0) +
       ' t=' +
       motionElapsed +
       ' slots=' +
@@ -2047,6 +2118,9 @@ export function getInfo(): Record<string, number | string> | null {
  */
 export const normalizeActPlan = (chain: Parameters<typeof normalizeActChain>[0]) =>
   normalizeActChain(chain);
+
+// E2：语义姿态执行计划（纯函数；profile 由 overlay 预取后传入，渲染层不读文件）
+export { planPostureExecution } from '../../core/src/posture.ts';
 
 const api = {
   loadCore,

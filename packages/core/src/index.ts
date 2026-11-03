@@ -1,6 +1,23 @@
 export { ParamMixer } from './mixer.ts';
 export { planSemanticPosture, canExpress } from './semantic-binding.ts';
 export type { SemanticWrite, SkippedChannel, PosturePlan } from './semantic-binding.ts';
+export {
+  POSTURE_DURATION_DEFAULT_MS,
+  POSTURE_DURATION_MAX_MS,
+  POSTURE_DURATION_MIN_MS,
+  normalizePostureInput,
+  planPostureExecution,
+  shapePostureReceipt,
+} from './posture.ts';
+export type {
+  DegradedChannel,
+  NormalizedPostureInput,
+  PostureAppliedWrite,
+  PostureExecutionPlan,
+  PostureFailedWrite,
+  PostureInput,
+  PostureReceipt,
+} from './posture.ts';
 export type { ChannelSpec, BlendMode, MixerOptions, ParamId, ParamRange, StepSnapshot } from './mixer.ts';
 export { easeInOutCubic } from './ease.ts';
 export { mixAdditive } from './angle-mix.ts';

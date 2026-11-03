@@ -196,6 +196,27 @@ server.registerTool(
 );
 
 server.registerTool(
+  'l2d_posture',
+  {
+    description:
+      '用语义通道摆姿态：values 是 {通道名: -1..1}，通道名来自模型能力画像（l2d_get_state 可见），不认识的通道会被显式 skipped 并给原因。保持 durationMs（默认 4000，500~30000）后自动回到待机；own 为 true 时把全部写入参数占住防止被覆盖。approximate 通道在回执 degraded 里标注（表达是近似的）。返回的 skipped / degraded / failed 都要读，不要原样重试。',
+    inputSchema: {
+      values: z.record(z.string(), z.number().min(-1).max(1)).describe('语义通道 → 归一化值（-1..1）'),
+      durationMs: z.number().int().min(500).max(30000).optional().describe('保持时长毫秒，默认 4000'),
+      own: z.boolean().optional().describe('true 时把全部写入参数 own 住，到期自动释放'),
+      fadeMs: z.number().min(0).optional().describe('淡入时长毫秒，超过 durationMs 会被夹到 durationMs'),
+    },
+  },
+  async ({ values, durationMs, own, fadeMs }) => {
+    if (!values || Object.keys(values).length === 0) {
+      return toolResult({ ok: false, reason: 'empty-values' });
+    }
+    const timeoutMs = Math.min(35000, (durationMs || 4000) + 5000);
+    return toolResult(await forward('l2d_posture', { values, durationMs, own, fadeMs }, timeoutMs));
+  },
+);
+
+server.registerTool(
   'l2d_say',
   {
     description: '让角色冒一句气泡。只显示文字，不读硬盘、不发请求。',

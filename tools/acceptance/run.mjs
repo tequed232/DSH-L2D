@@ -5,29 +5,39 @@
  *   node tools/acceptance/run.mjs                 # 默认读 ~/.dsh/l2d-service.json
  *   node tools/acceptance/run.mjs --origin http://127.0.0.1:3080
  *   node tools/acceptance/run.mjs --seconds 10 --min-fps 52
- *   node tools/acceptance/run.mjs --read-only     # 只做 A/A2/B，不发任何动作
+ *   node tools/acceptance/run.mjs --read-only     # 只做只读项，不发任何动作
  *
- * 检查项（A/A2/B 只读；C/D 会发动作，二选一按需跳过）：
+ * 检查项（A/A2/B/E/F GET 只读；D/C 发动作；F rescan 是 POST 重扫但不动角色）：
  *   A  新产物：get_state.info 必须带 fpsCap / vsyncHz（缺了就是旧 bundle）
  *   A2 渲染倍率：pxW×pxH 量级判断（≈1186×1482 = 还没吃 2048 档）
  *   B  前台帧率：Δframes / Δutime ≥ min-fps（utime 是渲染器累加渲染时间，不含轮询延迟）
  *   D  计划层：只带 group+timeoutMs 的链必须按整组超时收敛（reason=timeout）。
  *      这一项专门防「页面还在跑旧 overlay / 计划层没接线」——老路径会忽略 timeoutMs，等满 1.8s。
  *   C  并行组降级：同组两条 look，**结束事件**必须带 notes=parallel-overlap-downgraded。
+ *   E  设置页：GET /dsh-l2d/settings 返回 200 且五个分区标题齐全。
+ *   F  画像路由：GET /dsh-l2d/capability.json 契约（controls=20、modelId 非空）；
+ *      POST /dsh-l2d/capability/rescan 重扫一次（只重建画像缓存，不驱动角色）。
+ *   G  MCP 冒烟：spawn packages/dsh-l2d-mcp/src/server.mjs 走 JSON-RPC tools/list，
+ *      工具数 ≥13 且含 l2d_act；l2d_posture 未实装记 WARN（对未上线 API 只做预埋检查）。
  *
  * 标志：
- *   --read-only      跳过 C 和 D（不改变角色状态，可随时跑）
+ *   --read-only      跳过 C/D（发动作）和 F 的 rescan（POST 写操作），其余照跑
  *   --skip-parallel  仅跳过 C（D 仍会发一条动作，要完全只读请用 --read-only）
  *   --skip-plan      仅跳过 D
+ *   --min-boot-tag   页面新鲜度基准（默认 1793684582683）：bootTag 更旧的页面可能
+ *                    是旧实例，或与并行代理的旧页面共享 /ai/poll 队列，回执不可信
  *   --verbose        打印 C 的原始事件，便于定位「notes 没产生」还是「没送到」
  *
  * 退出码：0 全过；1 有 FAIL；2 连不上服务（DSH 没起 / 端口变了）。
  *
  * 注意：C/D 会驱动角色做动作，别和他人同时操作同一实例（aiInbox 是全域抢占式队列）。
+ * 发动作的入队调用带 2 次重试（并行代理的页面可能瞬时抢走队列），回执按 bootTag 判新鲜度。
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const args = process.argv.slice(2);
 const argOf = (name, def) => {
@@ -42,6 +52,10 @@ const MIN_FPS = Number(argOf('min-fps', 52));
 const RESULT_TIMEOUT = Number(argOf('timeout', 15000));
 /** 并行组用例的取件窗口（秒）：结束回执带 notes，常在受理回执之后 1~3s 才到。 */
 const DRAIN_MS = Math.max(2, Number(argOf('drain', 9))) * 1000;
+/** 页面新鲜度基准：diag.bootTag 低于它的页面是旧实例 / 别的代理旧页面，动作回执不可信。 */
+const MIN_BOOT_TAG = Number(argOf('min-boot-tag', 1793684582683));
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const MCP_SERVER = path.join(REPO_ROOT, 'packages', 'dsh-l2d-mcp', 'src', 'server.mjs');
 
 function readOrigin() {
   const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
@@ -84,6 +98,20 @@ async function call(name, payload) {
   return r.body.id;
 }
 
+/** 发动作前重试：并行代理的页面可能瞬时抢走 /ai/poll 队列导致入队失败，总共最多试 3 次。 */
+async function callRetry(name, payload, tries = 3) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await call(name, payload);
+    } catch (e) {
+      lastErr = e;
+      if (i < tries - 1) await sleep(500);
+    }
+  }
+  throw lastErr;
+}
+
 /** 轮询 /ai/result 直到 ready，返回 { result, events }。 */
 async function awaitResult(id, timeoutMs = RESULT_TIMEOUT) {
   const deadline = Date.now() + timeoutMs;
@@ -110,6 +138,57 @@ async function drainEvents(id, ms) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * spawn MCP server，走 stdio JSON-RPC 完成 initialize + tools/list，返回工具数组。
+ * 只列工具，不调任何工具 → 不发动作、不碰角色。
+ */
+function mcpToolsList(serverPath, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [serverPath], {
+      cwd: REPO_ROOT,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    let buf = '';
+    let stderr = '';
+    let done = false;
+    const finish = (err, tools) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { child.kill(); } catch { /* 已退出也无妨 */ }
+      err ? reject(err) : resolve(tools);
+    };
+    const timer = setTimeout(
+      () => finish(new Error(`tools/list ${timeoutMs}ms 内无响应${stderr ? '，stderr: ' + stderr.slice(-200) : ''}`)),
+      timeoutMs,
+    );
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('error', (e) => finish(new Error('spawn 失败：' + e.message)));
+    child.on('exit', (code) => {
+      if (!done) finish(new Error(`server 提前退出 code=${code}${stderr ? '，stderr: ' + stderr.slice(-200) : ''}`));
+    });
+    child.stdout.on('data', (d) => {
+      buf += d;
+      let idx;
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 1);
+        if (!line) continue;
+        let msg;
+        try { msg = JSON.parse(line); } catch { continue; }
+        if (msg && msg.id === 2 && msg.result && Array.isArray(msg.result.tools)) {
+          finish(null, msg.result.tools);
+        }
+      }
+    });
+    const send = (obj) => child.stdin.write(JSON.stringify(obj) + '\n');
+    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'dsh-acceptance', version: '0.0.0' } } });
+    send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+  });
+}
 
 async function main() {
   if (!ORIGIN) {
@@ -185,11 +264,19 @@ async function main() {
   // D 计划层是否在跑（专门防「页面还在跑旧 overlay」这类假绿/假红）
   // 只带 timeoutMs 且 delayMs=0 的单个 look：计划层在跑 → 整组超时在 ~300ms 收敛，
   // 走老串行兜底 → timeoutMs 被忽略，要等满 life（1.8s+）。两者时间差一个数量级。
+  // 回执可信度前置检查：bootTag 低于基准 = 连的是旧实例 / 并行代理的旧页面在抢队列。
+  // 页面会把 bootTag 序列化成字符串，必须转数字再比，否则守卫静默失效。
+  const bootTagRaw = diag ? diag.bootTag : null;
+  const bootTagNum = Number(bootTagRaw);
+  const bootTag = bootTagRaw != null && Number.isFinite(bootTagNum) ? bootTagNum : null;
+  const pageStale = bootTag != null && bootTag < MIN_BOOT_TAG;
   if (flag('read-only') || flag('skip-plan')) {
     record('D 计划层', 'warn', flag('read-only') ? '已按 --read-only 跳过' : '已按 --skip-plan 跳过');
+  } else if (pageStale) {
+    record('D 计划层', 'warn', `页面 bootTag=${bootTag} 低于基准 ${MIN_BOOT_TAG}（旧实例或并行代理旧页面在消费队列），回执不可信 → 刷新页面 / 重启后重跑`);
   } else {
     const t = Date.now();
-    const pid = await call('l2d_act', {
+    const pid = await callRetry('l2d_act', {
       chain: [{ kind: 'look', x: 0.2, y: 0, group: 'probe', timeoutMs: 300 }],
       priority: 'FORCE',
     });
@@ -229,13 +316,15 @@ async function main() {
   // C 并行组降级（判据：notes 必须挂在**同一 runId 的结束事件**上；被插队也算，但只算 WARN）
   if (flag('read-only') || flag('skip-parallel')) {
     record('C 并行组降级', 'warn', flag('read-only') ? '已按 --read-only 跳过' : '已按 --skip-parallel 跳过');
+  } else if (pageStale) {
+    record('C 并行组降级', 'warn', `页面 bootTag=${bootTag} 低于基准 ${MIN_BOOT_TAG}（旧实例或并行代理旧页面在消费队列），回执不可信 → 刷新页面 / 重启后重跑`);
   } else {
     const chain = [
       { kind: 'look', x: 0.6, y: 0.1, group: 'acc', mode: 'parallel', delayMs: 0 },
       { kind: 'look', x: -0.6, y: 0.1, group: 'acc', mode: 'parallel', delayMs: 0 },
     ];
     // FORCE：环境自发动作抢不走，避免把「被插队」误判成「降级没生效」
-    const actId = await call('l2d_act', { chain, priority: 'FORCE' });
+    const actId = await callRetry('l2d_act', { chain, priority: 'FORCE' });
     const act = await awaitResult(actId, 12000);
     const r = act.result || {};
     const accepted = r.ok === true && (r.accepted === true || r.status === 'accepted');
@@ -279,6 +368,102 @@ async function main() {
     } catch {
       /* 忽略：收尾失败不影响验收结论 */
     }
+  }
+
+  // E 设置页：GET 200 且五个分区标题齐全（纯读取；标题是分区导航的契约锚点，
+  // 缺了 = 页面是旧 bundle 或分区被改名导致深链 / 自动化定位失效）。
+  {
+    const TITLES = ['显示与布局', '角色与模型', '情绪与行为', '动画与性能', '开发者工具'];
+    let html = '';
+    let status = 0;
+    try {
+      const res = await fetch(`${ORIGIN}/dsh-l2d/settings`, { cache: 'no-store' });
+      status = res.status;
+      html = await res.text();
+    } catch (e) {
+      html = 'FETCH-ERR ' + e.message;
+    }
+    const missing = TITLES.filter((t) => !html.includes(t));
+    record(
+      'E 设置页',
+      status === 200 && missing.length === 0,
+      status !== 200
+        ? `HTTP ${status}（预期 200）→ 插件设置路由未挂载或服务是旧版本`
+        : missing.length
+          ? `缺分区标题：${missing.join('/')} → 页面是旧 bundle 或分区标题被改名`
+          : `HTTP 200，分区标题 5/5 齐全`,
+    );
+  }
+
+  // F 画像路由：capability.json 是 MCP / 上层规划的语义通道契约，
+  // controls 数量变了 = 模型或扫描器变了，下游白名单会静默漂移，必须显式断言。
+  // rescan 是 POST 重扫（重建画像缓存文件，不驱动角色），read-only 下跳过。
+  {
+    const cap = await getJson(`${ORIGIN}/dsh-l2d/capability.json`);
+    const controls = cap.body && Array.isArray(cap.body.controls) ? cap.body.controls : null;
+    const n = controls ? controls.length : -1;
+    const modelId = cap.body && cap.body.modelId;
+    record(
+      'F 画像路由',
+      cap.status === 200 && n === 20 && !!modelId,
+      cap.status !== 200
+        ? `capability.json HTTP ${cap.status}（预期 200）→ 画像路由未挂载`
+        : n !== 20
+          ? `controls.length=${n}（契约要求 20）→ 模型或扫描器输出变了，检查 tools/capability-scan`
+          : !modelId
+            ? 'modelId 为空 → 画像缺模型标识，上层无法绑定'
+            : `controls=20 · modelId=${modelId}`,
+    );
+    if (flag('read-only')) {
+      record('F rescan', 'warn', '已按 --read-only 跳过（POST 重扫）');
+    } else {
+      const rs = await getJson(`${ORIGIN}/dsh-l2d/capability/rescan`, { method: 'POST' });
+      const rsText = typeof rs.body === 'string' ? rs.body : JSON.stringify(rs.body);
+      record(
+        'F rescan',
+        rs.status === 200,
+        rs.status === 200
+          ? 'HTTP 200（重扫一次，画像缓存已重建）'
+          : `HTTP ${rs.status}：${String(rsText).slice(0, 120)} → 重扫失败时 capability.json 可能滞留旧模型`,
+      );
+    }
+  }
+
+  // G MCP 冒烟：spawn MCP server 走 JSON-RPC tools/list（不起渲染、不连服务也能列工具）。
+  // 判据：工具数 ≥13 且含 l2d_act；l2d_posture 未实装记 WARN——它是对未上线 API 的
+  // 行为契约预埋，缺了不算失败，但要让实装进度可见。
+  {
+    let tools = null;
+    let gError = '';
+    try {
+      tools = await mcpToolsList(MCP_SERVER, 15000);
+    } catch (e) {
+      gError = e && e.message ? e.message : String(e);
+    }
+    let verdict;
+    let detail;
+    if (!tools) {
+      verdict = false;
+      detail = gError || 'tools/list 无结果';
+    } else {
+      const names = tools.map((t) => t && t.name).filter(Boolean);
+      const missingRequired = ['l2d_act'].filter((n) => !names.includes(n));
+      const missingOptional = ['l2d_posture'].filter((n) => !names.includes(n));
+      if (names.length < 13) {
+        verdict = false;
+        detail = `只列出 ${names.length} 个工具（要求 ≥13）→ server.mjs 注册中断或 SDK 依赖未安装（在 packages/dsh-l2d-mcp 跑 pnpm install）`;
+      } else if (missingRequired.length) {
+        verdict = false;
+        detail = `缺必需工具：${missingRequired.join('/')}（现有 ${names.join(', ')}）`;
+      } else if (missingOptional.length) {
+        verdict = 'warn';
+        detail = `${names.length} 个工具齐全（含 l2d_act）；${missingOptional.join('/')} 未实装 → WARN 不算 FAIL：该项是对未上线 API 的预埋检查，实装后应自动转 PASS`;
+      } else {
+        verdict = true;
+        detail = `${names.length} 个工具，必需/可选全齐`;
+      }
+    }
+    record('G MCP 冒烟', verdict, detail);
   }
 
   const failed = results.filter((r) => r.ok === false).length;

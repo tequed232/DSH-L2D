@@ -78,3 +78,72 @@
 
 **流程教训**：一个失败的客户端入口会把**整个 Web UI** 打进错误页，不能直接在正在用的 profile 上试。
 下次在临时 profile（复制 web profile、换端口）里验证通过，再动主环境。
+
+## 6. 真机实验记录：客户端入口打通（第二次尝试，成功）
+
+> 时间：2026-11-03（§5 同日的续篇）。环境：web profile（`dsh web --port 3080`）。
+> 最终形态见 `packages/dsh-l2d-plugin/lib/client.js`（吞错 + window 变量上报 + get_state diag 回读）。
+
+### 6.1 最终可用的注册调用形态
+
+```js
+// lib/client.js —— 模块格式不变：window.__ModuleLoader__.load({ id, factory(require) })
+const inject = ['slots'];        // ← 服务名，不是包名！宿主按它等 slots 服务就绪
+exports.inject = inject;         // ← 必须；缺了就是 §5 的 "without inject"
+
+function apply(ctx) {
+  try {
+    // ctx.slots.inject(key, cb)：声明等待 API（@deepseek-ai/dsh-client-ui-renderer）。
+    //   - slot 已声明 → cb 同步执行；
+    //   - 未声明 → 在声明提交的那次 register() 调用栈里执行。
+    // shell.overlay 由 @deepseek-ai/dsh-client-ui-layout 注册 root entry 时用
+    // children: { 'shell.overlay': { kind:'list', scope:'root' }, … } 声明；
+    // 我们的 apply 早于 layout 注册执行，直接 register 必抛 not declared。
+    ctx.slots.inject('shell.overlay', function () {
+      try {  // cb 可能跑在 layout 的 register 栈里，绝不能把异常冒进宿主 fiber
+        ctx.slots.register({ name: 'shell.overlay', id: 'dsh-l2d' }, Component);
+      } catch (err) { window.__L2D_CLIENT_ERROR__ = String(err && err.stack || err); }
+    });
+    window.__L2D_CLIENT_OK__ = true;
+  } catch (err) {
+    window.__L2D_CLIENT_ERROR__ = String(err && err.stack || err);
+  }
+}
+exports.apply = apply;
+```
+
+组件本体零约束验证过的两点：不需要宿主注入 props；`register` 选项只要 `{ name, id }`
+即可（`locale`/`children` 不是必填——那是「声明 slot」时的字段，不是「使用 slot」时的）。
+
+### 6.2 错误 → 修法对照表
+
+| # | 错误 | 根因 | 修法 |
+|---|---|---|---|
+| 1 | `Failed to load plugins — web boot: 1 entry did not activate`（`dsh-l2d: loading` 挂起） | `dsh.client` 声明了 client 入口但模块没返回 `{ inject, apply }` 契约 | 模块导出 `inject` 数组 + `apply`（§5） |
+| 2 | `dsh-l2d: failed` | `dsh.client.inject` 填了**包名** `@deepseek-ai/dsh-client-ui-layout` | 不是包名，是**服务名**：宿主侧 `inject: ['slots']`，且模块要 `exports.inject = inject` |
+| 3 | `Error: cannot get property "slots" without inject` | apply 访问了未声明的服务 | 同上：`inject = ['slots']` + `exports.inject = inject` |
+| 4 | `Error: slot "shell.overlay" is not declared (a parent entry's children table must declare it)` | SlotRegistry（前端 bundle）只内置声明 `root`；其余 slot 由各 entry 的 `children` 表在 register 时声明。我们的 apply 早于 layout 的 root 注册执行 | `ctx.slots.inject('shell.overlay', cb)` 等声明就绪，register 放进 cb |
+| 5 | （预防）cb 内异常会炸宿主 entry | inject 的 cb 可能在 layout 的 register 调用栈中同步执行 | cb 全体 try/catch，错误写 `window.__L2D_CLIENT_ERROR__` |
+
+### 6.3 调试基建（后来人直接复用）
+
+1. **绝不允许 apply 抛异常**：一次抛错会把整个 Web UI 打进错误页（§5 教训）。
+   现行模式：apply 全体 try/catch → 错误写 `window.__L2D_CLIENT_ERROR__`（完整栈），
+   成功写 `window.__L2D_CLIENT_OK__`。`lib/overlay.js` 的 `l2d_get_state` diag
+   里 `clientEntry` 字段回读（slice 上限已提到 4000 字符）。
+2. **读 get_state 回执要按 bootTag 过滤**：`diag.bootTag` = overlay.js 的 mtime 派生值，
+   只有「本次改完刷新出来的页面」才算数（其他并行浏览器页面在抢同一个 `/ai/poll` 队列）。
+   做法：burst ≥30 次 `POST /dsh-l2d/ai/call {name:'l2d_get_state'}` + `GET /dsh-l2d/ai/result?id=`，
+   丢弃 bootTag 不等于期望值的回执。
+3. **代码缓存不必重启实例**：overlay.js 注入 URL 的 `v=`（mtime 派生）与客户端聚合包
+   `/plugins/??<pkg>/client.js&rev=`（mtime/ctime/size 派生，`dsh-client-modules` 内置
+   HMR watch）都按文件元数据失效。改完 client.js / overlay.js **刷新页面即拿到新代码**。
+4. **验证 slot 组件渲染用截图**：DOM 快照看不到 overlay 层。
+
+### 6.4 结果
+
+- 探针徽标（`shell.overlay` → 蓝色 fixed 顶部胶囊）真机渲染成功，`diag.clientEntry=ok`，无错误页。
+- 已升级为角色容器：`shell.overlay` → 320×480 `<iframe src="/dsh-l2d/test.html">`（右下角、
+  圆角、半透明边框），模型在 iframe 内渲染成功（test.html HUD + Live2D 模型均可见）。
+- §5 的「尚未确认三点」全部关闭：register 无必填的 locale/children；组件不需要宿主 props；
+  kind/scope 不由使用方声明（那是 layout 的 children 表的事，用 `slots.inject` 等它即可）。

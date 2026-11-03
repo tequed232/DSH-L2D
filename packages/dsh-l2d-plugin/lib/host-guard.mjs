@@ -53,6 +53,7 @@ export const HOST_ALLOWED_TOOLS = Object.freeze([
   'l2d_gaze',
   'l2d_say',
   'l2d_act',
+  'l2d_posture',
   'l2d_get_state',
   'l2d_reset',
 ]);

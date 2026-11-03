@@ -1,0 +1,1640 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DSH-L2D · 设置</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --dsh-font-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+          'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+        --dsh-font-mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+        --dsh-text-xs: 400 12px/1.45 var(--dsh-font-sans);
+        --dsh-text-sm: 400 13px/1.5 var(--dsh-font-sans);
+        --dsh-text-md: 400 14px/1.55 var(--dsh-font-sans);
+        --dsh-text-label: 500 13px/1.4 var(--dsh-font-sans);
+        --dsh-text-lg: 500 16px/1.4 var(--dsh-font-sans);
+        --dsh-text-xl: 500 20px/1.3 var(--dsh-font-sans);
+        --dsh-space-1: 4px;
+        --dsh-space-2: 8px;
+        --dsh-space-3: 12px;
+        --dsh-space-4: 16px;
+        --dsh-space-5: 24px;
+        --dsh-space-6: 32px;
+        --dsh-radius-sm: 4px;
+        --dsh-radius-md: 8px;
+        --dsh-radius-lg: 12px;
+        --dsh-radius-full: 999px;
+        --dsh-control-sm: 32px;
+        --dsh-control-md: 40px;
+        --dsh-ease: cubic-bezier(0.2, 0, 0, 1);
+        --dsh-dur-fast: 120ms;
+        --dsh-dur: 200ms;
+        --dsh-bg: #101114;
+        --dsh-surface: #171a21;
+        --dsh-surface-raised: #222733;
+        --dsh-surface-sunken: #0c0e12;
+        --dsh-ink: #e8eaef;
+        --dsh-ink-muted: #b4bac6;
+        --dsh-line: rgb(232 234 239 / 0.14);
+        --dsh-line-strong: rgb(232 234 239 / 0.32);
+        --dsh-accent: #9dc1ff;
+        --dsh-on-accent: #0b1b33;
+        --dsh-accent-soft: #2a3d5c;
+        --dsh-on-accent-soft: #d6e6ff;
+        --dsh-danger: #ffb4ab;
+        --dsh-ok: #8fd0a8;
+        --dsh-warn: #f2cc60;
+        --dsh-hover: color-mix(in srgb, var(--dsh-ink) 8%, transparent);
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          color-scheme: light;
+          --dsh-bg: #f4f6f8;
+          --dsh-surface: #ffffff;
+          --dsh-surface-raised: #eef1f5;
+          --dsh-surface-sunken: #e6eaf0;
+          --dsh-ink: #1c1f26;
+          --dsh-ink-muted: #526070;
+          --dsh-line: #e1e5ec;
+          --dsh-line-strong: #c5ccd6;
+          --dsh-accent: #1e4f8a;
+          --dsh-on-accent: #ffffff;
+          --dsh-accent-soft: #e6eef8;
+          --dsh-on-accent-soft: #143864;
+          --dsh-danger: #b42318;
+          --dsh-ok: #087443;
+          --dsh-warn: #8a5b00;
+          --dsh-hover: color-mix(in srgb, var(--dsh-ink) 6%, transparent);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        :root {
+          --dsh-dur-fast: 0ms;
+          --dsh-dur: 0ms;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+      }
+
+      body {
+        background: var(--dsh-bg);
+        color: var(--dsh-ink);
+        font: var(--dsh-text-md);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .page {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: var(--dsh-space-6) var(--dsh-space-5) var(--dsh-space-6);
+        display: flex;
+        flex-direction: column;
+        gap: var(--dsh-space-4);
+      }
+
+      .head h1 {
+        margin: 0;
+        font: var(--dsh-text-xl);
+      }
+
+      .head .sub {
+        margin: var(--dsh-space-1) 0 0;
+        font: var(--dsh-text-sm);
+        color: var(--dsh-ink-muted);
+      }
+
+      .bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--dsh-space-3);
+        flex-wrap: wrap;
+        padding: var(--dsh-space-2) var(--dsh-space-4);
+        border: 1px solid var(--dsh-line);
+        border-radius: var(--dsh-radius-lg);
+        background: var(--dsh-surface);
+        font: var(--dsh-text-sm);
+      }
+
+      .bar-left {
+        display: flex;
+        align-items: center;
+        gap: var(--dsh-space-2);
+        min-width: 0;
+      }
+
+      .bar-right {
+        color: var(--dsh-ink-muted);
+        font: var(--dsh-text-xs);
+      }
+
+      .bar-right.ok {
+        color: var(--dsh-ok);
+      }
+
+      .bar-right.err {
+        color: var(--dsh-danger);
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        flex: none;
+        border-radius: var(--dsh-radius-full);
+        background: var(--dsh-ink-muted);
+      }
+
+      .dot.ok {
+        background: var(--dsh-ok);
+      }
+
+      .dot.warn {
+        background: var(--dsh-warn);
+      }
+
+      .dot.err {
+        background: var(--dsh-danger);
+      }
+
+      .alert {
+        border: 1px solid var(--dsh-danger);
+        border-radius: var(--dsh-radius-md);
+        padding: var(--dsh-space-2) var(--dsh-space-3);
+        color: var(--dsh-danger);
+        font: var(--dsh-text-sm);
+      }
+
+      .card {
+        border: 1px solid var(--dsh-line);
+        border-radius: var(--dsh-radius-lg);
+        background: var(--dsh-surface);
+        padding: var(--dsh-space-4) var(--dsh-space-5) var(--dsh-space-5);
+        scroll-margin-top: var(--dsh-space-4);
+      }
+
+      .sec-head {
+        display: flex;
+        align-items: baseline;
+        gap: var(--dsh-space-2);
+      }
+
+      .sec-no {
+        font-family: var(--dsh-font-mono);
+        font-size: 12px;
+        color: var(--dsh-ink-muted);
+      }
+
+      .sec-head h2 {
+        margin: 0;
+        font: var(--dsh-text-lg);
+        color: var(--dsh-ink);
+      }
+
+      .sec-desc {
+        margin: var(--dsh-space-1) 0 0;
+        font: var(--dsh-text-sm);
+        color: var(--dsh-ink-muted);
+      }
+
+      .sub-head {
+        margin: var(--dsh-space-5) 0 0;
+        font: var(--dsh-text-label);
+        display: flex;
+        align-items: center;
+        gap: var(--dsh-space-2);
+      }
+
+      .rows {
+        margin-top: var(--dsh-space-2);
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: var(--dsh-space-2) var(--dsh-space-5);
+        padding: var(--dsh-space-2) 0;
+        border-top: 1px solid var(--dsh-line);
+      }
+
+      .row:first-child {
+        border-top: none;
+      }
+
+      .row.is-stack {
+        grid-template-columns: minmax(0, 1fr);
+        align-items: start;
+      }
+
+      .row.is-stack .row-ctrl {
+        justify-content: flex-start;
+      }
+
+      .row-label {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      .label {
+        font: var(--dsh-text-label);
+      }
+
+      .hint {
+        font: var(--dsh-text-xs);
+        color: var(--dsh-ink-muted);
+      }
+
+      .row-ctrl {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--dsh-space-2);
+        min-width: 0;
+      }
+
+      .row-message {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: var(--dsh-space-2);
+        margin: 0;
+        font: var(--dsh-text-xs);
+        color: var(--dsh-danger);
+      }
+
+      .sw {
+        appearance: none;
+        width: 36px;
+        height: 20px;
+        flex: none;
+        margin: 0;
+        border: 1px solid var(--dsh-line-strong);
+        border-radius: var(--dsh-radius-full);
+        background: var(--dsh-surface-sunken);
+        cursor: pointer;
+        position: relative;
+        transition: background var(--dsh-dur-fast) var(--dsh-ease);
+      }
+
+      .sw::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 14px;
+        height: 14px;
+        border-radius: var(--dsh-radius-full);
+        background: var(--dsh-ink-muted);
+        transition: left var(--dsh-dur-fast) var(--dsh-ease);
+      }
+
+      .sw:checked {
+        background: var(--dsh-accent);
+        border-color: var(--dsh-accent);
+      }
+
+      .sw:checked::after {
+        left: 18px;
+        background: var(--dsh-on-accent);
+      }
+
+      .num,
+      .sel {
+        height: var(--dsh-control-sm);
+        border: 1px solid var(--dsh-line);
+        border-radius: var(--dsh-radius-md);
+        background: var(--dsh-surface-sunken);
+        color: var(--dsh-ink);
+        font: var(--dsh-text-sm);
+        padding: 0 var(--dsh-space-2);
+      }
+
+      .num {
+        width: 96px;
+        font-family: var(--dsh-font-mono);
+      }
+
+      .sel {
+        min-width: 168px;
+      }
+
+      .ctrl-num,
+      .ctrl-range {
+        display: flex;
+        align-items: center;
+        gap: var(--dsh-space-2);
+      }
+
+      .unit,
+      .val {
+        font: var(--dsh-text-xs);
+        color: var(--dsh-ink-muted);
+      }
+
+      .rng {
+        width: 168px;
+        accent-color: var(--dsh-accent);
+      }
+
+      .val {
+        font-family: var(--dsh-font-mono);
+        min-width: 48px;
+        text-align: right;
+      }
+
+      .modes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--dsh-space-2);
+      }
+
+      .mode-opt {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--dsh-space-2);
+        padding: var(--dsh-space-2) var(--dsh-space-3);
+        border: 1px solid var(--dsh-line);
+        border-radius: var(--dsh-radius-md);
+        font: var(--dsh-text-sm);
+        cursor: pointer;
+      }
+
+      .mode-opt.is-checked {
+        border-color: var(--dsh-accent);
+        background: var(--dsh-accent-soft);
+        color: var(--dsh-on-accent-soft);
+      }
+
+      .mode-opt.is-disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .mode-opt input {
+        accent-color: var(--dsh-accent);
+        margin: 0;
+      }
+
+      .tag {
+        font: var(--dsh-text-xs);
+        color: var(--dsh-ink-muted);
+        border: 1px solid var(--dsh-line);
+        border-radius: var(--dsh-radius-sm);
+        padding: 0 var(--dsh-space-1);
+      }
+
+      .note {
+        margin: var(--dsh-space-2) 0 0;
+        font: var(--dsh-text-xs);
+        color: var(--dsh-ink-muted);
+      }
+
+      .btn {
+        height: var(--dsh-control-sm);
+        padding: 0 var(--dsh-space-3);
+        border: 1px solid var(--dsh-line-strong);
+        border-radius: var(--dsh-radius-md);
+        background: var(--dsh-surface-raised);
+        color: var(--dsh-ink);
+        font: var(--dsh-text-label);
+        cursor: pointer;
+      }
+
+      .btn:hover:not(:disabled) {
+        background: var(--dsh-hover);
+      }
+
+      .btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .link-btn {
+        border: none;
+        background: none;
+        padding: 0;
+        color: var(--dsh-accent);
+        font: var(--dsh-text-xs);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        cursor: pointer;
+      }
+
+      a {
+        color: var(--dsh-accent);
+        text-underline-offset: 2px;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--dsh-accent);
+        outline-offset: 2px;
+      }
+
+      .model-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--dsh-space-4);
+        flex-wrap: wrap;
+        margin-top: var(--dsh-space-3);
+      }
+
+      .k {
+        font: var(--dsh-text-xs);
+        color: var(--dsh-ink-muted);
+      }
+
+      .model-name {
+        margin-top: 2px;
+        font-family: var(--dsh-font-mono);
+        font-size: 14px;
+        word-break: break-all;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--dsh-space-1);
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--dsh-space-1);
+        height: 24px;
+        padding: 0 var(--dsh-space-2);
+        border: 1px solid var(--dsh-line);
+        border-radius: var(--dsh-radius-md);
+        background: var(--dsh-surface-raised);
+        color: var(--dsh-ink);
+        font: var(--dsh-text-xs);
+      }
+
+      .chip.is-btn {
+        cursor: pointer;
+      }
+
+      .chip.is-btn:hover {
+        background: var(--dsh-hover);
+      }
+
+      .chip.is-open {
+        border-color: var(--dsh-line-strong);
+      }
+
+      .cap-group {
+        margin-top: var(--dsh-space-3);
+      }
+
+      .cap-title {
+        display: flex;
+        align-items: center;
+        gap: var(--dsh-space-2);
+        font: var(--dsh-text-xs);
+        color: var(--dsh-ink-muted);
+      }
+
+      .cap-reasons {
+        display: flex;
+        flex-direction: column;
+        gap: var(--dsh-space-2);
+        margin-top: var(--dsh-space-2);
+      }
+
+      .cap-reason {
+        margin: 0;
+        padding-left: var(--dsh-space-2);
+        font: var(--dsh-text-xs);
+        color: var(--dsh-ink-muted);
+        border-left: 2px solid var(--dsh-line-strong);
+      }
+
+      .readouts {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1px;
+        margin-top: var(--dsh-space-4);
+        border: 1px solid var(--dsh-line);
+        border-radius: var(--dsh-radius-md);
+        background: var(--dsh-line);
+        overflow: hidden;
+      }
+
+      .ro {
+        background: var(--dsh-surface);
+        padding: var(--dsh-space-2) var(--dsh-space-3);
+      }
+
+      .ro-val {
+        margin-top: 2px;
+        font-family: var(--dsh-font-mono);
+        font-size: 14px;
+      }
+
+      .kv {
+        margin-top: var(--dsh-space-3);
+        border-top: 1px solid var(--dsh-line);
+      }
+
+      .kv-row {
+        display: grid;
+        grid-template-columns: 132px minmax(0, 1fr);
+        gap: var(--dsh-space-3);
+        padding: var(--dsh-space-2) 0;
+        border-bottom: 1px solid var(--dsh-line);
+        font: var(--dsh-text-sm);
+      }
+
+      .kv-row .k {
+        font: var(--dsh-text-xs);
+        padding-top: 3px;
+      }
+
+      .kv-row .v {
+        font-family: var(--dsh-font-mono);
+        font-size: 13px;
+        word-break: break-all;
+      }
+
+      .dev-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--dsh-space-3);
+        flex-wrap: wrap;
+        margin-top: var(--dsh-space-4);
+      }
+
+      .dev-actions a {
+        font: var(--dsh-text-label);
+      }
+
+      .hint.is-error {
+        color: var(--dsh-danger);
+      }
+
+      .empty {
+        margin: var(--dsh-space-2) 0 0;
+        font: var(--dsh-text-sm);
+        color: var(--dsh-ink-muted);
+      }
+
+      @media (max-width: 640px) {
+        .page {
+          padding: var(--dsh-space-4) var(--dsh-space-3) var(--dsh-space-6);
+        }
+        .row {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .row-ctrl {
+          justify-content: flex-start;
+        }
+        .readouts {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="head">
+        <h1>设置</h1>
+        <p class="sub">DSH-L2D 角色运行时 · 改动即时写入宿主，无需保存按钮</p>
+      </header>
+
+      <div class="bar">
+        <div class="bar-left">
+          <span class="dot" id="modeDot"></span>
+          <span id="modeText">当前呈现模式：未知</span>
+        </div>
+        <div class="bar-right" id="saveState" role="status" aria-live="polite">正在读取设置</div>
+      </div>
+
+      <div class="alert" id="alert" hidden></div>
+
+      <section class="card" id="sec-display">
+        <div class="sec-head"><span class="sec-no">01</span><h2>显示与布局</h2></div>
+        <p class="sec-desc">角色挂在哪里、多大、什么时候淡出。</p>
+        <div class="rows" id="rows-display"></div>
+      </section>
+
+      <section class="card" id="sec-model">
+        <div class="sec-head"><span class="sec-no">02</span><h2>角色与模型</h2></div>
+        <p class="sec-desc">当前加载的模型、资源就位情况与能力边界。</p>
+        <div class="model-head">
+          <div>
+            <div class="k">当前模型</div>
+            <div class="model-name" id="modelName">—</div>
+          </div>
+          <div class="chips" id="assetChips"></div>
+        </div>
+        <h3 class="sub-head">能力画像 <span class="hint" id="capSummary"></span></h3>
+        <div id="capGroups"></div>
+      </section>
+
+      <section class="card" id="sec-behavior">
+        <div class="sec-head"><span class="sec-no">03</span><h2>情绪与行为</h2></div>
+        <p class="sec-desc">角色怎么被驱动，以及主动说话和玩梗的尺度。</p>
+        <div class="rows" id="rows-behavior"></div>
+      </section>
+
+      <section class="card" id="sec-performance">
+        <div class="sec-head"><span class="sec-no">04</span><h2>动画与性能</h2></div>
+        <p class="sec-desc">刷新节奏、声音、传感器与桌宠形态。</p>
+        <div class="rows" id="rows-performance"></div>
+        <div class="readouts">
+          <div class="ro">
+            <div class="k">帧率</div>
+            <div class="ro-val" id="roFps">—</div>
+          </div>
+          <div class="ro">
+            <div class="k">分辨率</div>
+            <div class="ro-val" id="roRes">—</div>
+          </div>
+          <div class="ro">
+            <div class="k">渲染就绪</div>
+            <div class="ro-val" id="roReady">—</div>
+          </div>
+        </div>
+        <p class="note" id="roNote">读数来自 status.json 与 l2d_get_state，取不到时显示「—」。</p>
+      </section>
+
+      <section class="card" id="sec-dev">
+        <div class="sec-head"><span class="sec-no">05</span><h2>开发者工具</h2></div>
+        <p class="sec-desc">诊断信息与不常用的重活。</p>
+        <div class="kv" id="devInfo"></div>
+        <div class="dev-actions">
+          <a href="/dsh-l2d/test.html">参数监视台</a>
+          <button class="btn" type="button" id="rescanBtn">能力重扫</button>
+          <span class="hint" id="devMsg"></span>
+        </div>
+      </section>
+
+      <noscript>
+        <p class="empty">这个页面需要 JavaScript 才能读写设置。</p>
+      </noscript>
+    </main>
+
+    <script>
+      (function () {
+        'use strict';
+
+        var API = {
+          settings: '/dsh-l2d/settings.json',
+          status: '/dsh-l2d/status.json',
+          capability: '/dsh-l2d/capability.json',
+          rescan: '/dsh-l2d/capability/rescan',
+          call: '/dsh-l2d/ai/call',
+          result: '/dsh-l2d/ai/result',
+          test: '/dsh-l2d/test.html'
+        };
+
+        var LS_KEY = 'dsh-l2d.settings-ui.v1';
+
+        var state = { settings: null, status: null, capability: null };
+        var fields = {};
+        var pending = {};
+        var pendingRows = {};
+        var timer = 0;
+        var modes = [];
+        var mounted = false;
+
+        function $(id) {
+          return document.getElementById(id);
+        }
+
+        function timeStr() {
+          var d = new Date();
+          function p(n) {
+            return n < 10 ? '0' + n : String(n);
+          }
+          return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+        }
+
+        function setBar(text, cls) {
+          var el = $('saveState');
+          el.textContent = text;
+          el.className = 'bar-right' + (cls ? ' ' + cls : '');
+        }
+
+        function showAlert(text) {
+          var el = $('alert');
+          if (!text) {
+            el.hidden = true;
+            el.textContent = '';
+            return;
+          }
+          el.hidden = false;
+          el.textContent = text;
+        }
+
+        function reason(err) {
+          if (!err) return '未知错误';
+          return String(err.message || err);
+        }
+
+        // ------------------------------------------------------------ 本地偏好
+        function readLocal() {
+          try {
+            return JSON.parse(window.localStorage.getItem(LS_KEY) || '{}') || {};
+          } catch (err) {
+            return {};
+          }
+        }
+
+        var local = readLocal();
+        if (typeof local.autoHidePx !== 'number' || !isFinite(local.autoHidePx)) local.autoHidePx = 240;
+        if (typeof local.autoHideEnabled !== 'boolean') local.autoHideEnabled = false;
+        if (local.mode !== 'embedded' && local.mode !== 'overlay' && local.mode !== 'window') local.mode = null;
+
+        function writeLocal(key, value) {
+          local[key] = value;
+          try {
+            var all = readLocal();
+            all[key] = value;
+            window.localStorage.setItem(LS_KEY, JSON.stringify(all));
+          } catch (err) {
+            /* file:// 下 localStorage 可能不可用，页面仍按内存值工作 */
+          }
+        }
+
+        // ------------------------------------------------------------ 行构建
+        function makeRow(labelText, hintText, control, key, stacked) {
+          var row = document.createElement('div');
+          row.className = 'row' + (stacked ? ' is-stack' : '');
+          if (key) row.dataset.key = key;
+
+          var left = document.createElement('div');
+          left.className = 'row-label';
+          var label = document.createElement('span');
+          label.className = 'label';
+          label.textContent = labelText;
+          left.appendChild(label);
+          if (hintText) {
+            var hint = document.createElement('span');
+            hint.className = 'hint';
+            hint.textContent = hintText;
+            left.appendChild(hint);
+          }
+
+          var right = document.createElement('div');
+          right.className = 'row-ctrl';
+          right.appendChild(control);
+
+          row.appendChild(left);
+          row.appendChild(right);
+          return row;
+        }
+
+        function clearRowError(key) {
+          var row = document.querySelector('.row[data-key="' + key + '"]');
+          if (!row) return;
+          var msg = row.querySelector('.row-message');
+          if (msg) msg.remove();
+        }
+
+        function rowError(key, message, fieldKey) {
+          var row = document.querySelector('.row[data-key="' + key + '"]');
+          if (!row) return;
+          clearRowError(key);
+          var msg = document.createElement('p');
+          msg.className = 'row-message';
+          var text = document.createElement('span');
+          text.textContent = '保存失败：' + message;
+          msg.appendChild(text);
+          var retry = document.createElement('button');
+          retry.type = 'button';
+          retry.className = 'link-btn';
+          retry.textContent = '重试';
+          retry.addEventListener('click', function () {
+            var field = fields[fieldKey || key];
+            if (!field) return;
+            var value = field.read();
+            clearRowError(key);
+            submit(fieldKey || key, value, key);
+          });
+          msg.appendChild(retry);
+          row.appendChild(msg);
+        }
+
+        // ------------------------------------------------------------ 控件
+        function toggleRow(host, key, labelText, hintText) {
+          var input = document.createElement('input');
+          input.type = 'checkbox';
+          input.className = 'sw';
+          input.id = 'f-' + key;
+          input.setAttribute('aria-label', labelText);
+          input.addEventListener('change', function () {
+            submit(key, input.checked);
+          });
+          host.appendChild(makeRow(labelText, hintText, input, key));
+          var field = {
+            key: key,
+            set: function (value) {
+              input.checked = value === true;
+            },
+            read: function () {
+              return input.checked;
+            }
+          };
+          fields[key] = field;
+          return field;
+        }
+
+        function numberRow(host, key, labelText, hintText, opts) {
+          var input = document.createElement('input');
+          input.type = 'number';
+          input.className = 'num';
+          input.id = 'f-' + key;
+          input.min = String(opts.min);
+          input.max = String(opts.max);
+          input.step = String(opts.step || 1);
+          input.setAttribute('aria-label', labelText);
+
+          var wrap = document.createElement('div');
+          wrap.className = 'ctrl-num';
+          wrap.appendChild(input);
+          if (opts.unit) {
+            var unit = document.createElement('span');
+            unit.className = 'unit';
+            unit.textContent = opts.unit;
+            wrap.appendChild(unit);
+          }
+
+          input.addEventListener('input', function () {
+            var value = Number(input.value);
+            if (!isFinite(value)) return;
+            submit(key, value);
+          });
+
+          host.appendChild(makeRow(labelText, hintText, wrap, key));
+          var field = {
+            key: key,
+            set: function (value) {
+              input.value = String(value);
+            },
+            read: function () {
+              return Number(input.value);
+            }
+          };
+          fields[key] = field;
+          return field;
+        }
+
+        function rangeRow(host, key, labelText, hintText, opts) {
+          var input = document.createElement('input');
+          input.type = 'range';
+          input.className = 'rng';
+          input.id = 'f-' + key;
+          input.min = String(opts.min);
+          input.max = String(opts.max);
+          input.step = String(opts.step || 1);
+          input.setAttribute('aria-label', labelText);
+
+          var value = document.createElement('span');
+          value.className = 'val';
+
+          var wrap = document.createElement('div');
+          wrap.className = 'ctrl-range';
+          wrap.appendChild(input);
+          wrap.appendChild(value);
+
+          function paint() {
+            var raw = Number(input.value);
+            value.textContent = opts.format ? opts.format(raw) : String(raw);
+          }
+
+          function toStore(raw) {
+            return opts.toStore ? opts.toStore(raw) : raw;
+          }
+
+          input.addEventListener('input', function () {
+            paint();
+            submit(key, toStore(Number(input.value)));
+          });
+
+          host.appendChild(makeRow(labelText, hintText, wrap, key));
+          var field = {
+            key: key,
+            set: function (stored) {
+              var raw = opts.fromStore ? opts.fromStore(stored) : stored;
+              input.value = String(raw);
+              paint();
+            },
+            read: function () {
+              return toStore(Number(input.value));
+            }
+          };
+          fields[key] = field;
+          return field;
+        }
+
+        function selectRow(host, key, labelText, hintText, options, onChange) {
+          var select = document.createElement('select');
+          select.className = 'sel';
+          select.id = 'f-' + key;
+          select.setAttribute('aria-label', labelText);
+          options.forEach(function (item) {
+            var opt = document.createElement('option');
+            opt.value = item.value;
+            opt.textContent = item.label;
+            select.appendChild(opt);
+          });
+          select.addEventListener('change', function () {
+            submit(key, select.value);
+            if (onChange) onChange(select.value);
+          });
+          host.appendChild(makeRow(labelText, hintText, select, key));
+          var field = {
+            key: key,
+            set: function (value) {
+              select.value = String(value);
+            },
+            read: function () {
+              return select.value;
+            }
+          };
+          fields[key] = field;
+          return field;
+        }
+
+        // ------------------------------------------------------------ 呈现模式
+        var MODE_LABEL = { embedded: '面板内嵌', overlay: '应用内悬浮', window: '独立窗口' };
+
+        function desktopHint() {
+          var ua = navigator.userAgent || '';
+          return /Electron|dsh-desktop|dshdesktop/i.test(ua);
+        }
+
+        function buildModes(host) {
+          var wrap = document.createElement('div');
+          wrap.className = 'modes';
+          wrap.id = 'modes';
+
+          var list = [
+            { value: 'embedded', label: '面板内嵌', desktopOnly: false },
+            { value: 'overlay', label: '应用内悬浮', desktopOnly: false },
+            { value: 'window', label: '独立窗口', desktopOnly: true }
+          ];
+
+          list.forEach(function (item) {
+            var label = document.createElement('label');
+            label.className = 'mode-opt';
+            label.dataset.value = item.value;
+
+            var input = document.createElement('input');
+            input.type = 'radio';
+            input.name = 'presentation-mode';
+            input.value = item.value;
+
+            var text = document.createElement('span');
+            text.textContent = item.label;
+
+            label.appendChild(input);
+            label.appendChild(text);
+
+            if (item.desktopOnly) {
+              var tag = document.createElement('span');
+              tag.className = 'tag';
+              tag.textContent = '仅桌面版';
+              label.appendChild(tag);
+              if (!desktopHint()) {
+                input.disabled = true;
+                label.classList.add('is-disabled');
+                label.title = '仅桌面版：需要宿主桌面端创建透明窗口';
+              }
+            }
+
+            input.addEventListener('change', function () {
+              if (!input.checked) return;
+              pickMode(item.value);
+            });
+
+            wrap.appendChild(label);
+            modes.push({ value: item.value, label: label, input: input });
+          });
+
+          host.appendChild(
+            makeRow(
+              '呈现模式',
+              '独立窗口走宿主的桌宠窗（petWindow=only），其余两种停在页内浮层',
+              wrap,
+              'mode',
+              true
+            )
+          );
+
+          var note = document.createElement('p');
+          note.className = 'note';
+          note.textContent =
+            '自动显隐与其阈值宿主设置接口暂无对应字段，这两项只记在本页（同源 localStorage），不会下发给宿主。';
+          host.appendChild(note);
+
+          paintMode(local.mode || (window.self !== window.top ? 'overlay' : 'embedded'));
+        }
+
+        function paintMode(value) {
+          modes.forEach(function (item) {
+            item.input.checked = item.value === value;
+            item.label.classList.toggle('is-checked', item.value === value);
+          });
+        }
+
+        function pickMode(value) {
+          if (value !== 'window' && value !== 'embedded' && value !== 'overlay') return;
+          writeLocal('mode', value);
+          paintMode(value);
+          submit('petWindow', value === 'window' ? 'only' : 'off', 'mode');
+          paintTopBar();
+        }
+
+        function currentMode() {
+          if (state.settings && state.settings.petWindow === 'only') return 'window';
+          if (local.mode) return local.mode;
+          return window.self !== window.top ? 'overlay' : 'embedded';
+        }
+
+        function paintTopBar() {
+          var mode = currentMode();
+          var dot = $('modeDot');
+          var text = $('modeText');
+          if (state.settings) {
+            dot.className = 'dot ok';
+            text.textContent = '当前呈现模式：' + MODE_LABEL[mode];
+          } else {
+            dot.className = 'dot warn';
+            text.textContent = '当前呈现模式：未知';
+          }
+        }
+
+        // ------------------------------------------------------------ 提交
+        function submit(key, value, rowKey) {
+          if (!mounted) return;
+          if (state.settings && state.settings[key] === value) return;
+          pending[key] = value;
+          pendingRows[key] = rowKey || key;
+          clearRowError(pendingRows[key]);
+          setBar('保存中', '');
+          window.clearTimeout(timer);
+          timer = window.setTimeout(flush, 300);
+        }
+
+        function flush() {
+          var patch = pending;
+          var rows = pendingRows;
+          pending = {};
+          pendingRows = {};
+          var keys = Object.keys(patch);
+          if (!keys.length) return;
+          send(patch, keys, rows);
+        }
+
+        function send(patch, keys, rows) {
+          fetch(API.settings, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(patch),
+            cache: 'no-store'
+          })
+            .then(function (res) {
+              if (!res.ok) {
+                return res.text().then(function (body) {
+                  throw new Error('HTTP ' + res.status + (body ? ' · ' + body.slice(0, 80) : ''));
+                });
+              }
+              return res.json();
+            })
+            .then(function (data) {
+              if (!data || typeof data !== 'object') throw new Error('返回内容不是设置对象');
+              state.settings = data;
+              applyAll();
+              setBar('已保存 · ' + timeStr(), 'ok');
+            })
+            .catch(function (err) {
+              var msg = reason(err);
+              keys.forEach(function (key) {
+                rowError((rows && rows[key]) || key, msg, key);
+              });
+              setBar('保存失败：' + msg, 'err');
+            });
+        }
+
+        function applyAll() {
+          var s = state.settings;
+          if (!s) return;
+          Object.keys(fields).forEach(function (key) {
+            if (s[key] === undefined) return;
+            fields[key].set(s[key]);
+          });
+          paintMode(s.petWindow === 'only' ? 'window' : currentMode());
+          paintTopBar();
+        }
+
+        // ------------------------------------------------------------ 读取
+        function fetchJson(url) {
+          return fetch(url, { cache: 'no-store' })
+            .then(function (res) {
+              if (!res.ok) throw new Error('HTTP ' + res.status);
+              return res.json();
+            })
+            .then(function (data) {
+              return { ok: true, data: data };
+            })
+            .catch(function (err) {
+              return { ok: false, error: reason(err) };
+            });
+        }
+
+        function statusChip(text, ok) {
+          var chip = document.createElement('span');
+          chip.className = 'chip';
+          var dot = document.createElement('span');
+          dot.className = 'dot ' + (ok ? 'ok' : 'err');
+          var label = document.createElement('span');
+          label.textContent = text;
+          chip.appendChild(dot);
+          chip.appendChild(label);
+          return chip;
+        }
+
+        function renderStatus(st) {
+          var name = $('modelName');
+          var chips = $('assetChips');
+          chips.textContent = '';
+          if (!st) {
+            name.textContent = '—';
+            chips.appendChild(statusChip('status.json 不可用', false));
+            return;
+          }
+          name.textContent = st.model || '未找到模型文件';
+          chips.appendChild(statusChip('渲染包', st.renderer === true));
+          chips.appendChild(statusChip('Core', st.core === true));
+          chips.appendChild(statusChip('模型文件', !!st.model));
+          chips.appendChild(statusChip('立绘', st.avatarFound === true));
+        }
+
+        function renderDevInfo(st) {
+          var host = $('devInfo');
+          host.textContent = '';
+          var rows = [
+            { k: '版本', v: (st && st.version) || '—', id: 'devVersion' },
+            { k: 'bootTag', v: '—', id: 'devBootTag' },
+            { k: '模型目录', v: (st && st.modelDir) || '—' },
+            { k: '立绘文件', v: (st && st.avatar) || '—' }
+          ];
+          rows.forEach(function (item) {
+            var row = document.createElement('div');
+            row.className = 'kv-row';
+            var k = document.createElement('div');
+            k.className = 'k';
+            k.textContent = item.k;
+            var v = document.createElement('div');
+            v.className = 'v';
+            v.textContent = item.v;
+            if (item.id) v.id = item.id;
+            row.appendChild(k);
+            row.appendChild(v);
+            host.appendChild(row);
+          });
+        }
+
+        var CAP_GROUPS = [
+          { status: 'supported', title: '支持', dot: 'ok' },
+          { status: 'approximate', title: '近似', dot: 'warn' },
+          { status: 'unsupported', title: '不支持', dot: 'err' }
+        ];
+
+        function renderCapability(cap) {
+          var host = $('capGroups');
+          var summary = $('capSummary');
+          host.textContent = '';
+          summary.textContent = '';
+
+          if (!cap || !Array.isArray(cap.controls)) {
+            var empty = document.createElement('p');
+            empty.className = 'empty';
+            empty.textContent = '能力画像未接入：/dsh-l2d/capability.json 读不到，渲染层仍按自身索引校验。';
+            host.appendChild(empty);
+            return;
+          }
+
+          var total = cap.controls.length;
+          var counts = { supported: 0, approximate: 0, unsupported: 0 };
+          cap.controls.forEach(function (item) {
+            var key = item && item.status;
+            if (counts[key] !== undefined) counts[key] += 1;
+          });
+          summary.textContent =
+            '共 ' + total + ' 项 · 支持 ' + counts.supported + ' · 近似 ' + counts.approximate + ' · 不支持 ' + counts.unsupported;
+
+          CAP_GROUPS.forEach(function (group) {
+            var items = cap.controls.filter(function (item) {
+              return item && item.status === group.status;
+            });
+            if (!items.length) return;
+
+            var box = document.createElement('div');
+            box.className = 'cap-group';
+            var title = document.createElement('div');
+            title.className = 'cap-title';
+            var dot = document.createElement('span');
+            dot.className = 'dot ' + group.dot;
+            var text = document.createElement('span');
+            text.textContent = group.title + ' · ' + items.length;
+            title.appendChild(dot);
+            title.appendChild(text);
+            box.appendChild(title);
+
+            var chips = document.createElement('div');
+            chips.className = 'chips';
+            chips.style.marginTop = '8px';
+
+            var reasons = document.createElement('div');
+            reasons.className = 'cap-reasons';
+
+            items.forEach(function (item) {
+              var chip = document.createElement(group.status === 'unsupported' ? 'button' : 'span');
+              chip.className = 'chip';
+              var label = document.createElement('span');
+              label.textContent = String(item.id || '未命名通道');
+              chip.appendChild(label);
+
+              if (group.status === 'unsupported') {
+                chip.classList.add('is-btn');
+                chip.type = 'button';
+                chip.title = item.reason ? '展开原因' : '没有记录原因';
+                chip.setAttribute('aria-expanded', 'false');
+                var reasonEl = null;
+                chip.addEventListener('click', function () {
+                  var open = chip.getAttribute('aria-expanded') === 'true';
+                  if (open) {
+                    chip.setAttribute('aria-expanded', 'false');
+                    chip.classList.remove('is-open');
+                    if (reasonEl) {
+                      reasonEl.remove();
+                      reasonEl = null;
+                    }
+                    return;
+                  }
+                  chip.setAttribute('aria-expanded', 'true');
+                  chip.classList.add('is-open');
+                  reasonEl = document.createElement('p');
+                  reasonEl.className = 'cap-reason';
+                  reasonEl.textContent =
+                    String(item.id || '未命名通道') +
+                    ' · ' +
+                    (item.reason ? String(item.reason) : '该通道没有记录原因。');
+                  reasons.appendChild(reasonEl);
+                });
+              }
+
+              chips.appendChild(chip);
+            });
+
+            box.appendChild(chips);
+            box.appendChild(reasons);
+            host.appendChild(box);
+          });
+        }
+
+        // ------------------------------------------------------------ 实时读数
+        function pickNumber(obj, keys) {
+          for (var i = 0; i < keys.length; i += 1) {
+            var v = obj[keys[i]];
+            if (typeof v === 'number' && isFinite(v)) return v;
+            if (typeof v === 'string' && v && isFinite(Number(v))) return Number(v);
+          }
+          return null;
+        }
+
+        function paintReadouts(result) {
+          var fpsEl = $('roFps');
+          var resEl = $('roRes');
+          var readyEl = $('roReady');
+          var info = result && result.info ? result.info : null;
+
+          if (!info) {
+            fpsEl.textContent = '—';
+            resEl.textContent = '—';
+            readyEl.textContent = '—';
+            return;
+          }
+
+          var fps = pickNumber(info, ['fps', 'FPS', 'frameRate', 'frame_rate']);
+          fpsEl.textContent = fps === null ? '—' : fps.toFixed(1) + ' fps';
+
+          var w = pickNumber(info, ['width', 'canvasWidth', 'w']);
+          var h = pickNumber(info, ['height', 'canvasHeight', 'h']);
+          if (w !== null && h !== null) {
+            resEl.textContent = Math.round(w) + ' × ' + Math.round(h);
+          } else if (typeof info.resolution === 'string' && info.resolution) {
+            resEl.textContent = info.resolution;
+          } else {
+            resEl.textContent = '—';
+          }
+
+          readyEl.textContent = result.ready === true ? '就绪' : result.ready === false ? '未就绪' : '—';
+
+          var boot = result && result.diag ? result.diag.bootTag : '';
+          var tagEl = $('devBootTag');
+          if (tagEl) tagEl.textContent = boot ? String(boot) : '—';
+        }
+
+        function postCall(name, args) {
+          return fetch(API.call, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, args: args || {} }),
+            cache: 'no-store'
+          })
+            .then(function (res) {
+              if (!res.ok) throw new Error('HTTP ' + res.status);
+              return res.json();
+            })
+            .then(function (queued) {
+              if (!queued || !queued.id) throw new Error('未入队');
+              return new Promise(function (resolve, reject) {
+                var tries = 0;
+                function step() {
+                  if (tries >= 8) {
+                    reject(new Error('超时'));
+                    return;
+                  }
+                  tries += 1;
+                  fetch(API.result + '?id=' + encodeURIComponent(queued.id), { cache: 'no-store' })
+                    .then(function (res) {
+                      return res.json();
+                    })
+                    .then(function (data) {
+                      if (data && data.ready) resolve(data.result);
+                      else window.setTimeout(step, 200);
+                    })
+                    .catch(function () {
+                      window.setTimeout(step, 200);
+                    });
+                }
+                window.setTimeout(step, 200);
+              });
+            });
+        }
+
+        function refreshReadouts() {
+          if (document.hidden) return;
+          postCall('l2d_get_state', {})
+            .then(paintReadouts)
+            .catch(function () {
+              paintReadouts(null);
+            });
+        }
+
+        // ------------------------------------------------------------ 装配
+        function localToggleRow(host, key, labelText, hintText) {
+          var input = document.createElement('input');
+          input.type = 'checkbox';
+          input.className = 'sw';
+          input.id = 'f-' + key;
+          input.setAttribute('aria-label', labelText);
+          input.checked = local[key] === true;
+          input.addEventListener('change', function () {
+            writeLocal(key, input.checked);
+          });
+          host.appendChild(makeRow(labelText, hintText, input, key));
+          fields[key] = {
+            key: key,
+            set: function () {},
+            read: function () {
+              return input.checked;
+            }
+          };
+        }
+
+        function localNumberRow(host, key, labelText, hintText, opts) {
+          var input = document.createElement('input');
+          input.type = 'number';
+          input.className = 'num';
+          input.id = 'f-' + key;
+          input.min = String(opts.min);
+          input.max = String(opts.max);
+          input.step = String(opts.step || 1);
+          input.value = String(local[key]);
+          input.setAttribute('aria-label', labelText);
+          input.addEventListener('input', function () {
+            var value = Number(input.value);
+            if (!isFinite(value)) return;
+            writeLocal(key, value);
+          });
+
+          var wrap = document.createElement('div');
+          wrap.className = 'ctrl-num';
+          wrap.appendChild(input);
+          var unit = document.createElement('span');
+          unit.className = 'unit';
+          unit.textContent = opts.unit;
+          wrap.appendChild(unit);
+
+          host.appendChild(makeRow(labelText, hintText, wrap, key));
+          fields[key] = {
+            key: key,
+            set: function () {},
+            read: function () {
+              return Number(input.value);
+            }
+          };
+        }
+
+        function mount() {
+          var display = $('rows-display');
+          buildModes(display);
+          localToggleRow(display, 'autoHideEnabled', '自动显隐', '指针移开后收起，仅本页记录');
+          localNumberRow(display, 'autoHidePx', '自动隐藏阈值', '距画布边缘多近开始收起，默认 240，仅本页记录', {
+            min: 0,
+            max: 2000,
+            step: 10,
+            unit: 'px'
+          });
+
+          rangeRow(display, 'scale', '模型缩放', '0.6 到 2.0，宿主侧同样夹取', {
+            min: 0.6,
+            max: 2,
+            step: 0.05,
+            format: function (v) {
+              return '×' + v.toFixed(2);
+            }
+          });
+
+          var behavior = $('rows-behavior');
+          toggleRow(behavior, 'autoAct', 'API 自主动作', '空闲时让模型定期编排小动作');
+          toggleRow(behavior, 'spontaneousChat', '自发聊天', '完成状态与空闲时主动冒泡');
+          selectRow(
+            behavior,
+            'clickMode',
+            '戳一戳动作',
+            '单击角色时播什么',
+            [
+              { value: 'random', label: '随机动作' },
+              { value: 'api', label: 'DeepSeek 决定' }
+            ]
+          );
+          toggleRow(behavior, 'memeStyle', '梗味人设', '动作与气泡带梗');
+          rangeRow(behavior, 'memeLevel', '玩梗程度', '0 正经，100 放飞到人设边缘', {
+            min: 0,
+            max: 100,
+            step: 5,
+            format: function (v) {
+              return String(v);
+            }
+          });
+          toggleRow(behavior, 'eyeFollow', '眼神跟随', '鼠标驱动视线、头与身体');
+          toggleRow(behavior, 'agentLink', '工作区联动', '读工作区会话状态驱动表情与动作链');
+
+          var perf = $('rows-performance');
+          numberRow(perf, 'refreshSeconds', '余额刷新间隔', '最短 15 秒，最长 3600 秒', {
+            min: 15,
+            max: 3600,
+            step: 5,
+            unit: '秒'
+          });
+          toggleRow(perf, 'soundEnabled', '音效', '按下与松开角色时的声音');
+          rangeRow(perf, 'soundVolume', '音量', '宿主存 0~1，这里按百分比显示', {
+            min: 0,
+            max: 100,
+            step: 1,
+            format: function (v) {
+              return v + '%';
+            },
+            toStore: function (v) {
+              return Math.round((v / 100) * 100) / 100;
+            },
+            fromStore: function (v) {
+              return Math.round((Number(v) || 0) * 100);
+            }
+          });
+          toggleRow(perf, 'systemSensor', '系统联动', 'CPU、内存、电量、断网驱动表情');
+          toggleRow(perf, 'mediaSensor', '媒体律动', '音乐播放时轻摆');
+          toggleRow(perf, 'reverseEnabled', '反向桥', '交互事件回流宿主，供 MCP 与日志读取');
+          toggleRow(perf, 'petMode', '桌宠模式', '悬停零触发，点击只摸头');
+          selectRow(
+            perf,
+            'petWindow',
+            '桌宠独立窗',
+            '独立透明窗停用页内浮层，需要重启生效',
+            [
+              { value: 'off', label: '关闭（页内浮层）' },
+              { value: 'only', label: '仅独立窗口' }
+            ],
+            function (value) {
+              paintMode(value === 'only' ? 'window' : local.mode || 'embedded');
+              paintTopBar();
+            }
+          );
+
+          mounted = true;
+        }
+
+        function loadAll() {
+          setBar('正在读取设置', '');
+          Promise.all([fetchJson(API.settings), fetchJson(API.status), fetchJson(API.capability)]).then(function (res) {
+            var settings = res[0];
+            var status = res[1];
+            var capability = res[2];
+
+            if (settings.ok && settings.data && typeof settings.data === 'object') {
+              state.settings = settings.data;
+              applyAll();
+              setBar('设置已读取 · ' + timeStr(), 'ok');
+            } else {
+              setBar('读取失败：' + (settings.error || '返回为空'), 'err');
+              showAlert(
+                '无法读取 /dsh-l2d/settings.json（' +
+                  (settings.error || '返回为空') +
+                  '）。若用 file:// 直接打开，请改为通过宿主地址访问；下面改动保存时会逐项报错。'
+              );
+            }
+
+            state.status = status.ok ? status.data : null;
+            renderStatus(state.status);
+            renderDevInfo(state.status);
+
+            state.capability = capability.ok ? capability.data : null;
+            renderCapability(state.capability);
+
+            paintTopBar();
+          });
+        }
+
+        function bindDev() {
+          var btn = $('rescanBtn');
+          var msg = $('devMsg');
+          function say(text, isError) {
+            msg.textContent = text;
+            msg.className = 'hint' + (isError ? ' is-error' : '');
+          }
+          btn.addEventListener('click', function () {
+            btn.disabled = true;
+            say('正在重扫', false);
+            fetch(API.rescan, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: '{}',
+              cache: 'no-store'
+            })
+              .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json().catch(function () {
+                  return {};
+                });
+              })
+              .then(function () {
+                return fetchJson(API.capability);
+              })
+              .then(function (res) {
+                if (res.ok) {
+                  state.capability = res.data;
+                  renderCapability(state.capability);
+                  say('已重扫 · ' + timeStr(), false);
+                } else {
+                  say('重扫完成但读不到能力文件：' + res.error, true);
+                }
+              })
+              .catch(function (err) {
+                say('重扫失败：' + reason(err) + '（路由未接入时会 404）', true);
+              })
+              .then(function () {
+                btn.disabled = false;
+              });
+          });
+        }
+
+        window.addEventListener('error', function (event) {
+          showAlert('脚本错误：' + (event && event.message ? event.message : '未知'));
+        });
+
+        window.addEventListener('unhandledrejection', function (event) {
+          var r = event && event.reason;
+          showAlert('未处理的异步错误：' + reason(r));
+        });
+
+        mount();
+        bindDev();
+        loadAll();
+        refreshReadouts();
+        window.setInterval(refreshReadouts, 6000);
+        document.addEventListener('visibilitychange', function () {
+          if (!document.hidden) refreshReadouts();
+        });
+      })();
+    </script>
+  </body>
+</html>

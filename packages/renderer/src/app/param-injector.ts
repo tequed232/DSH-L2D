@@ -50,6 +50,29 @@ const ADDITIVE_INPUTS = new Set([
 const FALLBACK_PHYSICS_OUTPUT = /^(?:ParamAngle[XYZ]|ParamBodyAngle[XYZ]|ParamBodyAngleRX|HipAngle[XYZ]|HipAngleX2|HipAngleYUP|HipAngleYDOWN|ParamHipAngleZ2?|HipZ[12]|LEGs*AngleZ2|ShoulderY|ShoulderZ|RArm|LArm|RForearm|LForearm|RWrist|LWrist|RHand|LHand|RHand2|LHand2)$/;
 
 /**
+ * 取参数的**真实**下标；模型里不存在时返回 -1。
+ *
+ * 真机缺陷修复（choreo 复现：真机 l2d_set_parameters 写 ParamArmRA / ParamNotExistXYZ
+ * 都回报 applied）。
+ * 根因：Cubism 5 的 CubismModel.getParameterIndex 对模型里不存在的参数**不返回 -1**，
+ * 而是把 id 登记进 _notExistParameterId 并返回一个 ≥ getParameterCount() 的合成下标，
+ * 之后 min/max 读到 undefined、写值落进 _notExistParameterValues，全程不抛错 ——
+ * 所有只判 `index < 0` 的写入路径都会把不存在的参数静默 applied。
+ * 真机复现步骤：真机调 l2d_set_parameters { values: { ParamNotExistXYZ: 1 } }，
+ * 修复前回执 applied 含 ParamNotExistXYZ；修复后应进 failed 且 reason=not-exist。
+ * 本模型真实手臂参数是 Param36/39/40/41/42/43 与 59~62（见 motion-director 的 poseParams）。
+ */
+export function parameterIndexOf(model: CubismModel, id: string): number {
+  try {
+    const handle = CubismFramework.getIdManager().getId(id);
+    const index = model.getParameterIndex(handle);
+    return index >= 0 && index < model.getParameterCount() ? index : -1;
+  } catch {
+    return -1;
+  }
+}
+
+/**
  * 外部参数的唯一写入入口。
  *
  * Cubism 每帧都会从 savedParameters 恢复基底，所以一次性 set 无法持久。
@@ -140,7 +163,8 @@ export class ParamInjector {
     }
     try {
       const handle = CubismFramework.getIdManager().getId(id);
-      const index = model.getParameterIndex(handle);
+      // 必须用真实下标校验：getParameterIndex 对不存在的参数返回合成下标（见 parameterIndexOf 注释）
+      const index = parameterIndexOf(model, id);
       if (index < 0) {
         this.skipped++;
         return false;
@@ -191,8 +215,9 @@ export class ParamInjector {
     const result: Record<string, number> = {};
     for (const id of ids) {
       try {
-        const handle = CubismFramework.getIdManager().getId(id);
-        if (model.getParameterIndex(handle) >= 0) {
+        // 真实下标校验：不存在的参数（合成下标）不进快照
+        if (parameterIndexOf(model, id) >= 0) {
+          const handle = CubismFramework.getIdManager().getId(id);
           result[id] = model.getParameterValueById(handle);
         }
       } catch {
@@ -243,7 +268,8 @@ export class ParamInjector {
       }
       try {
         const handle: CubismIdHandle = CubismFramework.getIdManager().getId(id);
-        const index = model.getParameterIndex(handle);
+        // 同 set()：合成下标不等于存在，必须用 parameterIndexOf 过滤（否则会写 NaN）
+        const index = parameterIndexOf(model, id);
         if (index < 0) {
           this.skipped++;
           continue;

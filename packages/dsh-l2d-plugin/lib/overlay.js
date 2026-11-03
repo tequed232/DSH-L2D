@@ -12,6 +12,14 @@
  *   - 立绘缺失时回退内置 SVG 轮廓，不出现破图
  */
 (function () {
+
+  // E2：能力画像预取（/dsh-l2d/capability.json）。失败不致命——l2d_posture 会报 profile-loading。
+  try {
+    fetch('/dsh-l2d/capability.json', { cache: 'no-store' })
+      .then(function (r2) { return r2.ok ? r2.json() : null; })
+      .then(function (j2) { if (j2 && j2.controls) window.__L2D_PROFILE__ = j2; })
+      .catch(function () { /* 静默：l2d_posture 会显式报 profile-loading */ });
+  } catch (e2) { /* 同上 */ }
   'use strict';
 
   if (window.__DSH_L2D_OVERLAY__) return;
@@ -3768,7 +3776,7 @@
                 guarded: !!window.__DSH_L2D_GUARD__,
                 keyCount: Object.keys(window.DSH_L2D || {}).length,
                 clientEntry: (typeof window !== 'undefined')
-                  ? (window.__L2D_CLIENT_ERROR__ ? 'ERR: ' + String(window.__L2D_CLIENT_ERROR__).slice(0, 400)
+                  ? (window.__L2D_CLIENT_ERROR__ ? 'ERR: ' + String(window.__L2D_CLIENT_ERROR__).slice(0, 4000)
                     : window.__L2D_CLIENT_OK__ ? 'ok'
                     : 'not-run')
                   : 'no-window',
@@ -3842,6 +3850,37 @@
             return { ok: true, params: n };
           }
           default:
+          case 'l2d_posture': {
+
+            // E2：语义姿态执行。参数 id 全部来自能力画像，overlay 不写死任何模型参数。
+            if (!L.planPostureExecution || !L.setParameters) return { ok: false, reason: 'posture-unavailable' };
+            var pProfile = window.__L2D_PROFILE__ || null;
+            if (!pProfile) return { ok: false, reason: 'profile-loading' };
+            var pExec = L.planPostureExecution(pProfile, { values: a.values || {}, durationMs: a.durationMs, own: a.own, fadeMs: a.fadeMs });
+            if (!pExec || !pExec.plan) return { ok: false, reason: 'profile-unavailable' };
+            if (!pExec.plan.writes.length) {
+              return { ok: true, applied: [], failed: [], owned: [], skipped: pExec.skipped, degraded: pExec.degraded, durationMs: pExec.input.durationMs };
+            }
+            var pDuration = pExec.input.durationMs;
+            var pOwned = (pExec.owns.length && L.ownParameters) ? L.ownParameters(pExec.owns, pDuration) : [];
+            var pApplied = [], pFailed = [];
+            var pBatch = function (writes) {
+              var batch = {};
+              writes.forEach(function (w) { w.params.forEach(function (p) { batch[p.id] = p.value; }); });
+              if (!Object.keys(batch).length) return;
+              var rr = L.setParameters(batch);
+              pApplied.push.apply(pApplied, rr.ok || []);
+              (rr.failed || []).forEach(function (f) {
+                // setParameters 的失败格式是 '参数名:原因' 字符串
+                var parts = String(f).split(':');
+                pFailed.push({ id: parts[0], reason: parts[1] || 'write-failed' });
+              });
+            };
+            pBatch(pExec.pre);
+            pBatch(pExec.post);
+            if (pOwned.length && !pApplied.length && L.releaseParameters) { L.releaseParameters(pOwned); pOwned = []; }
+            return { ok: pFailed.length === 0, applied: pApplied, failed: pFailed, owned: pOwned, skipped: pExec.skipped, degraded: pExec.degraded, durationMs: pDuration };
+          }
             return { ok: false, error: 'unknown-tool: ' + name };
         }
       } catch (e) {
