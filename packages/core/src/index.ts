@@ -258,3 +258,29 @@ export type {
   EmbodiedCueCompileOptions,
   EmbodiedCueCompileResult,
 } from './embodied-cue.ts';
+
+// ---------------------------------------------------------------- M1-f 第二批 Cue Loop
+// 编译层之上的组合账本与生命周期（F2-1/3/4）：同 channel 后到替换（Body.cs:198 同语义）、
+// 跨 channel 并存、durationMs 到期释放（INV-5/S-05 同型）、clear 显式释放、overlay 单槽。
+// 不做跨通道求和（INV-1 唯一 winner）；准入/冲突判定仍由 enqueueGesture 单点负责。
+export {
+  CUE_DEFAULT_PRIORITY,
+  commitCue,
+  cueSnapshot,
+  cueWrites,
+  emptyCueLoop,
+  releaseCue,
+  tickCue,
+} from './cue-loop.ts';
+export type {
+  CueChannelState,
+  CueCommitOptions,
+  CueCommitResult,
+  CueLoopState,
+  CueOverlayState,
+  CueReleaseResult,
+  CueReleaseSelector,
+  CueSnapshot,
+  CueTickResult,
+  CueWritesResult,
+} from './cue-loop.ts';

@@ -130,8 +130,11 @@ function validateBinding(binding: CueChannelBinding): string | null {
   return null;
 }
 
-/** 归一化语义值 → 原生值（motion-intent.ts:178-187 同型：乘加后 clamp 进 bounds）。 */
-function mapNative(value: number, binding: CueChannelParamBinding): number {
+/**
+ * 归一化语义值 → 原生值（motion-intent.ts:178-187 同型：乘加后 clamp 进 bounds）。
+ * 导出供 cue-loop.ts 的逐帧写值复用同一映射（值域只有一份定义，避免词表漂移）。
+ */
+export function mapCueParamValue(value: number, binding: CueChannelParamBinding): number {
   const native = value * (binding.scale ?? 1) + (binding.offset ?? 0);
   if (!Number.isFinite(native)) return native; // 溢出交由调用方按 invalid-value fail-closed
   if (binding.bounds) {
@@ -201,7 +204,7 @@ export function compileEmbodiedCue(
     if (cue.value === undefined) return fail(channel, opStr, 'missing-value');
     const params: Record<string, number> = {};
     for (const [paramId, paramBinding] of Object.entries(binding.params)) {
-      const native = mapNative(cue.value, paramBinding);
+      const native = mapCueParamValue(cue.value, paramBinding);
       if (!Number.isFinite(native)) return fail(channel, opStr, 'invalid-value');
       params[paramId] = native;
     }

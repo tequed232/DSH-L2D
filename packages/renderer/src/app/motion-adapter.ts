@@ -158,14 +158,22 @@ export interface EmbodiedFlags {
    * 回滚 = 把 DEFAULT_EMBODIED_FLAGS['embodied.timeline'] 改回 false，无需回退代码。
    */
   'embodied.timeline'?: boolean;
+  /**
+   * [M1-f 第二批] EmbodiedCue 行为闭环（admitCue 接线：编译 → 时间线准入 → 账本 →
+   * 每帧写值 / 表情开关）。默认 false = 现行为逐字节不变；依赖 embodied.timeline
+   * 作为 hold/transition 的准入闸（timeline 关 → cue 整体 disabled）。
+   * 回滚 = 把 DEFAULT_EMBODIED_FLAGS['embodied.cue'] 改回 false，无需回退代码。
+   */
+  'embodied.cue'?: boolean;
 }
 
 export const DEFAULT_EMBODIED_FLAGS: Readonly<
-  Required<Pick<EmbodiedFlags, 'embodied.m1' | 'embodied.m1e' | 'embodied.timeline'>>
+  Required<Pick<EmbodiedFlags, 'embodied.m1' | 'embodied.m1e' | 'embodied.timeline' | 'embodied.cue'>>
 > = {
   'embodied.m1': false,
   'embodied.m1e': false,
   'embodied.timeline': false,
+  'embodied.cue': false,
 };
 
 /**

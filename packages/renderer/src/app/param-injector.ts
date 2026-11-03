@@ -155,7 +155,21 @@ export class ParamInjector {
       .map((e) => e.id);
   }
 
-  public set(model: CubismModel, id: string, value: number, weight = 1): boolean {
+  /**
+   * 登记目标值（逐帧重放）。
+   *
+   * @param opts.mode 未独占参数的注入模式覆盖（缺省按参数族 modeFor 判定）。
+   *   独占参数始终强制 'set'（现行为不变）。cue 通道是 ADDITIVE_INPUTS（AngleZ/AngleX/
+   *   AngleY/LeanInput），逐帧写持有值必须显式 set，否则 add 会累加——因此需要该覆盖。
+   *   所有守卫（口型红线 / 物理输出未授权 / 真实下标 / min-max 钳制）保持不变。
+   */
+  public set(
+    model: CubismModel,
+    id: string,
+    value: number,
+    weight = 1,
+    opts: { mode?: InjectionMode } = {},
+  ): boolean {
     this.calls++;
     if (!id || !Number.isFinite(value)) {
       this.skipped++;
@@ -184,7 +198,7 @@ export class ParamInjector {
       const min = model.getParameterMinimumValue(index);
       const max = model.getParameterMaximumValue(index);
       // 独占参数强制 set 语义；相位由 ownership 指定（四肢叶子 post，M1-b 的 Hip 类 pre）
-      const mode = owned ? 'set' : this.modeFor(id);
+      const mode = owned ? 'set' : (opts.mode ?? this.modeFor(id));
       this.modeCounts[mode]++;
       this.sticky.set(id, {
         value: Math.max(min, Math.min(max, value)),
@@ -274,32 +288,83 @@ export class ParamInjector {
           ? target.mode === 'add'
           : target.mode === 'set';
       if (!belongsHere) continue;
-      if (this.locked.has(id)) {
+      this.applyStickyEntry(model, id, target, phase);
+    }
+  }
+
+  /** 单条 sticky 重放（apply 与 applyNow 共用同一守卫/钳制/计数）。 */
+  private applyStickyEntry(
+    model: CubismModel,
+    id: string,
+    target: StickyValue,
+    phase: 'pre' | 'post',
+  ): boolean {
+    if (this.locked.has(id)) {
+      this.skipped++;
+      return false;
+    }
+    try {
+      const handle: CubismIdHandle = CubismFramework.getIdManager().getId(id);
+      // 同 set()：合成下标不等于存在，必须用 parameterIndexOf 过滤（否则会写 NaN）
+      const index = parameterIndexOf(model, id);
+      if (index < 0) {
         this.skipped++;
+        return false;
+      }
+      const current = model.getParameterValueById(handle);
+      const value =
+        target.mode === 'add' && !target.ownedPhase
+          ? current + target.value * target.weight
+          : current + (target.value - current) * target.weight;
+      const min = model.getParameterMinimumValue(index);
+      const max = model.getParameterMaximumValue(index);
+      model.setParameterValueById(handle, Math.max(min, Math.min(max, value)), 1);
+      this.writes++;
+      this.phaseWrites[phase]++;
+      return true;
+    } catch {
+      this.skipped++;
+      return false;
+    }
+  }
+
+  /**
+   * 立即写一批目标值（供「必须晚于 applyGazeEyes」的 cue 帧写值使用）。
+   *
+   * 复用 set() 的全部守卫（口型红线 / 物理输出未授权 / 真实下标 / min-max 钳制）
+   * 与 applyStickyEntry 的同一份钳制/计数，写后移除 sticky——避免下一帧被 apply()
+   * 再重放一次（add 语义会累加）。
+   *
+   * 只允许非独占参数走本入口；独占参数仍由 apply() 按 ownership 相位统一重放。
+   * 返回本批 applied/skipped（skipped 含 set 拒绝与单条写失败）。
+   */
+  public applyNow(
+    model: CubismModel,
+    entries: Iterable<{ id: string; value: number }>,
+    opts: { mode?: InjectionMode } = {},
+  ): { applied: string[]; skipped: string[] } {
+    const applied: string[] = [];
+    const skipped: string[] = [];
+    for (const entry of entries) {
+      const id = entry && typeof entry.id === 'string' ? entry.id : '';
+      if (!id) {
+        skipped.push('*');
         continue;
       }
-      try {
-        const handle: CubismIdHandle = CubismFramework.getIdManager().getId(id);
-        // 同 set()：合成下标不等于存在，必须用 parameterIndexOf 过滤（否则会写 NaN）
-        const index = parameterIndexOf(model, id);
-        if (index < 0) {
-          this.skipped++;
-          continue;
-        }
-        const current = model.getParameterValueById(handle);
-        const value =
-          target.mode === 'add' && !ownedPhase
-            ? current + target.value * target.weight
-            : current + (target.value - current) * target.weight;
-        const min = model.getParameterMinimumValue(index);
-        const max = model.getParameterMaximumValue(index);
-        model.setParameterValueById(handle, Math.max(min, Math.min(max, value)), 1);
-        this.writes++;
-        this.phaseWrites[phase]++;
-      } catch {
-        this.skipped++;
+      if (!this.set(model, id, entry.value, 1, opts)) {
+        skipped.push(id);
+        continue;
       }
+      const target = this.sticky.get(id);
+      if (!target) {
+        skipped.push(id);
+        continue;
+      }
+      this.sticky.delete(id);
+      if (this.applyStickyEntry(model, id, target, 'post')) applied.push(id);
+      else skipped.push(id);
     }
+    return { applied, skipped };
   }
 
   public resetStats(): void {

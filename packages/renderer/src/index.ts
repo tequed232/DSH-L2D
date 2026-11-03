@@ -28,6 +28,9 @@ import {
   type GestureBridgeSnapshot,
   type GestureSegmentInput,
 } from './app/gesture-bridge';
+import { createCueBridge, type CueBridgeSnapshot, type CueStopOutcome } from './app/cue-bridge';
+import type { EmbodiedCue } from '../../core/src/embodied-cue.ts';
+import type { CueReleaseSelector } from '../../core/src/cue-loop.ts';
 import type { StopSelector } from '../../core/src/gesture-timeline.ts';
 import {
   ActGate,
@@ -377,6 +380,9 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
     physicsGate.post(core);
     injector.apply(core, 'post');
     applyGazeEyes(core);
+    // [M1-f 第二批] cue 写值必须晚于 applyGazeEyes：gaze 通道写的就是 ParamEyeBallX/Y，
+    // 先写会被注视收招覆盖；cue 持有期间以持有值为准（clear/到期后立即交还）。
+    if (CUE_ENABLED) applyCueFrame(core);
   });
 
   // 从模型自己的 physics3.json 读取输出表，禁止把无效写入误报为成功。
@@ -533,6 +539,37 @@ const gestureBridge = createGestureBridge({
 });
 
 /**
+ * [M1-f 第二批] EmbodiedCue 行为闭环（flag `embodied.cue`，默认关）。
+ * 前置依赖 embodied.timeline 作为 hold/transition 的准入闸：timeline 关 → cue 整体 disabled
+ * （不编译、不入队、不写值，回滚 = 两个 flag 任一置 false）。
+ * 纯逻辑在 cue-bridge.ts（可 node 单测），这里只注入运行面（时间线/表情/时钟）。
+ */
+const CUE_ENABLED =
+  DEFAULT_EMBODIED_FLAGS['embodied.cue'] === true && TIMELINE_ENABLED;
+/** 本帧模型引用（cue 写值端口在帧钩子里取；模块级同 model/canvasEl 的既有装配方式）。 */
+let cueFrameCore: CoreModel | null = null;
+const CUE_MOUTH_PARAMS = new Set<string>(LIPSYNC_PARAMS);
+const cueBridge = createCueBridge({
+  enabled: CUE_ENABLED,
+  admitGesture: (segments, opts) =>
+    gestureBridge.admit(segments as GestureSegmentInput[], { entryId: opts?.entryId }),
+  stopGesture: (selector) => gestureBridge.stop(selector),
+  setExpression: (name) => setExpression(name),
+  clearExpression: () => clearExpression(),
+  knownOverlays: () =>
+    modelSetting?.FileReferences?.Expressions?.map((e) => e?.Name ?? '').filter((n) => !!n),
+  // 唯一写通道：ParamInjector（口型/物理未授权/真实下标/钳制/计数全部复用其守卫）。
+  writeParam: (id, value) => {
+    if (!cueFrameCore) return false;
+    return injector.applyNow(cueFrameCore, [{ id, value }], { mode: 'set' }).applied.length === 1;
+  },
+  isMouthParam: (id) => CUE_MOUTH_PARAMS.has(id),
+  isPhysicsOutput: (id) => injector.isPhysicsOutput(id),
+  ownParams: (ids, durationMs, phase) => injector.own(ids, durationMs, phase),
+  releaseOwned: (ids) => injector.release(ids),
+});
+
+/**
  * [M1-d2] 手势准入（overlay l2d_act / l2d_play_keyframes 前置调用）。
  * flag 关时恒 rejected('disabled') 且 flagEnabled:false —— overlay 以
  * `ga.admitted === false && ga.flagEnabled` 判定拒绝，否则等价直通原路径（兼容矩阵 §6）。
@@ -556,6 +593,29 @@ export function getGestureState(): GestureBridgeSnapshot {
   return gestureBridge.snapshot();
 }
 
+/**
+ * [M1-f 第二批] EmbodiedCue 准入（hold/transition/overlay/clear）。
+ *
+ * 判定顺序：flag 查 → compileEmbodiedCue fail-closed 校验 → 表情清单校验 →
+ * 时间线准入（同通道替换/跨通道并存/低不打断高，沿用 enqueueGesture）→ 落账。
+ * 返回 accepted=false 且 flagEnabled=true 表示被拒（与 admitGesture 同口径）。
+ */
+export function admitCue(cue: EmbodiedCue, opts: { runId?: string; entryId?: string } = {}) {
+  const admission = cueBridge.admit(cue, opts);
+  if (admission.accepted) markActive();
+  return admission;
+}
+
+/** [M1-f 第二批] 显式释放 cue（selector 缺省 = 全清；按 channel/runId/overlay 收窄）。 */
+export function stopCue(selector?: CueReleaseSelector): CueStopOutcome {
+  return cueBridge.stop(selector);
+}
+
+/** [M1-f 第二批] 诊断只读面。 */
+export function getCueState(): CueBridgeSnapshot {
+  return cueBridge.snapshot();
+}
+
 export function admitAct(input: ActAdmitInput = {}) {
   const result = actGate.admit(input);
   // [M1-d2] Agent 打断手势：flag 开且链占上槽时全清时间线 + 停旧手势逐帧写值
@@ -563,6 +623,8 @@ export function admitAct(input: ActAdmitInput = {}) {
   // flag 关 = 与基线完全一致（admitGesture/armed 均不可达）。
   if (TIMELINE_ENABLED && result.accepted) {
     gestureBridge.stop();
+    // [M1-f 第二批] Agent 动作占用身体时 cue 一并让位（同 admitGesture 的打断语义）。
+    if (CUE_ENABLED) cueBridge.stop();
   }
   return result;
 }
@@ -1525,6 +1587,23 @@ function writeParam(core: CoreModel, id: string, value: number, add = false): vo
   }
 }
 
+/**
+ * [M1-f 第二批] 每帧 cue 推进：先到期清理（停租约/释放认领/关表情），再经
+ * ParamInjector.applyNow 写当前持有值。
+ *
+ * 为什么必须晚于 applyGazeEyes：gaze 通道写 ParamEyeBallX/Y，先写会被注视收招覆盖。
+ * 为什么走 applyNow 而不是 set + apply：sticky 里 AngleZ/LeanInput 等是 add 语义，
+ * 二次 apply 会累加；applyNow 复用 set 的全部守卫并按 set 语义单条立即写入。
+ */
+function applyCueFrame(core: CoreModel): void {
+  cueFrameCore = core;
+  try {
+    cueBridge.tick(performance.now());
+  } finally {
+    cueFrameCore = null;
+  }
+}
+
 // 动作自己会写 AngleX 的动作组：动作播放期头让位，避免叠加把头部曲线顶歪。
 // 当前模型只有「脱捕」直接写 AngleX（未进 model3 索引，暂时播不到，留作前置防护）。
 const HEAD_WRITING_MOTIONS = new Set(['脱捕']);
@@ -1736,6 +1815,7 @@ export function resetPose(): number {
   const core = model?.getModel();
   if (!core) return 0;
   if (TIMELINE_ENABLED) gestureBridge.stop(); // [M1-d2] 清空手势时间线与 armed，与 stopKeyframes 同步清账
+  if (CUE_ENABLED) cueBridge.stop(); // [M1-f 第二批] 清 cue 账本（channel/overlay），停在手写值
   stopKeyframes();
   stopAmbient();
   zeroAngleBus();
@@ -1917,6 +1997,7 @@ export async function destroy(): Promise<void> {
   injector.resetStats();
   physicsGate.dispose(); // [M1-b] 清掉让位登记表，避免残留状态影响下一次 mount
   if (TIMELINE_ENABLED) gestureBridge.stop(); // [M1-d2] 清手势时间线与 armed
+  if (CUE_ENABLED) cueBridge.stop(); // [M1-f 第二批] 清 cue 账本（destroy 后不残留持有值）
   motionDirector.reset();
   poseOwnedByMotion = false;
   poseController.resetToRest();
@@ -2283,6 +2364,10 @@ const api = {
   admitGesture,
   stopGesture,
   getGestureState,
+  // [M1-f 第二批] EmbodiedCue 行为闭环（embodied.cue flag，默认关）
+  admitCue,
+  stopCue,
+  getCueState,
   getCapabilities,
   // 生命周期
   destroy,
