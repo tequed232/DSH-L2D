@@ -38,9 +38,34 @@ export interface PosturePlan {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-function findControl(profile: ModelMotionProfile | null | undefined, id: string): SemanticControlCapability | null {
+/**
+ * W3 语义约束在画像里的落地字段（扫描器 tools/capability-scan/w3-controls.mjs 产出）：
+ *   - `kind`：W3 条目类型（motion-pair / motion-loop / pose / gaze / body / expression）；
+ *   - `conflicts`：与本通道互斥的其它通道 id（`ext.` 前缀，可含 `x.*` 通配），
+ *     由登记表按「成对动作只看姿态骨、共用光效/待机参数不参与冲突」「眼睛族互斥」
+ *     「gaze 与前倾同写 LeanInput」派生。
+ * 字段是画像的新增内容（schema 只加不改），契约接口不感知。
+ */
+interface W3ControlFields {
+  kind?: string;
+  conflicts?: readonly string[];
+}
+type ResolvedControl = SemanticControlCapability & W3ControlFields;
+
+function normalizeExtId(id: string): string {
+  return id.startsWith('ext.') ? id : 'ext.' + id;
+}
+
+function findControl(profile: ModelMotionProfile | null | undefined, id: string): ResolvedControl | null {
   if (!profile || !Array.isArray(profile.controls)) return null;
-  return profile.controls.find((c) => c.id === id) || null;
+  const exact = profile.controls.find((c) => c && c.id === id);
+  if (exact) return exact as ResolvedControl;
+  // W3 通道在画像里带 ext. 前缀；允许用清单原始 id（gesture.grass）查询
+  if (!id.startsWith('ext.')) {
+    const ext = profile.controls.find((c) => c && c.id === 'ext.' + id);
+    if (ext) return ext as ResolvedControl;
+  }
+  return null;
 }
 
 /**
@@ -96,8 +121,43 @@ export function planSemanticPosture(
   return plan;
 }
 
-/** 便捷封装：只想知道某通道能不能写。 */
-export function canExpress(profile: ModelMotionProfile | null | undefined, channel: string): boolean {
+/**
+ * 语义约束上下文（W3「语义约束」节）。
+ * - `active`：当前已打开/持有的通道 id（`gesture.grass` 或 `ext.gesture.grass` 均可）；
+ * - `motionPlaying`：是否有动作正在播放（姿势类通道要求「动作未播放」，
+ *   setPose 在 motion-playing 时返回 false）。
+ */
+export interface ExpressionContext {
+  active?: readonly string[];
+  motionPlaying?: boolean;
+}
+
+/**
+ * 便捷封装：某通道现在能不能表达。
+ *
+ * 画像层判定（status/sourceId）之外，叠加 W3 语义约束：
+ *   1. 姿势类（pose）要求动作未播放；
+ *   2. 画像 conflicts 里声明的互斥通道处于激活态 → 不可表达
+ *      （成对动作不能同时 open、眼睛族 key3-6 表情互斥、gaze 与前倾同写 LeanInput）。
+ * 约束全部来自画像数据，不硬编码任何通道/参数名。
+ */
+export function canExpress(
+  profile: ModelMotionProfile | null | undefined,
+  channel: string,
+  context?: ExpressionContext,
+): boolean {
   const c = findControl(profile, channel);
-  return !!c && (c.status === 'supported' || c.status === 'approximate') && !!c.sourceId;
+  if (!c || !(c.status === 'supported' || c.status === 'approximate') || !c.sourceId) return false;
+  if (context?.motionPlaying && c.kind === 'pose') return false;
+  const active = context?.active;
+  if (active && active.length && Array.isArray(c.conflicts) && c.conflicts.length) {
+    for (const raw of active) {
+      if (!raw) continue;
+      const id = normalizeExtId(raw);
+      for (const conflict of c.conflicts) {
+        if (conflict === id || (conflict.endsWith('.*') && id.startsWith(conflict.slice(0, -1)))) return false;
+      }
+    }
+  }
+  return true;
 }

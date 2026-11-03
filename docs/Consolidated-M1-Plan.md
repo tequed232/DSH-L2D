@@ -54,9 +54,13 @@
 
 ## 4. 执行记录
 
-| 工作流 | 代理 | 状态 | 提交 |
+| 工作流 | 代理 | 状态 | 交付要点 |
 |---|---|---|---|
-| WS-1 | core-mixer | 进行中 | — |
-| WS-2 | renderer-adapter | 进行中 | — |
-| WS-3 | guards-unify | 进行中 | — |
-| WS-4 | capability-registry | 进行中 | — |
+| WS-1 | core-mixer | ✅ 完成 | resolveWritePlan（官方 spec 跨验 25/25）+ LimbController（20 叶子 id 注入式）+ INV-01…12/S-01…06 全绿 |
+| WS-2 | renderer-adapter | ✅ 完成 | MotionAdapter（canOwn 对齐 R10b）+ PhysicsGate 预留 + 帧序审计（与 §1 无顺序性差异）；flag 关 = 行为与 main 一致 |
+| WS-3 | guards-unify | ✅ 完成 | 口型红线扩到 posture 路径（真机 400）、R10b ignored（真机 warning 可见）、物理输出未 own 400（真机） |
+| WS-4 | capability-registry | ✅ 完成 | 画像 20→56 通道（W3 36 条 + 排除 4 条带原因）、canExpress 语义约束数据化；真机重扫/settings 兼容 |
+
+终验：test:core exit 0（120+ 断言）· test:types PASS · 真机验收 9/9 · 守卫 9/9。
+集成修复：acceptance F 项契约同步 20→56；失败原因透出（failed[0]）；
+跨流对齐：renderer 的 LimbControlLike 三方法签名即 WS-1 LimbController 的公开接口。

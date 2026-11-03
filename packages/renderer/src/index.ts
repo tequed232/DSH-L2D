@@ -334,6 +334,9 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
     applyGazeBody(core);
     flushAngleBus(core);
     injector.apply(core, 'pre');
+    // [M1-b PhysicsGate 挂接点·物理前] gate.pre(core) 的启用位置：此处位于 Physics600 之前，
+    // 负责 Hip* 生产者让位。当前未接线（空实现见 app/motion-adapter.ts createPhysicsGate），
+    // 由 embodied.m1 flag 控制（默认 false = 现行为）；接线前禁止在此添加任何可执行语句。
   });
   model.setPostLateUpdateHook((core, deltaTimeSeconds) => {
     phaseDiag.post++;
@@ -342,6 +345,10 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
       poseController.update(core, deltaTimeSeconds, injector);
     }
     applyAmbientFace(core);
+    // [M1-b PhysicsGate 挂接点·物理后] gate.post(core) 的启用位置：此处位于 Physics600 /
+    // Pose800 之后、injector.apply('post') 之前。当前未接线（空实现见 app/motion-adapter.ts
+    // createPhysicsGate），由 embodied.m1 flag 控制（默认 false = 现行为）；
+    // 接线前禁止在此添加任何可执行语句。
     injector.apply(core, 'post');
     applyGazeEyes(core);
   });

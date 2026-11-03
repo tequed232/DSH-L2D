@@ -405,10 +405,11 @@ async function main() {
     const modelId = cap.body && cap.body.modelId;
     record(
       'F 画像路由',
-      cap.status === 200 && n === 20 && !!modelId,
+      // W3 合入后契约 = 标准 20 + W3 36 = 56（来源 tools/w3-registry/registry.json）
+      cap.status === 200 && n === 56 && !!modelId,
       cap.status !== 200
         ? `capability.json HTTP ${cap.status}（预期 200）→ 画像路由未挂载`
-        : n !== 20
+        : n !== 56
           ? `controls.length=${n}（契约要求 20）→ 模型或扫描器输出变了，检查 tools/capability-scan`
           : !modelId
             ? 'modelId 为空 → 画像缺模型标识，上层无法绑定'

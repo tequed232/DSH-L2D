@@ -139,3 +139,35 @@ export type {
   SafeSample,
   TrajectorySample,
 } from './motion-trajectory.ts';
+
+// ---------------------------------------------------------------- M1 所有权仲裁（WS-1）
+// resolveWritePlan 纯函数：docs/Ownership-Invariants.md §1 契约 / §2 INV 不变量；
+// LimbController：physics-owned ↔ limb-owned 状态机（叶子四肢 id 由调用方传入）。
+// feature flag：M1_DEFAULT_ENABLED=false = 现行为，行为变化必须由调用方显式启用。
+export {
+  M1_DEFAULT_ENABLED,
+  LIMB_BONE_PARAMS,
+  LIPSYNC_PARAM_SET,
+  WRITE_SOURCE_RANK,
+  resolveWritePlan,
+} from './write-plan.ts';
+export type {
+  OwnershipEntry,
+  OwnershipWriteIntent,
+  RejectReason,
+  RejectedWrite,
+  ResolveInput,
+  ResolveResult,
+  WriteEntry,
+  WriteSource,
+} from './write-plan.ts';
+export { LimbController } from './limb-controller.ts';
+export type {
+  AcquireRejectReason,
+  AcquireResult,
+  LimbAcquireOptions,
+  LimbControllerOptions,
+  LimbOwnershipEntry,
+  LimbOwnershipSnapshot,
+  LimbSetResult,
+} from './limb-controller.ts';

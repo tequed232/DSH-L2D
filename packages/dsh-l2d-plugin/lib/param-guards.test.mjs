@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   LIPSYNC_PARAMS,
+  checkParameterWrite,
   collectReservedParams,
   isReservedParam,
 } from './param-guards.mjs';
@@ -53,5 +54,33 @@ let deep = { v: 'ParamMouthOpenY' };
 for (let i = 0; i < 20; i++) deep = { child: deep };
 assert.deepEqual(collectReservedParams(deep, { maxDepth: 3 }), []);
 assert.deepEqual(collectReservedParams(deep, { maxDepth: 30 }), ['ParamMouthOpenY']);
+
+// 7) checkParameterWrite：口型优先于 requires-own；R10b 的 ignored 只在 own:true 时出现。
+const phys = new Set(['ParamAngleX', 'HipAngleX']);
+// 口型优先：即使同时未 own 直写物理输出，也先报 reserved-param。
+assert.deepEqual(
+  checkParameterWrite({ paramIds: ['ParamMouthOpenY', 'ParamAngleX'] }, { physicsOutputs: phys }),
+  { ok: false, reason: 'reserved-param', params: ['ParamMouthOpenY'] },
+);
+// 未 own 直写物理输出 → 拒绝且只报物理输出 id。
+assert.deepEqual(
+  checkParameterWrite({ paramIds: ['AngleX', 'HipAngleX'] }, { physicsOutputs: phys }),
+  { ok: false, reason: 'physics-output-requires-own', params: ['HipAngleX'] },
+);
+// own:true → 放行；非物理 id 进 ignored（R10b：own 只登记物理输出）。
+assert.deepEqual(
+  checkParameterWrite({ paramIds: ['HipAngleX', 'AngleX'], own: true }, { physicsOutputs: phys }),
+  { ok: true, params: ['HipAngleX', 'AngleX'], ignored: ['AngleX'] },
+);
+// 全物理输出 → ignored 为空。
+assert.deepEqual(
+  checkParameterWrite({ paramIds: ['HipAngleX'], own: true }, { physicsOutputs: phys }),
+  { ok: true, params: ['HipAngleX'], ignored: [] },
+);
+// 未带 own 的普通写入不产生 ignored（不涉及登记）。
+assert.deepEqual(
+  checkParameterWrite({ paramIds: ['AngleX'] }, { physicsOutputs: phys }),
+  { ok: true, params: ['AngleX'], ignored: [] },
+);
 
 console.log('param-guards ok');

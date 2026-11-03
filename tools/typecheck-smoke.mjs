@@ -63,6 +63,9 @@ function listSources() {
   // E1 语义绑定层：把通道解析成参数写入，类型错了会静默产出错的参数名
   const semanticBinding = path.join(ROOT, 'packages', 'core', 'src', 'semantic-binding.ts');
   if (fs.existsSync(semanticBinding)) files.push(semanticBinding);
+  // M1-a 核心纯函数：resolveWritePlan / LimbController（INV 不变量承载者）
+  const m1Core = [path.join(ROOT, 'packages', 'core', 'src', 'write-plan.ts'), path.join(ROOT, 'packages', 'core', 'src', 'limb-controller.ts')];
+  for (const f of m1Core) if (fs.existsSync(f)) files.push(f);
 
   // P1 呈现层：自适应布局是纯计算，类型错会静默算出错的缩放/偏移
   const presentationDir = path.join(ROOT, 'packages', 'renderer', 'src', 'presentation');
