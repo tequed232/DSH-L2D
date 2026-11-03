@@ -16,7 +16,7 @@ import path from 'node:path';
 
 const MAX_EVENTS = 50; // 环形缓冲条数
 const FLUSH_DEBOUNCE_MS = 500; // 落盘防抖
-const PAYLOAD_LIMITS = { region: 32, action: 32, name: 64, group: 64, reason: 120 };
+const PAYLOAD_LIMITS = { region: 32, action: 32, name: 64, group: 64, reason: 120, summary: 120, requestId: 64, status: 16 };
 const PAYLOAD_NUMBERS = ['x', 'y', 'seconds', 'durationMs'];
 
 export function createReverseLog(options = {}) {

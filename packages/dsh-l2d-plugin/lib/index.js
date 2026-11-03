@@ -21,6 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAiInbox } from './ai-inbox.mjs';
+import { createWorkspaceActionChannel } from './workspace-action.mjs';
 import { createWorkspaceAgentBridge } from './workspace-agent.mjs';
 import { createReverseLog } from './reverse-log.mjs';
 import { normalizePresencePayload, readEnvState, writeEnvState } from './env-state.mjs';
@@ -916,6 +917,17 @@ export function apply(root, config = {}) {
     // 用「队列 + 轮询」而不是 WebSocket：插件环境里没有长连接，轮询 400ms 足够，
     // 而且失败可重建，不会因为连接断了就哑掉。
     const aiInbox = createAiInbox();
+    // Workspace Action Protocol：requestId↔callId 关联 + 上下文注入 + 状态同步。
+    // 复用 aiInbox（通信）、buildRuntimeSnapshot（上下文）、guardAiCall（权限），不新建通信层。
+    const workspaceActions = createWorkspaceActionChannel({
+      aiInbox,
+      guardAiCall,
+      getSnapshot: () => buildRuntimeSnapshot(),
+      workspace: { id: 'dsh-l2d', name: 'DSH-L2D', type: 'development' },
+    });
+    try {
+      ctx.effect(() => () => { /* workspaceActions 无需清理（内存映射随进程结束） */ });
+    } catch { /* 老宿主没有 effect */ }
     const reverseLog = createReverseLog({ diag });
     // 模型索引（表情/动作组/物理输出表）只读缓存：/ai/call 不该每次都读磁盘。
     // 读不到时守卫 fail-open（物理输出判定放行），由渲染端兜底，绝不 500。
@@ -1017,6 +1029,47 @@ export function apply(root, config = {}) {
 
     // 浏览器把执行回执和 action-done 事件放回来。MCP 用 id 取走。
     // result 是受理/失败（一个 id 一份）；event 是 start / end / interrupted，可先到后到。
+    // Workspace Action Protocol：双向动作通信（信封见 packages/core/src/workspace-protocol.ts）
+    // POST 提交动作请求（含工作区上下文）；GET 按 requestId 取关联的响应信封。
+    route('/dsh-l2d/agent/action', (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'POST') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      const chunks = [];
+      req.on('data', (c) => {
+        chunks.push(c);
+        if (chunks.reduce((n, b) => n + b.length) > 32 * 1024) req.destroy();
+      });
+      req.on('end', () => {
+        let request;
+        try {
+          request = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        } catch {
+          return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
+        }
+        const resp = workspaceActions.submit(request);
+        // 终态反馈推给页面（气泡展示简短摘要，不展示原始 JSON）
+        if (resp.status === 'completed' || resp.status === 'failed' || resp.status === 'rejected') {
+          try { reverseLog.record('workspace.action.result', { requestId: resp.requestId, status: resp.status, summary: resp.summary }); } catch { /* 反向桥不可用不致命 */ }
+        }
+        sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(resp), 'utf8'));
+      });
+    });
+
+    route('/dsh-l2d/agent/action/result', (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      let requestId = '';
+      try { requestId = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('requestId') || ''); } catch { requestId = ''; }
+      const resp = requestId ? workspaceActions.result(requestId) : null;
+      if (!resp) return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('unknown requestId'));
+      if (resp.__invalid) {
+        diag('workspace action envelope invalid: ' + resp.__invalid.join('; '));
+        delete resp.__invalid;
+      }
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(resp), 'utf8'));
+    });
+
     route('/dsh-l2d/ai/result', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       if (req.method === 'GET') {

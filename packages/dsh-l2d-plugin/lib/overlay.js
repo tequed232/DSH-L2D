@@ -3663,6 +3663,20 @@
         .then(function (d) {
           // 先消费搭车的反向桥快照（必须在无指令提前 return 之前，否则没指令时永远不更新）
           if (d && d.reverse) aiReverseState = d.reverse;
+          // Workspace Action 反馈：终态动作把简短摘要上气泡（用户看摘要，不看 JSON）
+          if (d && d.reverse && Array.isArray(d.reverse.recent)) {
+            for (const ev of d.reverse.recent) {
+              if (ev && ev.type === 'workspace.action.result' && ev.payload && ev.payload.summary && ev.ts) {
+                if (!window.__L2D_LAST_FEEDBACK_TS__ || ev.ts > window.__L2D_LAST_FEEDBACK_TS__) {
+                  window.__L2D_LAST_FEEDBACK_TS__ = ev.ts;
+                  var Lfb = window.DSH_L2D;
+                  if (Lfb && Lfb.setEmotionBubble) {
+                    try { Lfb.setEmotionBubble(ev.payload.summary); } catch (e2) { /* 气泡失败不致命 */ }
+                  }
+                }
+              }
+            }
+          }
           if (!d || !d.calls || !d.calls.length) return;
           d.calls.forEach(function (c) {
             Promise.resolve(window.DSH_L2D_AI.exec(c.name, c.args, c.id))
