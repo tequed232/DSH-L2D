@@ -102,6 +102,8 @@ const AI_ALLOWED = new Set([
   'l2d_act',
   'l2d_get_state',
   'l2d_reset',
+  'l2d_cue',
+  'l2d_cue_stop',
 ]);
 
 // 内存态设置（模拟 DSH 侧的 settings 持久化，重启 server 会重置）
