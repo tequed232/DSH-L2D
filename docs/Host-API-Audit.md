@@ -50,3 +50,31 @@
 - 呈现层分三档：`pane`（右侧面板 tab）/ `overlay`（框架之上）/ `window`（桌面原生窗）。
 - **唯一 Avatar Runtime**：角色仍跑在现有 renderer 页面里，容器只决定它被放在哪。
 - 设置页做成 `settings.section` 的一个分区，内部 5 个子区，不假装是独立窗口。
+
+## 5. 真机实验记录：客户端入口（第一次尝试失败，已回滚）
+
+**做了**：在 `package.json` 声明 `dsh.client = { platform: "web" }` + `exports["./client"]`，
+新增 `lib/client.js`（`window.__ModuleLoader__.load({ id: 'dsh-l2d', factory: (require) => {...} })`），
+在 `apply(ctx)` 里 `ctx.slots.register({ name: 'shell.overlay', id: 'dsh-l2d' }, Badge)`。
+
+**现象**（两次，均为 web profile 真机）：
+
+| 配置 | 页面表现 |
+|---|---|
+| `dsh.client` 无 `inject` | `Failed to load plugins — web boot: 1 entry did not activate` / `dsh-l2d: loading`（一直挂着） |
+| 补 `inject: ["@deepseek-ai/dsh-client-ui-layout"]` | 同上，但状态变 `dsh-l2d: failed` |
+
+角色浮层仍正常（它是 webServer 注入，与此无关），但**整个 DSH 界面被这条失败条目拖进错误页**。
+
+**已确认的**：
+- 客户端入口确实会被发现并进入激活流程（状态从 loading → failed 说明 `apply` 被调用了）。
+- 失败原因在 `apply` 内部（注册参数或组件契约不匹配），不是加载失败。
+- 模块格式是 `window.__ModuleLoader__.load({ id, factory(require) })`，`require` 由宿主注入。
+
+**尚未确认的三点**（下次先验证，不要再盲改）：
+1. `register()` 的必填字段：官方调用带了 `locale` 与 `children`，我只给了 `name`/`id`。
+2. 组件是否需要宿主注入的 props（`PropsRuntime<'root'>`）才能挂载。
+3. `shell.overlay` 是否要求先声明 `kind: 'list'` / `scope: 'root'`。
+
+**流程教训**：一个失败的客户端入口会把**整个 Web UI** 打进错误页，不能直接在正在用的 profile 上试。
+下次在临时 profile（复制 web profile、换端口）里验证通过，再动主环境。
