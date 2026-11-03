@@ -11,11 +11,16 @@ import { CubismShaderManager_WebGL } from './fw/rendering/cubismshader_webgl';
 import { LAppSubdelegate } from './app/lappsubdelegate';
 import { LAppPal } from './app/lapppal';
 import type { LAppModel } from './app/lappmodel';
+import {
+  attachWebglRecovery,
+  type WebglRecoveryHandle,
+} from './app/webgl-recovery';
 import { ParamInjector, parameterIndexOf } from './app/param-injector';
 import { EmotionRouter, EmotionIntent, EmotionSignal } from './app/emotion-router';
 import { MotionDirector, motionsShareArm } from './app/motion-director';
 import { PoseController, POSE_IDS } from './app/pose-controller';
 import { SHADER_SOURCES } from './shaders';
+import { ActivityTracker, shouldStartAmbient, REDUCED_MOTION_AMBIENT_COOLDOWN_MS, type ActivityKind } from './app/activity-tracker';
 import { mixAdditive } from '../../core/src/angle-mix.ts';
 import { sampleAmbient, type AmbientKind } from '../../core/src/ambient.ts';
 import { LIPSYNC_PARAMS } from '../../core/src/index.ts';
@@ -38,6 +43,19 @@ let started = false;
 let lastError = '';
 let frames = 0;
 let canvasEl: HTMLCanvasElement | null = null;
+
+// ---------------------------------------------------------------- WebGL context lost/restored
+// lost：停渲染循环、记录诊断、由 destroy 语义放弃全部 GL 资源（不保留失效句柄）。
+// restored：用上次的挂载参数整树重建（mount 内部先 destroy 再走完整初始化）。
+let webglRecovery: WebglRecoveryHandle | null = null;
+let lastMount: { canvas: HTMLCanvasElement; opts: MountOptions } | null = null;
+let webglRestoring = false;
+let webglDiag = 'none';
+
+/** 诊断用：context lost/restored 最近状态 */
+export function getWebglRecoveryDiag(): string {
+  return webglDiag;
+}
 
 /** model3.json 原文，用于自省表情/动作组（不依赖 SDK 内部结构） */
 interface ModelSettingRefs {
@@ -278,6 +296,37 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
   currentZoom = opts.zoom ?? 1;
   canvasEl = canvas;
 
+  // context lost/restored 监听：每次挂载重建（旧监听随 handle detach），destroy 时移除
+  lastMount = { canvas, opts };
+  webglRecovery?.detach();
+  webglRecovery = attachWebglRecovery(canvas, {
+    onLost: (info) => {
+      webglDiag = 'lost@' + new Date(info.at).toISOString() + (info.message ? ' ' + info.message : '');
+      console.warn('[dsh-l2d] WebGL context lost，停止渲染循环：' + webglDiag);
+      // 停渲染循环；失效的 GL 句柄不保留，等 restored 后整树重建
+      paused = true;
+      pausedByVisibility = false;
+    },
+    onRestored: () => {
+      if (!lastMount || webglRestoring) return;
+      webglRestoring = true;
+      webglDiag = 'restored rebuilding';
+      console.info('[dsh-l2d] WebGL context restored，重建渲染资源');
+      void (async () => {
+        try {
+          paused = false;
+          await mount(lastMount.canvas, lastMount.opts); // mount 内部先 destroy，不残留旧句柄
+          webglDiag = 'restored ok';
+        } catch (err) {
+          webglDiag = 'restore-failed: ' + String(err);
+          console.error('[dsh-l2d] context 恢复重建失败：', err);
+        } finally {
+          webglRestoring = false;
+        }
+      })();
+    },
+  });
+
   bootFramework();
 
   // 先设定 CSS 尺寸：subdelegate 初始化时会按 clientWidth/Height 决定画布分辨率
@@ -404,7 +453,29 @@ let lastRafAt = 0;
 let targetFps = 60;
 let paused = false;
 let pausedByVisibility = false;
-let lastActiveAt = typeof performance !== 'undefined' ? performance.now() : 0;
+/**
+ * 统一活动信号（P1）：拖拽/动作/表情/注视/Agent/指针全部经 markActive 进 tracker，
+ * 帧率门只问 isActive()。滞回 2500ms 与旧「交互后 2.5s 保持满帧」逐毫秒一致，
+ * 替换后行为语义不变（前台 60 / 失焦 30 / 交互 60）。
+ */
+const activity = new ActivityTracker();
+
+/**
+ * 标记"有交互"：拖拽、点击、AI 指令、动作播放都会调它，确保前台满帧。
+ * kind 只影响诊断计数（谁在唤醒渲染），不影响帧率门决策。
+ */
+export function markActive(kind: ActivityKind = 'agent'): void {
+  activity.mark(kind);
+}
+
+/** 当前应使用的帧率：前台恒定 60；失焦降载 30；最近有交互保持 60 */
+function computeFps(_now: number): number {
+  if (kfActive) return 60;
+  // 活动滞回窗口内保持满帧：鼠标进窗/切回前台立刻顺滑，不用等降载窗口回升
+  if (activity.isActive()) return 60;
+  if (!windowFocused) return 30; // 失焦降载 30fps（原 15fps 实测只有 9.5，观感卡）
+  return 60;
+}
 
 /**
  * 兼容原 API 的外部写入钩子。
@@ -425,7 +496,7 @@ let emotionBubble: ((text: string, holdMs: number) => void) | null = null;
 let emotionCloseTimer = 0;
 
 emotionRouter.subscribe((intent) => {
-  markActive();
+  markActive('agent');
   try {
     if (intent.expression) setExpression(intent.expression);
     if (intent.motion) {
@@ -524,21 +595,6 @@ let poseOwnedByMotion = false;
 /** 注入相位诊断：确认 pre/post 钩子都在跑。 */
 const phaseDiag = { pre: 0, post: 0 };
 let windowFocused = true;
-
-/** 标记"有交互"：拖拽、点击、AI 指令、动作播放都会调它，确保前台满帧 */
-export function markActive(): void {
-  lastActiveAt = performance.now();
-  if (!paused) targetFps = 60;
-}
-
-/** 当前应使用的帧率：前台恒定 60；失焦降载 30；最近有交互保持 60 */
-function computeFps(_now: number): number {
-  if (kfActive) return 60;
-  // 交互后 2.5s 内保持满帧：鼠标进窗/切回前台立刻顺滑，不用等降载窗口回升
-  if (performance.now() - lastActiveAt < 2500) return 60;
-  if (!windowFocused) return 30; // 失焦降载 30fps（原 15fps 实测只有 9.5，观感卡）
-  return 60;
-}
 
 function tick(): void {
   if (paused) return;
@@ -641,7 +697,7 @@ function installSchedulingGuards(): void {
       lastTickAt = 0; // 立即补一帧，避免恢复时画面停住
       nextTickAt = 0; // 同步重置 deadline，否则旧计划会把补帧挡回去
       gateFps = 0;
-      markActive(); // 回前台立即满帧（不等降载窗口回升）
+      markActive('system'); // 回前台立即满帧（不等降载窗口回升）
     }
   });
 
@@ -650,13 +706,13 @@ function installSchedulingGuards(): void {
   });
   window.addEventListener('focus', () => {
     windowFocused = true;
-    markActive();
+    markActive('system');
   });
   // 鼠标进入窗口即视为活跃：失焦降载期间移进窗口也立刻回满帧
-  window.addEventListener('pointerenter', markActive, { passive: true });
+  window.addEventListener('pointerenter', () => markActive('pointer'), { passive: true });
   // 任何指针活动都算交互，避免「只是在角色上移一下」就掉到低帧
-  window.addEventListener('pointerdown', markActive, { passive: true });
-  window.addEventListener('wheel', markActive, { passive: true });
+  window.addEventListener('pointerdown', () => markActive('pointer'), { passive: true });
+  window.addEventListener('wheel', () => markActive('pointer'), { passive: true });
 }
 
 export function layout(width: number, height: number, zoom = 1, dpr = 0): void {
@@ -956,7 +1012,10 @@ function syncStageGate(): void {
 export function setStageBusy(flags: { dragging?: boolean; acting?: boolean }): void {
   if (typeof flags.dragging === 'boolean') stageBusy.dragging = flags.dragging;
   if (typeof flags.acting === 'boolean') stageBusy.acting = flags.acting;
-  if (stageBusy.dragging || stageBusy.acting) stopAmbient();
+  if (stageBusy.dragging || stageBusy.acting) {
+    markActive('drag');
+    stopAmbient();
+  }
   syncStageGate();
 }
 
@@ -970,10 +1029,32 @@ interface AmbientPlay {
 let ambientPlay: AmbientPlay | null = null;
 const AMBIENT_SEC = 2.4;
 
+// prefers-reduced-motion（P1）：系统要求减少动态时，ambient 自发微动作按冷却降频，
+// 而不是停渲染/停循环——角色仍是呼吸、眨眼、物理的常驻视觉锚点。
+let reducedMotionQuery: MediaQueryList | null = null;
+function systemReducedMotion(): boolean {
+  try {
+    if (!reducedMotionQuery && typeof window.matchMedia === 'function') {
+      reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    }
+    return !!(reducedMotionQuery && reducedMotionQuery.matches);
+  } catch {
+    return false;
+  }
+}
+let lastAmbientStartAt = -Infinity;
+
 function startAmbient(kind: AmbientKind): void {
   if (stageBusy.dragging || stageBusy.acting || mediaState.on || poseOwnedByMotion || isUserMotionPlaying()) {
     return;
   }
+  if (
+    systemReducedMotion() &&
+    !shouldStartAmbient(true, lastAmbientStartAt, performance.now(), REDUCED_MOTION_AMBIENT_COOLDOWN_MS)
+  ) {
+    return;
+  }
+  lastAmbientStartAt = performance.now();
   ambientPlay = {
     kind,
     sign: Math.random() < 0.5 ? -1 : 1,
@@ -1128,7 +1209,7 @@ export function getOwnedParameters(): string[] {
 
 /** 视线/头部朝向，x、y ∈ [-1, 1]，走模型自带的拖动逻辑（Angle/EyeBall 一起动） */
 export function lookAt(x: number, y: number): void {
-  markActive();
+  markActive('gaze');
   if (!model) return;
   const core = model.getModel();
   if (!core) return;
@@ -1172,7 +1253,7 @@ export function lookAt(x: number, y: number): void {
 /** 播放指定动作组；组或下标不存在时返回 false */
 export function playMotion(group: string, index = 0, priority = 2): boolean {
   if (!model) return false;
-  markActive();
+  markActive('motion');
   try {
     const groups = modelSetting?.FileReferences?.Motions || {};
     const list = groups[group];
@@ -1254,7 +1335,7 @@ export async function playMotionAsync(
   const no = Math.max(0, Math.min(list.length - 1, Math.floor(Number(opts.index) || 0)));
   const priority = opts.interrupt || opts.priority === 3 ? 3 : opts.priority || 2;
 
-  markActive();
+  markActive('motion');
   const core = model.getModel();
   if (!core) return { status: 'failed', reason: 'not-ready' };
 
@@ -1327,7 +1408,7 @@ export function getMotionSlots(): Record<string, string> {
 /** 设置表情；表情不存在时返回 false */
 export function setExpression(name: string): boolean {
   if (!model) return false;
-  markActive();
+  markActive('expression');
   try {
     const list = modelSetting?.FileReferences?.Expressions || [];
     if (!list.some((e) => e && e.Name === name)) return false;
@@ -1343,7 +1424,7 @@ export function setExpression(name: string): boolean {
  */
 export function clearExpression(): boolean {
   if (!model) return false;
-  markActive();
+  markActive('expression');
   try {
     model.clearExpression();
     return true;
@@ -1366,7 +1447,7 @@ const mediaState = { on: false, phase: 0 };
 /** 注视目标：x、y ∈ [-1,1]，相对模型中心；[0,0] 是正对镜头 */
 export function gaze(x: number, y: number): void {
   gazeState.target = { x: clamp(Number(x) || 0), y: clamp(Number(y) || 0) };
-  markActive();
+  markActive('gaze');
 }
 
 /** 停止注视（眼与头平滑回正） */
@@ -1832,6 +1913,11 @@ export async function destroy(): Promise<void> {
   poseController.resetToRest();
   kfActive = false;
   kfTracks = [];
+  if (webglRecovery) {
+    webglRecovery.detach();
+    webglRecovery = null;
+  }
+  lastMount = null;
   try {
     model?.release?.();
   } catch {
@@ -2046,6 +2132,8 @@ export function getInfo(): Record<string, number | string> | null {
     drawables: core.getDrawableCount ? core.getDrawableCount() : 0,
     params: core.getParameterCount ? core.getParameterCount() : 0,
     zoom: currentZoom,
+    // prefers-reduced-motion 诊断：1 = 系统要求减少动态（ambient 已按冷却降频）
+    rm: systemReducedMotion() ? 1 : 0,
     pxW: canvasEl ? canvasEl.width : 0,
     pxH: canvasEl ? canvasEl.height : 0,
     dpr: typeof window !== 'undefined' ? Math.round((window.devicePixelRatio || 1) * 100) / 100 : 1,
@@ -2182,3 +2270,33 @@ const api = {
 export default api;
 
 (window as unknown as { DSH_L2D?: typeof api }).DSH_L2D = api;
+
+// ------------------------------------------------------ P0 观测性导出
+// 只在文件尾挂载，不注入帧循环：FrameProfiler 未 start() / 未 record() 时零成本。
+// 宿主与页面都能读：window.DSH_L2D_PERF.frameProfiler / .memorySnapshot。
+import { FrameProfiler, percentilesOf, percentile } from './app/frame-profiler.ts';
+import {
+  collectBrowserMemorySnapshot,
+  collectProcessMemorySnapshot,
+  createMemorySampler,
+  snapshotToJSON,
+} from './app/memory-snapshot.ts';
+
+const perfApi = {
+  FrameProfiler,
+  percentile,
+  percentilesOf,
+  collectBrowserMemorySnapshot,
+  collectProcessMemorySnapshot,
+  createMemorySampler,
+  snapshotToJSON,
+  // 预建实例：默认不运行（零开销）；宿主/页面调用 start() 后开始被动采样帧间隔。
+  frameProfiler: new FrameProfiler(),
+  // 浏览器侧内存采样器：默认不启动；sample() 单次采样，start() 后每 5s 一次。
+  memorySnapshot: createMemorySampler({ collect: collectBrowserMemorySnapshot }),
+};
+
+(window as unknown as { DSH_L2D_PERF?: typeof perfApi }).DSH_L2D_PERF = perfApi;
+
+export { FrameProfiler, percentile, percentilesOf };
+export { collectBrowserMemorySnapshot, collectProcessMemorySnapshot, createMemorySampler, snapshotToJSON };

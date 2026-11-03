@@ -1,0 +1,409 @@
+{
+  "generatedAt": "2026-11-03T10:29:46.714Z",
+  "modelDir": "DeepSeek免费公皮\\DeepSeek",
+  "tool": "tools/texture-report.mjs",
+  "estimator": "packages/core/src/texture-budget.ts",
+  "formula": "宽×高×像素格式字节数×(mipmap?1.33:1)；同路径重复引用 GPU 只驻留一份，refCount 不乘",
+  "budgetBytes": 33554432,
+  "maskBufferNote": "遮蔽 RenderTexture 固定开销 33554432 字节（2×2048² RGBA，MASK_BUFFER_COUNT=2），不随纹理档位变化，在 32MB 纹理预算之外。",
+  "variants": [
+    {
+      "modelId": "大肥鱼.dsl2d.2048",
+      "modelFile": "大肥鱼.dsl2d.2048.model3.json",
+      "textureCount": 5,
+      "uniqueCount": 5,
+      "items": [
+        {
+          "id": "dsl2d-2048/texture_00.png",
+          "width": 1024,
+          "height": 2048,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 1078769
+        },
+        {
+          "id": "dsl2d-2048/texture_01.png",
+          "width": 1024,
+          "height": 2048,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 1507371
+        },
+        {
+          "id": "dsl2d-2048/texture_02.png",
+          "width": 2048,
+          "height": 2048,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 2146059
+        },
+        {
+          "id": "dsl2d-2048/texture_03.png",
+          "width": 2048,
+          "height": 2048,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 844945
+        },
+        {
+          "id": "dsl2d-2048/texture_04.png",
+          "width": 2048,
+          "height": 2048,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 281631
+        }
+      ],
+      "problems": [],
+      "originalBytes": 89254789,
+      "fileBytesTotal": 5858775,
+      "tierLadder": {
+        "512": {
+          "totalBytes": 5578424,
+          "feasible": true
+        },
+        "1024": {
+          "totalBytes": 22313696,
+          "feasible": true
+        },
+        "2048": {
+          "totalBytes": 89254789,
+          "feasible": false
+        }
+      },
+      "recommendation": {
+        "tier": 1024,
+        "tierFeasible": true,
+        "totalBytes": 22313696,
+        "budgetBytes": 33554432,
+        "warnings": [
+          "原始纹理合计约 85.1MB，超出低配预算 32.0MB"
+        ]
+      },
+      "perTexture": [
+        {
+          "id": "dsl2d-2048/texture_00.png",
+          "original": "1024x2048",
+          "tier": "512x1024",
+          "bytes": 2789212,
+          "fileBytes": 1078769,
+          "refCount": 1
+        },
+        {
+          "id": "dsl2d-2048/texture_01.png",
+          "original": "1024x2048",
+          "tier": "512x1024",
+          "bytes": 2789212,
+          "fileBytes": 1507371,
+          "refCount": 1
+        },
+        {
+          "id": "dsl2d-2048/texture_02.png",
+          "original": "2048x2048",
+          "tier": "1024x1024",
+          "bytes": 5578424,
+          "fileBytes": 2146059,
+          "refCount": 1
+        },
+        {
+          "id": "dsl2d-2048/texture_03.png",
+          "original": "2048x2048",
+          "tier": "1024x1024",
+          "bytes": 5578424,
+          "fileBytes": 844945,
+          "refCount": 1
+        },
+        {
+          "id": "dsl2d-2048/texture_04.png",
+          "original": "2048x2048",
+          "tier": "1024x1024",
+          "bytes": 5578424,
+          "fileBytes": 281631,
+          "refCount": 1
+        }
+      ]
+    },
+    {
+      "modelId": "大肥鱼.dsl2d",
+      "modelFile": "大肥鱼.dsl2d.model3.json",
+      "textureCount": 5,
+      "uniqueCount": 5,
+      "items": [
+        {
+          "id": "大肥鱼.4096/texture_00.png",
+          "width": 4096,
+          "height": 8192,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 10462576
+        },
+        {
+          "id": "大肥鱼.4096/texture_01.png",
+          "width": 4096,
+          "height": 8192,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 13210527
+        },
+        {
+          "id": "大肥鱼.4096/texture_02.png",
+          "width": 2048,
+          "height": 2048,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 2264052
+        },
+        {
+          "id": "大肥鱼.4096/texture_03.png",
+          "width": 8192,
+          "height": 8192,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 18625369
+        },
+        {
+          "id": "大肥鱼.4096/texture_04.png",
+          "width": 4096,
+          "height": 4096,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 1148818
+        }
+      ],
+      "problems": [],
+      "originalBytes": 825606798,
+      "fileBytesTotal": 45711342,
+      "tierLadder": {
+        "512": {
+          "totalBytes": 5578424,
+          "feasible": true
+        },
+        "1024": {
+          "totalBytes": 22313696,
+          "feasible": true
+        },
+        "2048": {
+          "totalBytes": 89254789,
+          "feasible": false
+        }
+      },
+      "recommendation": {
+        "tier": 1024,
+        "tierFeasible": true,
+        "totalBytes": 22313696,
+        "budgetBytes": 33554432,
+        "warnings": [
+          "原始纹理合计约 787.4MB，超出低配预算 32.0MB"
+        ]
+      },
+      "perTexture": [
+        {
+          "id": "大肥鱼.4096/texture_00.png",
+          "original": "4096x8192",
+          "tier": "512x1024",
+          "bytes": 2789212,
+          "fileBytes": 10462576,
+          "refCount": 1
+        },
+        {
+          "id": "大肥鱼.4096/texture_01.png",
+          "original": "4096x8192",
+          "tier": "512x1024",
+          "bytes": 2789212,
+          "fileBytes": 13210527,
+          "refCount": 1
+        },
+        {
+          "id": "大肥鱼.4096/texture_02.png",
+          "original": "2048x2048",
+          "tier": "1024x1024",
+          "bytes": 5578424,
+          "fileBytes": 2264052,
+          "refCount": 1
+        },
+        {
+          "id": "大肥鱼.4096/texture_03.png",
+          "original": "8192x8192",
+          "tier": "1024x1024",
+          "bytes": 5578424,
+          "fileBytes": 18625369,
+          "refCount": 1
+        },
+        {
+          "id": "大肥鱼.4096/texture_04.png",
+          "original": "4096x4096",
+          "tier": "1024x1024",
+          "bytes": 5578424,
+          "fileBytes": 1148818,
+          "refCount": 1
+        }
+      ]
+    },
+    {
+      "modelId": "大肥鱼",
+      "modelFile": "大肥鱼.model3.json",
+      "textureCount": 5,
+      "uniqueCount": 5,
+      "items": [
+        {
+          "id": "大肥鱼.4096/texture_00.png",
+          "width": 4096,
+          "height": 8192,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 10462576
+        },
+        {
+          "id": "大肥鱼.4096/texture_01.png",
+          "width": 4096,
+          "height": 8192,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 13210527
+        },
+        {
+          "id": "大肥鱼.4096/texture_02.png",
+          "width": 2048,
+          "height": 2048,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 2264052
+        },
+        {
+          "id": "大肥鱼.4096/texture_03.png",
+          "width": 8192,
+          "height": 8192,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 18625369
+        },
+        {
+          "id": "大肥鱼.4096/texture_04.png",
+          "width": 4096,
+          "height": 4096,
+          "pixelFormat": "rgba8",
+          "mipmap": true,
+          "refCount": 1,
+          "fileBytes": 1148818
+        }
+      ],
+      "problems": [],
+      "originalBytes": 825606798,
+      "fileBytesTotal": 45711342,
+      "tierLadder": {
+        "512": {
+          "totalBytes": 5578424,
+          "feasible": true
+        },
+        "1024": {
+          "totalBytes": 22313696,
+          "feasible": true
+        },
+        "2048": {
+          "totalBytes": 89254789,
+          "feasible": false
+        }
+      },
+      "recommendation": {
+        "tier": 1024,
+        "tierFeasible": true,
+        "totalBytes": 22313696,
+        "budgetBytes": 33554432,
+        "warnings": [
+          "原始纹理合计约 787.4MB，超出低配预算 32.0MB"
+        ]
+      },
+      "perTexture": [
+        {
+          "id": "大肥鱼.4096/texture_00.png",
+          "original": "4096x8192",
+          "tier": "512x1024",
+          "bytes": 2789212,
+          "fileBytes": 10462576,
+          "refCount": 1
+        },
+        {
+          "id": "大肥鱼.4096/texture_01.png",
+          "original": "4096x8192",
+          "tier": "512x1024",
+          "bytes": 2789212,
+          "fileBytes": 13210527,
+          "refCount": 1
+        },
+        {
+          "id": "大肥鱼.4096/texture_02.png",
+          "original": "2048x2048",
+          "tier": "1024x1024",
+          "bytes": 5578424,
+          "fileBytes": 2264052,
+          "refCount": 1
+        },
+        {
+          "id": "大肥鱼.4096/texture_03.png",
+          "original": "8192x8192",
+          "tier": "1024x1024",
+          "bytes": 5578424,
+          "fileBytes": 18625369,
+          "refCount": 1
+        },
+        {
+          "id": "大肥鱼.4096/texture_04.png",
+          "original": "4096x4096",
+          "tier": "1024x1024",
+          "bytes": 5578424,
+          "fileBytes": 1148818,
+          "refCount": 1
+        }
+      ]
+    }
+  ],
+  "audit": {
+    "auditedAt": "2026-11-03T10:29:46.700Z",
+    "scope": [
+      "packages/renderer/src/index.ts (mount/destroy)",
+      "packages/renderer/src/app/lappsubdelegate.ts",
+      "packages/renderer/src/app/lapptexturemanager.ts",
+      "packages/renderer/src/app/lapplive2dmanager.ts",
+      "packages/renderer/src/app/lappmodel.ts",
+      "packages/renderer/src/app/lappglmanager.ts",
+      "packages/renderer/src/fw/rendering/cubismoffscreenmanager.ts"
+    ],
+    "conclusions": [
+      {
+        "path": "mount() → destroy()（当前唯一切换路径）",
+        "verdict": "ok",
+        "detail": "mount 首行 await destroy()：取消 rAF 与兜底定时器、model.release()（CubismUserModel.release 释放 motion/expression/moc/model/physics/pose/breath + deleteRenderer→clippingManager.release）、sub.release()（live2dManager/view/textureManager.release→deleteTexture×N、ResizeObserver disconnect）。纹理与模型侧资源按调用路径闭环。"
+      },
+      {
+        "path": "LAppLive2DManager.loadModelUrl / changeScene",
+        "verdict": "risk",
+        "detail": "两者只 this._models.length = 0，不调用旧 model.release()。当前唯一调用方 index.ts mount() 先 destroy() 规避了泄漏；若未来绕过 mount 直接切模型，会泄漏旧模型的全部 GPU 资源。建议后续把 release 下沉到 loadModelUrl 内部（本次不改）。"
+      },
+      {
+        "path": "CubismWebGLOffscreenManager（遮蔽 RenderTexture 单例池）",
+        "verdict": "risk",
+        "detail": "单例 _contextManagers 按 gl 上下文缓存 framebuffer+colorBuffer；存在 removeContext(gl) 但全仓库无人调用，LAppGlManager.release() 是空实现。每次 mount 新建 canvas/GL 上下文时，旧上下文的遮蔽 RenderTexture 会滞留在单例里。若宿主复用同一 canvas 则同上下文复用、无泄漏；换 canvas 挂载则每次切换累积 2×画布尺寸的显存。建议 destroy() 时调用 removeContext(旧gl)（本次不改）。"
+      },
+      {
+        "path": "监听器与 Blob URL",
+        "verdict": "ok",
+        "detail": "window 级监听器（visibility/blur/focus/pointer）由 __DSH_L2D_GUARD__ 幂等守卫，按设计常驻不随模型销毁；ResizeObserver 在 sub.release() 断开；纹理走 Image.src 直链加载，无 createObjectURL，无需 revoke。本次新增的 webglcontextlost/restored 监听由 webgl-recovery handle 在 destroy() 时 detach。"
+      }
+    ],
+    "maskBufferNote": "遮蔽 RenderTexture 固定开销 33554432 字节（2×2048² RGBA，MASK_BUFFER_COUNT=2），不随纹理档位变化，在 32MB 纹理预算之外。"
+  }
+}

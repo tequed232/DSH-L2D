@@ -1,0 +1,33 @@
+{
+  "tool": "perf-idle",
+  "verdict": "PASS-PARTIAL",
+  "origin": "http://127.0.0.1:3081",
+  "mode": "http",
+  "startedAt": "2026-11-03T10:40:51.501Z",
+  "windowMs": 20000,
+  "hiddenWindows": 3,
+  "groups": [
+    {
+      "name": "A 前台待机60",
+      "verdict": "PASS",
+      "detail": "57.1 fps（Δframes=1184 / 20.75s utime，阈值 ≥50）"
+    },
+    {
+      "name": "B 失焦降载30",
+      "verdict": "SKIP",
+      "detail": "真机无 eval 通道，需 CDP 模式（--cdp）"
+    },
+    {
+      "name": "C 隐藏暂停",
+      "verdict": "SKIP",
+      "detail": "真机无 eval 通道，需 CDP 模式（--cdp）"
+    },
+    {
+      "name": "D 恢复无突跳",
+      "verdict": "SKIP",
+      "detail": "真机无 eval 通道，需 CDP 模式（--cdp）"
+    }
+  ],
+  "failed": 0,
+  "skipped": 3
+}

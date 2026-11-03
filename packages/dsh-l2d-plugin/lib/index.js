@@ -1015,6 +1015,12 @@ export function apply(root, config = {}) {
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(polled), 'utf8'));
     });
 
+    // P0 观测性：Agent 通道计数（queueDepth/老化/过期），perf 方案 P0 验收读数
+    route('/dsh-l2d/ai/stats', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(aiInbox.stats ? aiInbox.stats() : { available: false }), 'utf8'));
+    });
+
     // 浏览器把执行回执和 action-done 事件放回来。MCP 用 id 取走。
     // result 是受理/失败（一个 id 一份）；event 是 start / end / interrupted，可先到后到。
     route('/dsh-l2d/ai/result', (req, res) => {

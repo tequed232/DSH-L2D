@@ -1,0 +1,43 @@
+{
+  "tool": "perf-idle",
+  "verdict": "PASS",
+  "origin": "http://127.0.0.1:5300",
+  "mode": "cdp",
+  "startedAt": "2026-11-03T10:36:36.717Z",
+  "windowMs": 20000,
+  "hiddenWindows": 3,
+  "groups": [
+    {
+      "name": "A 前台待机60",
+      "verdict": "PASS",
+      "detail": "56.2 fps（Δframes=1131 / 20.1s，fpsCap=60，阈值 ≥50）"
+    },
+    {
+      "name": "B 失焦降载30",
+      "verdict": "PASS",
+      "detail": "28.8 fps（Δframes=582 / 20.2s，fpsCap=30，期望区间 24~42）"
+    },
+    {
+      "name": "C1 隐藏暂停",
+      "verdict": "PASS",
+      "detail": "20s 帧数零增长"
+    },
+    {
+      "name": "C2 隐藏暂停",
+      "verdict": "PASS",
+      "detail": "20s 帧数零增长"
+    },
+    {
+      "name": "C3 隐藏暂停",
+      "verdict": "PASS",
+      "detail": "20s 帧数零增长"
+    },
+    {
+      "name": "D 恢复无突跳",
+      "verdict": "PASS",
+      "detail": "Δframes=282/5.0s · 帧间隔 P99=7.6ms max=14.0ms（n=718，上限 P99≤150）"
+    }
+  ],
+  "failed": 0,
+  "skipped": 0
+}
