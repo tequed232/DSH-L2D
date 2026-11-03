@@ -38,6 +38,16 @@ DSH-L2D 是一个集成在 **DeepSeek Harness（DSH）** 中的 Live2D 角色系
 
 > **项目状态说明**：仓库同时包含已落地代码、实验性模块和仍在推进的架构设计。本文会明确标出能力边界；“存在模块”不等于“端到端链路已完成”，设计目标也不代表已通过真实 DSH 环境验收。
 
+## 🎬 项目演示
+
+> 视频发布后，将下方占位说明替换为真实的 Bilibili 视频卡片。GitHub README 不支持可靠的 Bilibili iframe 内嵌播放，因此采用“封面图片 + 点击跳转 B 站”的方式，兼容桌面端和移动端。
+
+<!-- Bilibili video card: replace BV_ID and COVER_IMAGE with real values.
+[![Watch the DSH-L2D demo](COVER_IMAGE)](https://www.bilibili.com/video/BV_ID/)
+-->
+
+**演示视频：** 暂待补充 Bilibili BV 号。发布后将在此展示可点击封面，跳转至 B 站播放。
+
 ## ✨ 功能一览
 
 <table>
