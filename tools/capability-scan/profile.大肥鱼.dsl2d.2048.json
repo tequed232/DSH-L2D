@@ -1,0 +1,523 @@
+{
+  "contractVersion": 3,
+  "modelId": "大肥鱼.dsl2d.2048",
+  "adapterId": "cubism",
+  "profileRevision": "r88b84822fb2e",
+  "controls": [
+    {
+      "id": "head.yaw",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.95,
+      "sourceId": "AngleX",
+      "resourceGroup": "ParamGroup24",
+      "ownership": "direct"
+    },
+    {
+      "id": "head.pitch",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.95,
+      "sourceId": "AngleY",
+      "resourceGroup": "ParamGroup24",
+      "ownership": "direct"
+    },
+    {
+      "id": "head.roll",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.95,
+      "sourceId": "AngleZ",
+      "resourceGroup": "ParamGroup24",
+      "ownership": "direct"
+    },
+    {
+      "id": "torso.lean",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.95,
+      "sourceId": "LeanInput",
+      "resourceGroup": "ParamGroup24",
+      "ownership": "direct"
+    },
+    {
+      "id": "torso.sway",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.8,
+      "sourceId": "ParamBodyAngleX",
+      "resourceGroup": "ParamGroup8",
+      "ownership": "requires-own",
+      "reason": "该参数是物理输出，必须 own 后才能写"
+    },
+    {
+      "id": "torso.contraction",
+      "status": "approximate",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.6,
+      "reason": "靠双肩内收近似「缩肩」，无独立躯干收缩参数",
+      "sourceId": "ShoulderX+ShoulderZ",
+      "ownership": "requires-own"
+    },
+    {
+      "id": "gaze.x",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.95,
+      "sourceId": "ParamEyeBallX",
+      "resourceGroup": "ParamGroup",
+      "ownership": "direct"
+    },
+    {
+      "id": "gaze.y",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.95,
+      "sourceId": "ParamEyeBallY",
+      "resourceGroup": "ParamGroup",
+      "ownership": "direct"
+    },
+    {
+      "id": "arm.left.raise",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.8,
+      "sourceId": "LArm",
+      "resourceGroup": "ParamGroup14",
+      "ownership": "requires-own",
+      "reason": "该参数是物理输出，必须 own 后才能写"
+    },
+    {
+      "id": "arm.left.extend",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.8,
+      "sourceId": "LForearm",
+      "resourceGroup": "ParamGroup14",
+      "ownership": "requires-own",
+      "reason": "该参数是物理输出，必须 own 后才能写"
+    },
+    {
+      "id": "arm.left.inward",
+      "status": "approximate",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.6,
+      "reason": "靠前臂+腕部组合近似「手臂内收」，无独立内收轴",
+      "sourceId": "LForearm+LWrist",
+      "ownership": "requires-own"
+    },
+    {
+      "id": "arm.right.raise",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.8,
+      "sourceId": "RArm",
+      "resourceGroup": "ParamGroup14",
+      "ownership": "requires-own",
+      "reason": "该参数是物理输出，必须 own 后才能写"
+    },
+    {
+      "id": "arm.right.extend",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.8,
+      "sourceId": "RForearm",
+      "resourceGroup": "ParamGroup14",
+      "ownership": "requires-own",
+      "reason": "该参数是物理输出，必须 own 后才能写"
+    },
+    {
+      "id": "arm.right.inward",
+      "status": "approximate",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.6,
+      "reason": "同上（右侧）",
+      "sourceId": "RForearm+RWrist",
+      "ownership": "requires-own"
+    },
+    {
+      "id": "leg.left.inward",
+      "status": "unsupported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0,
+      "reason": "模型无腿部内收参数（半身模型常见）"
+    },
+    {
+      "id": "leg.left.bend",
+      "status": "unsupported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0,
+      "reason": "模型无膝关节参数"
+    },
+    {
+      "id": "leg.right.inward",
+      "status": "unsupported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0,
+      "reason": "模型无腿部内收参数（半身模型常见）"
+    },
+    {
+      "id": "leg.right.bend",
+      "status": "unsupported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0,
+      "reason": "模型无膝关节参数"
+    },
+    {
+      "id": "face.blink",
+      "status": "approximate",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.7,
+      "sourceId": "ParamEyeLOpen",
+      "resourceGroup": "ParamGroup",
+      "ownership": "direct",
+      "reason": "引擎眨眼组自动接管，外部写只在 own 期间有效"
+    },
+    {
+      "id": "body.breathing",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.95,
+      "sourceId": "ParamBreath",
+      "ownership": "direct"
+    }
+  ],
+  "assets": [
+    {
+      "id": "motion.抚胸手打开.默认手切举手",
+      "kind": "motion",
+      "status": "supported",
+      "durationMs": 1133,
+      "resources": [
+        "Animation/默认手切举手.motion3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "motion.抚胸手关闭.举手切默认手",
+      "kind": "motion",
+      "status": "supported",
+      "durationMs": 1017,
+      "resources": [
+        "Animation/举手切默认手.motion3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "motion.竖手指打开.竖手指切出来动画",
+      "kind": "motion",
+      "status": "supported",
+      "durationMs": 1250,
+      "resources": [
+        "Animation/竖手指切出来动画.motion3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "motion.竖手指关闭.竖手指切回默认",
+      "kind": "motion",
+      "status": "supported",
+      "durationMs": 1250,
+      "resources": [
+        "Animation/竖手指切回默认.motion3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "motion.狗尾巴草打开.狗尾草切换出来",
+      "kind": "motion",
+      "status": "supported",
+      "durationMs": 1233,
+      "resources": [
+        "Animation/狗尾草切换出来.motion3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "motion.狗尾巴草关闭.狗尾草切回默认手",
+      "kind": "motion",
+      "status": "supported",
+      "durationMs": 1133,
+      "resources": [
+        "Animation/狗尾草切回默认手.motion3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "motion.Idle.IDLE",
+      "kind": "motion",
+      "status": "supported",
+      "durationMs": 5983,
+      "resources": [
+        "Animation/IDLE.motion3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.兔牙",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/兔牙.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.加载",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/加载.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.单片眼镜",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/单片眼镜.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.圈圈眼",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/圈圈眼.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.屑",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/屑屑眼.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.流泪",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/流泪.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.爱心眼",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/爱心眼.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.脱鞋",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/脱鞋.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.脸红",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/脸红.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.钢盆",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/钢盆.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.裙长切换",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/裙子切换.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.黑框眼镜",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/黑框眼镜.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.黑脸",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/黑脸.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.＞＜",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/＞＜.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.体型1",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/体型1.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.体型2",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/体型2.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.默认体型",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/默认体型.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.前倾",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/前倾.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.尾巴开关",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/尾巴开关.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.流冷汗",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/流冷汗.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    },
+    {
+      "id": "expression.胸口衣服",
+      "kind": "expression",
+      "status": "supported",
+      "resources": [
+        "Exp3/胸口衣服.exp3.json"
+      ],
+      "interruptible": true,
+      "loopable": false
+    }
+  ],
+  "metadata": {
+    "scannedAt": "2026-11-03T05:02:23.920Z",
+    "modelFile": "大肥鱼.dsl2d.2048.model3.json",
+    "cdiFile": "大肥鱼.cdi3.json",
+    "paramCount": 509,
+    "physicsOutputCount": 292,
+    "motionCount": 7,
+    "expressionCount": 21
+  }
+}

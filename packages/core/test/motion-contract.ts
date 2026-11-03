@@ -25,12 +25,16 @@ import {
 // ---------------------------------------------------------------------------
 // 1) 契约常量：与既有优先级/source 秩同一份，不新增词汇
 // ---------------------------------------------------------------------------
-assert.equal(MOTION_CONTRACT_VERSION, 2);
+assert.equal(MOTION_CONTRACT_VERSION, 3);
 assert.deepEqual([...SEMANTIC_PRIORITIES], [10, 50, 90]); // = ACT_PRIORITY_RANK
 assert.equal(SEMANTIC_SOURCE_RANK.motion, 2);
 assert.equal(SEMANTIC_SOURCE_RANK.gaze, 5);
 assert.equal(SEMANTIC_SOURCE_RANK.limb, 6);
-assert.equal(SEMANTIC_CONTROL_IDS.length, 13);
+assert.equal(SEMANTIC_CONTROL_IDS.length, 20);
+// v3 新增通道必须真的在词表里，否则「害羞式收拢」根本没法表达
+for (const id of ['torso.contraction', 'arm.left.inward', 'arm.right.inward', 'leg.left.inward', 'leg.left.bend', 'leg.right.inward', 'leg.right.bend']) {
+  assert.ok(SEMANTIC_CONTROL_IDS.includes(id), 'missing semantic control: ' + id);
+}
 assert.ok(isSemanticControlId('head.yaw'));
 assert.ok(isSemanticControlId('face.blink'));
 assert.ok(isSemanticControlId('body.breathing'));

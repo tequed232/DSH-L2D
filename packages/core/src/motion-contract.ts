@@ -12,7 +12,15 @@
  */
 import type { BlendMode } from './mixer.ts';
 
-export const MOTION_CONTRACT_VERSION = 2 as const;
+/**
+ * 契约版本。
+ *
+ * v3 相对 v2：新增 torso.contraction / arm.*.inward / leg.*.inward|bend 七个通道——
+ * 它们是「害羞式保护姿态」的表达前提（收肩、双臂内收、腿部并拢）。
+ * 注意：**通道存在不等于模型支持**，是否可写由 CapabilityProfile 的 status 决定，
+ * 判不出来的通道必须是 unknown（fail-closed），不得默认 supported。
+ */
+export const MOTION_CONTRACT_VERSION = 3 as const;
 
 /**
  * 标准语义控制（归一化口径，默认 [-1, 1]）。
@@ -48,8 +56,15 @@ export const SEMANTIC_CONTROL_IDS = Object.freeze([
   'gaze.y',
   'arm.left.raise',
   'arm.left.extend',
+  'arm.left.inward',
   'arm.right.raise',
   'arm.right.extend',
+  'arm.right.inward',
+  'leg.left.inward',
+  'leg.left.bend',
+  'leg.right.inward',
+  'leg.right.bend',
+  'torso.contraction',
   'face.blink',
   'body.breathing',
 ] as const satisfies readonly SemanticControlId[]);
@@ -107,6 +122,11 @@ export interface SemanticControlCapability {
   /** Adapter-private source ID; never expose this to the behavior planner. */
   sourceId?: string;
   resourceGroup?: string;
+  /**
+   * 写入前置条件。`requires-own` = 命中的是物理输出，物理默认持有该值，
+   * 直写会被覆盖，必须先走 ownership 认领（见 docs/Embodied-Behavior.md）。
+   */
+  ownership?: 'direct' | 'requires-own';
 }
 
 export interface MotionAssetCapability {
