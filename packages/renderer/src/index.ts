@@ -23,6 +23,13 @@ import { LIPSYNC_PARAMS } from '../../core/src/index.ts';
 import { normalizeActChain } from '../../core/src/chain-normalize.ts';
 import { admitKeyframeTrack } from './app/keyframe-admission.ts';
 import {
+  createGestureBridge,
+  type GestureAdmitOptions,
+  type GestureBridgeSnapshot,
+  type GestureSegmentInput,
+} from './app/gesture-bridge';
+import type { StopSelector } from '../../core/src/gesture-timeline.ts';
+import {
   ActGate,
   closeMotionsOnPreempt,
   getActPhaseTemplate,
@@ -355,6 +362,10 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
   });
   model.setPostLateUpdateHook((core, deltaTimeSeconds) => {
     phaseDiag.post++;
+    // [M1-d2] 手势时间线到期清理旁挂（kfTick 前一行，只插一步纯函数状态清理）：
+    // flag 开时 armed 批次全部段到期 → 软解除（releaseKfOwnership 兜底）；flag 关 = 不插，
+    // 任何既有相对顺序不变。
+    if (TIMELINE_ENABLED) gestureBridge.resolve(performance.now());
     kfTick(performance.now());
     if (!poseOwnedByMotion) {
       poseController.update(core, deltaTimeSeconds, injector);
@@ -505,8 +516,55 @@ export function injectEmotionIntent(intent: EmotionIntent): boolean {
  */
 const actGate = new ActGate();
 
+/**
+ * [M1-d2] 手势时间线动作面（flag `embodied.timeline`，默认关 = 现行为逐字节不变）。
+ * bridge 持有 timeline 与 armed 批次（纯逻辑在 gesture-bridge.ts，可 node 单测）；
+ * renderer 只负责把 ActGate / injector / keyframes 播放器作为 deps 注入。
+ * 回滚 = 把 DEFAULT_EMBODIED_FLAGS['embodied.timeline'] 保持/改回 false。
+ */
+const TIMELINE_ENABLED = DEFAULT_EMBODIED_FLAGS['embodied.timeline'] === true;
+const gestureBridge = createGestureBridge({
+  enabled: TIMELINE_ENABLED,
+  currentAct: () => actGate.current(),
+  getAgentOwned: () => injector.getAgentOwned(),
+  releaseOwned: (ids) => injector.release(ids),
+  stopKeyframes: () => stopKeyframes(),
+  releaseKfOwnership: () => releaseKfOwnership(),
+});
+
+/**
+ * [M1-d2] 手势准入（overlay l2d_act / l2d_play_keyframes 前置调用）。
+ * flag 关时恒 rejected('disabled') 且 flagEnabled:false —— overlay 以
+ * `ga.admitted === false && ga.flagEnabled` 判定拒绝，否则等价直通原路径（兼容矩阵 §6）。
+ */
+export function admitGesture(
+  segments: GestureSegmentInput[],
+  opts: GestureAdmitOptions = {},
+) {
+  const admission = gestureBridge.admit(segments, opts);
+  if (admission.admitted) markActive();
+  return admission;
+}
+
+/** [M1-d2] 显式释放手势；selector 缺省 = 全停（透传 core stopGesture 语义）。 */
+export function stopGesture(selector?: StopSelector) {
+  return gestureBridge.stop(selector);
+}
+
+/** [M1-d2] 诊断只读面。 */
+export function getGestureState(): GestureBridgeSnapshot {
+  return gestureBridge.snapshot();
+}
+
 export function admitAct(input: ActAdmitInput = {}) {
-  return actGate.admit(input);
+  const result = actGate.admit(input);
+  // [M1-d2] Agent 打断手势：flag 开且链占上槽时全清时间线 + 停旧手势逐帧写值
+  // （FORCE 戳一戳同样能打断手势——Agent/交互动作占用身体时手势让位）。
+  // flag 关 = 与基线完全一致（admitGesture/armed 均不可达）。
+  if (TIMELINE_ENABLED && result.accepted) {
+    gestureBridge.stop();
+  }
+  return result;
 }
 
 export function finishAct(runId: number) {
@@ -777,6 +835,13 @@ export function playKeyframes(tracks: KeyframeTrack[], opts: KeyframesOptions = 
 
   for (const tr of (tracks || []).slice(0, KF_MAX_TRACKS)) {
     if (!tr || !tr.param || !Array.isArray(tr.keys) || tr.keys.length < 2) continue;
+    // [M1-d2] 纵深防御 #3：flag 开时，写物理输出的轨道必须有 armed 批次背书
+    // （admitGesture/l2d_act keyframes 步登记）。没有 armed 批次的物理轨道写不进去 =
+    // 即使未来新增直连调用方也踩不掉 Agent 持有的手臂。flag 关时 TIMELINE_ENABLED
+    // 为编译期常量 false，本分支不可达，playKeyframes 逐行为等价基线。
+    if (TIMELINE_ENABLED && injector.isPhysicsOutput(tr.param) && !gestureBridge.armedHas(tr.param)) {
+      continue;
+    }
     try {
       const handle = CubismFramework.getIdManager().getId(tr.param);
       const idx = core.getParameterIndex(handle);
@@ -1670,6 +1735,7 @@ export function setZoom(zoom: number): void {
 export function resetPose(): number {
   const core = model?.getModel();
   if (!core) return 0;
+  if (TIMELINE_ENABLED) gestureBridge.stop(); // [M1-d2] 清空手势时间线与 armed，与 stopKeyframes 同步清账
   stopKeyframes();
   stopAmbient();
   zeroAngleBus();
@@ -1850,6 +1916,7 @@ export async function destroy(): Promise<void> {
   injector.unlock();
   injector.resetStats();
   physicsGate.dispose(); // [M1-b] 清掉让位登记表，避免残留状态影响下一次 mount
+  if (TIMELINE_ENABLED) gestureBridge.stop(); // [M1-d2] 清手势时间线与 armed
   motionDirector.reset();
   poseOwnedByMotion = false;
   poseController.resetToRest();
@@ -2212,6 +2279,10 @@ const api = {
   motionsShareArm,
   motionResultKind,
   noteActMotion,
+  // [M1-d2] 手势时间线动作面（embodied.timeline flag，默认关）
+  admitGesture,
+  stopGesture,
+  getGestureState,
   getCapabilities,
   // 生命周期
   destroy,

@@ -1563,6 +1563,66 @@
     return { expressions: expressions, motions: motions, safeParams: safeParams };
   }
 
+  // ---------------------------------------------------------------- M1-d2 手势时间线接线
+
+  /**
+   * [M1-d2] 轨道时间上界（ms）：与 renderer playKeyframes 内部 kfDuration 同口径
+   * （max(16, min(KF_MAX_MS=10000, duration || maxT))），供手势段 durationMs 映射。
+   */
+  function gestureTracksMaxT(tracks) {
+    var maxT = 0;
+    (Array.isArray(tracks) ? tracks : []).forEach(function (tr) {
+      (Array.isArray(tr && tr.keys) ? tr.keys : []).forEach(function (k) {
+        maxT = Math.max(maxT, Number(k && k[0]) || 0);
+      });
+    });
+    return maxT;
+  }
+
+  /**
+   * [M1-d2] l2d_play_keyframes 轨道 → GestureSegmentInput 映射（蓝图 §1.3 表）：
+   * 段 id 'kf:'+param（确定性、可重放，天然去重同参数轨道）；group 'kf'（同批 keyframes
+   * 同桶，整组超时/打断原子）；params 值只构成冲突域（同通道替换判定），不写模型。
+   * durationMs <= 0（loop 长播）缺省 = 长期持有，到期清理不影响 kfTick 续期（R5）。
+   */
+  function gestureSegmentsFromTracks(tracks, durationMs) {
+    var segs = [];
+    (Array.isArray(tracks) ? tracks : []).forEach(function (tr) {
+      if (!tr || typeof tr.param !== 'string' || !tr.param) return;
+      var domain = {};
+      domain[tr.param] = 0;
+      var seg = { id: 'kf:' + tr.param, group: 'kf', params: domain };
+      if (durationMs > 0) seg.durationMs = durationMs;
+      segs.push(seg);
+    });
+    return segs;
+  }
+
+  /**
+   * [M1-d2] 回执 arbitration 字段格式（l2d_act 与 l2d_play_keyframes 共用）。
+   * 只增不改：既有消费者看不到该字段时行为不变（向后兼容增列，§6 回滚表）。
+   */
+  function arbReceipt(ga) {
+    if (!ga) return undefined;
+    return {
+      entryId: ga.entryId,
+      admitted: ga.admittedIds,
+      rejected: ga.rejected,
+      interrupted: ga.interrupted,
+      releasedAgentParams: ga.releasedAgentParams,
+      flagEnabled: ga.flagEnabled,
+    };
+  }
+
+  /**
+   * [M1-d2] 老包/flag 关直通判定：只有「明确拒绝且 flag 开」才短路（ga.admitted === false
+   * 且 ga.flagEnabled === true）。renderer 缺 admitGesture（老包）或 flag 关
+   * （flagEnabled:false）一律走原路径——新 overlay × 老 renderer 不误拒（§6 风险 1）。
+   */
+  function gestureBlocked(ga) {
+    return !!(ga && ga.admitted === false && ga.flagEnabled === true);
+  }
+
   function randomOf(list) {
     return list[Math.floor(Math.random() * list.length)];
   }
@@ -1717,6 +1777,30 @@
         scheduleCloseMotion(step.closeMotion, step.closeAfterMs || 6000, runId);
       }
     } else if (step.kind === 'keyframes' && L.playKeyframes) {
+      // [M1-d2] 链已过 admitAct（P1），此处只做 Timeline 记账：登记段让 kfTick 到期记账
+      // 生效、后续手势能按参数域与链内 keyframes 冲突。被拒 → 记 notes（skip），不当失败，
+      // 链其余步骤照常（R4）。
+      if (L.admitGesture) {
+        var kCur = L.currentAct ? L.currentAct() : null;
+        var kChainPri = kCur && kCur.runId === runId && (kCur.priority === 10 || kCur.priority === 50 || kCur.priority === 90)
+          ? kCur.priority
+          : undefined;
+        var kDur = step.loop === true
+          ? 0
+          : Math.max(16, Math.min(10000, Number(step.duration) || gestureTracksMaxT(step.tracks)));
+        var kSegs = gestureSegmentsFromTracks(step.tracks, kDur).map(function (seg) {
+          if (kChainPri !== undefined) seg.priority = kChainPri;
+          return seg;
+        });
+        var kga = L.admitGesture(kSegs, { entryId: 'act:' + runId });
+        if (gestureBlocked(kga)) {
+          if (L.noteActMotion) {
+            var kReason = kga.rejected && kga.rejected[0] && kga.rejected[0].reason ? kga.rejected[0].reason : 'unknown';
+            L.noteActMotion(runId, 'gesture-blocked:' + kReason, 'skip');
+          }
+          return;
+        }
+      }
       L.playKeyframes(step.tracks || [], {
         duration: step.duration,
         loop: step.loop === true,
@@ -3834,15 +3918,36 @@
           }
           case 'l2d_play_keyframes': {
             // AI 自编动作：tracks = [{ param, keys: [[t_ms, value], ...] }]
+            // [M1-d2] 主闸：flag 开先手势准入再播放；被拒短路返回，不再触达 playKeyframes。
+            // renderer 缺 admitGesture 或 flag 关（flagEnabled:false）→ 等价直通原路径。
             var tracks = Array.isArray(a.tracks) ? a.tracks : [];
+            var ga = null;
+            if (L.admitGesture) {
+              var kDur = a.loop === true
+                ? 0
+                : Math.max(16, Math.min(10000, Number(a.duration) || gestureTracksMaxT(tracks)));
+              var ga2 = L.admitGesture(gestureSegmentsFromTracks(tracks, kDur), { priority: a.priority });
+              if (gestureBlocked(ga2)) {
+                return {
+                  ok: false,
+                  accepted: false,
+                  reason: 'gesture-priority-blocked',
+                  rejected: ga2.rejected,
+                  arbitration: arbReceipt(ga2),
+                };
+              }
+              ga = ga2;
+            }
             var n = L.playKeyframes(tracks, { duration: a.duration, loop: a.loop === true });
-            if (n <= 0) return { ok: false, error: 'no-valid-tracks' };
+            if (n <= 0) return { ok: false, error: 'no-valid-tracks', arbitration: arbReceipt(ga) };
             // keyframes 播放时按轨道时长自动认领物理输出（loop 会续期），回执列出被覆盖的参数
             var kfOwned = L.getKeyframeOwnedParameters ? L.getKeyframeOwnedParameters() : [];
-            return { ok: true, tracks: n, owned: kfOwned };
+            return { ok: true, tracks: n, owned: kfOwned, arbitration: arbReceipt(ga) };
           }
           case 'l2d_stop_keyframes': {
             L.stopKeyframes();
+            // [M1-d2] Timeline 同步清账：armed/段与 kf 状态一致（老包无 stopGesture 时跳过）。
+            if (L.stopGesture) L.stopGesture();
             return { ok: true };
           }
           case 'l2d_reset_pose': {

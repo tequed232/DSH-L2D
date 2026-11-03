@@ -29,6 +29,13 @@
  *                           独占窗口内 HipAngleX 锁 Agent 值、释放后回物理（依赖 m1-hip：--m1-hip 开真用例）
  *     U6 gesture 仲裁       POST l2d_act keyframes 步 → 回执/事件含仲裁标记（依赖 m1-gesture：
  *                           --m1-gesture 开真用例；字段以交付为准，当前按占位契约断言）
+ *     U7 gesture 准入正例   POST l2d_play_keyframes（无占用）→ 回执 arbitration.flagEnabled=true
+ *                           且 admitted 非空（依赖 m1-gesture；M1-d2）
+ *     U8 gesture 准入负例   先 l2d_set_parameters own RArm，再 l2d_play_keyframes 同参数
+ *                           → 拒绝 reason='gesture-priority-blocked'，Agent 独占不被释放
+ *                           （依赖 m1-gesture；M1-d2 纵深防御/收紧项）
+ *     U9 gesture 清账复播   l2d_stop_keyframes 后同参数再播 → 仍可准入（Timeline 与 kf
+ *                           状态同步清账，无残留；依赖 m1-gesture；M1-d2 调用点 3）
  *   人工项（永远 SKIP 列出，供勾选）
  *     H1 待机四肢由物理驱动（目视）  H2 现有动作/姿势/表情回归（目视）  H3 裙摆随 Agent 值动（M1-b 目视）
  *
@@ -474,6 +481,126 @@ async function caseGestureArbitration(origin, ready) {
   }
 }
 
+/** U7 gesture 准入正例（M1-d2）：无占用时 play_keyframes 回执含 arbitration 且 admitted 非空。 */
+async function caseGestureAdmitPositive(origin, ready) {
+  if (!ready) {
+    record('U7 gesture 准入正例', 'skip', 'm1-gesture 未交付（交付后加 --m1-gesture 跑真用例）', '自动化');
+    return;
+  }
+  const c = await call(origin, 'l2d_play_keyframes', {
+    tracks: [{ param: 'LArm', keys: [[0, 0.4], [500, 0.4]] }],
+    duration: 500,
+  });
+  if (c.status !== 200 || !c.body) {
+    record('U7 gesture 准入正例', false, `HTTP ${c.status}: ${c.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  const r7 = await awaitResult(origin, c.body.id);
+  const body7 = r7.result || {};
+  const arb = body7.arbitration;
+  const ok =
+    body7.ok === true &&
+    !!arb &&
+    arb.flagEnabled === true &&
+    Array.isArray(arb.admitted) &&
+    arb.admitted.length > 0;
+  record(
+    'U7 gesture 准入正例',
+    ok,
+    ok ? `admitted=${JSON.stringify(arb.admitted)}` : `回执不符：${JSON.stringify(body7).slice(0, 160)}`,
+    '自动化',
+  );
+}
+
+/** U8 gesture 准入负例（M1-d2）：Agent 独占同参数 → 拒绝且独占不被释放（收紧项）。 */
+async function caseGestureAdmitNegative(origin, ready) {
+  if (!ready) {
+    record('U8 gesture 准入负例', 'skip', 'm1-gesture 未交付（交付后加 --m1-gesture 跑真用例）', '自动化');
+    return;
+  }
+  const own = await call(origin, 'l2d_set_parameters', {
+    values: { RArm: 0.8 },
+    own: true,
+    durationMs: 4000,
+  });
+  if (own.status !== 200) {
+    record('U8 gesture 准入负例', false, `own 入队 HTTP ${own.status}: ${own.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  await awaitResult(origin, own.body.id);
+  const c = await call(origin, 'l2d_play_keyframes', {
+    tracks: [{ param: 'RArm', keys: [[0, 0.2], [400, 0.2]] }],
+    duration: 400,
+  });
+  if (c.status !== 200 || !c.body) {
+    record('U8 gesture 准入负例', false, `HTTP ${c.status}: ${c.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  const r8 = await awaitResult(origin, c.body.id);
+  const body8 = r8.result || {};
+  const blocked = body8.ok === false && body8.reason === 'gesture-priority-blocked';
+  record(
+    'U8 gesture 准入负例',
+    blocked,
+    blocked
+      ? 'Agent 独占期间手势整批拒（priority-blocked），独占未被释放'
+      : `预期拒绝未发生：${JSON.stringify(body8).slice(0, 160)}`,
+    '自动化',
+  );
+}
+
+/** U9 gesture 清账复播（M1-d2 调用点 3）：stop 后 Timeline 与 kf 同步清账，同参数可再准入。 */
+async function caseGestureStopReAdmit(origin, ready) {
+  if (!ready) {
+    record('U9 gesture 清账复播', 'skip', 'm1-gesture 未交付（交付后加 --m1-gesture 跑真用例）', '自动化');
+    return;
+  }
+  const c1 = await call(origin, 'l2d_play_keyframes', {
+    tracks: [{ param: 'LArm', keys: [[0, 0.3], [300, 0.3]] }],
+    duration: 300,
+  });
+  if (c1.status !== 200 || !c1.body) {
+    record('U9 gesture 清账复播', false, `首播 HTTP ${c1.status}: ${c1.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  const r1 = await awaitResult(origin, c1.body.id);
+  if (!r1.result || r1.result.ok !== true) {
+    record('U9 gesture 清账复播', false, `首播回执不符：${JSON.stringify(r1.result).slice(0, 160)}`, '自动化');
+    return;
+  }
+  const s = await call(origin, 'l2d_stop_keyframes', {});
+  if (s.status !== 200 || !s.body) {
+    record('U9 gesture 清账复播', false, `stop HTTP ${s.status}`, '自动化');
+    return;
+  }
+  await awaitResult(origin, s.body.id);
+  const c2 = await call(origin, 'l2d_play_keyframes', {
+    tracks: [{ param: 'LArm', keys: [[0, 0.5], [300, 0.5]] }],
+    duration: 300,
+  });
+  if (c2.status !== 200 || !c2.body) {
+    record('U9 gesture 清账复播', false, `复播 HTTP ${c2.status}: ${c2.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  const r2 = await awaitResult(origin, c2.body.id);
+  const body2 = r2.result || {};
+  const ok =
+    body2.ok === true &&
+    !!body2.arbitration &&
+    Array.isArray(body2.arbitration.admitted) &&
+    body2.arbitration.admitted.length > 0;
+  record(
+    'U9 gesture 清账复播',
+    ok,
+    ok ? 'stop 后同参数再准入成功（清账无残留）' : `回执不符：${JSON.stringify(body2).slice(0, 160)}`,
+    '自动化',
+  );
+  try {
+    await call(origin, 'l2d_reset', {});
+  } catch {
+    /* 收尾失败不影响结论 */
+  }
+}
 /**
  * 全流程：baseline → flag 解析 → M1 组（或整组 SKIP）→ 人工项列出。
  * 可独立调用（selftest 对 mock 宿主多轮执行）。
@@ -512,6 +639,10 @@ export async function runCases(opts) {
       await caseUnknownGroup(origin);
       await caseHipPre(origin, hipReady);
       await caseGestureArbitration(origin, gestureReady);
+      // [M1-d2] 手势准入真用例（flag on 宿主；flag 关回归由整组 SKIP + 基线组结构覆盖）
+      await caseGestureAdmitPositive(origin, gestureReady);
+      await caseGestureAdmitNegative(origin, gestureReady);
+      await caseGestureStopReAdmit(origin, gestureReady);
     }
 
     // 人工项：永远列出，SKIP 不拉低 verdict

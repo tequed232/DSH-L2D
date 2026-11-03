@@ -152,11 +152,20 @@ export interface EmbodiedFlags {
    * flag 先行注册保证回滚开关面完整。
    */
   'embodied.m1e'?: boolean;
+  /**
+   * [M1-d2] 手势时间线动作面（admitGesture 准入 / kfTick 到期旁挂 / playKeyframes
+   * armed 纵深防御 / admitAct 打断钩子）。默认 false = 现行为逐字节不变；
+   * 回滚 = 把 DEFAULT_EMBODIED_FLAGS['embodied.timeline'] 改回 false，无需回退代码。
+   */
+  'embodied.timeline'?: boolean;
 }
 
-export const DEFAULT_EMBODIED_FLAGS: Readonly<Required<Pick<EmbodiedFlags, 'embodied.m1' | 'embodied.m1e'>>> = {
+export const DEFAULT_EMBODIED_FLAGS: Readonly<
+  Required<Pick<EmbodiedFlags, 'embodied.m1' | 'embodied.m1e' | 'embodied.timeline'>>
+> = {
   'embodied.m1': false,
   'embodied.m1e': false,
+  'embodied.timeline': false,
 };
 
 /**

@@ -51,6 +51,8 @@ export function startMockHost(profile = {}) {
     holdValue: 0.8,
     hipUntil: 0,
     hipValue: 0.5,
+    agentUntil: 0,
+    agentIds: [],
     pwPre: 2,
     pwPost: 5,
     ticks: 0,
@@ -154,13 +156,57 @@ export function startMockHost(profile = {}) {
           if (a.values && a.values.ParamMouthOpenY !== undefined) {
             return send(400, { error: 'reserved-param: ParamMouthOpenY（口型禁区）' });
           }
-          return finish({ ok: true });
+          // M1-d2 mock：own 登记 Agent 独占（U8 负例前置），到期自动失效
+          if (a.own === true) {
+            state.agentIds = Object.keys(a.values || {});
+            state.agentUntil = Date.now() + Math.max(0, Number(a.durationMs) || 1200);
+          }
+          return finish({ ok: true, applied: Object.keys(a.values || {}) });
         }
         if (name === 'l2d_play_keyframes') {
           const tracks = Array.isArray(a.tracks) ? a.tracks : [];
           if (tracks.some((t) => t.param === 'ParamMouthOpenY')) {
             return send(400, { error: 'reserved-param: ParamMouthOpenY（口型禁区）' });
           }
+          // M1-d2 mock renderer：模拟 admitGesture 双查 + armed 纵深防御。
+          // Agent 独占窗口内的同参数轨道 → 整批拒（gesture-priority-blocked，flag 开）。
+          const held = tracks.some(
+            (t) => state.agentUntil > Date.now() && (state.agentIds || []).includes(t.param),
+          );
+          const entryId = 'kf:' + tracks.map((t) => t && t.param).filter(Boolean).sort().join('+');
+          if (held) {
+            const rejected = tracks.map((t) => ({ id: 'kf:' + t.param, reason: 'priority-blocked' }));
+            return finish({
+              ok: false,
+              accepted: false,
+              reason: 'gesture-priority-blocked',
+              rejected,
+              arbitration: {
+                entryId,
+                admitted: [],
+                rejected,
+                interrupted: [],
+                releasedAgentParams: [],
+                flagEnabled: true,
+              },
+            });
+          }
+          return finish({
+            ok: true,
+            tracks: tracks.length,
+            owned: tracks.map((t) => t.param),
+            arbitration: {
+              entryId,
+              admitted: tracks.map((t) => 'kf:' + t.param),
+              rejected: [],
+              interrupted: [],
+              releasedAgentParams: [],
+              flagEnabled: true,
+            },
+          });
+        }
+        if (name === 'l2d_stop_keyframes') {
+          // M1-d2 mock：stop 同步清账（U9 复播即再准入）
           return finish({ ok: true });
         }
         if (name === 'l2d_play_motion') {
@@ -174,7 +220,11 @@ export function startMockHost(profile = {}) {
           // mock m1-gesture：回执带仲裁标记
           return finish({ ok: true, runId: 'mock-run-1', notes: ['gesture-timeline-arbitrated'] });
         }
-        if (name === 'l2d_reset') return finish({ ok: true });
+        if (name === 'l2d_reset') {
+          state.agentUntil = 0;
+          state.agentIds = [];
+          return finish({ ok: true });
+        }
         return send(400, { error: 'unknown tool: ' + name });
       });
       return;
@@ -239,7 +289,7 @@ export async function selftest() {  const fails = [];
     selftestStop();
     check('0 FAIL', s2.failed === 0);
     check('基线 T0..T3 全 PASS', s2.results.filter((r) => r.name.startsWith('T')).every((r) => r.verdict === true));
-    const expectPass = ['U1 acquire→post 覆盖', 'U2 release 回物理', 'U3 口型红线（任何通道 400）', 'U4 未索引组拒绝', 'U5 Hip pre 让位', 'U6 gesture 仲裁'];
+    const expectPass = ['U1 acquire→post 覆盖', 'U2 release 回物理', 'U3 口型红线（任何通道 400）', 'U4 未索引组拒绝', 'U5 Hip pre 让位', 'U6 gesture 仲裁', 'U7 gesture 准入正例', 'U8 gesture 准入负例', 'U9 gesture 清账复播'];
     for (const name of expectPass) {
       const r = s2.results.find((x) => x.name === name);
       check(`${name} PASS`, !!r && r.verdict === true);
