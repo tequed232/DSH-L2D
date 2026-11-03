@@ -188,6 +188,8 @@ export function actTemplateWritesMouth(template: ActPhaseTemplate): boolean {
 }
 
 export interface ActionDoneEvent {
+  /** 事件产生时刻（ms）。end.ts - start.ts 才是链的真实收敛耗时。 */
+  ts?: number;
   type: 'action-done';
   phase: ActEventPhase;
   runId: number;
@@ -240,6 +242,9 @@ function doneEvent(
   const event: ActionDoneEvent = {
     type: 'action-done',
     phase,
+    // 事件自发时间戳：回执里没有它，「多久收敛」在任何一层都只能靠观测时刻倒推，
+    // 会把轮询间隔算成用户的延迟。
+    ts: Date.now(),
     runId: run.runId,
     priority: run.priority,
     callId: run.callId,

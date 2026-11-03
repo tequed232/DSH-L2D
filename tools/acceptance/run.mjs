@@ -1,20 +1,29 @@
 #!/usr/bin/env node
 /**
- * 运行时验收（一条命令）—— 对应 PR #11 的三项待验收。
+ * 运行时验收（一条命令）。
  *
  *   node tools/acceptance/run.mjs                 # 默认读 ~/.dsh/l2d-service.json
- *   node tools/acceptance/run.mjs --origin http://127.0.0.1:10237
- *   node tools/acceptance/run.mjs --seconds 10 --min-fps 55
+ *   node tools/acceptance/run.mjs --origin http://127.0.0.1:3080
+ *   node tools/acceptance/run.mjs --seconds 10 --min-fps 52
+ *   node tools/acceptance/run.mjs --read-only     # 只做 A/A2/B，不发任何动作
  *
- * 检查项：
- *   A 新产物：l2d_get_state.info 必须带 fpsCap / vsyncHz（缺了就是旧 bundle）
- *   B 前台帧率：Δframes / Δ墙钟 ≥ min-fps（失焦态按设计是 30，别在失焦时判失败）
- *   C 并行组：同组两条 look 应返回 accepted，且 action-done.notes 出现
- *     parallel-overlap-downgraded（同参数域自动降级串行）
+ * 检查项（A/A2/B 只读；C/D 会发动作，二选一按需跳过）：
+ *   A  新产物：get_state.info 必须带 fpsCap / vsyncHz（缺了就是旧 bundle）
+ *   A2 渲染倍率：pxW×pxH 量级判断（≈1186×1482 = 还没吃 2048 档）
+ *   B  前台帧率：Δframes / Δutime ≥ min-fps（utime 是渲染器累加渲染时间，不含轮询延迟）
+ *   D  计划层：只带 group+timeoutMs 的链必须按整组超时收敛（reason=timeout）。
+ *      这一项专门防「页面还在跑旧 overlay / 计划层没接线」——老路径会忽略 timeoutMs，等满 1.8s。
+ *   C  并行组降级：同组两条 look，**结束事件**必须带 notes=parallel-overlap-downgraded。
+ *
+ * 标志：
+ *   --read-only      跳过 C 和 D（不改变角色状态，可随时跑）
+ *   --skip-parallel  仅跳过 C（D 仍会发一条动作，要完全只读请用 --read-only）
+ *   --skip-plan      仅跳过 D
+ *   --verbose        打印 C 的原始事件，便于定位「notes 没产生」还是「没送到」
  *
  * 退出码：0 全过；1 有 FAIL；2 连不上服务（DSH 没起 / 端口变了）。
  *
- * 注意：本脚本只读状态 + 发两条视线动作，不改设置、不写文件。
+ * 注意：C/D 会驱动角色做动作，别和他人同时操作同一实例（aiInbox 是全域抢占式队列）。
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -122,6 +131,7 @@ async function main() {
   const stateId = await call('l2d_get_state', {});
   const state = await awaitResult(stateId, 8000);
   const info = (state.result && state.result.info) || null;
+  const diag = (state.result && state.result.diag) || null;
   if (!info) {
     record('A 新产物', false, 'get_state 未返回 info（渲染器未就绪？）');
   } else {
@@ -175,8 +185,8 @@ async function main() {
   // D 计划层是否在跑（专门防「页面还在跑旧 overlay」这类假绿/假红）
   // 只带 timeoutMs 且 delayMs=0 的单个 look：计划层在跑 → 整组超时在 ~300ms 收敛，
   // 走老串行兜底 → timeoutMs 被忽略，要等满 life（1.8s+）。两者时间差一个数量级。
-  if (flag('skip-plan')) {
-    record('D 计划层', 'warn', '已按 --skip-plan 跳过');
+  if (flag('read-only') || flag('skip-plan')) {
+    record('D 计划层', 'warn', flag('read-only') ? '已按 --read-only 跳过' : '已按 --skip-plan 跳过');
   } else {
     const t = Date.now();
     const pid = await call('l2d_act', {
@@ -195,19 +205,30 @@ async function main() {
       }
     }
     const elapsed = Date.now() - t;
-    const ok = !!endEv && endEv.reason === 'timeout' && elapsed < 1600;
+    // 断言只看「是否按整组超时收敛」：elapsed 含 400ms 级轮询延迟，用它卡阈值等于在测观察者。
+    const timedOut = !!endEv && endEv.reason === 'timeout';
+    // 收敛耗时用页面自己的时间戳算（end.ts - start.ts），不含任何轮询延迟；
+    // 老包没有 ts 时退回 elapsed，只做诊断不做断言。
+    const startEv = (pr.events || []).find((e) => e && e.phase === 'start' && e.runId === prr.runId) || null;
+    const chainMs = endEv && startEv && endEv.ts && startEv.ts ? endEv.ts - startEv.ts : null;
+    const withinBudget = chainMs == null ? true : chainMs < 1400;
+    const converged = timedOut && withinBudget;
+    const versioned = !!(diag && diag.bootTag) && !!(diag && String(diag.scripts || '').includes('?v='));
+    const ok = converged && versioned;
     record(
       'D 计划层',
       ok,
-      ok
-        ? `${elapsed}ms 收敛 reason=timeout（计划层生效）`
-        : `${elapsed}ms end.reason=${endEv ? endEv.reason || '无' : '未收到'}${prr.planSource ? ' planSource=' + prr.planSource : ''} → 计划层未生效`,
+      !converged
+        ? `链内 ${chainMs == null ? 'n/a' : chainMs + 'ms'} / 观测 ${elapsed}ms · end.reason=${endEv ? endEv.reason || '无' : '未收到'}${prr.planSource ? ' planSource=' + prr.planSource : ''} → 计划层未生效`
+        : versioned
+          ? `reason=timeout · 链内耗时 ${chainMs == null ? 'n/a' : chainMs + 'ms'}（观测 ${elapsed}ms 含轮询）· 产物带版本 ${diag.bootTag}`
+          : `reason=timeout 但页面产物不可自证（bootTag=${(diag && diag.bootTag) || '无'}）`,
     );
   }
 
   // C 并行组降级（判据：notes 必须挂在**同一 runId 的结束事件**上；被插队也算，但只算 WARN）
-  if (flag('skip-parallel')) {
-    record('C 并行组降级', 'warn', '已按 --skip-parallel 跳过');
+  if (flag('read-only') || flag('skip-parallel')) {
+    record('C 并行组降级', 'warn', flag('read-only') ? '已按 --read-only 跳过' : '已按 --skip-parallel 跳过');
   } else {
     const chain = [
       { kind: 'look', x: 0.6, y: 0.1, group: 'acc', mode: 'parallel', delayMs: 0 },
@@ -227,8 +248,9 @@ async function main() {
     const mine = events.filter((e) => e && e.type === 'action-done' && e.runId === r.runId);
     const end = mine.filter((e) => e.phase === 'end').pop() || null;
     const interrupted = mine.filter((e) => e.phase === 'interrupted').pop() || null;
-    // 事件上的 notes 与回执里的 planNotes 可能是同一条，去重后展示
-    const notesOf = (ev) => [...new Set([].concat((ev && ev.notes) || [], (r && r.planNotes) || []))].join(',');
+    // PASS 只认**结束事件自己携带的 notes**：混入 planNotes 会让「计划算出来了但没送到」假绿。
+    const notesOf = (ev) => [].concat((ev && ev.notes) || []).join(',');
+    const planNotes = [].concat((r && r.planNotes) || []).join(',');
     const endNotes = notesOf(end);
     const intNotes = notesOf(interrupted);
     // 用前缀匹配，别把未来的 parallel-overlap-xxx 变体判死
@@ -248,7 +270,7 @@ async function main() {
       verdict = false;
       detail =
         `未见降级 notes（end=${end ? endNotes || '空' : '-'} / interrupted=${interrupted ? intNotes || '空' : '-'} / events=${events.length}` +
-        `${r.planSource ? ' / planSource=' + r.planSource : ''}）`;
+        `${r.planSource ? ' / planSource=' + r.planSource : ''}${planNotes ? ' / planNotes=' + planNotes : ''}）`;
     }
     record('C 并行组降级', verdict, detail);
     // 收尾：把视线放回中立，避免留下歪头

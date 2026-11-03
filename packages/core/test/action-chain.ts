@@ -219,6 +219,7 @@ test('被抢占时已发生的降级 notes 不能丢', () => {
   assert.equal(interrupted?.runId, bg.runId);
   assert.equal(interrupted?.reason, 'preempted');
   assert.deepEqual(interrupted?.notes, ['parallel-overlap-downgraded:acc'], '降级事实不能因为被抢占而消失');
+  assert.equal(typeof interrupted?.ts, 'number', '回执必须自带事件时间戳，否则收敛耗时只能靠观测时刻倒推');
   assert.equal(gate.finish(bg.runId || 0), null, '旧 runId 的 finish 应被判为过期');
 });
 

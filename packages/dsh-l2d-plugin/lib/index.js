@@ -70,8 +70,12 @@ const MIME = {
  * 版本取 overlay.js 的 mtime，改文件即换 URL。
  */
 function overlayBuildTag() {
+  // 取 overlay 与渲染包两者的最大 mtime：只重建渲染包时版本号也必须变，
+  // 否则页面可能拿着旧的 data-dsh-l2d 脚本标记继续用旧逻辑。
   try {
-    return String(Math.floor(fs.statSync(OVERLAY_FILE).mtimeMs));
+    const a = fs.statSync(OVERLAY_FILE).mtimeMs;
+    const b = fs.existsSync(RENDERER_FILE) ? fs.statSync(RENDERER_FILE).mtimeMs : 0;
+    return String(Math.floor(Math.max(a, b)));
   } catch {
     return String(Date.now());
   }
