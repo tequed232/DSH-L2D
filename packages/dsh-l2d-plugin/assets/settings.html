@@ -180,6 +180,7 @@
         border-radius: var(--dsh-radius-lg);
         background: var(--dsh-surface);
         padding: var(--dsh-space-4) var(--dsh-space-5) var(--dsh-space-5);
+        scroll-margin-top: var(--dsh-space-4);
       }
 
       .sec-head {
@@ -506,11 +507,11 @@
         color: var(--dsh-ink-muted);
       }
 
-      .cap-item {
+      .cap-reasons {
         display: flex;
         flex-direction: column;
-        gap: var(--dsh-space-1);
-        align-items: flex-start;
+        gap: var(--dsh-space-2);
+        margin-top: var(--dsh-space-2);
       }
 
       .cap-reason {
@@ -580,6 +581,10 @@
         font: var(--dsh-text-label);
       }
 
+      .hint.is-error {
+        color: var(--dsh-danger);
+      }
+
       .empty {
         margin: var(--dsh-space-2) 0 0;
         font: var(--dsh-text-sm);
@@ -619,13 +624,13 @@
 
       <div class="alert" id="alert" hidden></div>
 
-      <section class="card">
+      <section class="card" id="sec-display">
         <div class="sec-head"><span class="sec-no">01</span><h2>显示与布局</h2></div>
         <p class="sec-desc">角色挂在哪里、多大、什么时候淡出。</p>
         <div class="rows" id="rows-display"></div>
       </section>
 
-      <section class="card">
+      <section class="card" id="sec-model">
         <div class="sec-head"><span class="sec-no">02</span><h2>角色与模型</h2></div>
         <p class="sec-desc">当前加载的模型、资源就位情况与能力边界。</p>
         <div class="model-head">
@@ -639,13 +644,13 @@
         <div id="capGroups"></div>
       </section>
 
-      <section class="card">
+      <section class="card" id="sec-behavior">
         <div class="sec-head"><span class="sec-no">03</span><h2>情绪与行为</h2></div>
         <p class="sec-desc">角色怎么被驱动，以及主动说话和玩梗的尺度。</p>
         <div class="rows" id="rows-behavior"></div>
       </section>
 
-      <section class="card">
+      <section class="card" id="sec-performance">
         <div class="sec-head"><span class="sec-no">04</span><h2>动画与性能</h2></div>
         <p class="sec-desc">刷新节奏、声音、传感器与桌宠形态。</p>
         <div class="rows" id="rows-performance"></div>
@@ -666,7 +671,7 @@
         <p class="note" id="roNote">读数来自 status.json 与 l2d_get_state，取不到时显示「—」。</p>
       </section>
 
-      <section class="card">
+      <section class="card" id="sec-dev">
         <div class="sec-head"><span class="sec-no">05</span><h2>开发者工具</h2></div>
         <p class="sec-desc">诊断信息与不常用的重活。</p>
         <div class="kv" id="devInfo"></div>
@@ -701,6 +706,7 @@
         var state = { settings: null, status: null, capability: null };
         var fields = {};
         var pending = {};
+        var pendingRows = {};
         var timer = 0;
         var modes = [];
         var mounted = false;
@@ -799,7 +805,7 @@
           if (msg) msg.remove();
         }
 
-        function rowError(key, message) {
+        function rowError(key, message, fieldKey) {
           var row = document.querySelector('.row[data-key="' + key + '"]');
           if (!row) return;
           clearRowError(key);
@@ -813,11 +819,11 @@
           retry.className = 'link-btn';
           retry.textContent = '重试';
           retry.addEventListener('click', function () {
-            var field = fields[key];
+            var field = fields[fieldKey || key];
             if (!field) return;
             var value = field.read();
             clearRowError(key);
-            submit(key, value);
+            submit(fieldKey || key, value, key);
           });
           msg.appendChild(retry);
           row.appendChild(msg);
@@ -870,8 +876,7 @@
           input.addEventListener('input', function () {
             var value = Number(input.value);
             if (!isFinite(value)) return;
-            if (opts.local) writeLocal(key, value);
-            else submit(key, value);
+            submit(key, value);
           });
 
           host.appendChild(makeRow(labelText, hintText, wrap, key));
@@ -1051,7 +1056,7 @@
           if (value !== 'window' && value !== 'embedded' && value !== 'overlay') return;
           writeLocal('mode', value);
           paintMode(value);
-          submit('petWindow', value === 'window' ? 'only' : 'off');
+          submit('petWindow', value === 'window' ? 'only' : 'off', 'mode');
           paintTopBar();
         }
 
@@ -1075,11 +1080,12 @@
         }
 
         // ------------------------------------------------------------ 提交
-        function submit(key, value) {
+        function submit(key, value, rowKey) {
           if (!mounted) return;
           if (state.settings && state.settings[key] === value) return;
           pending[key] = value;
-          clearRowError(key);
+          pendingRows[key] = rowKey || key;
+          clearRowError(pendingRows[key]);
           setBar('保存中', '');
           window.clearTimeout(timer);
           timer = window.setTimeout(flush, 300);
@@ -1087,13 +1093,15 @@
 
         function flush() {
           var patch = pending;
+          var rows = pendingRows;
           pending = {};
+          pendingRows = {};
           var keys = Object.keys(patch);
           if (!keys.length) return;
-          send(patch, keys);
+          send(patch, keys, rows);
         }
 
-        function send(patch, keys) {
+        function send(patch, keys, rows) {
           fetch(API.settings, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1117,7 +1125,7 @@
             .catch(function (err) {
               var msg = reason(err);
               keys.forEach(function (key) {
-                rowError(key, msg);
+                rowError((rows && rows[key]) || key, msg, key);
               });
               setBar('保存失败：' + msg, 'err');
             });
@@ -1253,10 +1261,10 @@
             chips.className = 'chips';
             chips.style.marginTop = '8px';
 
-            items.forEach(function (item) {
-              var wrapper = document.createElement('div');
-              wrapper.className = 'cap-item';
+            var reasons = document.createElement('div');
+            reasons.className = 'cap-reasons';
 
+            items.forEach(function (item) {
               var chip = document.createElement(group.status === 'unsupported' ? 'button' : 'span');
               chip.className = 'chip';
               var label = document.createElement('span');
@@ -1266,34 +1274,37 @@
               if (group.status === 'unsupported') {
                 chip.classList.add('is-btn');
                 chip.type = 'button';
-                var tip = item.reason ? '展开原因' : '没有记录原因';
-                chip.title = tip;
+                chip.title = item.reason ? '展开原因' : '没有记录原因';
                 chip.setAttribute('aria-expanded', 'false');
-                var expanded = false;
-                chip.addEventListener('click', function () {
-                  expanded = !expanded;
-                  chip.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-                  chip.classList.toggle('is-open', expanded);
-                  if (expanded) {
-                    if (!reasonEl) {
-                      reasonEl = document.createElement('p');
-                      reasonEl.className = 'cap-reason';
-                      reasonEl.textContent = item.reason ? String(item.reason) : '该通道没有记录原因。';
-                      wrapper.appendChild(reasonEl);
-                    }
-                  } else if (reasonEl) {
-                    reasonEl.remove();
-                    reasonEl = null;
-                  }
-                });
                 var reasonEl = null;
+                chip.addEventListener('click', function () {
+                  var open = chip.getAttribute('aria-expanded') === 'true';
+                  if (open) {
+                    chip.setAttribute('aria-expanded', 'false');
+                    chip.classList.remove('is-open');
+                    if (reasonEl) {
+                      reasonEl.remove();
+                      reasonEl = null;
+                    }
+                    return;
+                  }
+                  chip.setAttribute('aria-expanded', 'true');
+                  chip.classList.add('is-open');
+                  reasonEl = document.createElement('p');
+                  reasonEl.className = 'cap-reason';
+                  reasonEl.textContent =
+                    String(item.id || '未命名通道') +
+                    ' · ' +
+                    (item.reason ? String(item.reason) : '该通道没有记录原因。');
+                  reasons.appendChild(reasonEl);
+                });
               }
 
-              wrapper.appendChild(chip);
-              chips.appendChild(wrapper);
+              chips.appendChild(chip);
             });
 
             box.appendChild(chips);
+            box.appendChild(reasons);
             host.appendChild(box);
           });
         }
@@ -1566,9 +1577,13 @@
         function bindDev() {
           var btn = $('rescanBtn');
           var msg = $('devMsg');
+          function say(text, isError) {
+            msg.textContent = text;
+            msg.className = 'hint' + (isError ? ' is-error' : '');
+          }
           btn.addEventListener('click', function () {
             btn.disabled = true;
-            msg.textContent = '正在重扫';
+            say('正在重扫', false);
             fetch(API.rescan, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1588,13 +1603,13 @@
                 if (res.ok) {
                   state.capability = res.data;
                   renderCapability(state.capability);
-                  msg.textContent = '已重扫 · ' + timeStr();
+                  say('已重扫 · ' + timeStr(), false);
                 } else {
-                  msg.textContent = '重扫完成但读不到能力文件：' + res.error;
+                  say('重扫完成但读不到能力文件：' + res.error, true);
                 }
               })
               .catch(function (err) {
-                msg.textContent = '重扫失败：' + reason(err) + '（路由未接入时会 404）';
+                say('重扫失败：' + reason(err) + '（路由未接入时会 404）', true);
               })
               .then(function () {
                 btn.disabled = false;
