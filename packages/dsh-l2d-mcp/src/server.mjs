@@ -205,6 +205,9 @@ server.registerTool(
             closeMotion: z.string().optional(),
             closeAfterMs: z.number().optional(),
             delayMs: z.number().optional(),
+            group: z.string().regex(/^[A-Za-z0-9_.:-]{1,32}$/).optional(),
+            mode: z.enum(['sequence', 'parallel']).optional(),
+            timeoutMs: z.number().int().min(0).max(8000).optional(),
             pose: z
               .object({
                 right: z.enum(['rest', 'finger', 'grass', 'chest']).optional(),
@@ -247,6 +250,9 @@ server.registerTool(
           closeMotion: z.string().optional(),
           closeAfterMs: z.number().optional(),
           delayMs: z.number().optional(),
+          group: z.string().regex(/^[A-Za-z0-9_.:-]{1,32}$/).optional(),
+          mode: z.enum(['sequence', 'parallel']).optional(),
+          timeoutMs: z.number().int().min(0).max(8000).optional(),
           pose: z.object({
             right: z.enum(['rest', 'finger', 'grass', 'chest']).optional(),
             left: z.enum(['rest', 'finger', 'grass', 'chest']).optional(),

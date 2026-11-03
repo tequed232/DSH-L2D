@@ -62,4 +62,18 @@ assert.ok(mouth.errors.some((e) => e.includes('口型')));
 assert.deepEqual(findReservedParams({ chain: mouthChain }), ['ParamMouthOpenY']);
 assert.deepEqual(findReservedParams({ chain: valid }), []);
 
+
+// 并行组字段（Action Chain v2）：group / mode / timeoutMs（整组超时）
+const asyncChain = [
+  { kind: 'look', x: 0.1, y: 0.1, group: 'g1', mode: 'parallel', timeoutMs: 1200 },
+  { kind: 'look', x: -0.1, y: 0, group: 'g1', mode: 'parallel' },
+];
+assert.equal(validateActChain(asyncChain).ok, true);
+assert.match(validateActChain([{ kind: 'look', x: 0, y: 0, mode: 'parallel' }]).errors.join(';'), /必须同时给 group/);
+assert.match(validateActChain([{ kind: 'look', x: 0, y: 0, group: 'bad id' }]).errors.join(';'), /group 必须是/);
+assert.match(validateActChain([{ kind: 'look', x: 0, y: 0, group: 'g1', mode: 'override' }]).errors.join(';'), /mode 必须是 sequence 或 parallel/);
+assert.match(validateActChain([{ kind: 'look', x: 0, y: 0, timeoutMs: 500 }]).errors.join(';'), /整组超时/);
+assert.match(validateActChain([{ kind: 'look', x: 0, y: 0, group: 'g1', timeoutMs: 8001 }]).errors.join(';'), /timeoutMs 必须是/);
+assert.equal(validateActChain([{ kind: 'look', x: 0, y: 0, group: 'g1', timeoutMs: 0, mode: 'sequence' }]).ok, true);
+
 console.log('validate ok');

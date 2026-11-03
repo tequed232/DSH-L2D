@@ -154,4 +154,20 @@ for (const weird of [undefined, null, 42, 'x', [], [cyclicStep], [{ kind: 'expre
 }
 
 for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
+
+// ---------------------------------------------------------------------------
+// 4) Action Chain v2 字段：group / mode / timeoutMs 在 host 守卫里同样放行且校验
+// ---------------------------------------------------------------------------
+assert.equal(checkActChain([
+  { kind: 'look', x: 0.1, y: 0.1, group: 'g1', mode: 'parallel', timeoutMs: 1200 },
+  { kind: 'pose', pose: { right: 'finger' }, group: 'g1', mode: 'parallel' },
+]).ok, true);
+assert.match(checkActChain([{ kind: 'look', x: 0, y: 0, mode: 'parallel' }]).errors.join(';'), /必须同时给 group/);
+assert.match(checkActChain([{ kind: 'look', x: 0, y: 0, group: 'bad id' }]).errors.join(';'), /group 必须是/);
+assert.match(checkActChain([{ kind: 'look', x: 0, y: 0, group: 'g1', mode: 'override' }]).errors.join(';'), /mode 必须是/);
+assert.match(checkActChain([{ kind: 'look', x: 0, y: 0, timeoutMs: 500 }]).errors.join(';'), /整组超时/);
+assert.match(checkActChain([{ kind: 'look', x: 0, y: 0, group: 'g1', timeoutMs: 9000 }]).errors.join(';'), /timeoutMs 必须是/);
+// 仍拒绝真正的未知字段（防止并行组成为任意 payload 的口子）
+assert.match(checkActChain([{ kind: 'look', x: 0, y: 0, group: 'g1', priority: 1 }]).errors.join(';'), /未知字段/);
+
 console.log('host-guard-act ok');

@@ -102,7 +102,17 @@ export const STEP_KEYS = new Set([
   'pose',
   'x',
   'y',
+  // Action Chain v2：并行组（宿主只做静态可判定校验，参数重叠降级在 renderer）
+  'group',
+  'mode',
+  'timeoutMs',
 ]);
+
+/** 并行组 id：只允许安全字符，长度 1~32（会进回执与诊断）。 */
+export const GROUP_ID_RE = /^[A-Za-z0-9_.:-]{1,32}$/;
+
+/** 组语义：sequence 按顺序；parallel 同 elapsed 一次投放（必须带 group）。 */
+export const STEP_MODES = ['sequence', 'parallel'];
 
 /** 抖动门默认值。可按状态覆盖（entry.maxFlips / entry.flipWindowMs）。 */
 export const DEFAULT_GATE = {
@@ -498,6 +508,22 @@ export function validateStep(step, index = 0) {
   if (step.kind === 'look') {
     if (!numberInRange(step.x, -1, 1)) errors.push(at + ' look.x 必须是 -1~1 的数字');
     if (!numberInRange(step.y, -1, 1)) errors.push(at + ' look.y 必须是 -1~1 的数字');
+  }
+
+  // 并行组（Action Chain v2）。宿主只判静态事实：id 合法、parallel 必须带 group、
+  // timeoutMs 是整组超时（必须带 group）。参数重叠降级由 renderer 的 chain-normalize 做。
+  if (step.group !== undefined) {
+    if (typeof step.group !== 'string' || !GROUP_ID_RE.test(step.group)) {
+      errors.push(at + ' group 必须是 1~32 位 [A-Za-z0-9_.:-]');
+    }
+  }
+  if (step.mode !== undefined) {
+    if (!STEP_MODES.includes(step.mode)) errors.push(at + ' mode 必须是 sequence 或 parallel');
+    else if (step.mode === 'parallel' && step.group === undefined) errors.push(at + ' mode=parallel 必须同时给 group');
+  }
+  if (step.timeoutMs !== undefined) {
+    if (!numberInRange(step.timeoutMs, 0, 8000)) errors.push(at + ' timeoutMs 必须是 0~8000 的数字');
+    else if (step.group === undefined) errors.push(at + ' timeoutMs 是整组超时，必须同时给 group');
   }
 
   if (step.name !== undefined && typeof step.name !== 'string') errors.push(at + ' name 必须是字符串');
