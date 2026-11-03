@@ -525,8 +525,21 @@ function tick(): void {
   if (paused) return;
   const now = performance.now();
   targetFps = computeFps(now);
-  // 帧率上限：防重入 + 控帧合并在一个判断里
-  if (now - lastTickAt < 1000 / targetFps - 1) return;
+  const interval = 1000 / targetFps;
+  // 帧率上限用 deadline 累加，而不是「距上次出帧多久」。
+  // 后者在高刷屏上会被 rAF 量化：200Hz 每 5ms 一格，60fps 的 16.67ms 只能取到 20ms，
+  // 上限被钉在 refreshHz/ceil(refreshHz/capHz) = 200/4 = 50fps（实测 49.6）。
+  // 首帧 / 目标档位变化 / 长挂起后重新对齐，避免追补一串补帧。
+  if (nextTickAt <= 0 || targetFps !== gateFps || now - nextTickAt > interval * 2) {
+    nextTickAt = now;
+    gateFps = targetFps;
+  }
+  // 半个 vsync 容差：容许提前不到一格出帧，200Hz 上出帧间隔自然形成 15/20ms 交替，
+  // 平均 16.67ms；60Hz 屏容差更小，不会多出帧。
+  const tol = Math.min(Math.max(vsyncMs / 2, 1), 8);
+  if (now + tol < nextTickAt) return;
+  nextTickAt += interval;
+  if (nextTickAt < now) nextTickAt = now + interval; // 严重迟到时不补帧爆发
   lastTickAt = now;
   syncStageGate();
   emotionRouter.tick(Date.now()); // 情绪路由心跳（内部自带 200ms 限频）
@@ -561,8 +574,15 @@ function tick(): void {
 function startLoop(): void {
   if (rafId) return;
 
-  const rafLoop = () => {
+  const rafLoop = (ts: number) => {
     rafId = requestAnimationFrame(rafLoop);
+    // 实测 rAF 间隔 = 显示刷新周期（200Hz 屏 5ms、60Hz 16.7ms），用来算半个 vsync 容差。
+    // 只接受合理区间，避免偶发掉帧把估计拉长；指数平滑，收敛约 0.5s。
+    if (lastRafAt > 0) {
+      const gap = ts - lastRafAt;
+      if (gap > 1 && gap < 40) vsyncMs = vsyncMs * 0.8 + gap * 0.2;
+    }
+    lastRafAt = ts;
     tick();
   };
   rafId = requestAnimationFrame(rafLoop);
@@ -572,7 +592,10 @@ function startLoop(): void {
   // 兜底：超过 250ms 没推进就用定时器补帧；rAF 恢复后自动让位。
   if (!driverTimer) {
     driverTimer = window.setInterval(() => {
-      if (!paused && performance.now() - lastTickAt > 250) tick();
+      if (!paused && performance.now() - lastTickAt > 250) {
+        nextTickAt = 0; // 兜底补帧后重新对齐 deadline，别让旧计划拖住
+        tick();
+      }
     }, 66);
   }
 
@@ -598,6 +621,8 @@ function installSchedulingGuards(): void {
       pausedByVisibility = false;
       paused = false;
       lastTickAt = 0; // 立即补一帧，避免恢复时画面停住
+      nextTickAt = 0; // 同步重置 deadline，否则旧计划会把补帧挡回去
+      gateFps = 0;
       markActive(); // 回前台立即满帧（不等降载窗口回升）
     }
   });
@@ -1729,6 +1754,9 @@ export async function destroy(): Promise<void> {
     driverTimer = 0;
   }
   lastTickAt = 0;
+  nextTickAt = 0;
+  gateFps = 0;
+  lastRafAt = 0;
   try {
     model?.setPreLateUpdateHook(null);
     model?.setPostLateUpdateHook(null);
@@ -1873,6 +1901,9 @@ export function getInfo(): Record<string, number | string> | null {
     .join(',');
   return {
     frames,
+    fpsCap: targetFps,
+    // 实测刷新率（rAF 间隔倒数）。采集器据此判断「49fps 是不是高刷屏限帧量化」。
+    vsyncHz: +((1000 / (vsyncMs || 16.7)).toFixed(1)),
     mxNow,
     phase: 'pre=' + phaseDiag.pre + ' post=' + phaseDiag.post,
     inj:
