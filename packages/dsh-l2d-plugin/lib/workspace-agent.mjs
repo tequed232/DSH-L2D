@@ -22,6 +22,7 @@ import { randomUUID } from 'node:crypto';
 import { aggregateWorkspaceState, decide } from './choreography.mjs';
 import { personaPromptBlock } from './persona.mjs';
 import { envPromptBlock, readEnvState } from './env-state.mjs';
+import { renderSnapshotContext, summarizeSnapshot } from './workspace-snapshot.mjs';
 
 const marker = '<!-- managed-by: dsh-l2d-workspace-agent -->';
 const instructions = [
@@ -123,7 +124,7 @@ export function renderActionReceipt(snapshot, ownId) {
 }
 
 /** 通知 prompt。 */
-export function buildNotifyPrompt({ status, persona, env, receipt, notifyState, userInput }) {
+export function buildNotifyPrompt({ status, persona, env, receipt, notifyState, userInput, snapshotText }) {
   return [
     '其他 DSH 工作区的活动状态发生变化（判定状态：' + notifyState + '）。以下是 agent.md 的最新内容：',
     '',
@@ -134,6 +135,8 @@ export function buildNotifyPrompt({ status, persona, env, receipt, notifyState, 
     env ? envPromptBlock(env) : '【用户交互态】unknown',
     '',
     receipt || '【上次动作回执】无',
+    '',
+    snapshotText || '【工作区快照】unavailable（未生成；不要据此猜测用户在做什么）',
     '',
     '规划要求：',
     '- 所有输出（行为分析、气泡台词）必须使用简体中文。',
@@ -236,12 +239,13 @@ export function hasPendingAction(snapshot) {
  * @param {number} [options.intervalMs]
  * @param {number} [options.notifyMinIntervalMs]
  */
-export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir(), '.dsh'), getSnapshot, getPersona, intervalMs = 4000, notifyMinIntervalMs = NOTIFY_MIN_INTERVAL_MS }) {
+export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir(), '.dsh'), getSnapshot, getPersona, getWorkspaceSnapshot, intervalMs = 4000, notifyMinIntervalMs = NOTIFY_MIN_INTERVAL_MS }) {
   const directory = path.join(homeDir, 'workspaces', 'live2d-agent');
   const manifestPath = path.join(homeDir, 'l2d-workspace-agent.json');
   let workspace = null;
   let sessionId = null;
   let latest = { ok: true, generatedAt: new Date().toISOString(), workspaces: [] };
+  let latestSnapshot = null;
   let timer = null;
   let refreshing = false;
   let pendingEnsure = null;
@@ -307,6 +311,16 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
       latest = snapshot;
       const env = readEnvSafe();
       const persona = readPersonaSafe();
+      // W1：结构化工作区快照 → 规划 prompt 的「事实 / 推断 / 不可得」三段。
+      // 取不到快照只影响这一段（按 unavailable 渲染），不阻塞通知链路。
+      let wsSnapshot = null;
+      try {
+        wsSnapshot = typeof getWorkspaceSnapshot === 'function' ? await getWorkspaceSnapshot() : null;
+      } catch {
+        wsSnapshot = null;
+      }
+      latestSnapshot = wsSnapshot;
+      const snapshotText = wsSnapshot ? renderSnapshotContext(wsSnapshot) : '';
       const status = renderStatus(snapshot, workspace.id, persona, env);
       writeAtomic(path.join(directory, 'agent.md'), status);
 
@@ -355,6 +369,7 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
           receipt: renderActionReceipt(snapshot, workspace.id),
           notifyState: picked.state,
           userInput: !!(env && env.available && env.state === 'conversation'),
+          snapshotText,
         });
         await prompt(text).catch(() => {});
         gate.lastAnyFireAt = now;
@@ -420,10 +435,12 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
       if (!nextManifest.bootstrapSent) {
         const env = readEnvSafe();
         const persona = readPersonaSafe();
+        const snapshotText = latestSnapshot ? renderSnapshotContext(latestSnapshot) : '【工作区快照】unavailable（未生成）';
         await prompt(
           '初始化你的 Live2D 专属工作区。你的 AGENTS.md 指令已由 DSH Agent Instructions 加载。你是独立桌宠 Agent；所有输出（行为分析、气泡台词）必须使用简体中文。' +
             '以下是当前状态快照：\n\n' + renderStatus(latest, workspace.id, persona, env) +
             '\n\n' + (persona ? personaPromptBlock(persona) : '') +
+            '\n\n' + snapshotText +
             '\n\n不要读取其他工作区文件或聊天记录。用 mcp__dsh_l2d__l2d_choreograph 的 presetState=bootstrap 做一次简短的登场，并用 mcp__dsh_l2d__l2d_get_state 确认角色就绪。',
           bootstrapRequestId
         );
@@ -443,7 +460,14 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
       if (!ready.ok) return ready;
     }
     await refresh();
-    return { ok: true, workspace: { workspaceId: workspace.id, title: workspace.title, sessionId }, generatedAt: latest.generatedAt, workspaces: latest.workspaces };
+    return {
+      ok: true,
+      workspace: { workspaceId: workspace.id, title: workspace.title, sessionId },
+      generatedAt: latest.generatedAt,
+      workspaces: latest.workspaces,
+      // 快照摘要（只给结构键；完整快照在 /dsh-l2d/workspace/snapshot.json）。
+      snapshot: summarizeSnapshot(latestSnapshot),
+    };
   }
 
   function dispose() {

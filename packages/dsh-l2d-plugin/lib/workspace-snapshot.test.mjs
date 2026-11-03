@@ -6,6 +6,8 @@ import {
   buildWorkspaceContextSnapshot,
   processNameOnly,
   redactSensitive,
+  renderSnapshotContext,
+  summarizeSnapshot,
 } from './workspace-snapshot.mjs';
 import { summarizeSession } from './session-events.mjs';
 
@@ -208,5 +210,37 @@ assert.deepEqual(extra, again);
 
 // 13) reliability 常量三态齐全（消费方按它分支）。
 assert.deepEqual(RELIABILITY, { OBSERVED: 'observed', INFERRED: 'inferred', UNAVAILABLE: 'unavailable' });
+
+// 14) 规划 prompt 三段渲染：事实 / 推断 / 不可得；不含原始内容。
+const promptText = renderSnapshotContext(snapshot);
+assert.match(promptText, /结构化事实：/);
+assert.match(promptText, /推断（低置信不得当事实用）：/);
+assert.match(promptText, /不可得（不要猜测，也不要当 idle 或成功）：/);
+assert.match(promptText, /activity\.situation=waiting_for_approval（confidence 0\.95/);
+assert.match(promptText, /changedFiles\.fileCount（not-wired）/);
+assert.match(promptText, /foregroundProcess: Code\.exe/);
+assert.match(promptText, /不可信/);
+// 用户文本 / 命令 label / 路径 / 标题不得出现在 prompt 里。
+assert.equal(promptText.includes('把这个修一下'), false);
+assert.equal(promptText.includes('rm -rf /secret path'), false);
+assert.equal(promptText.includes('C:\\Program Files'), false);
+assert.equal(promptText.includes('token=abc'), false);
+
+// 空快照也要给出明确 unavailable，而不是"看起来正常"。
+const emptyPrompt = renderSnapshotContext(null);
+assert.match(emptyPrompt, /unavailable/);
+assert.match(emptyPrompt, /不要据此猜测/);
+
+// 15) 摘要只含结构键，给 /workspace/status.json 用。
+const summaryOut = summarizeSnapshot(snapshot);
+assert.equal(summaryOut.schemaVersion, SNAPSHOT_SCHEMA_VERSION);
+assert.equal(summaryOut.sessionId, 'session-1');
+assert.equal(summaryOut.situation, 'waiting_for_approval');
+assert.equal(summaryOut.presenceState, 'work');
+assert.equal(summaryOut.approvalPending, 1);
+assert.equal(summaryOut.jobsRunning, 1);
+assert.ok(summaryOut.unavailableCount >= 1);
+assert.equal(JSON.stringify(summaryOut).includes('把这个修一下'), false);
+assert.equal(summarizeSnapshot(null), null);
 
 console.log('workspace-snapshot ok');
