@@ -28,6 +28,9 @@ import { isReservedParam } from './param-guards.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
 import { ageSummaryState, isActionTool, legacyAgentState, summarizeSession } from './session-events.mjs';
 import { listSessionFiles, readSessionEvents } from './session-log.mjs';
+import { analyzeContext } from './context-analyzer.mjs';
+import { createForegroundProcessCollector } from './foreground-process.mjs';
+import { buildWorkspaceContextSnapshot } from './workspace-snapshot.mjs';
 import { setupPetWindow } from './pet-window.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -93,6 +96,7 @@ const SETTINGS_SHAPE = {
   mediaSensor: { type: 'boolean', default: false, description: '媒体律动（音乐节拍摇摆），默认关' },
   petWindow: { type: 'string', default: 'off', description: '桌宠独立窗：off 关闭（页内浮层）/ only 独立透明窗（页内浮层停用，重启生效）' },
   reverseEnabled: { type: 'boolean', default: true, description: '反向桥：模型交互事件回流宿主（l2d-reverse-state.json + /ai/poll 搭车）' },
+  workspaceForeground: { type: 'boolean', default: false, description: '工作区快照：读取前台应用进程名（默认关；仅本机、不取标题/路径/内容）' },
 };
 
 let z = null;
@@ -120,6 +124,7 @@ export const Config = z
       mediaSensor: z.boolean().default(false).description('媒体律动（音乐节拍摇摆），默认关').extra('volatile', true),
       petWindow: z.string().default('off').description('桌宠独立窗：off 关闭（页内浮层）/ only 独立透明窗（页内浮层停用，重启生效）').extra('volatile', true),
       reverseEnabled: z.boolean().default(true).description('反向桥：模型交互事件回流宿主（l2d-reverse-state.json + /ai/poll 搭车）').extra('volatile', true),
+      workspaceForeground: z.boolean().default(false).description('工作区快照：读取前台应用进程名（默认关；仅本机、不取标题/路径/内容）').extra('volatile', true),
     })
   : { ...SETTINGS_SHAPE };
 
@@ -510,6 +515,8 @@ function getAgentState(force = false) {
 export { getAgentState };
 
 let workspaceBridge = null;
+// W1：在 webServer 注入闭包里初始化（那里才有前台采集器与路由），桥用它取最新快照。
+let runtimeSnapshotBuilder = null;
 const workspaceEventCache = new Map();
 
 /** Workspace 状态只输出脱敏活动元数据，不向专属 Agent 暴露其他会话文本。
@@ -888,6 +895,46 @@ export function apply(root, config = {}) {
     // 读不到时守卫 fail-open（物理输出判定放行），由渲染端兜底，绝不 500。
     const aiIndexCache = createModelIndexCache(MODEL_DIR);
 
+    // W1：前台进程采集默认关（设置 workspaceForeground=true 才启动）；关闭即停并清空采样。
+    const foregroundCollector = createForegroundProcessCollector({ intervalMs: 2000 });
+    try {
+      ctx.effect(() => () => foregroundCollector.stop());
+    } catch {
+      /* 老宿主没有 effect：定时器 unref，进程退出不受影响 */
+    }
+
+    /**
+     * W1：构造一次工作区快照（只读）。路由与 workspace-agent 共用同一入口，
+     * 保证「事实 / 推断 / 不可得」三段只有一份实现。
+     */
+    const buildRuntimeSnapshot = (options = {}) => {
+      const now = Number(options.now) || Date.now();
+      foregroundCollector.setEnabled(readSettings().workspaceForeground === true);
+      const requested = typeof options.sessionId === 'string' && options.sessionId ? options.sessionId : '';
+      const files = listSessionFiles();
+      let entry = files[0] || null;
+      if (requested) entry = files.find((file) => file.sessionId === requested) || null;
+      const presence = readEnvState({ now });
+      const foreground = foregroundCollector.get();
+      const read = entry ? readSessionEvents(entry.file) : { ok: false, events: [], error: 'no-session' };
+      const summary = read.ok ? summarizeSession(read.events, { now }) : null;
+      const activity = analyzeContext({ summary, presence, foreground, now });
+      const missingSession = requested && !entry;
+      const unavailable = read.ok
+        ? []
+        : [{ path: missingSession ? 'sessionId' : 'session', reason: missingSession ? 'no-session' : 'session-unreadable' }];
+      return buildWorkspaceContextSnapshot({
+        sessionId: entry ? entry.sessionId : null,
+        summary,
+        presence,
+        foreground,
+        activity,
+        now,
+        unavailable,
+      });
+    };
+    runtimeSnapshotBuilder = buildRuntimeSnapshot;
+
     route('/dsh-l2d/ai/call', (req, res) => {
       if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
@@ -1214,6 +1261,29 @@ export function apply(root, config = {}) {
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(data), 'utf8'));
     });
 
+    // ------------------------------------------------------ W1 工作区快照（只读）
+    // 会话事实 + presence + 可选前台进程 + 分析器。缺会话/未上报/采集关都以
+    // unavailable 返回 200；500 只留给本路由自身的内部异常。
+    route('/dsh-l2d/workspace/snapshot.json', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      try {
+        if (readSettings().agentLink === false) {
+          return sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'disabled' }), 'utf8'));
+        }
+        let requested = '';
+        try {
+          requested = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('session') || '').slice(0, 80);
+        } catch {
+          requested = '';
+        }
+        const snapshot = buildRuntimeSnapshot({ sessionId: requested });
+        sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(snapshot), 'utf8'));
+      } catch (err) {
+        diag('workspace snapshot error: ' + String((err && err.message) || err));
+        sendBuffer(res, 500, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'snapshot-failed' }), 'utf8'));
+      }
+    });
+
     // 系统硬件采样（Emotion_Router 的 system 信号源）。
     // CPU 用 /proc 式采样：两次 os.cpus() 时间差；内存用 freemem/totalmem。
     // 开销极低（每 5s 由前端轮询一次），但仍受 systemSensor 开关约束。
@@ -1491,6 +1561,8 @@ export function apply(root, config = {}) {
       homeDir: process.env.DSH_HOME || path.join(os.homedir(), '.dsh'),
       getSnapshot: () => getWorkspaceAgentStates(ctx.workspaceRegistry),
       getPersona: () => readPersona(),
+      // 规划上下文用「结构化事实 + 推断 + 不可得」三段，不含会话正文。
+      getWorkspaceSnapshot: () => (typeof runtimeSnapshotBuilder === 'function' ? runtimeSnapshotBuilder() : null),
       intervalMs: 4000,
     });
     workspaceBridge = bridge;
