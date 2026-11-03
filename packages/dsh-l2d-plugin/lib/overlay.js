@@ -1679,40 +1679,92 @@
     }, delayMs || 6000));
   }
 
+  function runActStep(step, runId, source, skipMotions) {
+    var L = window.DSH_L2D;
+    if (!L || !step || !actStillCurrent(runId)) return;
+    if (step.kind === 'expression') {
+      if (step.clear && L.clearExpression) L.clearExpression();
+      else if (step.name && L.setExpression) L.setExpression(step.name);
+    } else if (step.kind === 'motion' && step.name) {
+      if (!skipMotions && L.playMotionAsync) watchMotion(runId, L.playMotionAsync(step.name), source, true);
+      if (step.closeMotion) {
+        scheduleCloseMotion(step.closeMotion, step.closeAfterMs || 6000, runId);
+      }
+    } else if (step.kind === 'keyframes' && L.playKeyframes) {
+      L.playKeyframes(step.tracks || [], {
+        duration: step.duration,
+        loop: step.loop === true,
+      });
+    } else if (step.kind === 'pose' && step.pose && L.setPose) {
+      L.setPose(step.pose);
+    } else if (step.kind === 'look' && L.lookAt) {
+      L.lookAt(step.x || 0, step.y || 0);
+    }
+  }
+
+  // 整组超时：到点取消整组并让结束回执带上 reason:'timeout'。
+  function timeoutActGroup(runId) {
+    var L = window.DSH_L2D;
+    if (!L || !actStillCurrent(runId)) return;
+    if (L.noteActMotion) L.noteActMotion(runId, 'timeout', 'fail');
+    cancelActTimers();
+    var ev = L.finishAct ? L.finishAct(runId) : null;
+    if (ev) postActEvent(ev);
+    if (L.setStageBusy) L.setStageBusy({ acting: false });
+  }
+
+  // 按执行计划投放：同桶步骤在同一 tick 内依次调用（并行是「同帧投放」，不是多线程）。
+  // 计划由渲染包的 normalizeActPlan 生成（core/src/chain-normalize.ts），老包没有时退回串行。
+  function playActPlan(plan, runId, source, skipMotions) {
+    var buckets = (plan && plan.buckets) || [];
+    for (var b = 0; b < buckets.length; b++) {
+      (function (bucket) {
+        var runBucket = function () {
+          for (var i = 0; i < bucket.steps.length; i++) {
+            runActStep(bucket.steps[i].step, runId, source, skipMotions);
+          }
+        };
+        if (!(bucket.atMs > 0)) {
+          runBucket();
+        } else {
+          pokeTimers.push(setTimeout(runBucket, bucket.atMs));
+        }
+        if (bucket.timeoutMs > 0) {
+          pokeTimers.push(setTimeout(function () {
+            timeoutActGroup(runId);
+          }, bucket.atMs + bucket.timeoutMs));
+        }
+      })(buckets[b]);
+    }
+  }
+
   function playActSteps(chain, runId, source, skipMotions) {
     var L = window.DSH_L2D;
-    var elapsed = 0;
-    function runStep(step) {
-      if (!L || !step || !actStillCurrent(runId)) return;
-      if (step.kind === 'expression') {
-        if (step.clear && L.clearExpression) L.clearExpression();
-        else if (step.name && L.setExpression) L.setExpression(step.name);
-      } else if (step.kind === 'motion' && step.name) {
-        if (!skipMotions && L.playMotionAsync) watchMotion(runId, L.playMotionAsync(step.name), source, true);
-        if (step.closeMotion) {
-          scheduleCloseMotion(step.closeMotion, step.closeAfterMs || 6000, runId);
-        }
-      } else if (step.kind === 'keyframes' && L.playKeyframes) {
-        L.playKeyframes(step.tracks || [], {
-          duration: step.duration,
-          loop: step.loop === true,
-        });
-      } else if (step.kind === 'pose' && step.pose && L.setPose) {
-        L.setPose(step.pose);
-      } else if (step.kind === 'look' && L.lookAt) {
-        L.lookAt(step.x || 0, step.y || 0);
+    if (L && L.normalizeActPlan) {
+      var plan = null;
+      try {
+        plan = L.normalizeActPlan(chain);
+      } catch (err) {
+        plan = null;
+      }
+      if (plan && plan.buckets && plan.buckets.length) {
+        playActPlan(plan, runId, source, skipMotions);
+        return;
       }
     }
+    var elapsed = 0;
     for (var i = 0; i < chain.length; i++) {
       var step = chain[i];
       var delay = Math.max(0, Number(step.delayMs) || 0);
       elapsed += delay;
       if (elapsed <= 0) {
-        runStep(step);
+        runActStep(step, runId, source, skipMotions);
       } else {
-        (function (pending) {
-          pokeTimers.push(setTimeout(function () { runStep(pending); }, elapsed));
-        })(step);
+        (function (pending, at) {
+          pokeTimers.push(setTimeout(function () {
+            runActStep(pending, runId, source, skipMotions);
+          }, at));
+        })(step, elapsed);
       }
     }
   }

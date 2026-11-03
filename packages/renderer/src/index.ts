@@ -19,6 +19,7 @@ import { SHADER_SOURCES } from './shaders';
 import { mixAdditive } from '../../core/src/angle-mix.ts';
 import { sampleAmbient, type AmbientKind } from '../../core/src/ambient.ts';
 import { LIPSYNC_PARAMS } from '../../core/src/index.ts';
+import { normalizeActChain } from '../../core/src/chain-normalize.ts';
 import { admitKeyframeTrack } from './app/keyframe-admission.ts';
 import {
   ActGate,
@@ -2041,6 +2042,8 @@ const api = {
   loadCore,
   mount,
   layout,
+  // 动作链执行计划（并行组 / 整组超时 / 冲突降级）：纯函数，overlay 按桶投放
+  normalizeActPlan: (chain: Parameters<typeof normalizeActChain>[0]) => normalizeActChain(chain),
   // 控制
   setParameter,
   setParameters,
