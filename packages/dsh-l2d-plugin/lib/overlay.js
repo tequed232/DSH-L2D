@@ -2010,7 +2010,7 @@
    * 渲染倍率：高 DPI/Retina 按 devicePixelRatio 走（Mac Retina=2、Windows 150%=1.5）。
    * dpr=1 的普通屏**不再固定 2× 超采样**：实测它把 593×741 的挂件画成 1186×1482，
    * 填充率 ×4，是有交互时掉到 38fps 的主因。要清晰档把返回改回 Math.max(2, ...) 即可。
-   * 上限 3×（前台），失焦/隐藏降到 1× 省 GPU 填充与带宽，回前台立即恢复；
+   * 前台按 devicePixelRatio 夹 1~2×（上限 2×），失焦/隐藏降到 1× 省 GPU 填充与带宽，回前台立即恢复；
    * 画布单边/总像素的 8K 护栏在渲染包 resizeCanvas 内统一钳制。
    */
   function renderScale() {
@@ -2099,7 +2099,7 @@
     }
   }
 
-  // 焦点/可见性变化时重算超采样倍率：前台 2~3×，失焦/隐藏 1×。
+  // 焦点/可见性变化时重算超采样倍率：前台按 dpr 夹 1~2×，失焦/隐藏 1×。
   // 这是"回前台就顺滑、切走就省电"的关键一环，和渲染包的帧率守卫配合。
   function applyRenderScale() {
     if (!rendererReady || !window.DSH_L2D || !window.DSH_L2D.layout) return;
