@@ -11,6 +11,7 @@
  * 这一层只产出"写什么、写到哪、什么相位、要不要 own"。
  */
 import type { ModelMotionProfile, SemanticControlCapability } from './motion-contract.ts';
+import { PRE_ONLY_PARAMS } from './motion-intent.ts';
 
 export interface SemanticWrite {
   channel: string;
@@ -18,7 +19,7 @@ export interface SemanticWrite {
   sourceId: string;
   params: { id: string; value: number }[];
   ownership: 'direct' | 'requires-own';
-  /** 物理输出写 post（physics 之后胜出）；输入类写 pre */
+  /** 物理输出写 post（physics 之后胜出）；输入类与 INV-7 pre-only 参数族写 pre */
   phase: 'pre' | 'post';
   status: 'supported' | 'approximate';
 }
@@ -104,12 +105,20 @@ export function planSemanticPosture(
     // 这不追求解剖学精确，只保证「收缩方向一致、幅度可控」，并在 status 里标 approximate。
     const params = ids.map((id) => ({ id, value }));
 
+    // 相位判定（M1-d1）：ownership 之外叠加 PRE_ONLY_PARAMS 参数族（INV-7，与
+    // motion-intent.ts / ownership-spec 的 PRE_ONLY 同一份名单，不维护第二份）——
+    //   direct → pre（恒等）；
+    //   requires-own 且参数全部 ∈ pre-only 族（如 HipAngleX/Y/Z）→ pre，PhysicsGate 让位；
+    //   requires-own 其余（姿态骨/眼球/四肢）→ post（既有通道零漂移）。
+    const preOnly = ids.length > 0 && ids.every((id) => PRE_ONLY_PARAMS.has(id));
+    const phase = control.ownership === 'requires-own' && !preOnly ? 'post' : 'pre';
+
     plan.writes.push({
       channel,
       sourceId: control.sourceId,
       params,
       ownership: control.ownership === 'requires-own' ? 'requires-own' : 'direct',
-      phase: control.ownership === 'requires-own' ? 'post' : 'pre',
+      phase,
       status: control.status === 'approximate' ? 'approximate' : 'supported',
     });
 

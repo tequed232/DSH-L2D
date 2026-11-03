@@ -1929,6 +1929,22 @@ export function getInfo(): Record<string, number | string> | null {
         parts.push(name + '=?');
       }
     }
+    // M1-d1 观测通道：当前被 own 的参数动态并入（pre 相位锁定值可从 pv 读到，
+    // 释放后自动消失）。固定清单不含 Hip* 等 pre 相位参数，U5 类验收必须经此读取。
+    try {
+      const ownedIds = injector.getAgentOwned() as unknown as string[];
+      for (const oid of ownedIds || []) {
+        if (ids.includes(oid)) continue;
+        try {
+          const oh = idMgr.getId(oid);
+          parts.push(oid + '=' + core.getParameterValueById(oh).toFixed(3) + '*');
+        } catch {
+          parts.push(oid + '=?');
+        }
+      }
+    } catch {
+      /* owned 快照不可用时静默——固定清单照常输出 */
+    }
     // 判定是否真的在动：与上次采样比较
     try {
       const h = idMgr.getId('AngleX');

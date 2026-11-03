@@ -73,9 +73,22 @@
 |---|---|---|---|
 | `pnpm test:core` 全绿 | package.json `test:core`（含 §1-§4 全部测试文件） | ✅ 已有 | ☐ |
 | `tools/dev-server` overlay-test 冒烟 | `tools/dev-server/`（人工起服目视） | ⬜ 需人工 | ☐ |
-| 真机验收 run.mjs 9 项 + guards.mjs 9 项 | `tools/acceptance/run.mjs` / `guards.mjs`（F 项已同步 56） | ⬜ 集成日执行 | ☐ |
+| 真机验收 run.mjs 9 项 + guards.mjs 9 项 | `tools/acceptance/run.mjs` / `guards.mjs`（F 项已同步 59） | ⬜ 集成日执行 | ☐ |
 | m1-smoke 基线（flag off = 回滚验收） | `tools/acceptance/m1-smoke.mjs` T0-T3 + 开关组 | ✅ 脚本已交付 · ⬜ 真机执行 | ☐ |
-| m1-smoke M1 组（flag on + allow-write） | U1-U4（自动化）· U5（--m1-hip）· U6（--m1-gesture） | 🔶 占位待交付 · ⬜ 集成日执行 | ☐ |
+| m1-smoke M1 组（flag on + allow-write） | U1-U4（自动化）· U5（--m1-hip，M1-d1 已升级真用例）· U6（--m1-gesture） | 🔶 U5 真用例已交付 · ⬜ 集成日执行 | ☐ |
+
+## 7b. M1-d1：Hip 语义控制（torso.hip 三通道，pre 相位动作面）
+
+| 项 | 载体 | 状态 | 勾选 |
+|---|---|---|---|
+| 画像绑定：torso.hip→HipAngleZ / torso.hip.forward→HipAngleY / torso.hip.twist→HipAngleX（requires-own，sourceId 只含规范名） | `tools/capability-scan/bindings.mjs` + `packages/core/test/capability-profile.ts`（59 控制断言 + 三条绑定原文） | ✅ | ☐ |
+| 相位判定：requires-own + PRE_ONLY_PARAMS 参数族 → pre；direct→pre、requires-own 非 Hip→post（零漂移） | `packages/core/test/semantic-binding.ts` + `packages/core/test/posture.ts` | ✅ | ☐ |
+| 契约 v4：标准通道 20→23，controls 56→59 | `packages/core/src/motion-contract.ts` + `packages/core/test/motion-contract.ts` + run.mjs F / m1-smoke T1 | ✅ | ☐ |
+| overlay own 按相位分组批量登记（pre/post 两次调用） | `packages/dsh-l2d-plugin/lib/overlay.js`（真机 U5 回执断言 phase='pre'） | ✅ + ⬜ | ☐ |
+| U5 真用例：torso.hip 三通道 → applied 含 HipAngleX/Y/Z 且 phase='pre'、owned 三参数、无 wrong-phase、pw pre 上涨、释放回物理 | `tools/acceptance/m1-smoke.mjs` caseHipPre（--m1-hip 开） | ✅ 脚本已交付 · ⬜ 真机执行 | ☐ |
+| PhysicsGate 让位 + chained 消费者随动（裙摆/腿链目视） | H3 人工项 + `packages/renderer/src/app/physics-gate.test.mjs` | ✅ 单测 · ⬜ 真机目视 | ☐ |
+| flag 关（embodied.m1=false）= 通道声明性可用但无让位效果（文档化预期，非 bug） | docs/M1b-Hip-Yield-Points.md §5 | ✅ | ☐ |
+| 方向标定（Z 左右倾/Y 前后/X 扭转只是初始映射；反向只调 binding 层符号，不改 core） | 集成日真机标定，结果回写 docs/M1b-Hip-Yield-Points.md §5 | ⬜ | ☐ |
 
 ## 7. 人工项（m1-smoke H 系列，永远列出不拉低 verdict）
 

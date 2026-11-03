@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { planSemanticPosture, canExpress } from '../src/semantic-binding.ts';
-import type { ModelMotionProfile } from '../src/motion-contract.ts';
+import { MOTION_CONTRACT_VERSION, type ModelMotionProfile } from '../src/motion-contract.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..', '..');
@@ -23,7 +23,7 @@ const test = (name: string, fn: () => void) => {
 };
 
 const fixture: ModelMotionProfile = {
-  contractVersion: 3,
+  contractVersion: MOTION_CONTRACT_VERSION,
   modelId: 'fixture',
   adapterId: 'cubism',
   profileRevision: 'r-test',
@@ -31,6 +31,10 @@ const fixture: ModelMotionProfile = {
     { id: 'head.yaw', status: 'supported', min: -1, max: 1, neutral: 0, confidence: 0.95, sourceId: 'AngleX', ownership: 'direct' },
     { id: 'arm.left.raise', status: 'supported', min: -1, max: 1, neutral: 0, confidence: 0.8, sourceId: 'LArm', ownership: 'requires-own' },
     { id: 'torso.contraction', status: 'approximate', min: -1, max: 1, neutral: 0, confidence: 0.6, sourceId: 'ShoulderX+ShoulderZ', ownership: 'requires-own' },
+    // M1-d1：Hip 族（INV-7 pre-only 参数族）——requires-own 但相位判 pre
+    { id: 'torso.hip', status: 'supported', min: -1, max: 1, neutral: 0, confidence: 0.8, sourceId: 'HipAngleZ', ownership: 'requires-own' },
+    { id: 'torso.hip.forward', status: 'supported', min: -1, max: 1, neutral: 0, confidence: 0.8, sourceId: 'HipAngleY', ownership: 'requires-own' },
+    { id: 'torso.hip.twist', status: 'supported', min: -1, max: 1, neutral: 0, confidence: 0.8, sourceId: 'HipAngleX', ownership: 'requires-own' },
     { id: 'leg.left.bend', status: 'unsupported', min: -1, max: 1, neutral: 0, confidence: 0, reason: '模型无膝关节参数' },
     { id: 'gaze.x', status: 'unknown', min: -1, max: 1, neutral: 0, confidence: 0, reason: '尚未探测' },
   ],
@@ -52,6 +56,28 @@ test('物理输出通道：post 相位且要求 own', () => {
   const plan = planSemanticPosture(fixture, { 'arm.left.raise': 0.8 });
   assert.equal(plan.writes[0].phase, 'post');
   assert.deepEqual(plan.owns, ['LArm']);
+});
+
+test('M1-d1 Hip 族：requires-own + PRE_ONLY 参数族 → pre 相位，既有通道不变', () => {
+  const plan = planSemanticPosture(fixture, { 'torso.hip.twist': 0.5, 'arm.left.raise': 0.3 });
+  const hip = plan.writes.find((w) => w.channel === 'torso.hip.twist')!;
+  assert.equal(hip.ownership, 'requires-own', 'Hip 是物理输出，仍要求 own');
+  assert.equal(hip.phase, 'pre', 'HipAngleX ∈ PRE_ONLY_PARAMS（INV-7），相位必须判 pre');
+  assert.deepEqual(hip.params, [{ id: 'HipAngleX', value: 0.5 }]);
+  assert.deepEqual(plan.owns, ['HipAngleX', 'LArm']);
+  // 非 pre-only 族的 requires-own 通道保持 post（既有通道零漂移）
+  assert.equal(plan.writes.find((w) => w.channel === 'arm.left.raise')!.phase, 'post');
+});
+
+test('M1-d1 Hip 三轴全部判 pre（Z 左右倾 / Y 前后 / X 扭转）', () => {
+  const plan = planSemanticPosture(fixture, { 'torso.hip': 0.4, 'torso.hip.forward': -0.3, 'torso.hip.twist': 0.2 });
+  const byChannel = new Map(plan.writes.map((w) => [w.channel, w]));
+  assert.deepEqual([...byChannel.keys()].sort(), ['torso.hip', 'torso.hip.forward', 'torso.hip.twist']);
+  for (const w of byChannel.values()) {
+    assert.equal(w.phase, 'pre');
+    assert.equal(w.ownership, 'requires-own');
+  }
+  assert.deepEqual(plan.owns.slice().sort(), ['HipAngleX', 'HipAngleY', 'HipAngleZ']);
 });
 
 test('组合通道：拆成多个参数，标 approximate', () => {

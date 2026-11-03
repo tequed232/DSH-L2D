@@ -106,8 +106,24 @@ test('真实模型画像：存在、能过契约校验、不编造参数', () =>
   const v = validateMotionProfile(profile);
   assert.ok(v.ok, 'profile 校验失败: ' + v.errors.join('; '));
   assert.equal(profile.contractVersion, MOTION_CONTRACT_VERSION);
-  // 标准 20 通道 + W3 清单 36 条登记（动作组 3 + Idle 1 + 姿势 4 + 视线 4 + 身体 3 + 表情 21）
+  // M1-d1 契约：标准 23 通道（v4 含 torso.hip 三轴）+ W3 清单 36 条登记
+  // （动作组 3 + Idle 1 + 姿势 4 + 视线 4 + 身体 3 + 表情 21）= 59
   assert.equal(profile.controls.length, SEMANTIC_CONTROL_IDS.length + registry.entries.length);
+  assert.equal(profile.controls.length, 59, '契约 59（标准 23 + W3 36）——画像与契约必须同步重扫');
+
+  const byIdAll = new Map(profile.controls.map((c: any) => [c.id, c]));
+  // M1-d1：盆骨三轴必须登记且 sourceId 只含规范名（变体参数 HipAngleX2/YUP/DOWN 等绝不进 sourceId）
+  for (const [id, src] of [
+    ['torso.hip', 'HipAngleZ'],
+    ['torso.hip.forward', 'HipAngleY'],
+    ['torso.hip.twist', 'HipAngleX'],
+  ] as const) {
+    const c = byIdAll.get(id);
+    assert.ok(c, '画像缺 M1-d1 通道: ' + id);
+    assert.equal(c.sourceId, src, id + ' 的 sourceId 必须是规范参数名');
+    assert.equal(c.ownership, 'requires-own', id + ' 是物理输出，必须 requires-own');
+    assert.equal(c.status, 'supported', id + ' 在本模型上应当 supported');
+  }
 
   // 反造假：任何 sourceId 都必须能在模型的 cdi3 里找到
   const cdiFile = fs.readdirSync(path.join(ROOT, 'DeepSeek免费公皮', 'DeepSeek')).find((f) => f.endsWith('.cdi3.json'));

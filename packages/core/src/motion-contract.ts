@@ -15,12 +15,13 @@ import type { BlendMode } from './mixer.ts';
 /**
  * 契约版本。
  *
- * v3 相对 v2：新增 torso.contraction / arm.*.inward / leg.*.inward|bend 七个通道——
- * 它们是「害羞式保护姿态」的表达前提（收肩、双臂内收、腿部并拢）。
+ * v4 相对 v3：新增 torso.hip / torso.hip.forward / torso.hip.twist 三个盆骨语义通道——
+ * M1-d1 让 Hip*（write-plan PRE_ONLY 参数族）获得动作面入口：binding 层标 requires-own
+ * （物理输出），相位由 semantic-binding 按参数族判为 pre（INV-7）。
  * 注意：**通道存在不等于模型支持**，是否可写由 CapabilityProfile 的 status 决定，
  * 判不出来的通道必须是 unknown（fail-closed），不得默认 supported。
  */
-export const MOTION_CONTRACT_VERSION = 3 as const;
+export const MOTION_CONTRACT_VERSION = 4 as const;
 
 /**
  * 标准语义控制（归一化口径，默认 [-1, 1]）。
@@ -36,6 +37,9 @@ export type SemanticControlId =
   | 'head.roll'
   | 'torso.lean'
   | 'torso.sway'
+  | 'torso.hip'
+  | 'torso.hip.forward'
+  | 'torso.hip.twist'
   | 'gaze.x'
   | 'gaze.y'
   | 'arm.left.raise'
@@ -52,6 +56,9 @@ export const SEMANTIC_CONTROL_IDS = Object.freeze([
   'head.roll',
   'torso.lean',
   'torso.sway',
+  'torso.hip',
+  'torso.hip.forward',
+  'torso.hip.twist',
   'gaze.x',
   'gaze.y',
   'arm.left.raise',

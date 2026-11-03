@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { arbitrateShared } from '../src/shared-arbitration.ts';
+import { MOTION_CONTRACT_VERSION } from '../src/motion-contract.ts';
 import type { ModelMotionProfile, SemanticControlCapability } from '../src/motion-contract.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -47,7 +48,7 @@ const ctrl = (id: string, conflicts: string[], extra: Partial<SemanticControlCap
 
 /** 与 tools/capability-scan 产出的画像同构的 fixture：gaze/lean 双向、表情两两、单向声明对。 */
 const fixture: ModelMotionProfile = {
-  contractVersion: 3,
+  contractVersion: MOTION_CONTRACT_VERSION,
   modelId: 'fixture',
   adapterId: 'cubism',
   profileRevision: 'r-test',

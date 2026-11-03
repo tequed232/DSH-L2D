@@ -405,15 +405,15 @@ async function main() {
     const modelId = cap.body && cap.body.modelId;
     record(
       'F 画像路由',
-      // W3 合入后契约 = 标准 20 + W3 36 = 56（来源 tools/w3-registry/registry.json）
-      cap.status === 200 && n === 56 && !!modelId,
+      // M1-d1 合入后契约 = 标准 23 + W3 36 = 59（标准 20 + torso.hip 三轴；W3 来源 tools/w3-registry/registry.json）
+      cap.status === 200 && n === 59 && !!modelId,
       cap.status !== 200
         ? `capability.json HTTP ${cap.status}（预期 200）→ 画像路由未挂载`
-        : n !== 56
-          ? `controls.length=${n}（契约要求 20）→ 模型或扫描器输出变了，检查 tools/capability-scan`
+        : n !== 59
+          ? `controls.length=${n}（契约要求 59）→ 模型或扫描器输出变了，检查 tools/capability-scan`
           : !modelId
             ? 'modelId 为空 → 画像缺模型标识，上层无法绑定'
-            : `controls=20 · modelId=${modelId}`,
+            : `controls=59 · modelId=${modelId}`,
     );
     if (flag('read-only')) {
       record('F rescan', 'warn', '已按 --read-only 跳过（POST 重扫）');

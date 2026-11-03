@@ -1,5 +1,5 @@
 {
-  "contractVersion": 3,
+  "contractVersion": 4,
   "modelId": "大肥鱼.dsl2d.2048",
   "adapterId": "cubism",
   "profileRevision": "r096ba86d2954",
@@ -70,6 +70,42 @@
       "reason": "靠双肩内收近似「缩肩」，无独立躯干收缩参数",
       "sourceId": "ShoulderX+ShoulderZ",
       "ownership": "requires-own"
+    },
+    {
+      "id": "torso.hip",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.8,
+      "sourceId": "HipAngleZ",
+      "resourceGroup": "ParamGroup8",
+      "ownership": "requires-own",
+      "reason": "该参数是物理输出，必须 own 后才能写"
+    },
+    {
+      "id": "torso.hip.forward",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.8,
+      "sourceId": "HipAngleY",
+      "resourceGroup": "ParamGroup8",
+      "ownership": "requires-own",
+      "reason": "该参数是物理输出，必须 own 后才能写"
+    },
+    {
+      "id": "torso.hip.twist",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.8,
+      "sourceId": "HipAngleX",
+      "resourceGroup": "ParamGroup8",
+      "ownership": "requires-own",
+      "reason": "该参数是物理输出，必须 own 后才能写"
     },
     {
       "id": "gaze.x",
@@ -1010,7 +1046,7 @@
     "note": "存在但 model3 未引用；不允许在 W3/W4 被当作可用能力（除非先验证并登记）"
   },
   "metadata": {
-    "scannedAt": "2026-11-03T10:14:52.351Z",
+    "scannedAt": "2026-11-03T17:56:27.744Z",
     "modelFile": "大肥鱼.dsl2d.2048.model3.json",
     "cdiFile": "大肥鱼.cdi3.json",
     "paramCount": 509,

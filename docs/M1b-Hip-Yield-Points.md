@@ -74,3 +74,29 @@
   （m1-smoke U5 + H3 目视：裙摆随 Agent 值动）覆盖；node 无法直跑 fw 的 SDK 依赖链。
 - 回滚：`embodied.m1` flag 置 false（默认即 false）——gate.pre/post/dispose 全部空操作，
   让位表永不被触碰，帧循环与 main 逐字节一致；无需改任何生产者代码。
+
+## 5. M1-d1：Hip\* 的动作面入口（语义通道打通，本批）
+
+M1-b 交付时 Hip\* 让位**只有渲染层 API 入口**（`ownParameters(ids, d, 'pre')`），
+Agent 动作面（l2d_posture）够不着 pre 相位——画像里没有任何语义通道映射 Hip\*。
+M1-d1 补上这条入口链，各层职责不变：
+
+| 层 | 变更 | 文件 |
+|---|---|---|
+| 画像绑定 | 新增 3 条 direct 规则：`torso.hip`→HipAngleZ（左右倾）、`torso.hip.forward`→HipAngleY（前后）、`torso.hip.twist`→HipAngleX（水平扭转）。三条都是物理输出 → requires-own；**sourceId 只含规范名**，变体参数（HipAngleX2/ParamHipAngleZ/HipAngleZ2/HipAngleYUP/DOWN/HipZ1/Z2/Xq）绝不进 sourceId | `tools/capability-scan/bindings.mjs` |
+| 语义契约 | 标准通道 20→23（v4），contractVersion 3→4 | `packages/core/src/motion-contract.ts` |
+| 相位判定 | 从「纯 ownership」改为「ownership + PRE_ONLY_PARAMS 参数族」：requires-own 且参数 ∈ pre-only 族 → **pre**（PhysicsGate 让位）；direct → pre、requires-own 非 Hip → post（既有通道零漂移）。参数族复用 `motion-intent.ts` 的 `PRE_ONLY_PARAMS`，不维护第二份名单 | `packages/core/src/semantic-binding.ts` |
+| 执行分批 | pre/post 批跟随 write.phase（Hip 进 pre 批）；回执 applied 仍带 phase 字段 | `packages/core/src/posture.ts` |
+| overlay | own 按相位分组两次**批量**调用：`ownParameters(preIds, d, 'pre')` + `ownParameters(postIds, d, 'post')`（不逐参数循环） | `packages/dsh-l2d-plugin/lib/overlay.js` l2d_posture 分支 |
+
+- 契约数字：controls 56→**59**（标准 23 + W3 36），`run.mjs` F 项 / `m1-smoke.mjs` T1 同步；
+  画像已重扫（`profile.大肥鱼.dsl2d.2048.json`，contractVersion 4）。
+- U5 已从占位升级为真用例：torso.hip 三通道 → 断言回执 applied 含 HipAngleX/Y/Z 且
+  phase='pre'、owned 含三参数、无 wrong-phase、pw=pre 计数上涨、独占窗口锁 Agent 值、
+  释放后回物理。
+- **flag 关行为（embodied.m1 = false，默认）**：torso.hip 通道声明性可用（画像 supported、
+  规划层能产出 phase='pre' 的写入计划），但 PhysicsGate 不让位——pre 写入不会胜过物理，
+  表现为「写了没效果」。这是文档化的预期行为，不算 bug；flag 开后同一条路径立即生效。
+- **方向标定待办（集成日）**：轴向惯例只是初始映射（Z=左右倾 / Y=前后 / X=水平扭转）。
+  真机目视方向相反或幅度不合适时，**只调 binding 层符号**（scale/-1 或取负），不改 core
+  语义与参数族判定；标定结果回写本表。

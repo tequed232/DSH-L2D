@@ -15,7 +15,7 @@
  * 用例组：
  *   基线组（GET 只读，任何 flag 下都跑）
  *     T0 连通性          GET /dsh-l2d/ai/result?id=0 → 200
- *     T1 画像契约        GET capability.json：controls=56 且 modelId 非空（对齐 run.mjs F 项）
+ *     T1 画像契约        GET capability.json：controls=59 且 modelId 非空（对齐 run.mjs F 项）
  *     T2 设置页          GET /dsh-l2d/settings：200 且五个分区标题齐全（对齐 run.mjs E 项）
  *     T3 服务状态        GET /dsh-l2d/status.json → 200（对齐 guards.mjs 前置）
  *   M1 组（--m1-flag on 才生效；off 时整组 SKIP 不拉低 verdict）
@@ -24,8 +24,9 @@
  *     U3 口型红线回归       POST l2d_set_parameters / l2d_play_keyframes 带 ParamMouthOpenY → 400
  *                           reserved-param（拒绝类探测不产生状态变化）
  *     U4 未索引组拒绝       POST l2d_play_motion 未知组 → 400 unknown-motion-group
- *     U5 Hip pre 让位       POST l2d_posture（own:true, HipAngleX）→ 受理且无 wrong-phase，
- *                           get_state info.inj 的 pw=pre 计数上涨（依赖 m1-hip：--m1-hip 开真用例）
+ *     U5 Hip pre 让位       POST l2d_posture（own:true, torso.hip 三通道）→ 回执 applied 含 HipAngleX/Y/Z
+ *                           且 phase='pre'、owned 含三参数、无 wrong-phase、pw=pre 计数上涨、
+ *                           独占窗口内 HipAngleX 锁 Agent 值、释放后回物理（依赖 m1-hip：--m1-hip 开真用例）
  *     U6 gesture 仲裁       POST l2d_act keyframes 步 → 回执/事件含仲裁标记（依赖 m1-gesture：
  *                           --m1-gesture 开真用例；字段以交付为准，当前按占位契约断言）
  *   人工项（永远 SKIP 列出，供勾选）
@@ -199,14 +200,14 @@ async function baselineCases(origin) {
     record('T0 连通性', false, e.message, '自动化');
     return false;
   }
-  // T1 画像契约（GET，对齐 run.mjs F：W3 合入后 controls=56）
+  // T1 画像契约（GET，对齐 run.mjs F：M1-d1 合入后 controls=59 = 标准 23 + W3 36）
   const cap = await getJson(origin, `${origin}/dsh-l2d/capability.json`);
   const controls = cap.body && Array.isArray(cap.body.controls) ? cap.body.controls.length : -1;
   const modelId = cap.body && cap.body.modelId;
   record(
     'T1 画像契约',
-    cap.status === 200 && controls === 56 && !!modelId,
-    cap.status !== 200 ? `HTTP ${cap.status}` : `controls=${controls}（契约 56）· modelId=${modelId || '空'}`,
+    cap.status === 200 && controls === 59 && !!modelId,
+    cap.status !== 200 ? `HTTP ${cap.status}` : `controls=${controls}（契约 59）· modelId=${modelId || '空'}`,
     '自动化',
   );
   // T2 设置页（GET，对齐 run.mjs E）
@@ -347,29 +348,38 @@ async function caseUnknownGroup(origin) {
   );
 }
 
-/** U5 Hip pre 让位（依赖 m1-hip：PhysicsGate 接线后 pw=pre 计数上涨）。 */
+/** U5 Hip pre 让位（依赖 m1-hip：语义通道 → pre 相位写入 → PhysicsGate 让位 → 释放回物理）。 */
 async function caseHipPre(origin, ready) {
   if (!ready) {
     record('U5 Hip pre 让位', 'skip', 'm1-hip 未交付（交付后加 --m1-hip 跑真用例），占位', '自动化');
     return;
   }
-  // M1-b pre 通道的 Agent 入口 = 画像语义控制。当前画像 56 通道无任何控制映射 Hip*（真机实测），
-  // 动作面暂不可达 pre 相位——诚实 SKIP 并记录缺口，待 capability-scan 增补 torso.hip 控制后升级真用例。
-  const hipControl = await resolveControlForParam(origin, 'HipAngleX');
-  if (!hipControl) {
-    record(
-      'U5 Hip pre 让位',
-      'skip',
-      '已知缺口：画像无 Hip* 语义通道（torso.hip 未派生）——M1-b pre 通道暂无动作面入口，' +
-        'pre 相位仅渲染层 API（ownParameters(...,\'pre\')）可达；待画像增补后升级真用例',
-      '自动化',
-    );
-    return;
+  // M1-d1：torso.hip 三语义通道已入画像（标准 23 通道），Hip* pre 相位的动作面入口打通——
+  // l2d_posture 走 torso.hip 族 → pre 批 ownParameters(..., 'pre') → PhysicsGate 让位（INV-7）。
+  const TARGET = 0.5; // HipAngleX 的归一化目标值
+  const hipTargets = [
+    ['HipAngleZ', 0.6],
+    ['HipAngleY', -0.4],
+    ['HipAngleX', TARGET],
+  ];
+  const values = {};
+  for (const [param, value] of hipTargets) {
+    const controlId = await resolveControlForParam(origin, param);
+    if (!controlId) {
+      record(
+        'U5 Hip pre 让位',
+        'skip',
+        `画像无映射 ${param} 的语义通道（torso.hip 未派生或画像未重扫到 59 通道）——无法从动作面进 pre 相位`,
+        '自动化',
+      );
+      return;
+    }
+    values[controlId] = value;
   }
   const before = await getState(origin);
   const pw0 = before && parsePw(before.inj);
   const c = await call(origin, 'l2d_posture', {
-    values: { [hipControl]: 8 },
+    values,
     own: true,
     durationMs: HOLD_MS_REF.v,
     fadeMs: 200,
@@ -381,15 +391,45 @@ async function caseHipPre(origin, ready) {
   const r = await awaitResult(origin, c.body.id);
   const receipt = r.result || {};
   const wrongPhase = JSON.stringify(receipt).includes('wrong-phase');
-  await sleep(600);
-  const after = await getState(origin);
-  const pw1 = after && parsePw(after.inj);
+  // 回执断言：applied 含 HipAngleX/Y/Z 且 phase='pre'、owned 含三参数、无 skipped
+  const applied = Array.isArray(receipt.applied) ? receipt.applied : [];
+  const appliedOk = hipTargets.every(([param]) => applied.find((a) => a.id === param && a.phase === 'pre'));
+  const owned = Array.isArray(receipt.owned) ? receipt.owned : [];
+  const ownedOk = hipTargets.every(([param]) => owned.includes(param));
+  const skipped = [].concat(receipt.skipped || []);
+  if (skipped.length || !appliedOk || !ownedOk) {
+    record(
+      'U5 Hip pre 让位',
+      false,
+      `回执不符：skipped=${JSON.stringify(skipped)} · applied=${JSON.stringify(applied)} · owned=${owned.join(',')}`,
+      '自动化',
+    );
+    return;
+  }
+  // 独占窗口内采样：HipAngleX 应稳定在 Agent pre 值附近
+  await sleep(500);
+  const s1 = await getState(origin);
+  await sleep(500);
+  const s2 = await getState(origin);
+  const h1 = s1 && parsePv(s1.pv, 'HipAngleX');
+  const h2 = s2 && parsePv(s2.pv, 'HipAngleX');
+  const held = h1 != null && h2 != null && Math.abs(h1 - TARGET) <= 0.05 && Math.abs(h2 - TARGET) <= 0.05;
+  // 释放后回物理：durationMs 到期后 HipAngleX 偏离独占值
+  await sleep(HOLD_MS_REF.v + 1200);
+  const e1 = await getState(origin);
+  const pw1 = e1 && parsePw(e1.inj);
+  await sleep(700);
+  const e2 = await getState(origin);
+  const p1 = e1 && parsePv(e1.pv, 'HipAngleX');
+  const p2 = e2 && parsePv(e2.pv, 'HipAngleX');
+  const released = driftedFromHold(p1, TARGET) && driftedFromHold(p2, TARGET);
   const preGrew = pw0 && pw1 ? pw1[0] > pw0[0] : false;
   record(
     'U5 Hip pre 让位',
-    !wrongPhase && preGrew,
+    !wrongPhase && preGrew && held && released,
     `wrong-phase=${wrongPhase} · pw=${pw0 ? pw0.join('/') : '?'} → ${pw1 ? pw1.join('/') : '?'}` +
-      (preGrew ? '（pre 计数已上涨）' : ' → PhysicsGate 未接管 Hip* 写'),
+      ` · 独占窗口 HipAngleX=${h1}/${h2}（目标 ${TARGET}）· 释放后=${p1}/${p2}` +
+      (!wrongPhase && preGrew && held && released ? '（pre 让位 + 释放回物理）' : ' → 见明细'),
     '自动化',
   );
   try {

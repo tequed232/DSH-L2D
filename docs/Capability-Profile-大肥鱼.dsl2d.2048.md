@@ -2,13 +2,13 @@
 
 > 扫描器：`tools/capability-scan/scan.mjs`（数据全部来自模型文件，不靠命名推断）
 > 输入：`大肥鱼.dsl2d.2048.model3.json`、`大肥鱼.cdi3.json`
-> 契约版本：v3 · profileRevision：`r096ba86d2954`
+> 契约版本：v4 · profileRevision：`r096ba86d2954`
 
 ## 摘要
 
 - 参数 509 个，其中物理输出 292 个（物理持有，直写需 own）
 - 表情 21 个、动作文件 7 个（动作组 7 个）
-- 语义通道 56 个：supported 48 · approximate 4 · unsupported 4
+- 语义通道 59 个：supported 51 · approximate 4 · unsupported 4
 - 眨眼组 2 个参数；口型组 1 个参数（口型是红线，任何通道不得写）
 
 ## 语义通道
@@ -21,6 +21,9 @@
 | `torso.lean` | supported | LeanInput | 直写 | 0.95 |  |
 | `torso.sway` | supported | ParamBodyAngleX | 需 own | 0.8 | 该参数是物理输出，必须 own 后才能写 |
 | `torso.contraction` | approximate | ShoulderX+ShoulderZ | 需 own | 0.6 | 靠双肩内收近似「缩肩」，无独立躯干收缩参数 |
+| `torso.hip` | supported | HipAngleZ | 需 own | 0.8 | 该参数是物理输出，必须 own 后才能写 |
+| `torso.hip.forward` | supported | HipAngleY | 需 own | 0.8 | 该参数是物理输出，必须 own 后才能写 |
+| `torso.hip.twist` | supported | HipAngleX | 需 own | 0.8 | 该参数是物理输出，必须 own 后才能写 |
 | `gaze.x` | supported | ParamEyeBallX | 直写 | 0.95 |  |
 | `gaze.y` | supported | ParamEyeBallY | 直写 | 0.95 |  |
 | `arm.left.raise` | supported | LArm | 需 own | 0.8 | 该参数是物理输出，必须 own 后才能写 |
@@ -85,6 +88,9 @@
 
 - `torso.sway` → ParamBodyAngleX
 - `torso.contraction` → ShoulderZ
+- `torso.hip` → HipAngleZ
+- `torso.hip.forward` → HipAngleY
+- `torso.hip.twist` → HipAngleX
 - `arm.left.raise` → LArm
 - `arm.left.extend` → LForearm
 - `arm.left.inward` → LForearm, LWrist

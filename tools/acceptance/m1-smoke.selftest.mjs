@@ -19,17 +19,27 @@ import { runCases, parsePv, parsePw, driftedFromHold, resolveM1Flag } from './m1
 
 const TITLES = ['显示与布局', '角色与模型', '情绪与行为', '动画与性能', '开发者工具'];
 
-/** 生成 info.pv 串：RArm 独占期内恒为目标值，过期后物理漂移。 */
+/** 生成 info.pv 串：RArm 独占期内恒为目标值，过期后物理漂移；HipAngleX 同理（U5）。 */
 function makePv(state) {
   const now = Date.now();
   const rarm = now < state.holdUntil ? state.holdValue : 0.25 + 0.05 * (state.ticks % 4);
-  return `AngleX=0.100 RArm=${rarm.toFixed(3)} LArm=-0.100 chg=yes finished=false`;
+  const hip = now < state.hipUntil ? state.hipValue : 0.1 + 0.05 * (state.ticks % 3);
+  return `AngleX=0.100 RArm=${rarm.toFixed(3)} HipAngleX=${hip.toFixed(3)} LArm=-0.100 chg=yes finished=false`;
 }
 
 /** 生成 info.inj 串（pw=pre/post 计数）。 */
 function makeInj(state) {
   return `calls=9 writes=6 skip=0 sticky=0 locked=${state.holdUntil > Date.now() ? 1 : 0} owned=0 modes=2/3 pw=${state.pwPre}/${state.pwPost} seen=8/8 ne=8/8 dbg=0:post:set:RArm`;
 }
+
+/** mock 画像：U1/U5 依赖 sourceId 解析语义控制（M1-d1 契约 59 = 标准 23 + W3 36）。 */
+const MOCK_CONTROLS = [
+  { id: 'head.yaw', sourceId: 'AngleX' },
+  { id: 'arm.right.raise', sourceId: 'RArm' },
+  { id: 'torso.hip', sourceId: 'HipAngleZ' },
+  { id: 'torso.hip.forward', sourceId: 'HipAngleY' },
+  { id: 'torso.hip.twist', sourceId: 'HipAngleX' },
+];
 
 /**
  * 起 mock 宿主。profile.broken = 坏画像（controls=20、设置页缺标题），用于验证 FAIL 路径。
@@ -39,6 +49,8 @@ export function startMockHost(profile = {}) {
   const state = {
     holdUntil: 0,
     holdValue: 0.8,
+    hipUntil: 0,
+    hipValue: 0.5,
     pwPre: 2,
     pwPost: 5,
     ticks: 0,
@@ -60,8 +72,10 @@ export function startMockHost(profile = {}) {
       return send(200, { ready: true, result: entry.result, events: entry.events || [] });
     }
     if (req.method === 'GET' && url.pathname === '/dsh-l2d/capability.json') {
-      const n = profile.broken ? 20 : 56;
-      return send(200, { controls: Array.from({ length: n }, (_, i) => 'c' + i), modelId: 'mock-model' });
+      const n = profile.broken ? 20 : 59;
+      const named = profile.broken ? [] : MOCK_CONTROLS;
+      const filler = Array.from({ length: Math.max(0, n - named.length) }, (_, i) => ({ id: 'c' + i }));
+      return send(200, { controls: [...named, ...filler], modelId: 'mock-model' });
     }
     if (req.method === 'GET' && url.pathname === '/dsh-l2d/settings') {
       const titles = profile.broken ? TITLES.slice(0, 4) : TITLES;
@@ -105,13 +119,32 @@ export function startMockHost(profile = {}) {
         }
         if (name === 'l2d_posture') {
           const values = a.values || {};
-          if (values.HipAngleX !== undefined) {
-            // mock PhysicsGate：Hip* pre 通道接管 → pre 计数上涨
+          // M1-d1：torso.hip 语义通道 → Hip* pre 让位（mock PhysicsGate：pw pre 上涨、
+          // 独占窗口内 pv 锁 Agent 值、到期回物理），回执带 phase='pre' 的 applied/owned
+          const hipApplied = ['torso.hip', 'torso.hip.forward', 'torso.hip.twist']
+            .filter((ch) => values[ch] !== undefined)
+            .map((ch) => ({ id: MOCK_CONTROLS.find((c) => c.id === ch).sourceId, value: Number(values[ch]), channel: ch, phase: 'pre' }));
+          if (hipApplied.length) {
             state.pwPre++;
-            return finish({ ok: true, accepted: true, planNotes: ['hip-pre-gate'] });
+            const hipX = hipApplied.find((x) => x.id === 'HipAngleX');
+            if (hipX) {
+              state.hipValue = hipX.value;
+              state.hipUntil = Date.now() + Math.max(0, Number(a.durationMs) || 0);
+            }
+            return finish({
+              ok: true,
+              applied: hipApplied,
+              failed: [],
+              owned: hipApplied.map((x) => x.id),
+              skipped: [],
+              degraded: [],
+              durationMs: Number(a.durationMs) || 0,
+            });
           }
-          if (values.RArm !== undefined) {
-            state.holdValue = Number(values.RArm);
+          // U1：RArm（语义 id 或裸参数名均可）→ post 覆盖
+          const rarmValue = values.RArm !== undefined ? values.RArm : values['arm.right.raise'];
+          if (rarmValue !== undefined) {
+            state.holdValue = Number(rarmValue);
             state.holdUntil = Date.now() + Math.max(0, Number(a.durationMs) || 0);
             return finish({ ok: true, accepted: true });
           }
@@ -268,7 +301,7 @@ export async function selftest() {  const fails = [];
     selftestStart();
     const s6 = await runCases({ origin: m6.origin, allowWrite: false, m1Flag: 'off' });
     selftestStop();
-    check('T1 FAIL（controls=20 ≠ 契约 56）', s6.results.find((r) => r.name === 'T1 画像契约')?.verdict === false);
+    check('T1 FAIL（controls=20 ≠ 契约 59）', s6.results.find((r) => r.name === 'T1 画像契约')?.verdict === false);
     check('T2 FAIL（缺分区标题）', s6.results.find((r) => r.name === 'T2 设置页')?.verdict === false);
     check('failed 计数 > 0（exit 1 路径）', s6.failed >= 2);
   } finally {
