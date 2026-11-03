@@ -31,11 +31,13 @@
       var cursor = null; // 主进程送来的窗口内光标坐标；null = 窗外
       var lastSentHit = null;
 
-      // 与 overlay.js 的 renderScale 同语义：2~4× 超采样（画布单边/总像素护栏在渲染包内钳制）。
+      // 与 overlay.js 的 renderScale 同语义：2~3× 超采样（画布单边/总像素护栏在渲染包内钳制）。
       // 两窗清晰度统一——独立窗若回退 devicePixelRatio（150% 屏只有 1.5×）会比页内糊。
+      // 隐藏/最小化时降到 1× 省电（pet 窗 focusable:false，不按焦点判，只看可见性）。
       function renderScale() {
         var dpr = Number(window.devicePixelRatio) || 1;
-        return Math.min(4, Math.max(2, Math.round(dpr * 100) / 100));
+        if (document.hidden === true) return 1;
+        return Math.min(3, Math.max(2, Math.round(dpr * 100) / 100));
       }
 
       function fit() {
@@ -48,6 +50,7 @@
         }
       }
       window.addEventListener('resize', fit);
+      document.addEventListener('visibilitychange', fit); // 隐藏/恢复时按新倍率重排
 
       function ensureGl() {
         if (gl) return gl;

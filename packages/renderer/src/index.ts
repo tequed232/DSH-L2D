@@ -512,10 +512,12 @@ export function markActive(): void {
   if (!paused) targetFps = 60;
 }
 
-/** 当前应使用的帧率：前台恒定 60；失焦降载，隐藏由可见性守卫暂停 */
+/** 当前应使用的帧率：前台恒定 60；失焦降载 30；最近有交互保持 60 */
 function computeFps(_now: number): number {
   if (kfActive) return 60;
-  if (!windowFocused) return 15;
+  // 交互后 2.5s 内保持满帧：鼠标进窗/切回前台立刻顺滑，不用等降载窗口回升
+  if (performance.now() - lastActiveAt < 2500) return 60;
+  if (!windowFocused) return 30; // 失焦降载 30fps（原 15fps 实测只有 9.5，观感卡）
   return 60;
 }
 
@@ -543,7 +545,8 @@ function tick(): void {
 
   try {
     sub.update();
-    sampleHitProbe(); // readPixels 必须紧跟本帧渲染（同一任务），否则恒为 0
+    // 命中采样改为事件驱动 + 10Hz 节流（readPixels 是 GPU→CPU 同步，不能每帧做）
+    maybeSampleHitProbe(now);
     frames++;
     // 首帧的部件可见性/不透明度可能还没稳定，包围盒会偏。跑几帧后重排一次。
     if (refitLeft > 0) {
@@ -595,6 +598,7 @@ function installSchedulingGuards(): void {
       pausedByVisibility = false;
       paused = false;
       lastTickAt = 0; // 立即补一帧，避免恢复时画面停住
+      markActive(); // 回前台立即满帧（不等降载窗口回升）
     }
   });
 
@@ -605,6 +609,8 @@ function installSchedulingGuards(): void {
     windowFocused = true;
     markActive();
   });
+  // 鼠标进入窗口即视为活跃：失焦降载期间移进窗口也立刻回满帧
+  window.addEventListener('pointerenter', markActive, { passive: true });
   // 任何指针活动都算交互，避免「只是在角色上移一下」就掉到低帧
   window.addEventListener('pointerdown', markActive, { passive: true });
   window.addEventListener('wheel', markActive, { passive: true });
@@ -1462,14 +1468,36 @@ const hitProbe = {
   sampledX: 0,
   sampledY: 0,
   hasSample: false,
+  /** pointerdown 强制下一帧采样（点击判定要新鲜）；hover 走 100ms 节流 */
+  force: false,
+  lastAt: 0,
   buf: null as Uint8Array | null,
 };
 
-/** 设置命中探针（客户端坐标）；每帧渲染后自动采样该点 alpha */
+/** 设置命中探针（客户端坐标）；采样节流/强制见 maybeSampleHitProbe */
 export function setHitProbe(clientX: number, clientY: number): void {
   hitProbe.x = clientX;
   hitProbe.y = clientY;
   hitProbe.on = true;
+}
+
+/** 请求下一帧强制采样一次（点击/拖拽起手时用，保证判定用的是点击点附近的 alpha） */
+export function requestHitSample(): void {
+  hitProbe.force = true;
+}
+
+/**
+ * 命中采样调度（必须紧跟本帧渲染，否则 drawingBuffer 内容未定义）。
+ * hover 最多 10Hz；pointerdown 强制一次；窗口失焦/隐藏时完全跳过——
+ * readPixels 是同步 GPU→CPU 往返，之前每帧 60 次是全场景卡顿的主因。
+ */
+function maybeSampleHitProbe(now: number): void {
+  if (!hitProbe.on) return;
+  if (!hitProbe.force && now - hitProbe.lastAt < 100) return;
+  if (!windowFocused || pausedByVisibility) return;
+  hitProbe.force = false;
+  hitProbe.lastAt = now;
+  sampleHitProbe();
 }
 
 /**
@@ -1999,6 +2027,7 @@ const api = {
   clearGaze,
   setHitProbe,
   hitTestAt,
+  requestHitSample,
   hitTestBox,
   setMediaSway,
   setStageBusy,
