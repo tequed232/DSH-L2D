@@ -204,3 +204,37 @@ export type {
   SharedDecision,
   SharedRejectReason,
 } from './shared-arbitration.ts';
+
+// ---------------------------------------------------------------- M1-e 连续动作 Mixer
+// Idle/Ambient/Media 三类连续动作统一收敛：lane 秩仲裁、agent hold 挂起/恢复、
+// 抖动幂等（refresh/update 不重启）、冷却窗口、到期清理（INV-5 同语义）。
+// 输出的写声明由消费方降级为 source 'continuous'/'ambient'（INV-6 秩 1）的 WriteIntent
+// 喂 resolveWritePlan——连续层永不直接写模型参数，也不触碰 PhysicsGate 让位表。
+// feature flag：enabled 缺省 M1E_DEFAULT_ENABLED（false = M1-b 集成后基线，回滚要求）。
+export {
+  M1E_DEFAULT_ENABLED,
+  M1E_MAX_RELEASED_TRACKED,
+  CONTINUOUS_LANES,
+  CONTINUOUS_PRIORITY,
+  CONTINUOUS_LANE_RANK,
+  emptyContinuous,
+  submitContinuous,
+  setContinuousAgentHold,
+  tickContinuous,
+  releaseContinuous,
+  resolveContinuous,
+} from './continuous-action.ts';
+export type {
+  ContinuousAgentHold,
+  ContinuousDecision,
+  ContinuousEntry,
+  ContinuousLane,
+  ContinuousReleaseResult,
+  ContinuousReleaseSelector,
+  ContinuousRejectReason,
+  ContinuousResolution,
+  ContinuousState,
+  ContinuousSubmitRequest,
+  ContinuousSubmitResult,
+  ContinuousTickResult,
+} from './continuous-action.ts';
