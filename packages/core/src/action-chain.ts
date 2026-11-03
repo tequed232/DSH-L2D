@@ -300,7 +300,14 @@ export class ActGate {
     }
 
     const events: ActionDoneEvent[] = [];
-    if (current) events.push(doneEvent(current, 'interrupted', 'preempted'));
+    if (current) {
+      // 被抢占也是正常结束路径：此前已经发生的降级/超时事实必须留在回执里，
+      // 否则「并行组降级」这类 notes 会因为一条 ambient 链插队而凭空消失。
+      const pending = this.motionSkips && this.motionSkips.runId === current.runId
+        ? this.motionSkips.notes.slice()
+        : undefined;
+      events.push(doneEvent(current, 'interrupted', 'preempted', pending));
+    }
     this.motionFail = null;
     this.motionSkips = null;
 
@@ -339,9 +346,13 @@ export class ActGate {
   release(runId?: number, reason = 'released'): ActionDoneEvent | null {
     if (!this.active) return null;
     if (runId != null && this.active.runId !== runId) return null;
+    // 与 admit 的抢占路径同口径：结束原因不影响已发生的降级事实。
+    const pending = this.motionSkips && this.motionSkips.runId === this.active.runId
+      ? this.motionSkips.notes.slice()
+      : undefined;
     this.motionFail = null;
     this.motionSkips = null;
-    const event = doneEvent(this.active, 'interrupted', reason);
+    const event = doneEvent(this.active, 'interrupted', reason, pending);
     this.active = null;
     return event;
   }

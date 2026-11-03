@@ -207,6 +207,30 @@ test('只有被拒或被吞才写 reason，already-open 放 notes', () => {
   assert.equal(swallowed?.notes, undefined);
 });
 
+test('被抢占时已发生的降级 notes 不能丢', () => {
+  const gate = new ActGate();
+  const bg = gate.admit({ priority: 'BACKGROUND', source: 'ai', callId: 11, steps: 2 });
+  gate.noteMotion(bg.runId || 0, 'parallel-overlap-downgraded:acc', 'skip');
+  // 环境层插一条更高优先级的链，把它顶掉
+  const ambient = gate.admit({ priority: 'NORMAL', source: 'ambient', callId: 12, steps: 1 });
+  assert.equal(ambient.accepted, true);
+  const interrupted = ambient.events.find((e) => e.phase === 'interrupted');
+  assert.ok(interrupted, '抢占必须产生 interrupted 回执');
+  assert.equal(interrupted?.runId, bg.runId);
+  assert.equal(interrupted?.reason, 'preempted');
+  assert.deepEqual(interrupted?.notes, ['parallel-overlap-downgraded:acc'], '降级事实不能因为被抢占而消失');
+  assert.equal(gate.finish(bg.runId || 0), null, '旧 runId 的 finish 应被判为过期');
+});
+
+test('release 同样保留已发生的 notes', () => {
+  const gate = new ActGate();
+  const run = gate.admit({ priority: 'NORMAL', source: 'ai', callId: 13, steps: 2 });
+  gate.noteMotion(run.runId || 0, 'group-timeout:acc', 'skip');
+  const ev = gate.release(run.runId || 0, 'yandere-exit');
+  assert.equal(ev?.phase, 'interrupted');
+  assert.deepEqual(ev?.notes, ['group-timeout:acc']);
+});
+
 test('只有邪神自己那条槽被抢走时才要收视觉层', () => {
   const held = { on: true, runId: 4 };
   assert.equal(preemptedYandere({ source: 'yandere', runId: 4 }, held), true);

@@ -2038,12 +2038,22 @@ export function getInfo(): Record<string, number | string> | null {
   };
 }
 
+/**
+ * 动作链执行计划（并行组 / 整组超时 / 冲突降级）。
+ *
+ * 必须是**具名导出**：打包成 UMD 后，页面上的 window.DSH_L2D 拿到的是模块命名空间，
+ * 只挂在 default 的 api 对象上的方法读不到——并行组/整组超时因此在浏览器里从未生效过
+ * （node 测试直接 import 源码，所以一直是绿的）。
+ */
+export const normalizeActPlan = (chain: Parameters<typeof normalizeActChain>[0]) =>
+  normalizeActChain(chain);
+
 const api = {
   loadCore,
   mount,
   layout,
   // 动作链执行计划（并行组 / 整组超时 / 冲突降级）：纯函数，overlay 按桶投放
-  normalizeActPlan: (chain: Parameters<typeof normalizeActChain>[0]) => normalizeActChain(chain),
+  normalizeActPlan,
   // 控制
   setParameter,
   setParameters,

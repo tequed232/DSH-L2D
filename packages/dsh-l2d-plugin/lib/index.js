@@ -63,13 +63,31 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
 };
 
-const injectRowText =
-  '(function(){try{' +
-  'var d=document.body||document.documentElement;if(!d)return;' +
-  'if(document.querySelector("script[data-dsh-l2d]"))return;' +
-  'var s=document.createElement("script");s.src="/dsh-l2d/overlay.js";s.async=true;' +
-  's.setAttribute("data-dsh-l2d","1");s.onerror=function(){};d.appendChild(s)' +
-  '}catch(e){}})()';
+/**
+ * 注入行的脚本地址带版本参数。
+ * 没有版本号时浏览器会复用旧 overlay.js：改完代码刷新页面，跑的仍是上一次的逻辑，
+ * 表现为「服务端 md5 已经是新文件，页面行为却没变」——排查成本极高。
+ * 版本取 overlay.js 的 mtime，改文件即换 URL。
+ */
+function overlayBuildTag() {
+  try {
+    return String(Math.floor(fs.statSync(OVERLAY_FILE).mtimeMs));
+  } catch {
+    return String(Date.now());
+  }
+}
+
+function injectRowText() {
+  const src = '/dsh-l2d/overlay.js?v=' + overlayBuildTag();
+  return (
+    '(function(){try{' +
+    'var d=document.body||document.documentElement;if(!d)return;' +
+    'if(document.querySelector("script[data-dsh-l2d]"))return;' +
+    'var s=document.createElement("script");s.src=' + JSON.stringify(src) + ';s.async=true;' +
+    's.setAttribute("data-dsh-l2d","1");s.onerror=function(){};d.appendChild(s)' +
+    '}catch(e){}})()'
+  );
+}
 
 export const name = 'dsh-l2d';
 
@@ -810,7 +828,7 @@ export function apply(root, config = {}) {
             if (row.text.indexOf('/dsh-l2d/overlay.js') >= 0) return; // 已推过，不重复
           }
         }
-        table.push({ kind: 'script', placement: 'body', text: injectRowText });
+        table.push({ kind: 'script', placement: 'body', text: injectRowText() });
       } catch {
         /* 注入表异常不应影响宿主启动 */
       }
@@ -1099,6 +1117,7 @@ export function apply(root, config = {}) {
     });
 
     route('/dsh-l2d/status.json', (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       const avatar = AVATAR_CANDIDATES.find((p) => fs.existsSync(p)) || null;
       const body = JSON.stringify({
@@ -1106,7 +1125,15 @@ export function apply(root, config = {}) {
         modelDir: MODEL_DIR,
         avatarFound: !!avatar,
         avatar: avatar ? path.basename(avatar) : null,
-        note: '当前为静态立绘预览；接入 Cubism Core 后替换为真实模型渲染',
+        // 运行时资源就位情况：之前这里写死了一句「静态立绘预览」，Cubism 接入后已失真。
+        renderer: fs.existsSync(RENDERER_FILE),
+        core: fs.existsSync(CORE_FILE),
+        // find() 找不到时是 undefined，JSON.stringify 会整键丢掉；显式落成 null。
+        model:
+          ['大肥鱼.dsl2d.2048.model3.json', '大肥鱼.dsl2d.model3.json'].find((f) =>
+            fs.existsSync(path.join(MODEL_DIR, f)),
+          ) || null,
+        note: 'Cubism 5 Web SDK 运行时：渲染包 /dsh-l2d/renderer.js，Core /dsh-l2d/core.js，模型前缀 /dsh-l2d/model/',
       });
       sendBuffer(res, 200, MIME['.json'], Buffer.from(body, 'utf8'));
     });

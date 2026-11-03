@@ -15,6 +15,16 @@
   'use strict';
 
   if (window.__DSH_L2D_OVERLAY__) return;
+
+  // 注入 URL 上的 v= 是构建标记：资源地址统一带上它，避免刷新后复用旧脚本。
+  var __bootTag = (function () {
+    try {
+      var src = (document.currentScript && document.currentScript.src) || '';
+      var m = src.match(/[?&]v=([^&]+)/);
+      return m ? m[1] : '';
+    } catch (e) { return ''; }
+  })();
+  function versioned(p) { return __bootTag ? p + (p.indexOf('?') >= 0 ? '&' : '?') + 'v=' + __bootTag : p; }
   window.__DSH_L2D_OVERLAY__ = true;
 
   // 说明：App 壳（dsh-app://）注入时 readyState 已是 complete，bootOverlay 会走
@@ -1500,13 +1510,13 @@
     };
   }
 
-  function acceptedAct(admission, steps) {
+  function acceptedAct(admission, steps, plan) {
     var own = [];
     var evs = admission && admission.events ? admission.events : [];
     for (var i = 0; i < evs.length; i++) {
       if (evs[i] && evs[i].runId === admission.runId) own.push(evs[i]);
     }
-    return {
+    var out = {
       ok: true,
       accepted: true,
       settled: false,
@@ -1517,6 +1527,14 @@
       source: admission.source || '',
       events: own,
     };
+    // 计划层诊断：降级/超时这类事实只能在回执里自证，没有这两个字段就无法区分
+    // 「计划没产出 notes」和「notes 没送到」，排查会一直靠猜。
+    out.planSource = plan && plan.buckets && plan.buckets.length ? 'plan' : 'serial';
+    if (plan && Array.isArray(plan.notes)) {
+      out.planBuckets = plan.buckets ? plan.buckets.length : 0;
+      out.planNotes = plan.notes.slice();
+    }
+    return out;
   }
 
   var SAFE_MOTION_PARAM = /^(?:Angle[XYZ]bs?|Position[XYZ]|LeanInput|ParamEyeBall[XY]|ParamEyeLOpen|ParamEyeROpen|ParamEyeSmile[LR]?|ParamMouthOpenY|ParamMouthForm|ParamCheek|ParamBreath|Movement[123])$/i;
@@ -1713,21 +1731,24 @@
     if (L.setStageBusy) L.setStageBusy({ acting: false });
   }
 
-  // 按执行计划投放：同桶步骤在同一 tick 内依次调用（并行是「同帧投放」，不是多线程）。
+  // 按执行计划投放：桶内每步按自己的 atMs 投放（降级成串行后 atMs 已被拉开），
+  // 不能整桶同一 tick 连发——那样降级只是改了记账，观感上仍是并行。
   // 计划由渲染包的 normalizeActPlan 生成（core/src/chain-normalize.ts），老包没有时退回串行。
   function playActPlan(plan, runId, source, skipMotions) {
     var buckets = (plan && plan.buckets) || [];
     for (var b = 0; b < buckets.length; b++) {
       (function (bucket) {
-        var runBucket = function () {
-          for (var i = 0; i < bucket.steps.length; i++) {
-            runActStep(bucket.steps[i].step, runId, source, skipMotions);
-          }
-        };
-        if (!(bucket.atMs > 0)) {
-          runBucket();
-        } else {
-          pokeTimers.push(setTimeout(runBucket, bucket.atMs));
+        for (var i = 0; i < bucket.steps.length; i++) {
+          (function (node) {
+            var at = Math.max(0, Number(node.atMs) || 0);
+            if (at <= 0) {
+              runActStep(node.step, runId, source, skipMotions);
+            } else {
+              pokeTimers.push(setTimeout(function () {
+                runActStep(node.step, runId, source, skipMotions);
+              }, at));
+            }
+          })(bucket.steps[i]);
         }
         if (bucket.timeoutMs > 0) {
           pokeTimers.push(setTimeout(function () {
@@ -1738,23 +1759,25 @@
     }
   }
 
-  function playActSteps(chain, runId, source, skipMotions) {
+  function playActSteps(chain, runId, source, skipMotions, plan) {
     var L = window.DSH_L2D;
-    if (L && L.normalizeActPlan) {
-      var plan = null;
+    // 计划由调用方一次算好并传进来（同一份对象既算寿命又记 notes），
+    // 老调用方没传时才就地补算，保证「寿命」与「降级事实」永远来自同一份计划。
+    var usePlan = plan || null;
+    if (!usePlan && L && L.normalizeActPlan) {
       try {
-        plan = L.normalizeActPlan(chain);
+        usePlan = L.normalizeActPlan(chain);
       } catch (err) {
-        plan = null;
+        usePlan = null;
       }
-      if (plan && plan.buckets && plan.buckets.length) {
-        // 降级/超时这类「计划层」信息进 notes（kind=skip 不算失败），回执里能看见
-        if (plan.notes && L.noteActMotion) {
-          for (var n = 0; n < plan.notes.length; n++) L.noteActMotion(runId, plan.notes[n], 'skip');
-        }
-        playActPlan(plan, runId, source, skipMotions);
-        return;
+    }
+    if (usePlan && usePlan.buckets && usePlan.buckets.length) {
+      // 降级/超时这类「计划层」信息进 notes（kind=skip 不算失败），回执里能看见
+      if (usePlan.notes && L.noteActMotion) {
+        for (var n = 0; n < usePlan.notes.length; n++) L.noteActMotion(runId, usePlan.notes[n], 'skip');
       }
+      playActPlan(usePlan, runId, source, skipMotions);
+      return;
     }
     var elapsed = 0;
     for (var i = 0; i < chain.length; i++) {
@@ -1801,7 +1824,7 @@
     return ev;
   }
 
-  function playbackAct(chain, runId, source, holdOnly) {
+  function playbackAct(chain, runId, source, holdOnly, plan) {
     var flush = closesToFlush(chain);
     var motions = chainMotionPlan(chain);
     pendingCloses = [];
@@ -1810,11 +1833,11 @@
     // 另一只手的关闭不能和新动作同时发，否则状态机把后一个吞掉。先播新动作，等它返回再收。
     if (flush.length && motions.length) {
       playSerial(motions, flush, runId, source);
-      playActSteps(chain, runId, source, true);
+      playActSteps(chain, runId, source, true, plan);
       return;
     }
     if (flush.length) playSerial([], flush, runId, source);
-    playActSteps(chain, runId, source, false);
+    playActSteps(chain, runId, source, false, plan);
   }
 
   function executePokeAction(action) {
@@ -1831,7 +1854,18 @@
       priority = built.template.priority;
     }
     var source = action.source || (built.template ? built.template.id : 'act');
-    var life = plannedLifeMs(chain, action.holdMs);
+    // 寿命单一来源：计划里有 lifeMs 就用计划的（它把同桶重叠、整组超时都算进去了）；
+    // 只有在老包没有 normalizeActPlan 时才退回本地估算，避免两套算法分叉，
+    // 出现「计划还没走完，armActEnd 先把槽放掉」。
+    var planForLife = null;
+    if (L.normalizeActPlan) {
+      try {
+        planForLife = L.normalizeActPlan(chain);
+      } catch (err) {
+        planForLife = null;
+      }
+    }
+    var life = planForLife && planForLife.lifeMs > 0 ? planForLife.lifeMs : plannedLifeMs(chain, action.holdMs);
 
     if (!L.admitAct || !L.currentAct || !L.finishAct) {
       legacyGen += 1;
@@ -1861,13 +1895,13 @@
     });
     if (!admission || !admission.accepted) return blockedAct(admission);
     preemptYandereIfNeeded(admission);
-    playbackAct(chain, admission.runId, source, !!action.holdOnly);
+    playbackAct(chain, admission.runId, source, !!action.holdOnly, planForLife);
     emitActEvents(admission.events);
     // 先挂上结束回执，避免步骤里抛错后槽位一直占着。
     armActEnd(admission.runId, life);
     if (action.bubble) say(action.bubble, 3200);
     else if (!action.silent) say('戳戳~', 2200);
-    return acceptedAct(admission, action.holdOnly ? 0 : chain.length);
+    return acceptedAct(admission, action.holdOnly ? 0 : chain.length, planForLife);
   }
 
   function pokeRandom() {
@@ -2186,10 +2220,10 @@
 
   function initRenderer() {
     if (rendererReady || rendererFailed) return;
-    loadScriptOnce('dsh-l2d-core', '/dsh-l2d/core.js')
+    loadScriptOnce('dsh-l2d-core', versioned('/dsh-l2d/core.js'))
       .then(function () {
         if (!window.Live2DCubismCore) throw new Error('Core 未挂载');
-        return loadScriptOnce('dsh-l2d-renderer', '/dsh-l2d/renderer.js');
+        return loadScriptOnce('dsh-l2d-renderer', versioned('/dsh-l2d/renderer.js'));
       })
       .then(nextFrame)
       .then(function () {
@@ -3721,6 +3755,20 @@
             return {
               ok: true,
               ready: !!(L.isReady && L.isReady()),
+              // 自检：计划层能力 + 注入版本，用来区分「页面跑旧脚本」与「逻辑真没生效」。
+              diag: {
+                bootTag: __bootTag || '',
+                hasPlan: typeof L.normalizeActPlan,
+                hasNote: typeof L.noteActMotion,
+                rendererEl: (document.getElementById('dsh-l2d-renderer') || {}).src || '',
+                winHasPlan: (typeof window !== 'undefined' && window.DSH_L2D) ? typeof window.DSH_L2D.normalizeActPlan : 'no-win-api',
+                sameRef: !!(typeof window !== 'undefined' && window.DSH_L2D === L),
+                planKeys: (typeof window !== 'undefined' && window.DSH_L2D) ? Object.keys(window.DSH_L2D).filter(function (k) { return /plan|normal/i.test(k); }).join(',') : '',
+                scripts: Array.prototype.map.call(document.querySelectorAll('script[src*="dsh-l2d/renderer"]'), function (x) { return x.src; }).join(' | '),
+                guarded: !!window.__DSH_L2D_GUARD__,
+                keyCount: Object.keys(window.DSH_L2D || {}).length,
+                keys: Object.keys(window.DSH_L2D || {}).join(','),
+              },
               info: L.getInfo ? L.getInfo() : null,
               emotion: L.getEmotionState ? L.getEmotionState() : null,
               pose: L.getPose ? L.getPose() : null,

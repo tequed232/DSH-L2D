@@ -44,11 +44,27 @@ async function forward(name, args, timeoutMs, mode) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name, args: args || {} }),
     });
-    queued = await res.json();
-    if (!res.ok || !queued || queued.ok === false) {
+    // 守卫拒绝的 4xx 是 text/plain（如 "reserved-param: ParamMouthOpenY"），
+    // 先 res.json() 会抛 SyntaxError 掉进 catch，被误报成 unreachable 并清掉缓存地址。
+    // 正确顺序：先读文本 → 尽力解析 → 再看状态码。
+    const text = await res.text();
+    try {
+      queued = text ? JSON.parse(text) : null;
+    } catch {
+      queued = { ok: false, reason: text.slice(0, 200) || 'call-rejected' };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        reason: (queued && (queued.reason || queued.error)) || 'call-rejected',
+        status: res.status,
+      };
+    }
+    if (!queued || queued.ok === false) {
       return { ok: false, reason: (queued && (queued.reason || queued.error)) || 'call-rejected' };
     }
   } catch (err) {
+    // 只有网络层失败才清缓存地址
     cachedBase = '';
     return { ok: false, reason: 'unreachable' };
   }
