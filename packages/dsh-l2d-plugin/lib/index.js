@@ -919,6 +919,7 @@ export function apply(root, config = {}) {
     const aiInbox = createAiInbox();
     // Workspace Action Protocol：requestId↔callId 关联 + 上下文注入 + 状态同步。
     // 复用 aiInbox（通信）、buildRuntimeSnapshot（上下文）、guardAiCall（权限），不新建通信层。
+    const recentActionRequests = [];
     const workspaceActions = createWorkspaceActionChannel({
       aiInbox,
       guardAiCall,
@@ -1048,12 +1049,32 @@ export function apply(root, config = {}) {
           return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
         }
         const resp = workspaceActions.submit(request);
+        // 最近动作环形缓冲（设置页"当前动作"面板的数据源）
+        if (request && request.requestId) {
+          recentActionRequests.push({ requestId: request.requestId, at: Date.now() });
+          while (recentActionRequests.length > 20) recentActionRequests.shift();
+        }
         // 终态反馈推给页面（气泡展示简短摘要，不展示原始 JSON）
         if (resp.status === 'completed' || resp.status === 'failed' || resp.status === 'rejected') {
           try { reverseLog.record('workspace.action.result', { requestId: resp.requestId, status: resp.status, summary: resp.summary }); } catch { /* 反向桥不可用不致命 */ }
         }
         sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(resp), 'utf8'));
       });
+    });
+
+    // 最近动作列表（终态信封 + 进行中占位），设置页"当前动作"面板消费
+    route('/dsh-l2d/agent/action/recent', (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const items = recentActionRequests
+        .slice()
+        .reverse()
+        .map((r) => {
+          const env = workspaceActions.result(r.requestId);
+          return env ? { requestId: r.requestId, at: r.at, status: env.status, summary: env.summary, action: env.action } : null;
+        })
+        .filter(Boolean);
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, items }), 'utf8'));
     });
 
     route('/dsh-l2d/agent/action/result', (req, res) => {
