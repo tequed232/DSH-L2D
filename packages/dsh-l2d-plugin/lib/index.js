@@ -404,6 +404,7 @@ const SETTINGS_DEFAULT = {
   petWindow: 'off',
   reverseEnabled: true,
   petMode: true,
+  debugPreview: false,
 };
 
 function readSettings() {
@@ -464,6 +465,7 @@ function writeSettings(patch) {
   next.petWindow = next.petWindow === 'only' ? 'only' : 'off';
   next.reverseEnabled = next.reverseEnabled !== false;
   next.petMode = next.petMode !== false; // 默认开：桌宠模式是正式行为，只有显式 false 才关
+  next.debugPreview = next.debugPreview === true; // 调试预览默认关，只有显式 true 才开
   try {
     fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf8');
@@ -1457,6 +1459,7 @@ export function apply(root, config = {}) {
             petWindow: saved.petWindow === 'only' ? 'only' : 'off',
             reverseEnabled: saved.reverseEnabled !== false,
             petMode: saved.petMode !== false,
+            debugPreview: saved.debugPreview === true,
             hasApiKey: !!String(saved.apiKey || '').trim(),
           };
           sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(view), 'utf8'));
@@ -1482,6 +1485,7 @@ export function apply(root, config = {}) {
         petWindow: st.petWindow === 'only' ? 'only' : 'off',
         reverseEnabled: st.reverseEnabled !== false,
         petMode: st.petMode !== false,
+        debugPreview: st.debugPreview === true,
         hasApiKey: !!String(st.apiKey || '').trim(),
       };
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(view), 'utf8'));

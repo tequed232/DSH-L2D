@@ -64,13 +64,20 @@
     <div id="stage"><canvas id="cv"></canvas></div>
 
     <script>
-      // —— HUD：双实例防御 + 折叠/展开开关 ——
+      // —— HUD：三态（hidden / collapsed / expanded）+ 双实例防御 ——
+      // hidden：完全不渲染 HUD DOM（连标题条都没有）；collapsed：单行标题条；expanded：完整信息。
+      var hudRoot;
       var hudBar;
       var hudBody;
-      (function ensureHud() {
+      var hudState = 'hidden';
+      var forceOpen = new URLSearchParams(location.search).get('hud') === 'open';
+      var debugPreview = false;
+
+      function ensureHud() {
         var root = document.getElementById('l2d-test-hud');
         if (root) {
           // 已存在则不重复创建，复用现有实例
+          hudRoot = root;
           hudBar = root.querySelector('.hud-bar');
           hudBody = root.querySelector('.hud-body');
           return;
@@ -84,23 +91,58 @@
         root.appendChild(hudBar);
         root.appendChild(hudBody);
         document.body.appendChild(root);
-      })();
+        hudRoot = root;
+        hudBar.addEventListener('click', function () {
+          // collapsed ↔ expanded 切换（hidden 下没有标题条，不会触发）
+          setHudState(hudBody.style.display === 'none' ? 'expanded' : 'collapsed');
+        });
+      }
 
-      function setHudOpen(open) {
-        hudBody.style.display = open ? '' : 'none';
-        hudBar.textContent = open ? '参数监视台 ▾' : '参数监视台 ▸';
+      function setHudState(state) {
+        if (state === 'hidden') {
+          // hidden：把 HUD 从 DOM 里整个摘掉
+          if (hudRoot && hudRoot.parentNode) hudRoot.parentNode.removeChild(hudRoot);
+          hudState = 'hidden';
+          return;
+        }
+        hudState = state;
+        ensureHud();
+        hudBody.style.display = state === 'expanded' ? '' : 'none';
+        hudBar.textContent = state === 'expanded' ? '参数监视台 ▾' : '参数监视台 ▸';
       }
-      if (!document.getElementById('l2d-test-hud').dataset.init) {
-        // 默认折叠；?hud=open 直展开（兼容旧书签）
-        document.getElementById('l2d-test-hud').dataset.init = '1';
-        setHudOpen(new URLSearchParams(location.search).get('hud') === 'open');
+
+      // 启动先按 fail-closed 渲染（hidden），settings 读取成功后再校正；
+      // ?hud=open 是调试后门：无视开关强制 expanded，且不跟随设置联动。
+      setHudState(forceOpen ? 'expanded' : 'hidden');
+
+      function readDebugPreview(onOk) {
+        fetch('/dsh-l2d/settings.json', { cache: 'no-store' })
+          .then(function (res) { return res.ok ? res.json() : null; })
+          .then(function (s) { onOk(!!(s && s.debugPreview === true)); })
+          .catch(function () { /* 读取失败静默沿用上次值 */ });
       }
-      hudBar.addEventListener('click', function () {
-        setHudOpen(hudBody.style.display === 'none');
-      });
+
+      if (forceOpen) {
+        // 调试后门生效，不读开关
+      } else {
+        readDebugPreview(function (want) {
+          debugPreview = want;
+          setHudState(want ? 'collapsed' : 'hidden');
+        });
+      }
+
+      // 设置联动轮询：每 ~2s 查一次 settings；设置页关掉开关后运行中的页面回到 hidden
+      setInterval(function () {
+        if (forceOpen) return;
+        readDebugPreview(function (want) {
+          if (want === debugPreview) return;
+          debugPreview = want;
+          setHudState(want ? 'collapsed' : 'hidden');
+        });
+      }, 2000);
 
       function log(text, cls) {
-        hudBody.innerHTML = '<span class="' + (cls || '') + '">' + text + '</span>';
+        if (hudBody) hudBody.innerHTML = '<span class="' + (cls || '') + '">' + text + '</span>';
         console.log('[l2d-test] ' + text);
       }
       window.addEventListener('error', function (e) {
@@ -148,6 +190,7 @@
           var info = window.DSH_L2D.getInfo ? window.DSH_L2D.getInfo() : null;
           var head = '模型已就绪（' + cost + 'ms）\n分辨率 ' + w + '×' + h + '\nCore: OK';
           var render = function () {
+            if (hudState === 'hidden' || !hudBody) return; // hidden：不刷 DOM， getInfo 数据链不受影响
             var i2 = window.DSH_L2D.getInfo ? window.DSH_L2D.getInfo() : null;
             var lines = [head];
             if (i2) Object.keys(i2).forEach(function (k) { lines.push(k + ': ' + i2[k]); });

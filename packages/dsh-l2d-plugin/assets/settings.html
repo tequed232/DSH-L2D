@@ -675,6 +675,7 @@
         <div class="sec-head"><span class="sec-no">05</span><h2>开发者工具</h2></div>
         <p class="sec-desc">诊断信息与不常用的重活。</p>
         <div class="kv" id="devInfo"></div>
+        <div class="rows" id="rows-dev"></div>
         <div class="dev-actions">
           <a href="/dsh-l2d/test.html">参数监视台</a>
           <button class="btn" type="button" id="rescanBtn">能力重扫</button>
@@ -1539,6 +1540,9 @@
               paintTopBar();
             }
           );
+
+          var dev = $('rows-dev');
+          toggleRow(dev, 'debugPreview', '显示调试预览', '开启后参数监视台标题条显示在其页面上');
 
           mounted = true;
         }
