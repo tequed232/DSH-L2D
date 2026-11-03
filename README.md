@@ -149,3 +149,4 @@ MCP 不会打开 `systemSensor` / `mediaSensor`，这两个开关默认关。
 - `docs/DSH-L2D-行为系统设计-v0.1.md`
 - `docs/AI-模型控制提示词.md`
 - `docs/参数读写对照.md`
+- `docs/agent/README.md`：Workspace Agent 动作编排学习指南（能力发现、工作区上下文、动作组合、回执验证与举一反三）
