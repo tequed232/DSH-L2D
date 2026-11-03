@@ -1271,6 +1271,47 @@
     return false;
   }
 
+  // 自包含纯函数（不引用闭包），与 lib/drag-hit-decision.mjs 保持同步；
+  // drag-hit-decision.test.mjs 会抽取本段与 mjs 版本做 parity 校验，勿单独改动。
+  /* @drag-hit-decision:inline-start */
+  function shouldStartDrag(d) {
+    d = d || {};
+    var SAMPLE_MAX_AGE_MS = 250;   // 与 mjs 版 HIT_SAMPLE_MAX_AGE_MS 一致
+    var SAMPLE_MAX_OFFSET_PX = 16; // 与 mjs 版 HIT_SAMPLE_MAX_OFFSET_PX（即渲染包内部阈值）一致
+    function usable(i) {
+      if (i.sampleAvailable === false) return false;
+      if (typeof i.sampleAge === 'number' && i.sampleAge > SAMPLE_MAX_AGE_MS) return false;
+      if (typeof i.sampleOffset === 'number' && i.sampleOffset > SAMPLE_MAX_OFFSET_PX) return false;
+      return true;
+    }
+    if (d.legacy) return { start: true, reason: 'legacy' };
+    if (d.hitTestAt === true) return { start: true, reason: 'sample-hit' };
+    if (d.hitTestBox === true) {
+      return { start: true, reason: usable(d) ? 'sample-miss-box-hit' : 'sample-unusable-box-hit' };
+    }
+    return { start: false, reason: usable(d) ? 'sample-miss' : 'sample-unusable-miss' };
+  }
+  /* @drag-hit-decision:inline-end */
+
+  /**
+   * 左键拖拽的起拖判定（两级，见 lib/drag-hit-decision.mjs 头注释）：
+   * pointerdown 里的 requestHitSample() 下一帧才产出样本，此刻 hitTestAt 读的是
+   * 上一帧（hover 10Hz 节流）的缓存——快速移动鼠标后首次点击人物，采样点距点击点
+   * 常 >16px，hitTestAt 直接 false，人物“拖不动”。故 hitTestAt 未命中时回退
+   * 同步包围盒 hitTestBox（与右键菜单同通道），两级都未命中才放行到下层页面。
+   */
+  function overModelDrag(e) {
+    var L = window.DSH_L2D;
+    if (!L || !L.hitTestAt) return true; // 旧渲染包/静态兜底：保持整盒可交互（与 overModel 一致）
+    var hitAt = false;
+    try { hitAt = !!L.hitTestAt(e.clientX, e.clientY); } catch (err) { return true; }
+    var box = null;
+    if (L.hitTestBox) {
+      try { box = !!L.hitTestBox(e.clientX, e.clientY); } catch (errB) { box = null; }
+    }
+    return shouldStartDrag({ hitTestAt: hitAt, hitTestBox: box }).start;
+  }
+
   function isL2dUiTarget(t) {
     if (!t || !t.closest) return false;
     return !!t.closest('.l2d-chip,.l2d-price,.l2d-menu,.l2d-panel,.l2d-bubble,.l2d-gear');
@@ -1322,7 +1363,7 @@
         var Lp = window.DSH_L2D;
         if (Lp && Lp.requestHitSample) Lp.requestHitSample();
       } catch (errP) { /* ignore */ }
-      if (!overModel(e)) return; // 空白处：不拦，事件照常落到下层页面
+      if (!overModelDrag(e)) return; // 空白处：不拦，事件照常落到下层页面（两级判定见 overModelDrag）
       e.stopPropagation(); // 命中模型：不传给下层界面
       // 裙摆拖拽手势取消：衣着只走右键菜单（点击/拖动位置冲突太多）
 
