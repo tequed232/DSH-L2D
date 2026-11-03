@@ -18,16 +18,16 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { createAiInbox } from './ai-inbox.mjs';
 import { createWorkspaceAgentBridge } from './workspace-agent.mjs';
 import { createReverseLog } from './reverse-log.mjs';
-import { normalizePresencePayload, writeEnvState } from './env-state.mjs';
+import { normalizePresencePayload, readEnvState, writeEnvState } from './env-state.mjs';
 import { createModelIndexCache, guardAiCall } from './host-guard.mjs';
 import { isReservedParam } from './param-guards.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
-import { isActionTool, summarizeSession } from './session-events.mjs';
+import { ageSummaryState, isActionTool, legacyAgentState, summarizeSession } from './session-events.mjs';
+import { listSessionFiles, readSessionEvents } from './session-log.mjs';
 import { setupPetWindow } from './pet-window.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -474,127 +474,15 @@ function listAudio() {
 
 // ---------------------------------------------------------------- 工作区会话状态
 // 参照 dsh-pet-indesktop 的 Agent Link：只读监听，不写不锁文件。
-// DSH 的 session.v4.jsonl.zstd 是“多帧 zstd + JSONL”，必须按帧边界逐段解压。
-const MAGIC_ZSTD = Buffer.from('28b52ffd', 'hex');
+// 会话日志读取统一走 session-log.mjs；事件分类/老化统一走 session-events.mjs
+// （W1 起只有一套扫描，getAgentState 通过 legacyAgentState 保持原返回契约）。
 const AGENT_STATE_TTL = 1500;
 let agentStateCache = { ts: 0, data: null };
 
-function extractText(value, limit = 90) {
-  if (!value) return '';
-  if (typeof value === 'string') return value.slice(0, limit);
-  if (Array.isArray(value)) {
-    for (const part of value) {
-      const text = part && typeof part.text === 'string' ? part.text : '';
-      if (text) return text.slice(0, limit);
-    }
-  }
-  return '';
-}
-
-function decompressZstdFrames(buffer) {
-  const lines = [];
-  let pos = 0;
-  while (pos < buffer.length) {
-    const start = buffer.indexOf(MAGIC_ZSTD, pos);
-    if (start < 0) break;
-    let end = buffer.indexOf(MAGIC_ZSTD, start + 1);
-    if (end < 0) end = buffer.length;
-    try {
-      const text = zlib.zstdDecompressSync(buffer.subarray(start, end)).toString('utf8');
-      for (const line of text.split(/\n/)) {
-        if (line.trim()) lines.push(line);
-      }
-    } catch {
-      // 单帧损坏不能拖垮状态读取
-    }
-    pos = end;
-  }
-  return lines;
-}
-
-function listSessionFiles() {
-  const base = process.env.DSH_L2D_SESSION_DIR || path.join(process.env.DSH_HOME || path.join(os.homedir(), '.dsh'), 'sessions');
-  const files = [];
-  let dirs = [];
-  try {
-    dirs = fs.readdirSync(base, { withFileTypes: true }).filter((d) => d.isDirectory());
-  } catch {
-    return files;
-  }
-  for (const dir of dirs) {
-    const dirPath = path.join(base, dir.name);
-    let entries = [];
-    try {
-      entries = fs.readdirSync(dirPath, { withFileTypes: true }).filter((d) => d.isDirectory());
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      const file = path.join(dirPath, entry.name, 'session.v4.jsonl.zstd');
-      try {
-        const stat = fs.statSync(file);
-        files.push({ file, mtimeMs: stat.mtimeMs, size: stat.size, workspace: dir.name, sessionId: entry.name });
-      } catch {
-        continue;
-      }
-    }
-  }
-  files.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  return files;
-}
-
+/** 旧 getAgentState 的返回形状（overlay /agent-state.json 契约），由统一扫描适配。 */
 function deriveAgentState(events, ageMs, workspace) {
-  let state = 'idle';
-  let lastUserText = '';
-  let lastTool = '';
-  let lastAssistantText = '';
-  let lastError = '';
-  let lastTime = 0;
-
-  for (const event of events) {
-    const type = event.type || '';
-    const data = event.data || {};
-    lastTime = Math.max(lastTime, Number(event.time) || 0);
-
-    if (type === 'user/message') {
-      const text = extractText(data.content || data.message?.content);
-      if (text && data.source?.kind !== 'user-approval') lastUserText = text;
-      state = 'thinking';
-    } else if (type === 'step/start') {
-      state = 'thinking';
-    } else if (type === 'tool/call') {
-      lastTool = String(data.name || data.kind || '');
-      state = 'working';
-    } else if (type === 'assistant/message') {
-      const text = extractText(data.message?.content);
-      if (text) lastAssistantText = text;
-      state = 'thinking';
-    } else if (type === 'turn/end') {
-      const reason = data.reason || {};
-      if (reason.kind === 'error' || reason.error) {
-        lastError = String(reason.error?.message || reason.message || 'unknown error');
-        state = 'error';
-      } else {
-        state = 'attention';
-      }
-    }
-  }
-
-  // 长时间没有事件就是 idle；错误保留更久，方便用户注意到失败。
-  if (state !== 'error' && ageMs > 120000) state = 'idle';
-  if (state === 'error' && ageMs > 600000) state = 'idle';
-
-  return {
-    ok: true,
-    state,
-    workspace,
-    ageMs: Math.max(0, Math.round(ageMs)),
-    lastUserText,
-    lastTool,
-    lastAssistantText,
-    lastError,
-    lastEventAt: lastTime,
-  };
+  const summary = summarizeSession(events);
+  return legacyAgentState(summary, { ageMs, workspace });
 }
 
 function getAgentState(force = false) {
@@ -607,15 +495,10 @@ function getAgentState(force = false) {
     const files = listSessionFiles();
     if (files.length) {
       const latest = files[0];
-      const events = [];
-      for (const line of decompressZstdFrames(fs.readFileSync(latest.file))) {
-        try {
-          events.push(JSON.parse(line));
-        } catch {
-          continue;
-        }
-      }
-      data = deriveAgentState(events, now - latest.mtimeMs, latest.workspace);
+      const read = readSessionEvents(latest.file);
+      data = read.ok
+        ? deriveAgentState(read.events, now - latest.mtimeMs, latest.workspace)
+        : { ok: false, state: 'idle', reason: read.error || 'read-failed' };
     }
   } catch (err) {
     data = { ok: false, state: 'idle', reason: String(err && err.message ? err.message : err) };
@@ -658,45 +541,40 @@ function getWorkspaceAgentStates(registry) {
       }
       let cached = workspaceEventCache.get(id);
       if (!cached || cached.mtimeMs !== entry.mtimeMs || cached.size !== entry.size) {
-        try {
-          const events = [];
-          for (const line of decompressZstdFrames(fs.readFileSync(entry.file))) {
-            try { events.push(JSON.parse(line)); } catch { /* ignore malformed event */ }
-          }
-          const summary = summarizeSession(events, { now: entry.mtimeMs });
-          cached = { mtimeMs: entry.mtimeMs, size: entry.size, ...summary };
-          workspaceEventCache.set(id, cached);
-        } catch {
-          cached = {
-            mtimeMs: entry.mtimeMs,
-            size: entry.size,
-            state: 'unknown',
-            lastEventAt: 0,
-            lastTool: null,
-            lastTurnEnd: null,
-            lastAction: null,
-            pendingTool: null,
-            hasError: false,
-          };
-          workspaceEventCache.set(id, cached);
-        }
+        const read = readSessionEvents(entry.file);
+        // 缓存「截至读取时」的汇总；每次调用再用 ageSummaryState 按 now 老化，
+        // 避免 mtime 不变时把状态冻在缓存那一刻。
+        const summary = read.ok ? summarizeSession(read.events, { now }) : null;
+        cached = { mtimeMs: entry.mtimeMs, size: entry.size, summary, error: read.ok ? null : read.error };
+        workspaceEventCache.set(id, cached);
       }
       const ageMs = Math.max(0, Math.round(now - entry.mtimeMs));
-      let state = cached.state;
-      if (state !== 'error' && ageMs > 120000) state = 'idle';
-      if (state === 'error' && ageMs > 600000) state = 'idle';
-      const pending = cached.pendingTool && isActionTool(cached.pendingTool.name)
-        ? { name: cached.pendingTool.name, priority: 'NORMAL' }
+      const summary = cached.summary || {
+        state: 'unknown',
+        substate: null,
+        lastEventAt: 0,
+        lastTool: null,
+        lastTurnEnd: null,
+        lastAction: null,
+        pendingTool: null,
+        hasError: false,
+      };
+      const aged = summary.lastEventAt
+        ? ageSummaryState(summary, { now })
+        : { state: summary.state, substate: summary.substate || null };
+      const pending = summary.pendingTool && isActionTool(summary.pendingTool.name)
+        ? { name: summary.pendingTool.name, priority: 'NORMAL' }
         : null;
       sessions.push({
         sessionIndex: sessions.length + 1,
-        state,
+        state: aged.state,
+        substate: aged.substate || null,
         ageMs,
-        lastEventAt: cached.lastEventAt,
-        hasError: state === 'error',
-        lastTool: cached.lastTool || null,
-        lastTurnEnd: cached.lastTurnEnd || null,
-        lastAction: cached.lastAction || null,
+        lastEventAt: summary.lastEventAt,
+        hasError: aged.state === 'error',
+        lastTool: summary.lastTool || null,
+        lastTurnEnd: summary.lastTurnEnd || null,
+        lastAction: summary.lastAction || null,
         pendingAction: pending,
       });
     }
