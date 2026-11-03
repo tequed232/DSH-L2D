@@ -123,6 +123,7 @@ const SETTINGS_SHAPE = {
   petWindow: { type: 'string', default: 'off', description: '桌宠独立窗：off 关闭（页内浮层）/ only 独立透明窗（页内浮层停用，重启生效）' },
   reverseEnabled: { type: 'boolean', default: true, description: '反向桥：模型交互事件回流宿主（l2d-reverse-state.json + /ai/poll 搭车）' },
   workspaceForeground: { type: 'boolean', default: false, description: '工作区快照：读取前台应用进程名（默认关；仅本机、不取标题/路径/内容）' },
+  consumerLeaseEnabled: { type: 'boolean', default: false, description: '消费者租约：/ai/poll 单消费者接管 + /ai/result token fencing，默认关' },
 };
 
 let z = null;
@@ -151,6 +152,7 @@ export const Config = z
       petWindow: z.string().default('off').description('桌宠独立窗：off 关闭（页内浮层）/ only 独立透明窗（页内浮层停用，重启生效）').extra('volatile', true),
       reverseEnabled: z.boolean().default(true).description('反向桥：模型交互事件回流宿主（l2d-reverse-state.json + /ai/poll 搭车）').extra('volatile', true),
       workspaceForeground: z.boolean().default(false).description('工作区快照：读取前台应用进程名（默认关；仅本机、不取标题/路径/内容）').extra('volatile', true),
+      consumerLeaseEnabled: z.boolean().default(false).description('消费者租约：/ai/poll 单消费者接管 + /ai/result token fencing，默认关').extra('volatile', true),
     })
   : { ...SETTINGS_SHAPE };
 
@@ -915,7 +917,14 @@ export function apply(root, config = {}) {
     //   GET  /dsh-l2d/ai/poll  浏览器侧取走待执行队列
     // 用「队列 + 轮询」而不是 WebSocket：插件环境里没有长连接，轮询 400ms 足够，
     // 而且失败可重建，不会因为连接断了就哑掉。
-    const aiInbox = createAiInbox();
+    // 消费者租约（M1-d3）：flag 按调用时读取（settings volatile，热切换零重启），
+    // 不得在构造时烘焙。TTL/宽容期与 READY 文档 §1.1 一致。
+    const aiInbox = createAiInbox({
+      leaseTtlMs: 15000,
+      legacyGraceMs: 30 * 60 * 1000,
+      leaseEnabled: () => readSettings().consumerLeaseEnabled === true,
+      diag,
+    });
     const reverseLog = createReverseLog({ diag });
     // 模型索引（表情/动作组/物理输出表）只读缓存：/ai/call 不该每次都读磁盘。
     // 读不到时守卫 fail-open（物理输出判定放行），由渲染端兜底，绝不 500。
@@ -1009,8 +1018,15 @@ export function apply(root, config = {}) {
 
     route('/dsh-l2d/ai/poll', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      // 消费者身份：新 overlay 带 ?consumer=<页面自生成 id>（version 仅诊断）；旧 overlay 无参数 → 空队列降级
+      let consumerId = '';
+      try {
+        consumerId = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('consumer') || '');
+      } catch {
+        consumerId = '';
+      }
       // 搭车：把反向桥事件摘要一并带给页面，overlay 可并入 l2d_get_state
-      const polled = aiInbox.poll();
+      const polled = aiInbox.poll({ consumerId });
       polled.reverse = reverseLog.snapshot();
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(polled), 'utf8'));
     });
@@ -1045,7 +1061,9 @@ export function apply(root, config = {}) {
         }
         const saved = aiInbox.post(body);
         if (!saved.ok) {
-          return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from(saved.reason || 'id required'));
+          // fenced（token 校验失败/先到先得/宽容期拒绝）→ 409 Conflict；其余（id 缺失）→ 400
+          const status = saved.reason === 'fenced' ? 409 : 400;
+          return sendBuffer(res, status, 'text/plain; charset=utf-8', Buffer.from(saved.reason || 'id required'));
         }
         sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true }), 'utf8'));
       });

@@ -35,6 +35,19 @@
   function versioned(p) { return __bootTag ? p + (p.indexOf('?') >= 0 ? '&' : '?') + 'v=' + __bootTag : p; }
   window.__DSH_L2D_OVERLAY__ = true;
 
+  // 消费者租约（M1-d3）：页面自生成身份，同版本双页靠它区分（__bootTag 不可区分）。
+  // 页面刷新/重开生成新 id → 服务端自然走接管流程，无遗留状态。
+  var __aiConsumerId = (function () {
+    try {
+      return 'c-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2));
+    } catch (e) {
+      return 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+    }
+  })();
+  // /ai/poll 响应下发的租约凭证：result 提交必须附带，接管后旧 token 即刻作废
+  var __aiLeaseToken = '';
+  var __aiLeaseEpoch = 0;
+
   // 说明：App 壳（dsh-app://）注入时 readyState 已是 complete，bootOverlay 会走
   // setTimeout 宏任务；但 ensureMounted / startAiPoll 等还有同步调用路径。agentLink 若
   // 只在 IIFE 后段声明，会以 var 提升的 undefined 被读到，startAgentPoll 抛
@@ -1457,7 +1470,8 @@
     fetch('/dsh-l2d/ai/result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: event.callId, event: event }),
+      // token/epoch 随租约下发（flag 关时服务端忽略这两个字段）
+      body: JSON.stringify({ id: event.callId, event: event, token: __aiLeaseToken, epoch: __aiLeaseEpoch }),
     }).catch(function () { /* 回执丢了，调用方会停在 pending */ });
   }
 
@@ -3735,18 +3749,44 @@
   var aiPollTimer = 0;
   // /ai/poll 搭车下发的反向桥快照（模型→宿主事件最近记录），供 l2d_get_state 查询
   var aiReverseState = null;
+  // 消费者租约（M1-d3）：租约被他人持有时跳过的 tick 数（4×400ms≈1.6s，降频等接管）
+  var aiPollHoldTicks = 0;
+
+  // result 提交统一走这里：附带 poll 时下发的租约凭证（flag 关时服务端忽略）。
+  // 409 fenced 不重试——重试必然再被 fence，仅告警留痕。
+  function postAiResult(payload) {
+    payload.token = __aiLeaseToken;
+    payload.epoch = __aiLeaseEpoch;
+    return fetch('/dsh-l2d/ai/result', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(function (r) {
+      if (!r.ok) console.warn('[dsh-l2d] AI 回执被拒 id=' + payload.id + ' status=' + r.status);
+      return r;
+    });
+  }
 
   function startAiPoll() {
     if (aiPollTimer) return;
     aiPollTimer = setInterval(function () {
+      if (aiPollHoldTicks > 0) { aiPollHoldTicks--; return; } // 租约被他人持有：降频轮询
       if (!window.DSH_L2D_AI) return;
-      fetch('/dsh-l2d/ai/poll', { cache: 'no-store' })
+      fetch('/dsh-l2d/ai/poll?consumer=' + encodeURIComponent(__aiConsumerId) + '&version=' + encodeURIComponent(__bootTag || ''), { cache: 'no-store' })
         .then(function (r) {
           return r.ok ? r.json() : null;
         })
         .then(function (d) {
           // 先消费搭车的反向桥快照（必须在无指令提前 return 之前，否则没指令时永远不更新）
           if (d && d.reverse) aiReverseState = d.reverse;
+          if (d && d.lease) {
+            if (d.lease.token) {
+              __aiLeaseToken = d.lease.token; // 接管/续期发放的新凭证（含接管后 token 轮换）
+              __aiLeaseEpoch = d.lease.epoch || 0;
+            } else if (d.lease.status === 'held') {
+              aiPollHoldTicks = 4; // 他人持租约：拉长下次 poll 间隔
+            }
+          }
           if (!d || !d.calls || !d.calls.length) return;
           d.calls.forEach(function (c) {
             Promise.resolve(window.DSH_L2D_AI.exec(c.name, c.args, c.id))
@@ -3757,18 +3797,12 @@
                     console.warn('[dsh-l2d] AI 指令执行失败', c.name, res);
                   }
                 }
-                fetch('/dsh-l2d/ai/result', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id: c.id, result: res || { ok: false, reason: 'empty' } }),
-                }).catch(function () { /* 结果回写失败，MCP 会超时 */ });
+                postAiResult({ id: c.id, result: res || { ok: false, reason: 'empty' } })
+                  .catch(function () { /* 结果回写失败，MCP 会超时 */ });
               })
               .catch(function (err) {
-                fetch('/dsh-l2d/ai/result', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id: c.id, result: { ok: false, reason: String(err && err.message ? err.message : err) } }),
-                }).catch(function () { /* ignore */ });
+                postAiResult({ id: c.id, result: { ok: false, reason: String(err && err.message ? err.message : err) } })
+                  .catch(function () { /* ignore */ });
               });
           });
         })
