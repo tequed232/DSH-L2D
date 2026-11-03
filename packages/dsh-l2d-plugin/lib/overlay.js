@@ -3767,6 +3767,11 @@
                 scripts: Array.prototype.map.call(document.querySelectorAll('script[src*="dsh-l2d/renderer"]'), function (x) { return x.src; }).join(' | '),
                 guarded: !!window.__DSH_L2D_GUARD__,
                 keyCount: Object.keys(window.DSH_L2D || {}).length,
+                clientEntry: (typeof window !== 'undefined')
+                  ? (window.__L2D_CLIENT_ERROR__ ? 'ERR: ' + String(window.__L2D_CLIENT_ERROR__).slice(0, 400)
+                    : window.__L2D_CLIENT_OK__ ? 'ok'
+                    : 'not-run')
+                  : 'no-window',
                 keys: Object.keys(window.DSH_L2D || {}).join(','),
               },
               info: L.getInfo ? L.getInfo() : null,
