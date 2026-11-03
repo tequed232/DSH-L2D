@@ -3852,6 +3852,8 @@
                 bootTag: __bootTag || '',
                 hasPlan: typeof L.normalizeActPlan,
                 hasNote: typeof L.noteActMotion,
+                // [M1-d2 诊断] armed/timeline 活体状态（临时诊断，随 d2 验收移除或保留为观测面）
+                gesture: L.getGestureState ? L.getGestureState() : 'getGestureState-missing',
                 rendererEl: (document.getElementById('dsh-l2d-renderer') || {}).src || '',
                 winHasPlan: (typeof window !== 'undefined' && window.DSH_L2D) ? typeof window.DSH_L2D.normalizeActPlan : 'no-win-api',
                 sameRef: !!(typeof window !== 'undefined' && window.DSH_L2D === L),
