@@ -15,7 +15,8 @@
     "build:renderer": "pnpm -F @dsh/renderer build",
     "dev:server": "node tools/dev-server/index.mjs",
     "gen:ai-tools": "node tools/gen-ai-tools/index.mjs",
-    "test:types": "node tools/typecheck-smoke.mjs"
+    "test:types": "node tools/typecheck-smoke.mjs",
+    "accept": "node tools/acceptance/run.mjs"
   },
   "engines": {
     "node": ">=22"
