@@ -64,6 +64,14 @@ function listSources() {
   const semanticBinding = path.join(ROOT, 'packages', 'core', 'src', 'semantic-binding.ts');
   if (fs.existsSync(semanticBinding)) files.push(semanticBinding);
 
+  // P1 呈现层：自适应布局是纯计算，类型错会静默算出错的缩放/偏移
+  const presentationDir = path.join(ROOT, 'packages', 'renderer', 'src', 'presentation');
+  if (fs.existsSync(presentationDir)) {
+    for (const n of fs.readdirSync(presentationDir).filter((x) => x.endsWith('.ts')).sort()) {
+      files.push(path.join(presentationDir, n));
+    }
+  }
+
   const coreSrc = path.join(ROOT, 'packages', 'core', 'src');
   const motionFiles = fs
     .readdirSync(coreSrc)

@@ -16,6 +16,7 @@
  * 模型资源不外拷贝：按绝对路径从模型目录直读，遵守「模型文件不重新分发」的授权约束。
  */
 import fs from 'node:fs';
+import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +47,9 @@ const CORE_FILE =
 const RENDERER_FILE = path.join(PKG_ROOT, 'assets', 'renderer.js');
 const TEST_FILE = path.join(PKG_ROOT, 'assets', 'test.html');
 const TOKENS_FILE = path.join(PKG_ROOT, 'assets', 'ui-tokens.css');
+const SETTINGS_HTML_FILE = path.join(PKG_ROOT, 'assets', 'settings.html');
+const CAPABILITY_DIR = path.join(L2D_ROOT, 'tools', 'capability-scan');
+const CAPABILITY_SCAN = path.join(CAPABILITY_DIR, 'scan.mjs');
 const PET_HTML_FILE = path.join(PKG_ROOT, 'lib', 'pet.html');
 const PET_PRELOAD_FILE = path.join(PKG_ROOT, 'lib', 'pet-preload.cjs');
 const MODEL_EXT = new Set(['.json', '.moc3', '.png', '.jpg', '.jpeg']);
@@ -1219,6 +1223,66 @@ export function apply(root, config = {}) {
       const buf = readIfExists(TEST_FILE);
       if (!buf) return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('test.html missing'));
       sendBuffer(res, 200, 'text/html; charset=utf-8', buf);
+    });
+
+    // 设置页（P1 呈现层）：独立的单页设置界面，五个分区共用 /settings.json 契约
+    route('/dsh-l2d/settings', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const buf = readIfExists(SETTINGS_HTML_FILE);
+      if (!buf) return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('settings.html missing'));
+      sendBuffer(res, 200, 'text/html; charset=utf-8', buf);
+    });
+
+    // 能力画像（E0）：扫描产物只读返回，供设置页与调试面板使用
+    route('/dsh-l2d/capability.json', (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      let file = null;
+      try {
+        file = fs.readdirSync(CAPABILITY_DIR).filter((n) => /^profile\..+\.json$/.test(n)).sort()[0] || null;
+      } catch {
+        file = null;
+      }
+      if (!file) {
+        return sendBuffer(
+          res,
+          404,
+          'application/json; charset=utf-8',
+          Buffer.from(JSON.stringify({ ok: false, reason: 'no-profile', hint: 'POST /dsh-l2d/capability/rescan' })),
+        );
+      }
+      const buf = readIfExists(path.join(CAPABILITY_DIR, file));
+      if (!buf) return sendBuffer(res, 500, 'text/plain; charset=utf-8', Buffer.from('profile unreadable'));
+      sendBuffer(res, 200, MIME['.json'], buf);
+    });
+
+    // 能力重扫：只在本地回环可用；明确是用户动作，不自动跑
+    route('/dsh-l2d/capability/rescan', (req, res) => {
+      if (req.method !== 'POST') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (!fs.existsSync(CAPABILITY_SCAN)) {
+        return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('scan.mjs missing'));
+      }
+      const child = spawn(process.execPath, [CAPABILITY_SCAN], { cwd: L2D_ROOT, windowsHide: true });
+      let out = '';
+      child.stdout.on('data', (c) => {
+        out += String(c);
+      });
+      child.stderr.on('data', (c) => {
+        out += String(c);
+      });
+      child.on('error', (err) => {
+        sendBuffer(res, 500, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: String(err && err.message) })));
+      });
+      child.on('close', (code) => {
+        sendBuffer(
+          res,
+          code === 0 ? 200 : 500,
+          MIME['.json'],
+          Buffer.from(JSON.stringify({ ok: code === 0, code, out: out.slice(-1200) })),
+        );
+      });
     });
 
     // 模型资源：prefix 路由，直接把模型目录当静态根，仍做扩展名白名单与穿越防护
