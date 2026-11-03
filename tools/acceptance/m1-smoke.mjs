@@ -3,8 +3,19 @@
  * M1 真机验收冒烟（一条命令，风格对齐 run.mjs）。
  *
  *   node tools/acceptance/m1-smoke.mjs --origin http://127.0.0.1:3081
+ *   node tools/acceptance/m1-smoke.mjs --origin http://127.0.0.1:3081 --readiness-wait 30000
  *   node tools/acceptance/m1-smoke.mjs --m1-flag on --allow-write   # 集成日：M1 写路径真用例
  *   node tools/acceptance/m1-smoke.mjs --selftest                   # 对内置 mock 宿主自测（不碰真机）
+ *
+ * 就绪门禁（--readiness-wait <ms>，默认不加 = 0 = 现行为）：
+ *   宿主页 overlay 的模型挂载是异步的（3081 已知现象：HTTP 早通、模型未就绪），
+ *   不等就进场会把环境问题记成用例 FAIL。加 --readiness-wait 后先在 [0, ms] 内有上限轮询，
+ *   按 L0 服务连通 / L1 消费者在线 / L2 模型就绪 三层判定（见 readiness.mjs）：
+ *     READY         → 进场跑用例
+ *     MODEL-LOADING → 继续等（readiness 中），到期仍不就绪 = BLOCKED
+ *     NO-CONSUMER   → 页面没在 poll AI 队列，等也无用，到期 = BLOCKED
+ *     BLOCKED       → L0 就不通，直接 BLOCKED
+ *   裸 --readiness-wait（不带数值）= 30000ms。BLOCKED 即 exit 3，不跑用例、不写状态。
  *
  * 开关组（embodied.m1 flag 的镜像开关，见 Consolidated-M1-Plan §2 约束 4）：
  *   --m1-flag on|off|auto   默认 off。
@@ -47,12 +58,20 @@
  * SKIP 语义：占位 / 未开启的用例记 SKIP，不计入 verdict（学 perf-idle 双后端幂态的处理）。
  * 每项标注「自动化 / 需人工」。
  *
- * 退出码：0 无 FAIL（SKIP/WARN 不算）；1 有 FAIL；2 连不上服务。
+ * 退出码：0 无 FAIL（SKIP/WARN 不算）；1 有 FAIL；2 连不上服务；3 就绪门禁 BLOCKED。
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  DEFAULT_READINESS_WAIT_MS,
+  DEFAULT_CONSUMER_TIMEOUT_MS,
+  EXIT_BLOCKED,
+  waitForReadiness,
+  formatReadinessLines,
+  formatTick,
+} from './readiness.mjs';
 
 const args = process.argv.slice(2);
 const argOf = (name, def) => {
@@ -68,6 +87,8 @@ const HIP_READY = flag('m1-hip'); // m1-hip 交付后由执行方显式开启
 const GESTURE_READY = flag('m1-gesture'); // m1-gesture 交付后由执行方显式开启
 const HOLD_MS = Number(argOf('hold-ms', 3000)); // U1 独占时长
 const RESULT_TIMEOUT = Number(argOf('timeout', 15000));
+// 就绪门禁：不带开关 = 0（现行为，不门禁）；裸 --readiness-wait = 30s；显式 0 同样回到现行为。
+const READINESS_WAIT = readReadinessWait();
 
 const SELFTEST = flag('selftest');
 const THIS_FILE = fileURLToPath(import.meta.url);
@@ -84,6 +105,15 @@ function readOrigin() {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** 解析 --readiness-wait：缺省 0；裸开关默认 30s；非法数值按默认处理。 */
+function readReadinessWait() {
+  if (!flag('readiness-wait')) return 0;
+  const raw = argOf('readiness-wait', '');
+  if (raw === '' || raw.startsWith('--')) return DEFAULT_READINESS_WAIT_MS;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_READINESS_WAIT_MS;
+}
 
 // ---------------------------------------------------------------------------
 // 判定辅助（selftest 直接打这些纯函数）
@@ -172,6 +202,69 @@ async function getState(origin) {
   } catch {
     return null;
   }
+}
+
+/**
+ * 单轮就绪探针（三层一次探完，交给 classifyReadiness 判）。
+ * L0 失败直接返回，不再往队列灌调用；L1 无回执说明没人 poll——
+ * 此时排队的 l2d_get_state 是只读的，页面后到时执行也只是一次读取，无副作用。
+ */
+async function probeReadiness(origin, consumerTimeoutMs = DEFAULT_CONSUMER_TIMEOUT_MS) {
+  let connected = false;
+  let httpStatus = 0;
+  let error = '';
+  try {
+    const r = await getJson(origin, `${origin}/dsh-l2d/ai/result?id=0`);
+    httpStatus = r.status;
+    connected = r.status === 200;
+  } catch (e) {
+    error = (e && e.message) || String(e);
+  }
+  if (!connected) return { connected: false, httpStatus, error };
+
+  const t0 = Date.now();
+  let served = false;
+  let modelReady = null;
+  try {
+    const c = await call(origin, 'l2d_get_state', {});
+    if (c.status === 200 && c.body && c.body.id) {
+      const r = await awaitResult(origin, c.body.id, consumerTimeoutMs);
+      if (r.result) {
+        served = true;
+        modelReady = r.result.ready === true;
+      }
+    }
+  } catch {
+    /* 回执异常按「未服务」处理 */
+  }
+  return { connected: true, httpStatus, served, latencyMs: Date.now() - t0, modelReady };
+}
+
+/**
+ * 就绪门禁：有上限轮询到 READY 或超时。返回带 exitCode 的结论（0 放行 / 3 BLOCKED）。
+ * log=true 时打分层状态行（轮次进度 + 收尾块）。
+ *
+ * @param {{origin:string, maxWaitMs?:number, intervalMs?:number,
+ *          consumerTimeoutMs?:number, log?:boolean}} opts
+ */
+export async function runReadinessGate(opts) {
+  const origin = String(opts.origin || '').replace(/\/+$/, '');
+  const maxWaitMs = Number.isFinite(Number(opts.maxWaitMs)) ? Math.max(0, Number(opts.maxWaitMs)) : DEFAULT_READINESS_WAIT_MS;
+  const consumerTimeoutMs = Number.isFinite(Number(opts.consumerTimeoutMs))
+    ? Math.max(100, Number(opts.consumerTimeoutMs))
+    : DEFAULT_CONSUMER_TIMEOUT_MS;
+  const log = opts.log !== false;
+
+  if (log) {
+    console.log(`[m1-smoke] 就绪门禁：origin=${origin} 上限 ${maxWaitMs}ms（L0 连通 → L1 消费者 → L2 模型）`);
+  }
+  const verdict = await waitForReadiness(() => probeReadiness(origin, consumerTimeoutMs), {
+    maxWaitMs,
+    intervalMs: opts.intervalMs,
+    onTick: log ? (t) => console.log(formatTick(t)) : null,
+  });
+  if (log) for (const line of formatReadinessLines(verdict)) console.log(line);
+  return verdict;
 }
 
 /** M1 组整组开关：flag 解析（auto = 探测运行时标记，当前渲染层未接线，回落 off）。 */
@@ -673,8 +766,14 @@ async function main() {
   }
   console.log(
     `\n[m1-smoke] origin=${CLI_ORIGIN}  m1-flag=${M1_FLAG}  allow-write=${ALLOW_WRITE}` +
-      `${HIP_READY ? '  m1-hip=ready' : ''}${GESTURE_READY ? '  m1-gesture=ready' : ''}\n`,
+      `${HIP_READY ? '  m1-hip=ready' : ''}${GESTURE_READY ? '  m1-gesture=ready' : ''}` +
+      `${READINESS_WAIT ? `  readiness-wait=${READINESS_WAIT}ms` : ''}\n`,
   );
+  // 就绪门禁：仅在显式开启时生效（--readiness-wait 0 = 现行为，不等直接进场）。
+  if (READINESS_WAIT > 0) {
+    const gate = await runReadinessGate({ origin: CLI_ORIGIN, maxWaitMs: READINESS_WAIT });
+    if (!gate.ok) process.exit(EXIT_BLOCKED);
+  }
   const summary = await runCases({
     origin: CLI_ORIGIN,
     allowWrite: ALLOW_WRITE,
