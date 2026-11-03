@@ -48,3 +48,75 @@ export type ChannelName = keyof typeof CHANNEL_PRIORITY;
 
 /** 口型参数：行为层禁区，只有 lipSync 通道可写 */
 export const LIPSYNC_PARAMS = ['ParamMouthOpenY', 'ParamMouthOpen', 'ParamMouthForm'] as const;
+
+// ---------------------------------------------------------------- motion engine 契约（v2）
+// 语义层（planner）只产出 SemanticMotionFrame；写模型必须先经 lowerFrameToIntents
+// 变成既有 WriteIntent，再交给 ParamMixer/param-ownership——不允许直接写 Cubism 参数。
+export {
+  MOTION_CONTRACT_VERSION,
+  SEMANTIC_CONTROL_IDS,
+  SEMANTIC_PRIORITIES,
+  SEMANTIC_SOURCE_RANK,
+  isFiniteRange,
+  isSemanticControlId,
+  isSemanticPriority,
+  isSemanticSource,
+} from './motion-contract.ts';
+export type {
+  AnySemanticControlId,
+  CapabilityStatus,
+  ExtensionControlId,
+  ModelMotionProfile,
+  MotionAdapter,
+  MotionAdapterRegistration,
+  MotionAssetCapability,
+  MotionAssetKind,
+  SemanticControlCapability,
+  SemanticControlId,
+  SemanticMotionFrame,
+  SemanticPriority,
+  SemanticSource,
+  WritePhase,
+} from './motion-contract.ts';
+export {
+  clampSemanticValue,
+  hasAsset,
+  isExtensionControlId,
+  resolveSemanticControl,
+  selectMotionAdapter,
+  validateMotionProfile,
+} from './motion-profile.ts';
+export type { ProfileValidation } from './motion-profile.ts';
+export {
+  PRE_ONLY_PARAMS,
+  defaultPhaseForParam,
+  lowerFrameToIntents,
+  validateChannelBindings,
+} from './motion-intent.ts';
+export type {
+  ChannelBinding,
+  LowerResult,
+  RejectedControl,
+  WriteIntent,
+} from './motion-intent.ts';
+export {
+  compileTrajectory,
+  compileTrajectoryCached,
+  easeAt,
+  sampleCompiled,
+  sampleTrajectory,
+  sampleTrajectorySafe,
+  validateTrajectory,
+} from './motion-trajectory.ts';
+export type {
+  CompileResult,
+  CompiledSegment,
+  CompiledTrack,
+  CompiledTrajectory,
+  MotionEasing,
+  MotionKeyframe,
+  MotionTrack,
+  MotionTrajectory,
+  SafeSample,
+  TrajectorySample,
+} from './motion-trajectory.ts';

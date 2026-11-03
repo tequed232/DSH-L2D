@@ -1,0 +1,2405 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "tools/w3-registry/build.mjs",
+  "model": {
+    "id": "大肥鱼.dsl2d",
+    "model3": "大肥鱼.dsl2d.model3.json",
+    "moc3": "大肥鱼.moc3",
+    "physics3": "大肥鱼.physics3.json",
+    "physicsOutputCount": 292,
+    "expressionCount": 21,
+    "motionGroupCount": 7
+  },
+  "sourceCommit": "96069c926fc0db9eec9c43a83787461d17bef1f3",
+  "entries": [
+    {
+      "id": "gesture.right_finger",
+      "kind": "motion-pair",
+      "label": "竖手指（右手指向）",
+      "slot": "竖手指",
+      "arm": "right",
+      "api": "l2d_play_motion(\"竖手指打开\") / (\"竖手指关闭\")",
+      "assets": [
+        {
+          "group": "竖手指打开",
+          "asset": "model/Animation/竖手指切出来动画.motion3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Animation/竖手指切出来动画.motion3.json",
+          "durationMs": 1250,
+          "fadeInMs": 300,
+          "fadeOutMs": 300,
+          "sourceLoopFlag": true
+        },
+        {
+          "group": "竖手指关闭",
+          "asset": "model/Animation/竖手指切回默认.motion3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Animation/竖手指切回默认.motion3.json",
+          "durationMs": 1250,
+          "fadeInMs": 300,
+          "fadeOutMs": 300,
+          "sourceLoopFlag": true
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "Movement1",
+          "min": 0,
+          "max": 0,
+          "end": 0
+        },
+        {
+          "id": "Movement3",
+          "min": 0,
+          "max": 1,
+          "end": 0
+        },
+        {
+          "id": "Param56",
+          "min": 1,
+          "max": 1,
+          "end": 1
+        },
+        {
+          "id": "Param57",
+          "min": 0,
+          "max": 0,
+          "end": 0
+        },
+        {
+          "id": "Param40",
+          "min": 0,
+          "max": 1,
+          "end": 0
+        },
+        {
+          "id": "Param36",
+          "min": -0.004,
+          "max": 0.004,
+          "end": 0
+        },
+        {
+          "id": "Param39",
+          "min": 0,
+          "max": 0.322,
+          "end": 0
+        },
+        {
+          "id": "Param41",
+          "min": -0.008,
+          "max": 0.762,
+          "end": 0
+        },
+        {
+          "id": "Param42",
+          "min": -0.102,
+          "max": 0.136,
+          "end": 0
+        },
+        {
+          "id": "Param43",
+          "min": -0.164,
+          "max": 0.066,
+          "end": 0
+        }
+      ],
+      "poseParams": [
+        "Param40",
+        "Param36",
+        "Param39",
+        "Param41",
+        "Param42",
+        "Param43"
+      ],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gesture.chest"
+        ],
+        "conflictWith": [
+          "gesture.grass"
+        ]
+      },
+      "conflicts": [
+        {
+          "with": "gesture.grass",
+          "type": "param-overlap",
+          "params": [
+            "Param36",
+            "Param39",
+            "Param41",
+            "Param42",
+            "Param43"
+          ],
+          "reason": "同为右臂姿态骨，同开逐帧互抢"
+        }
+      ],
+      "preconditions": [
+        "右臂空闲（狗尾巴草未打开）",
+        "动作槽未被 FORCE 动作占用"
+      ],
+      "recovery": "播放「竖手指关闭」或 l2d_reset / resetPose（终态参数被姿势层 adopt，可继续持有）",
+      "stateNotes": [
+        "重复播放「竖手指打开」返回 skipped(already-open)；未打开时播放「竖手指关闭」返回 skipped(already-closed)"
+      ],
+      "evidence": [
+        "packages/renderer/src/app/motion-director.ts:32-49 PAIRED_SLOTS[竖手指]",
+        "packages/renderer/src/app/motion-director.ts:105-140 decide() 冲突/幂等",
+        "packages/dsh-l2d-plugin/lib/overlay.js:1758 executePokeAction"
+      ]
+    },
+    {
+      "id": "gesture.grass",
+      "kind": "motion-pair",
+      "label": "狗尾巴草（右手道具）",
+      "slot": "狗尾巴草",
+      "arm": "right",
+      "api": "l2d_play_motion(\"狗尾巴草打开\") / (\"狗尾巴草关闭\")",
+      "assets": [
+        {
+          "group": "狗尾巴草打开",
+          "asset": "model/Animation/狗尾草切换出来.motion3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Animation/狗尾草切换出来.motion3.json",
+          "durationMs": 1233,
+          "fadeInMs": 300,
+          "fadeOutMs": 300,
+          "sourceLoopFlag": true
+        },
+        {
+          "group": "狗尾巴草关闭",
+          "asset": "model/Animation/狗尾草切回默认手.motion3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Animation/狗尾草切回默认手.motion3.json",
+          "durationMs": 1133,
+          "fadeInMs": 300,
+          "fadeOutMs": 300,
+          "sourceLoopFlag": true
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "Movement1",
+          "min": 0,
+          "max": 1,
+          "end": 0
+        },
+        {
+          "id": "Movement3",
+          "min": 0,
+          "max": 0,
+          "end": 0
+        },
+        {
+          "id": "Param56",
+          "min": 1,
+          "max": 1,
+          "end": 1
+        },
+        {
+          "id": "Param57",
+          "min": 0,
+          "max": 0,
+          "end": 0
+        },
+        {
+          "id": "Param36",
+          "min": 0,
+          "max": 0.068,
+          "end": 0.001
+        },
+        {
+          "id": "Param39",
+          "min": 0,
+          "max": 0.2,
+          "end": 0
+        },
+        {
+          "id": "Param41",
+          "min": -0.766,
+          "max": 0.007,
+          "end": 0
+        },
+        {
+          "id": "Param42",
+          "min": -0.586,
+          "max": 0.266,
+          "end": -0.009
+        },
+        {
+          "id": "Param43",
+          "min": 0,
+          "max": 0,
+          "end": 0
+        }
+      ],
+      "poseParams": [
+        "Param36",
+        "Param39",
+        "Param41",
+        "Param42",
+        "Param43"
+      ],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gesture.chest"
+        ],
+        "conflictWith": [
+          "gesture.right_finger"
+        ]
+      },
+      "conflicts": [
+        {
+          "with": "gesture.right_finger",
+          "type": "param-overlap",
+          "params": [
+            "Param36",
+            "Param39",
+            "Param41",
+            "Param42",
+            "Param43"
+          ],
+          "reason": "同为右臂姿态骨"
+        }
+      ],
+      "preconditions": [
+        "右臂空闲（竖手指未打开）"
+      ],
+      "recovery": "播放「狗尾巴草关闭」或 l2d_reset",
+      "stateNotes": [],
+      "evidence": [
+        "packages/renderer/src/app/motion-director.ts:32-49 PAIRED_SLOTS[狗尾巴草]"
+      ]
+    },
+    {
+      "id": "gesture.chest",
+      "kind": "motion-pair",
+      "label": "抚胸手（左手抚胸）",
+      "slot": "抚胸手",
+      "arm": "left",
+      "api": "l2d_play_motion(\"抚胸手打开\") / (\"抚胸手关闭\")",
+      "assets": [
+        {
+          "group": "抚胸手打开",
+          "asset": "model/Animation/默认手切举手.motion3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Animation/默认手切举手.motion3.json",
+          "durationMs": 1133,
+          "fadeInMs": 300,
+          "fadeOutMs": 300,
+          "sourceLoopFlag": true
+        },
+        {
+          "group": "抚胸手关闭",
+          "asset": "model/Animation/举手切默认手.motion3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Animation/举手切默认手.motion3.json",
+          "durationMs": 1017,
+          "fadeInMs": 300,
+          "fadeOutMs": 300,
+          "sourceLoopFlag": true
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "Movement2",
+          "min": 0,
+          "max": 1,
+          "end": 0
+        },
+        {
+          "id": "Param56",
+          "min": 1,
+          "max": 1,
+          "end": 1
+        },
+        {
+          "id": "Param57",
+          "min": 0,
+          "max": 0,
+          "end": 0
+        },
+        {
+          "id": "Param62",
+          "min": -0.03,
+          "max": 0.034,
+          "end": -0.001
+        },
+        {
+          "id": "Param59",
+          "min": -0.048,
+          "max": 0.516,
+          "end": -0.001
+        },
+        {
+          "id": "Param60",
+          "min": -0.008,
+          "max": 0.88,
+          "end": 0
+        },
+        {
+          "id": "Param61",
+          "min": 0,
+          "max": 0.2,
+          "end": 0.001
+        }
+      ],
+      "poseParams": [
+        "Param62",
+        "Param59",
+        "Param60",
+        "Param61"
+      ],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gesture.right_finger",
+          "gesture.grass"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "左臂空闲"
+      ],
+      "recovery": "播放「抚胸手关闭」或 l2d_reset",
+      "stateNotes": [],
+      "evidence": [
+        "packages/renderer/src/app/motion-director.ts:32-49 PAIRED_SLOTS[抚胸手]（左臂参数不相交，可与右臂动作共存）"
+      ]
+    },
+    {
+      "id": "idle.background",
+      "kind": "motion-loop",
+      "label": "待机（Idle，渲染端自动续播）",
+      "arm": "none",
+      "api": "无（渲染端 motionManager 空闲时自动 startRandomMotion(Idle)）",
+      "assets": [
+        {
+          "group": "Idle",
+          "asset": "model/Animation/IDLE.motion3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Animation/IDLE.motion3.json",
+          "durationMs": 5983,
+          "fadeInMs": 500,
+          "fadeOutMs": 500,
+          "sourceLoopFlag": true
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "ShockR",
+          "min": -0.159,
+          "max": 0.159,
+          "end": -0.077
+        },
+        {
+          "id": "ShockL",
+          "min": -0.159,
+          "max": 0.159,
+          "end": -0.077
+        },
+        {
+          "id": "Param11",
+          "min": 0,
+          "max": 8,
+          "end": 7
+        },
+        {
+          "id": "SweatBurst1",
+          "min": 0,
+          "max": 1,
+          "end": 0
+        },
+        {
+          "id": "SweatBurst2",
+          "min": 0,
+          "max": 1,
+          "end": 0
+        },
+        {
+          "id": "SweatBurst3",
+          "min": 0,
+          "max": 1,
+          "end": 0
+        },
+        {
+          "id": "SweatBurst4",
+          "min": 0,
+          "max": 1,
+          "end": 0
+        },
+        {
+          "id": "Divider22",
+          "min": 0,
+          "max": 0,
+          "end": 0
+        },
+        {
+          "id": "Param31",
+          "min": -0.831,
+          "max": 0.831,
+          "end": -0.827
+        },
+        {
+          "id": "Param32",
+          "min": -0.06,
+          "max": 0.06,
+          "end": -0.029
+        },
+        {
+          "id": "Param27",
+          "min": -1,
+          "max": 1,
+          "end": -1
+        },
+        {
+          "id": "Param28",
+          "min": 0.5,
+          "max": 1,
+          "end": 0.5
+        },
+        {
+          "id": "RCry",
+          "min": 0,
+          "max": 1,
+          "end": 1
+        },
+        {
+          "id": "Param29",
+          "min": -1,
+          "max": 1,
+          "end": -1
+        },
+        {
+          "id": "Param30",
+          "min": 0.5,
+          "max": 1,
+          "end": 0.5
+        },
+        {
+          "id": "LCry",
+          "min": 0,
+          "max": 1,
+          "end": 1
+        },
+        {
+          "id": "Startwinkle",
+          "min": -0.501,
+          "max": 0.501,
+          "end": -0.488
+        },
+        {
+          "id": "Param55",
+          "min": 0,
+          "max": 1,
+          "end": 1
+        },
+        {
+          "id": "Param56",
+          "min": 0,
+          "max": 1,
+          "end": 0.437
+        },
+        {
+          "id": "Param58",
+          "min": 0,
+          "max": 1,
+          "end": 1
+        },
+        {
+          "id": "Param57",
+          "min": 0,
+          "max": 1,
+          "end": 0.257
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "无更高优先级动作播放"
+      ],
+      "recovery": "自动；被动作打断后动作结束继续续播",
+      "evidence": [
+        "packages/renderer/src/app/lappmodel.ts:643-660 startRandomMotion(Idle, PriorityIdle)",
+        "packages/renderer/src/index.ts:1159 playMotionAsync"
+      ]
+    },
+    {
+      "id": "pose.rest",
+      "kind": "pose",
+      "label": "rest（自然下垂）",
+      "arm": "both",
+      "api": "l2d_set_pose({right:\"rest\",left:\"rest\"})",
+      "assets": [],
+      "controlledParams": [
+        {
+          "id": "Param36",
+          "end": 0
+        },
+        {
+          "id": "Param39",
+          "end": 0
+        },
+        {
+          "id": "Param40",
+          "end": 0
+        },
+        {
+          "id": "Param41",
+          "end": 0
+        },
+        {
+          "id": "Param42",
+          "end": 0
+        },
+        {
+          "id": "Param43",
+          "end": 0
+        },
+        {
+          "id": "Param59",
+          "end": 0
+        },
+        {
+          "id": "Param60",
+          "end": 0
+        },
+        {
+          "id": "Param61",
+          "end": 0
+        },
+        {
+          "id": "Param62",
+          "end": 0
+        }
+      ],
+      "poseParams": [
+        "Param36",
+        "Param39",
+        "Param40",
+        "Param41",
+        "Param42",
+        "Param43",
+        "Param59",
+        "Param60",
+        "Param61",
+        "Param62"
+      ],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "l2d_set_pose 同一次调用里另一只手的姿势"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "动作未播放（setPose 在 motion-playing 时返回 false）"
+      ],
+      "recovery": "6s 空闲自动缓回 rest；l2d_reset_pose 立即回 rest",
+      "notes": "PoseController 的 REST 全 0 基线；6s 空闲自动缓回 rest（idleReturnSec 默认 6）",
+      "evidence": [
+        "packages/renderer/src/app/pose-controller.ts:28-38 REST",
+        "packages/renderer/src/app/pose-controller.ts:113-114 idleReturnSec",
+        "packages/renderer/src/index.ts:1592 setPose"
+      ]
+    },
+    {
+      "id": "pose.finger",
+      "kind": "pose",
+      "label": "finger（竖起手指）",
+      "arm": "right",
+      "api": "l2d_set_pose({right:\"finger\"})",
+      "assets": [],
+      "controlledParams": [
+        {
+          "id": "Param36",
+          "end": 0
+        },
+        {
+          "id": "Param39",
+          "end": 0.322
+        },
+        {
+          "id": "Param40",
+          "end": 1
+        },
+        {
+          "id": "Param41",
+          "end": 0.702
+        },
+        {
+          "id": "Param42",
+          "end": 0
+        },
+        {
+          "id": "Param43",
+          "end": 0
+        }
+      ],
+      "poseParams": [
+        "Param36",
+        "Param39",
+        "Param40",
+        "Param41",
+        "Param42",
+        "Param43"
+      ],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "l2d_set_pose 同一次调用里另一只手的姿势"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "动作未播放（setPose 在 motion-playing 时返回 false）"
+      ],
+      "recovery": "6s 空闲自动缓回 rest；l2d_reset_pose 立即回 rest",
+      "notes": "数值来自竖手指 motion3 终态；动作播放期间 setPose 返回 motion-playing",
+      "evidence": [
+        "packages/renderer/src/app/pose-controller.ts:42-52 finger",
+        "packages/renderer/src/index.ts:1592-1606 setPose 拒绝 motion-playing"
+      ]
+    },
+    {
+      "id": "pose.grass",
+      "kind": "pose",
+      "label": "grass（拿狗尾巴草）",
+      "arm": "right",
+      "api": "l2d_set_pose({right:\"grass\"})",
+      "assets": [],
+      "controlledParams": [
+        {
+          "id": "Param36",
+          "end": 0.04
+        },
+        {
+          "id": "Param39",
+          "end": 0.2
+        },
+        {
+          "id": "Param41",
+          "end": -0.732
+        },
+        {
+          "id": "Param42",
+          "end": 0
+        },
+        {
+          "id": "Param43",
+          "end": 0
+        }
+      ],
+      "poseParams": [
+        "Param36",
+        "Param39",
+        "Param41",
+        "Param42",
+        "Param43"
+      ],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "l2d_set_pose 同一次调用里另一只手的姿势"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "动作未播放（setPose 在 motion-playing 时返回 false）"
+      ],
+      "recovery": "6s 空闲自动缓回 rest；l2d_reset_pose 立即回 rest",
+      "notes": "与 finger 同占右臂；左手可同时 chest",
+      "evidence": [
+        "packages/renderer/src/app/pose-controller.ts:42-58 grass"
+      ]
+    },
+    {
+      "id": "pose.chest",
+      "kind": "pose",
+      "label": "chest（抚胸）",
+      "arm": "left",
+      "api": "l2d_set_pose({left:\"chest\"})",
+      "assets": [],
+      "controlledParams": [
+        {
+          "id": "Param59",
+          "end": 0.476
+        },
+        {
+          "id": "Param60",
+          "end": 0.86
+        },
+        {
+          "id": "Param61",
+          "end": 0.002
+        },
+        {
+          "id": "Param62",
+          "end": 0.034
+        }
+      ],
+      "poseParams": [
+        "Param59",
+        "Param60",
+        "Param61",
+        "Param62"
+      ],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "l2d_set_pose 同一次调用里另一只手的姿势"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "动作未播放（setPose 在 motion-playing 时返回 false）"
+      ],
+      "recovery": "6s 空闲自动缓回 rest；l2d_reset_pose 立即回 rest",
+      "notes": "只写左臂 4 个参数，可与右臂姿势共存",
+      "evidence": [
+        "packages/renderer/src/app/pose-controller.ts:42-59 chest"
+      ]
+    },
+    {
+      "id": "gaze.look_up",
+      "kind": "gaze",
+      "label": "抬头看（视线向上）",
+      "arm": "none",
+      "api": "l2d_gaze({x:0,y:1})",
+      "assets": [],
+      "controlledParams": [
+        {
+          "id": "AngleX"
+        },
+        {
+          "id": "AngleY"
+        },
+        {
+          "id": "ParamEyeBallX"
+        },
+        {
+          "id": "ParamEyeBallY"
+        },
+        {
+          "id": "PositionX"
+        },
+        {
+          "id": "LeanInput"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": [
+          "body.lean_forward"
+        ]
+      },
+      "conflicts": [
+        {
+          "with": "body.lean_forward",
+          "type": "param-write",
+          "params": [
+            "LeanInput"
+          ],
+          "reason": "身体通道与「前倾」表情同写 LeanInput"
+        },
+        {
+          "with": "motion.head",
+          "type": "phase",
+          "params": [
+            "AngleX",
+            "AngleY"
+          ],
+          "reason": "动作播放期 motionWritesHead() 时头部跟随让路"
+        }
+      ],
+      "preconditions": [
+        "渲染包 ready；动作播放期头部让路"
+      ],
+      "recovery": "l2d_gaze({x:0,y:0}) 或 clearGaze()",
+      "evidence": [
+        "packages/renderer/src/index.ts:1292 gaze",
+        "packages/renderer/src/index.ts:1395-1448 applyGazeBody/applyGazeEyes"
+      ]
+    },
+    {
+      "id": "gaze.look_down",
+      "kind": "gaze",
+      "label": "低头看（视线向下）",
+      "arm": "none",
+      "api": "l2d_gaze({x:0,y:-1})",
+      "assets": [],
+      "controlledParams": [
+        {
+          "id": "AngleX"
+        },
+        {
+          "id": "AngleY"
+        },
+        {
+          "id": "ParamEyeBallX"
+        },
+        {
+          "id": "ParamEyeBallY"
+        },
+        {
+          "id": "PositionX"
+        },
+        {
+          "id": "LeanInput"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": [
+          "body.lean_forward"
+        ]
+      },
+      "conflicts": [
+        {
+          "with": "body.lean_forward",
+          "type": "param-write",
+          "params": [
+            "LeanInput"
+          ],
+          "reason": "身体通道与「前倾」表情同写 LeanInput"
+        },
+        {
+          "with": "motion.head",
+          "type": "phase",
+          "params": [
+            "AngleX",
+            "AngleY"
+          ],
+          "reason": "动作播放期 motionWritesHead() 时头部跟随让路"
+        }
+      ],
+      "preconditions": [
+        "渲染包 ready；动作播放期头部让路"
+      ],
+      "recovery": "l2d_gaze({x:0,y:0}) 或 clearGaze()",
+      "evidence": [
+        "packages/renderer/src/index.ts:1292 gaze",
+        "packages/renderer/src/index.ts:1395-1448 applyGazeBody/applyGazeEyes"
+      ]
+    },
+    {
+      "id": "gaze.look_left",
+      "kind": "gaze",
+      "label": "视线向左",
+      "arm": "none",
+      "api": "l2d_gaze({x:-1,y:0})",
+      "assets": [],
+      "controlledParams": [
+        {
+          "id": "AngleX"
+        },
+        {
+          "id": "AngleY"
+        },
+        {
+          "id": "ParamEyeBallX"
+        },
+        {
+          "id": "ParamEyeBallY"
+        },
+        {
+          "id": "PositionX"
+        },
+        {
+          "id": "LeanInput"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": [
+          "body.lean_forward"
+        ]
+      },
+      "conflicts": [
+        {
+          "with": "body.lean_forward",
+          "type": "param-write",
+          "params": [
+            "LeanInput"
+          ],
+          "reason": "身体通道与「前倾」表情同写 LeanInput"
+        },
+        {
+          "with": "motion.head",
+          "type": "phase",
+          "params": [
+            "AngleX",
+            "AngleY"
+          ],
+          "reason": "动作播放期 motionWritesHead() 时头部跟随让路"
+        }
+      ],
+      "preconditions": [
+        "渲染包 ready；动作播放期头部让路"
+      ],
+      "recovery": "l2d_gaze({x:0,y:0}) 或 clearGaze()",
+      "evidence": [
+        "packages/renderer/src/index.ts:1292 gaze",
+        "packages/renderer/src/index.ts:1395-1448 applyGazeBody/applyGazeEyes"
+      ]
+    },
+    {
+      "id": "gaze.look_right",
+      "kind": "gaze",
+      "label": "视线向右",
+      "arm": "none",
+      "api": "l2d_gaze({x:1,y:0})",
+      "assets": [],
+      "controlledParams": [
+        {
+          "id": "AngleX"
+        },
+        {
+          "id": "AngleY"
+        },
+        {
+          "id": "ParamEyeBallX"
+        },
+        {
+          "id": "ParamEyeBallY"
+        },
+        {
+          "id": "PositionX"
+        },
+        {
+          "id": "LeanInput"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": [
+          "body.lean_forward"
+        ]
+      },
+      "conflicts": [
+        {
+          "with": "body.lean_forward",
+          "type": "param-write",
+          "params": [
+            "LeanInput"
+          ],
+          "reason": "身体通道与「前倾」表情同写 LeanInput"
+        },
+        {
+          "with": "motion.head",
+          "type": "phase",
+          "params": [
+            "AngleX",
+            "AngleY"
+          ],
+          "reason": "动作播放期 motionWritesHead() 时头部跟随让路"
+        }
+      ],
+      "preconditions": [
+        "渲染包 ready；动作播放期头部让路"
+      ],
+      "recovery": "l2d_gaze({x:0,y:0}) 或 clearGaze()",
+      "evidence": [
+        "packages/renderer/src/index.ts:1292 gaze",
+        "packages/renderer/src/index.ts:1395-1448 applyGazeBody/applyGazeEyes"
+      ]
+    },
+    {
+      "id": "body.lean_forward",
+      "kind": "body",
+      "label": "前倾（物理根输入 LeanInput）",
+      "arm": "none",
+      "api": "l2d_set_expression(\"前倾\")",
+      "assets": [
+        {
+          "group": "前倾",
+          "asset": "model/Exp3/前倾.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/前倾.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "LeanInput",
+          "value": -30,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*"
+        ],
+        "conflictWith": [
+          "gaze.*",
+          "motion.head"
+        ]
+      },
+      "conflicts": [
+        {
+          "with": "gaze.*",
+          "type": "param-write",
+          "params": [
+            "LeanInput"
+          ],
+          "reason": "gaze 身体通道每帧 set LeanInput；表情是 Add，会叠加/被覆盖，二者必须经所有权仲裁"
+        },
+        {
+          "with": "motion.head",
+          "type": "param-write",
+          "params": [
+            "LeanInput"
+          ],
+          "reason": "动作播放期 gaze 锁存身体值，LeanInput 与动作头/身体曲线可能同帧写"
+        }
+      ],
+      "preconditions": [
+        "若与 gaze 身体同时使用，需 ownParameters([LeanInput])"
+      ],
+      "recovery": "clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/前倾.exp3.json",
+        "packages/renderer/src/index.ts:1385-1393 writeGazeBody(LeanInput)",
+        "docs/Ownership-Invariants.md S-01..S-06 source 优先级"
+      ]
+    },
+    {
+      "id": "body.straighten",
+      "kind": "body",
+      "label": "站直/回正（姿势与角度总线归零）",
+      "arm": "none",
+      "api": "l2d_reset_pose / l2d_reset",
+      "assets": [],
+      "controlledParams": [
+        {
+          "id": "Param36",
+          "end": 0
+        },
+        {
+          "id": "Param39",
+          "end": 0
+        },
+        {
+          "id": "Param40",
+          "end": 0
+        },
+        {
+          "id": "Param41",
+          "end": 0
+        },
+        {
+          "id": "Param42",
+          "end": 0
+        },
+        {
+          "id": "Param43",
+          "end": 0
+        },
+        {
+          "id": "Param59",
+          "end": 0
+        },
+        {
+          "id": "Param60",
+          "end": 0
+        },
+        {
+          "id": "Param61",
+          "end": 0
+        },
+        {
+          "id": "Param62",
+          "end": 0
+        },
+        {
+          "id": "AngleX",
+          "end": 0
+        },
+        {
+          "id": "AngleY",
+          "end": 0
+        },
+        {
+          "id": "AngleZ",
+          "end": 0
+        },
+        {
+          "id": "PositionX",
+          "end": 0
+        },
+        {
+          "id": "PositionY",
+          "end": 0
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [],
+      "recovery": "无（本身就是恢复路径）",
+      "evidence": [
+        "packages/renderer/src/index.ts:1556-1572 resetPose zeroAngleBus/injector.releaseAll/poseController.resetToRest"
+      ]
+    },
+    {
+      "id": "body.relax",
+      "kind": "body",
+      "label": "放松（等同 rest 姿势）",
+      "arm": "none",
+      "api": "l2d_set_pose({right:\"rest\",left:\"rest\"})",
+      "assets": [],
+      "controlledParams": [
+        {
+          "id": "Param36",
+          "end": 0
+        },
+        {
+          "id": "Param39",
+          "end": 0
+        },
+        {
+          "id": "Param40",
+          "end": 0
+        },
+        {
+          "id": "Param41",
+          "end": 0
+        },
+        {
+          "id": "Param42",
+          "end": 0
+        },
+        {
+          "id": "Param43",
+          "end": 0
+        },
+        {
+          "id": "Param59",
+          "end": 0
+        },
+        {
+          "id": "Param60",
+          "end": 0
+        },
+        {
+          "id": "Param61",
+          "end": 0
+        },
+        {
+          "id": "Param62",
+          "end": 0
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [],
+      "recovery": "6s 空闲自动缓回 rest；l2d_reset_pose 立即回 rest",
+      "evidence": [
+        "packages/renderer/src/app/pose-controller.ts:28-38 REST"
+      ]
+    },
+    {
+      "id": "expression.兔牙",
+      "kind": "expression",
+      "label": "表情：兔牙",
+      "expressionName": "兔牙",
+      "arm": "none",
+      "api": "l2d_set_expression(\"兔牙\")",
+      "assets": [
+        {
+          "group": "兔牙",
+          "asset": "model/Exp3/兔牙.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/兔牙.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "key9",
+          "value": 1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/兔牙.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "mouth.happy"
+      ],
+      "family": "mouth",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.加载",
+      "kind": "expression",
+      "label": "表情：加载",
+      "expressionName": "加载",
+      "arm": "none",
+      "api": "l2d_set_expression(\"加载\")",
+      "assets": [
+        {
+          "group": "加载",
+          "asset": "model/Exp3/加载.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/加载.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "key8",
+          "value": 1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/加载.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "state.working"
+      ],
+      "family": "state",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.单片眼镜",
+      "kind": "expression",
+      "label": "表情：单片眼镜",
+      "expressionName": "单片眼镜",
+      "arm": "none",
+      "api": "l2d_set_expression(\"单片眼镜\")",
+      "assets": [
+        {
+          "group": "单片眼镜",
+          "asset": "model/Exp3/单片眼镜.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/单片眼镜.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "key12",
+          "value": 1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/单片眼镜.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "prop"
+      ],
+      "family": "prop",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.圈圈眼",
+      "kind": "expression",
+      "label": "表情：圈圈眼",
+      "expressionName": "圈圈眼",
+      "arm": "none",
+      "api": "l2d_set_expression(\"圈圈眼\")",
+      "assets": [
+        {
+          "group": "圈圈眼",
+          "asset": "model/Exp3/圈圈眼.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/圈圈眼.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "key3",
+          "value": 1,
+          "blend": "Add"
+        },
+        {
+          "id": "key4",
+          "value": 0,
+          "blend": "Add"
+        },
+        {
+          "id": "key5",
+          "value": 0,
+          "blend": "Add"
+        },
+        {
+          "id": "key6",
+          "value": 0,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": [
+          "expression.key3-6-eye"
+        ]
+      },
+      "conflicts": [
+        {
+          "with": "expression.* (key3-6 eye family)",
+          "type": "expression-exclusive",
+          "params": [
+            "key3",
+            "key4",
+            "key5",
+            "key6"
+          ],
+          "reason": "眼睛族 key3-6 同属一组：同一时刻只允许一个眼睛表情生效；切换时旧表情 1s 淡出、Add 叠加在过渡期可能短暂共存，必须 clearExpression 或等淡出完成"
+        }
+      ],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/圈圈眼.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "eyes.surprised"
+      ],
+      "family": "key3-6-eye",
+      "eyeFamilyKeys": [
+        "key3",
+        "key4",
+        "key5",
+        "key6"
+      ]
+    },
+    {
+      "id": "expression.屑",
+      "kind": "expression",
+      "label": "表情：屑",
+      "expressionName": "屑",
+      "arm": "none",
+      "api": "l2d_set_expression(\"屑\")",
+      "assets": [
+        {
+          "group": "屑",
+          "asset": "model/Exp3/屑屑眼.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/屑屑眼.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "key3",
+          "value": 0,
+          "blend": "Add"
+        },
+        {
+          "id": "key5",
+          "value": 0,
+          "blend": "Add"
+        },
+        {
+          "id": "key6",
+          "value": 1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": [
+          "expression.key3-6-eye"
+        ]
+      },
+      "conflicts": [
+        {
+          "with": "expression.* (key3-6 eye family)",
+          "type": "expression-exclusive",
+          "params": [
+            "key3",
+            "key4",
+            "key5",
+            "key6"
+          ],
+          "reason": "眼睛族 key3-6 同属一组：同一时刻只允许一个眼睛表情生效；切换时旧表情 1s 淡出、Add 叠加在过渡期可能短暂共存，必须 clearExpression 或等淡出完成"
+        }
+      ],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/屑.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "eyes.bright",
+        "emotion.tease"
+      ],
+      "family": "key3-6-eye",
+      "eyeFamilyKeys": [
+        "key3",
+        "key5",
+        "key6"
+      ]
+    },
+    {
+      "id": "expression.流泪",
+      "kind": "expression",
+      "label": "表情：流泪",
+      "expressionName": "流泪",
+      "arm": "none",
+      "api": "l2d_set_expression(\"流泪\")",
+      "assets": [
+        {
+          "group": "流泪",
+          "asset": "model/Exp3/流泪.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/流泪.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "key2",
+          "value": 1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/流泪.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "emotion.sad"
+      ],
+      "family": "effect-tear",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.爱心眼",
+      "kind": "expression",
+      "label": "表情：爱心眼",
+      "expressionName": "爱心眼",
+      "arm": "none",
+      "api": "l2d_set_expression(\"爱心眼\")",
+      "assets": [
+        {
+          "group": "爱心眼",
+          "asset": "model/Exp3/爱心眼.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/爱心眼.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "key4",
+          "value": 1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": [
+          "expression.key3-6-eye"
+        ]
+      },
+      "conflicts": [
+        {
+          "with": "expression.* (key3-6 eye family)",
+          "type": "expression-exclusive",
+          "params": [
+            "key3",
+            "key4",
+            "key5",
+            "key6"
+          ],
+          "reason": "眼睛族 key3-6 同属一组：同一时刻只允许一个眼睛表情生效；切换时旧表情 1s 淡出、Add 叠加在过渡期可能短暂共存，必须 clearExpression 或等淡出完成"
+        }
+      ],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/爱心眼.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "eyes.bright"
+      ],
+      "family": "key3-6-eye",
+      "eyeFamilyKeys": [
+        "key4"
+      ]
+    },
+    {
+      "id": "expression.脱鞋",
+      "kind": "expression",
+      "label": "表情：脱鞋",
+      "expressionName": "脱鞋",
+      "arm": "none",
+      "api": "l2d_set_expression(\"脱鞋\")",
+      "assets": [
+        {
+          "group": "脱鞋",
+          "asset": "model/Exp3/脱鞋.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/脱鞋.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "Clothes4",
+          "value": 1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/脱鞋.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "clothes"
+      ],
+      "family": "clothes",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.脸红",
+      "kind": "expression",
+      "label": "表情：脸红",
+      "expressionName": "脸红",
+      "arm": "none",
+      "api": "l2d_set_expression(\"脸红\")",
+      "assets": [
+        {
+          "group": "脸红",
+          "asset": "model/Exp3/脸红.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/脸红.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "key7",
+          "value": 1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/脸红.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "emotion.shy"
+      ],
+      "family": "overlay",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.钢盆",
+      "kind": "expression",
+      "label": "表情：钢盆",
+      "expressionName": "钢盆",
+      "arm": "none",
+      "api": "l2d_set_expression(\"钢盆\")",
+      "assets": [
+        {
+          "group": "钢盆",
+          "asset": "model/Exp3/钢盆.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/钢盆.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "key10",
+          "value": 1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/钢盆.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "prop"
+      ],
+      "family": "prop",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.裙长切换",
+      "kind": "expression",
+      "label": "表情：裙长切换",
+      "expressionName": "裙长切换",
+      "arm": "none",
+      "api": "l2d_set_expression(\"裙长切换\")",
+      "assets": [
+        {
+          "group": "裙长切换",
+          "asset": "model/Exp3/裙子切换.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/裙子切换.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "Clothes1",
+          "value": -1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/裙长切换.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "clothes"
+      ],
+      "family": "clothes",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.黑框眼镜",
+      "kind": "expression",
+      "label": "表情：黑框眼镜",
+      "expressionName": "黑框眼镜",
+      "arm": "none",
+      "api": "l2d_set_expression(\"黑框眼镜\")",
+      "assets": [
+        {
+          "group": "黑框眼镜",
+          "asset": "model/Exp3/黑框眼镜.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/黑框眼镜.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "key11",
+          "value": 1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/黑框眼镜.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "prop"
+      ],
+      "family": "prop",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.黑脸",
+      "kind": "expression",
+      "label": "表情：黑脸",
+      "expressionName": "黑脸",
+      "arm": "none",
+      "api": "l2d_set_expression(\"黑脸\")",
+      "assets": [
+        {
+          "group": "黑脸",
+          "asset": "model/Exp3/黑脸.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/黑脸.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "key1",
+          "value": 1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/黑脸.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "emotion.angry"
+      ],
+      "family": "overlay",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.＞＜",
+      "kind": "expression",
+      "label": "表情：＞＜",
+      "expressionName": "＞＜",
+      "arm": "none",
+      "api": "l2d_set_expression(\"＞＜\")",
+      "assets": [
+        {
+          "group": "＞＜",
+          "asset": "model/Exp3/＞＜.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/＞＜.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "key3",
+          "value": 0,
+          "blend": "Add"
+        },
+        {
+          "id": "key4",
+          "value": 0,
+          "blend": "Add"
+        },
+        {
+          "id": "key5",
+          "value": 1,
+          "blend": "Add"
+        },
+        {
+          "id": "key6",
+          "value": 0,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": [
+          "expression.key3-6-eye"
+        ]
+      },
+      "conflicts": [
+        {
+          "with": "expression.* (key3-6 eye family)",
+          "type": "expression-exclusive",
+          "params": [
+            "key3",
+            "key4",
+            "key5",
+            "key6"
+          ],
+          "reason": "眼睛族 key3-6 同属一组：同一时刻只允许一个眼睛表情生效；切换时旧表情 1s 淡出、Add 叠加在过渡期可能短暂共存，必须 clearExpression 或等淡出完成"
+        }
+      ],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/＞＜.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "eyes.narrowed",
+        "emotion.pain"
+      ],
+      "family": "key3-6-eye",
+      "eyeFamilyKeys": [
+        "key3",
+        "key4",
+        "key5",
+        "key6"
+      ]
+    },
+    {
+      "id": "expression.体型1",
+      "kind": "expression",
+      "label": "表情：体型1",
+      "expressionName": "体型1",
+      "arm": "none",
+      "api": "l2d_set_expression(\"体型1\")",
+      "assets": [
+        {
+          "group": "体型1",
+          "asset": "model/Exp3/体型1.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/体型1.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "Clothes2",
+          "value": 0.4,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/体型1.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "body-shape"
+      ],
+      "family": "body-shape",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.体型2",
+      "kind": "expression",
+      "label": "表情：体型2",
+      "expressionName": "体型2",
+      "arm": "none",
+      "api": "l2d_set_expression(\"体型2\")",
+      "assets": [
+        {
+          "group": "体型2",
+          "asset": "model/Exp3/体型2.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/体型2.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "Clothes2",
+          "value": 1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/体型2.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "body-shape"
+      ],
+      "family": "body-shape",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.默认体型",
+      "kind": "expression",
+      "label": "表情：默认体型",
+      "expressionName": "默认体型",
+      "arm": "none",
+      "api": "l2d_set_expression(\"默认体型\")",
+      "assets": [
+        {
+          "group": "默认体型",
+          "asset": "model/Exp3/默认体型.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/默认体型.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "Clothes2",
+          "value": 0,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/默认体型.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "body-shape"
+      ],
+      "family": "body-shape",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.前倾",
+      "kind": "expression",
+      "label": "表情：前倾",
+      "expressionName": "前倾",
+      "arm": "none",
+      "api": "l2d_set_expression(\"前倾\")",
+      "assets": [
+        {
+          "group": "前倾",
+          "asset": "model/Exp3/前倾.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/前倾.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "LeanInput",
+          "value": -30,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/前倾.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "body.lean_forward"
+      ],
+      "family": "body",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.尾巴开关",
+      "kind": "expression",
+      "label": "表情：尾巴开关",
+      "expressionName": "尾巴开关",
+      "arm": "none",
+      "api": "l2d_set_expression(\"尾巴开关\")",
+      "assets": [
+        {
+          "group": "尾巴开关",
+          "asset": "model/Exp3/尾巴开关.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/尾巴开关.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "Clothes5",
+          "value": -1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/尾巴开关.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "clothes"
+      ],
+      "family": "clothes",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.流冷汗",
+      "kind": "expression",
+      "label": "表情：流冷汗",
+      "expressionName": "流冷汗",
+      "arm": "none",
+      "api": "l2d_set_expression(\"流冷汗\")",
+      "assets": [
+        {
+          "group": "流冷汗",
+          "asset": "model/Exp3/流冷汗.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/流冷汗.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "key13",
+          "value": 1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/流冷汗.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "emotion.anxious"
+      ],
+      "family": "effect-sweat",
+      "eyeFamilyKeys": []
+    },
+    {
+      "id": "expression.胸口衣服",
+      "kind": "expression",
+      "label": "表情：胸口衣服",
+      "expressionName": "胸口衣服",
+      "arm": "none",
+      "api": "l2d_set_expression(\"胸口衣服\")",
+      "assets": [
+        {
+          "group": "胸口衣服",
+          "asset": "model/Exp3/胸口衣服.exp3.json",
+          "file": "D:/Desktop/DSH-L2D/DeepSeek免费公皮/DeepSeek/Exp3/胸口衣服.exp3.json",
+          "durationMs": 0
+        }
+      ],
+      "controlledParams": [
+        {
+          "id": "Clothes3",
+          "value": 1,
+          "blend": "Add"
+        }
+      ],
+      "poseParams": [],
+      "interruptible": true,
+      "composable": {
+        "with": [
+          "gaze.*",
+          "pose.*",
+          "gesture.*"
+        ],
+        "conflictWith": []
+      },
+      "conflicts": [],
+      "preconditions": [
+        "表情为 Add 且持续；切换前需 clearExpression 或等 1s 淡出"
+      ],
+      "recovery": "l2d_set_expression 其它表情 / clearExpression() / l2d_reset",
+      "evidence": [
+        "Exp3/胸口衣服.exp3.json",
+        "docs/Embodied-Behavior.md",
+        "packages/renderer/src/index.ts:cubismexpressionmotion.ts DefaultFadeTime=1.0"
+      ],
+      "tags": [
+        "clothes"
+      ],
+      "family": "clothes",
+      "eyeFamilyKeys": []
+    }
+  ],
+  "excluded": [
+    {
+      "id": "gesture.wave",
+      "label": "挥手（right_wave / left_wave）",
+      "reason": "无 authored motion3 资产；现有 7 个动作组里没有挥手曲线（Animation/*.motion3.json 全部解析，无手部挥动约束）"
+    },
+    {
+      "id": "gesture.hand_to_chin",
+      "label": "托腮（hand_to_chin）",
+      "reason": "无 authored 资产；Exp3 只有嘴/眼/道具开关，无托腮表情"
+    },
+    {
+      "id": "gesture.arms_crossed",
+      "label": "交叉手（arms_crossed）",
+      "reason": "无 authored 资产，且左右臂参数由两套独立姿势层控制，交叉需要同时驱动双臂且无混合规则"
+    },
+    {
+      "id": "gesture.open_hands",
+      "label": "双手张开（open_hands）",
+      "reason": "无 authored 资产；手指无独立参数（W0 审计），无法用参数近似"
+    }
+  ],
+  "unregisteredAssets": {
+    "motion3": [
+      "model/Animation/脱捕.motion3.json"
+    ],
+    "exp3": [
+      "model/Exp3/竖食指关.exp3.json",
+      "model/Exp3/竖食指开.exp3.json"
+    ],
+    "note": "存在但 model3 未引用；不允许在 W3/W4 被当作可用能力（除非先验证并登记）"
+  },
+  "semanticsNotes": [
+    "动作组是「状态切换」而非一次性动作：打开后保持，直到对应关闭（motion-director.ts:1-15）。",
+    "Cubism 5 Web SDK 不读 motion3 的 Meta.Loop；循环由渲染端 motionManager 对 Idle 单独处理。",
+    "成对动作的冲突判定只看姿态骨（poseParams），共用光效/待机参数（Param56/57、Movement*）不参与冲突。",
+    "表情是 Add 且持久：切换必须 clearExpression 或等 1s 交叉淡出；眼睛族 key3-6 同一时刻只允许一个表情。"
+  ]
+}
