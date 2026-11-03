@@ -60,6 +60,9 @@
 | WS-2 | renderer-adapter | ✅ 完成 | MotionAdapter（canOwn 对齐 R10b）+ PhysicsGate 预留 + 帧序审计（与 §1 无顺序性差异）；flag 关 = 行为与 main 一致 |
 | WS-3 | guards-unify | ✅ 完成 | 口型红线扩到 posture 路径（真机 400）、R10b ignored（真机 warning 可见）、物理输出未 own 400（真机） |
 | WS-4 | capability-registry | ✅ 完成 | 画像 20→56 通道（W3 36 条 + 排除 4 条带原因）、canExpress 语义约束数据化；真机重扫/settings 兼容 |
+| M1-b | m1-hip | 🔄 进行中 | HipAngleX/Y/Z pre 通道 + PhysicsGate（16 生产者让位）；提交号待补 |
+| M1-c | m1-gesture | 🔄 进行中 | Gesture Timeline + LeanInput/表情共享仲裁；提交号待补 |
+| 验收基建 | m1-acceptance | 🔄 进行中 | tools/acceptance/m1-smoke.mjs（T/U/H 三组用例 + embodied.m1 开关组 + mock 自测）+ docs/M1-Test-Contract.md（§9 契约对照表）；提交号待补 |
 
 终验：test:core exit 0（120+ 断言）· test:types PASS · 真机验收 9/9 · 守卫 9/9。
 集成修复：acceptance F 项契约同步 20→56；失败原因透出（failed[0]）；

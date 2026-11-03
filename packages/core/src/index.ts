@@ -171,3 +171,36 @@ export type {
   LimbOwnershipSnapshot,
   LimbSetResult,
 } from './limb-controller.ts';
+
+// ---------------------------------------------------------------- M1-c 手势时间线与共享仲裁
+// Gesture Timeline：手势/动作段时间线编排纯函数（group/delayMs/timeoutMs 分组语义
+// 与 chain-normalize 同源；可打断规则与 LimbController/ActGate 同一份；到期清理
+// INV-5/S-05 同语义）。feature flag：enabled 缺省 M1_DEFAULT_ENABLED（false = 现行为）。
+export {
+  DEFAULT_GESTURE_PRIORITY,
+  emptyTimeline,
+  enqueueGesture,
+  resolveTimeline,
+  stopGesture,
+} from './gesture-timeline.ts';
+export type {
+  EnqueueOptions,
+  GestureEnqueueResult,
+  GestureRejectReason,
+  GestureSegment,
+  GestureTimelineState,
+  ScheduledSegment,
+  StopSelector,
+  TimelineResolution,
+  TimelineStopResult,
+} from './gesture-timeline.ts';
+// 共享通道仲裁：LeanInput/gaze、表情族互斥全部读画像 conflicts 数据（零通道名），
+// 输出 accept/yield/reject/queue（ActGate/LimbController 同一份优先级语义）。
+export { arbitrateShared, DEFAULT_SHARED_PRIORITY } from './shared-arbitration.ts';
+export type {
+  SharedArbitration,
+  SharedChannelUse,
+  SharedConflict,
+  SharedDecision,
+  SharedRejectReason,
+} from './shared-arbitration.ts';

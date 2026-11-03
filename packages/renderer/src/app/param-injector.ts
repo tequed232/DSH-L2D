@@ -143,6 +143,18 @@ export class ParamInjector {
     return this.ownership.list();
   }
 
+  /**
+   * [M1-b] 当前被 Agent 独占且相位为 pre 的参数 id（PhysicsGate.pre 的让位集合数据源）。
+   * pre 相位按契约只有物理根输入类（M1-b 实际为 HipAngleX/Y/Z）；flag 关时 PhysicsGate
+   * 不会调用本方法。snapshot 自带到期清理（INV-5）。
+   */
+  public getPreOwnedIds(): string[] {
+    return this.ownership
+      .snapshot()
+      .filter((e) => e.phase === 'pre')
+      .map((e) => e.id);
+  }
+
   public set(model: CubismModel, id: string, value: number, weight = 1): boolean {
     this.calls++;
     if (!id || !Number.isFinite(value)) {

@@ -12,6 +12,7 @@ import { LAppSubdelegate } from './app/lappsubdelegate';
 import { LAppPal } from './app/lapppal';
 import type { LAppModel } from './app/lappmodel';
 import { ParamInjector, parameterIndexOf } from './app/param-injector';
+import { createPhysicsGate, DEFAULT_EMBODIED_FLAGS } from './app/motion-adapter';
 import { EmotionRouter, EmotionIntent, EmotionSignal } from './app/emotion-router';
 import { MotionDirector, motionsShareArm } from './app/motion-director';
 import { PoseController, POSE_IDS } from './app/pose-controller';
@@ -54,6 +55,19 @@ let currentZoom = 1;
 const injector = new ParamInjector();
 const motionDirector = new MotionDirector();
 const poseController = new PoseController();
+
+/**
+ * [M1-b] PhysicsGate：Hip* pre 让位（生产者跳过输出）+ limb post 覆盖的帧内挂接点。
+ * `embodied.m1` 默认 false（DEFAULT_EMBODIED_FLAGS）= pre/post 均为空操作，现行为逐字节不变；
+ * 集成日把 flag 翻 true 即启用（settings/overlay 的开关管线由后续批次承接）。
+ * pre 让位数据源是 injector 的 ownership（pre 相位独占，实际只有 HipAngleX/Y/Z）；
+ * limb 控制器实例未接线（M1-c/Mixer 批次提供），post 通道在提供前为空操作。
+ */
+const physicsGate = createPhysicsGate(DEFAULT_EMBODIED_FLAGS, {
+  preOwnedIds: () => injector.getPreOwnedIds(),
+  stagePostWrite: (core, id, value) =>
+    injector.set(core as Parameters<typeof injector.set>[0], id, value, 1),
+});
 
 /** 页面里加载 Cubism Core（幂等） */
 export function loadCore(url: string): Promise<void> {
@@ -334,9 +348,10 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
     applyGazeBody(core);
     flushAngleBus(core);
     injector.apply(core, 'pre');
-    // [M1-b PhysicsGate 挂接点·物理前] gate.pre(core) 的启用位置：此处位于 Physics600 之前，
-    // 负责 Hip* 生产者让位。当前未接线（空实现见 app/motion-adapter.ts createPhysicsGate），
-    // 由 embodied.m1 flag 控制（默认 false = 现行为）；接线前禁止在此添加任何可执行语句。
+    // [M1-b PhysicsGate·物理前] flag 开启时把本帧 pre 相位独占的 Hip* 写进让位登记表：
+    // Physics600 对这些输出跳过缓存回写与落写（chained 裙摆/腿链随 Agent 值），
+    // 振子状态保温，release 后物理平滑接管。flag 关（默认）= 空操作，现行为不变。
+    physicsGate.pre(core);
   });
   model.setPostLateUpdateHook((core, deltaTimeSeconds) => {
     phaseDiag.post++;
@@ -345,10 +360,10 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
       poseController.update(core, deltaTimeSeconds, injector);
     }
     applyAmbientFace(core);
-    // [M1-b PhysicsGate 挂接点·物理后] gate.post(core) 的启用位置：此处位于 Physics600 /
-    // Pose800 之后、injector.apply('post') 之前。当前未接线（空实现见 app/motion-adapter.ts
-    // createPhysicsGate），由 embodied.m1 flag 控制（默认 false = 现行为）；
-    // 接线前禁止在此添加任何可执行语句。
+    // [M1-b PhysicsGate·物理后] flag 开启时按 LimbControlLike.resolve 覆盖叶子四肢：
+    // resolve 非空则逐项经 stagePostWrite（injector.set）登记，由下一行 injector.apply('post')
+    // 后写胜出（M1-a post 语义）。flag 关（默认）= 空操作，现行为不变。
+    physicsGate.post(core);
     injector.apply(core, 'post');
     applyGazeEyes(core);
   });
@@ -1834,6 +1849,7 @@ export async function destroy(): Promise<void> {
   injector.clear();
   injector.unlock();
   injector.resetStats();
+  physicsGate.dispose(); // [M1-b] 清掉让位登记表，避免残留状态影响下一次 mount
   motionDirector.reset();
   poseOwnedByMotion = false;
   poseController.resetToRest();
