@@ -146,10 +146,17 @@ export interface LimbControlLike {
 /** feature flag：默认 false = 现行为。任何渲染层行为变化都必须在它后面（全局约束 4）。 */
 export interface EmbodiedFlags {
   'embodied.m1'?: boolean;
+  /**
+   * [M1-e] 连续动作 Mixer（Idle/Ambient/Media 收敛）。默认 false = M1-b 集成后基线；
+   * 运行路径尚未接线（core 侧纯函数已落地，连续层写声明消费方在后续批次提供），
+   * flag 先行注册保证回滚开关面完整。
+   */
+  'embodied.m1e'?: boolean;
 }
 
-export const DEFAULT_EMBODIED_FLAGS: Readonly<Required<Pick<EmbodiedFlags, 'embodied.m1'>>> = {
+export const DEFAULT_EMBODIED_FLAGS: Readonly<Required<Pick<EmbodiedFlags, 'embodied.m1' | 'embodied.m1e'>>> = {
   'embodied.m1': false,
+  'embodied.m1e': false,
 };
 
 /**
