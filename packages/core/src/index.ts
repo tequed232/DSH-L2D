@@ -1,4 +1,6 @@
 export { ParamMixer } from './mixer.ts';
+export { planSemanticPosture, canExpress } from './semantic-binding.ts';
+export type { SemanticWrite, SkippedChannel, PosturePlan } from './semantic-binding.ts';
 export type { ChannelSpec, BlendMode, MixerOptions, ParamId, ParamRange, StepSnapshot } from './mixer.ts';
 export { easeInOutCubic } from './ease.ts';
 export { mixAdditive } from './angle-mix.ts';

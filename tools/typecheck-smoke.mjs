@@ -60,6 +60,10 @@ function listSources() {
   }
   files.push(chainNormalize);
 
+  // E1 语义绑定层：把通道解析成参数写入，类型错了会静默产出错的参数名
+  const semanticBinding = path.join(ROOT, 'packages', 'core', 'src', 'semantic-binding.ts');
+  if (fs.existsSync(semanticBinding)) files.push(semanticBinding);
+
   const coreSrc = path.join(ROOT, 'packages', 'core', 'src');
   const motionFiles = fs
     .readdirSync(coreSrc)
