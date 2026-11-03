@@ -250,3 +250,145 @@ interface TaskScheduler {
 - 现有 Avatar Runtime 的创建、销毁、恢复接口在哪里？禁止新增第二套生命周期所有者。
 
 **评审结论建议：先批准启动边界与验收标准，再由实现者基于真实 Host API 和现有代码调用链提交实现 PR。**
+
+
+---
+
+# 12. DSH Host 能力映射与呈现架构修订
+
+> 本节根据开发提供的 Host 能力审计结果修订。以下能力边界以该审计为当前实现依据；具体调用签名、生命周期语义和跨窗口行为仍须由实现者对照宿主代码验证。
+
+## 12.1 已确认的宿主能力与落地映射
+
+| 需求 | Host 能力审计结果 | 本项目落地方案 |
+|---|---|---|
+| 默认嵌入角色视图 | 没有通用 tab 级 API；提供 `sidebar.right.pane.tab` keyed tab | 注册右侧面板 keyed tab，作为默认嵌入入口 |
+| App 内悬浮 | 提供 `shell.overlay`（root 级 list） | 将角色呈现容器挂载到 overlay |
+| 独立悬浮窗 | 仅桌面端支持；现有 `pet-window.mjs` 已使用 Electron 通道 | 复用现有窗口通道，不另造窗口协议 |
+| 设置入口 | 没有独立设置页签；提供 `settings.section` | 在宿主设置面板中注册独立分区 |
+| UI 缩放/布局事件 | 没有公开事件 | 不依赖缩放事件，直接观察实际容器尺寸 |
+| 跨容器状态 | 客户端插件与宿主服务之间可保留状态；审计指出 iframe 只创建一次 | 优先保持单一 iframe/渲染上下文，切换呈现挂载位置 |
+
+不得再假设存在通用的 tab 注册 API、独立设置页 API 或 UI scale 事件。不得以 `window.open` 等浏览器行为冒充桌面原生悬浮窗。
+
+## 12.2 修订后的呈现拓扑
+
+默认入口为右侧面板 keyed tab；App 内悬浮使用 root-level overlay；桌面独立悬浮窗复用 `pet-window.mjs`；设置入口使用 `settings.section`。
+
+逻辑结构：
+
+```text
+DSH Host
+├── sidebar.right.pane.tab
+├── shell.overlay
+├── pet-window.mjs (desktop only)
+└── settings.section
+
+DSH-L2D
+├── PresentationManager
+├── Host Adapters
+│   ├── SidebarTabAdapter
+│   ├── ShellOverlayAdapter
+│   └── PetWindowAdapter
+└── Single Avatar Runtime / renderer context
+```
+
+`PresentationManager` 只负责选择和协调呈现目标；Host Adapter 封装宿主 API；Avatar Runtime 不直接依赖具体 Host API。
+
+建议的目标类型：
+
+```ts
+type PresentationTarget =
+  | "sidebar-tab"
+  | "shell-overlay"
+  | "pet-window";
+
+interface PresentationAdapter {
+  attach(): Promise<void>;
+  detach(): Promise<void>;
+  getContainer(): HTMLElement | null;
+  observeResize(
+    callback: (width: number, height: number) => void
+  ): () => void;
+}
+```
+
+以上是项目内部抽象，不是对 DSH Host API 签名的声明。Adapter 的具体实现必须使用已审计的真实宿主接口。
+
+## 12.3 iframe 与跨容器状态：优先保持单实例
+
+如果宿主实际允许同一个 iframe 在不同呈现容器间保持存活或迁移挂载，应采用单 iframe 方案：
+
+- iframe、Live2D Runtime、模型实例和动作时间线均保持唯一。
+- 切换目标只改变呈现挂载位置及容器布局。
+- 不重新创建 iframe，不重复初始化 Cubism，不重播当前动作。
+- 旧容器 detach 与新容器 attach 必须有明确顺序，避免同一 iframe 同时挂载到两个位置。
+- 切换期间保存并恢复容器相关的尺寸、焦点和可见性状态；模型姿态与动作状态由 Runtime 自身持续持有。
+
+**桌面独立窗口需单独验证：** Electron 独立窗口通常拥有自己的 WebContents/执行上下文。不能仅凭“客户端插件↔宿主服务可保状态”就推断主窗口 iframe 能直接迁移到独立窗口。开发必须检查 `pet-window.mjs` 的实际实现：
+
+1. 如果它承载的是同一 WebContents/同一 iframe，验证迁移时不会触发销毁与重建。
+2. 如果它是独立 WebContents，则将其视为远程呈现端，通过现有宿主通道同步必要的呈现状态；不得在第二个窗口再创建第二个权威 Avatar Runtime。
+3. 如果现有通道无法做到单 Runtime 跨窗口呈现，先保留独立窗口能力并明确限制，不得伪称已经实现无重建迁移。
+
+## 12.4 尺寸自适应：只依赖实际容器观测
+
+由于没有公开的 UI 缩放/布局事件，算法不应依赖虚构的 `uiScaleChanged` 事件，也不应猜测 DSH 的缩放倍率。
+
+- 每个 Adapter 在 attach 后取得实际容器元素。
+- 使用 `ResizeObserver` 观察容器的 content box。
+- 根据实际 CSS 像素宽高计算布局；结合 `devicePixelRatio` 设置 Canvas backing-store 分辨率。
+- 容器 detach 时注销 Observer；attach 到新容器后重新观察。
+- 对 overlay、sidebar 和 pet window 分别使用相同算法，不硬编码宿主缩放系数。
+- 使用滞回与平滑过渡避免临界尺寸附近频繁切换展示模式。
+
+示意：
+
+```ts
+const observer = new ResizeObserver(entries => {
+  const rect = entries[0]?.contentRect;
+  if (!rect) return;
+
+  adaptiveEngine.update({
+    containerWidth: rect.width,
+    containerHeight: rect.height,
+    devicePixelRatio: window.devicePixelRatio,
+  });
+});
+
+observer.observe(container);
+```
+
+这里的 CSS 容器尺寸用于布局，DPR 用于绘制缓冲区分辨率；二者不得混为一个缩放因子。
+
+## 12.5 Host Adapter 的职责边界
+
+- `SidebarTabAdapter`：注册并管理 `sidebar.right.pane.tab` keyed tab 的内容容器。
+- `ShellOverlayAdapter`：通过 `shell.overlay` 管理 root-level overlay 容器的挂载和卸载。
+- `PetWindowAdapter`：复用 `pet-window.mjs` 已有 Electron 通道；仅桌面端可用。
+- `SettingsAdapter`：通过 `settings.section` 注册设置分区。设置界面不应依赖 Live2D 模型加载成功。
+- `AdaptivePresentationEngine`：只接收实际容器尺寸、DPR、页面可见性和用户偏好，不读取未经公开的 Host 内部状态。
+
+## 12.6 修订后的验收标准
+
+在原第 9 节基础上增加：
+
+13. 默认角色入口通过 `sidebar.right.pane.tab` keyed tab 注册，不依赖不存在的通用 tab API。
+14. App 内悬浮通过 `shell.overlay` 工作；overlay 关闭/重开不重复创建 Avatar Runtime。
+15. 桌面独立窗口复用 `pet-window.mjs`；Web 版本正确隐藏或禁用该入口。
+16. 设置分区通过 `settings.section` 注册，模型加载失败时仍可使用。
+17. 所有自适应计算来自实际容器尺寸和 DPR；没有对不存在的 UI 缩放事件的依赖。
+18. Sidebar 与 overlay 切换时 iframe/Runtime 是否保持同一实例，有自动化或可重复的真机证据。
+19. 对 pet window 明确记录它是同一执行上下文迁移，还是独立 WebContents 呈现端；不得把两种情况混为一谈。
+20. attach/detach、ResizeObserver 注册/注销和窗口关闭均无重复监听器、悬空节点或重复渲染循环。
+
+## 12.7 实施前必须完成的 Host 代码核对
+
+- `sidebar.right.pane.tab` 的 keyed tab 注册、销毁和内容节点生命周期。
+- `shell.overlay` 的 root-level list 项目如何创建、更新、关闭及回收。
+- `pet-window.mjs` 的 BrowserWindow/WebContents 创建方式、通信通道、关闭行为和状态同步协议。
+- `settings.section` 的注册和卸载方式。
+- iframe 在 sidebar 与 overlay 间是否可真实迁移且不被宿主销毁；若不能，明确替代机制。
+- 各容器的实际 DOM 元素何时可用，以及 ResizeObserver 的注册时机。
+
+**架构结论：** 以已审计的 DSH Host 能力为边界，通过 Host Adapters 适配不同呈现位置；默认 sidebar keyed tab，overlay 负责 App 内悬浮，桌面窗口复用现有 pet-window 通道，设置使用 settings section。优先保持单 iframe/单 Runtime，但必须把 Electron 独立 WebContents 的边界单独验证清楚。
