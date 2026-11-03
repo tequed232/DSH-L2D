@@ -33,6 +33,9 @@ import {
   type ScheduledSegment,
 } from '../../../core/src/gesture-timeline.ts';
 import type { SemanticPriority } from '../../../core/src/motion-contract.ts';
+// [F2/H1] ActGate 的 ActiveAct.priority 是枚举名（'NORMAL' 等），手势档位是数值；
+// 双查比较前必须归一化，否则 `50 <= 'NORMAL'` 恒 false → ActGate 闸门静默失效。
+import { ACT_PRIORITY_RANK, type ActPriority } from '../../../core/src/action-chain.ts';
 
 /** overlay 传入的段结构：GestureSegment 的宽松输入形状（数值字段容错由校验兜底）。 */
 export interface GestureSegmentInput {
@@ -59,6 +62,11 @@ const PRIORITY_RANK: Record<GesturePriorityLabel, SemanticPriority> = {
 };
 
 /** Agent 独占（ownParameters，无活动链）按 NORMAL 档收紧（M2/M3 断言口径）。 */
+/** [F2/H1] ActGate 优先级归一：枚举名 → 数值档（与 SemanticPriority 同尺度 10/50/90）。
+ *  未知值按 0 处理（低于一切手势档 = 不拦截，fail-open 到 injector 独占屏障兜底）。 */
+const rankOfActPriority = (p: number | ActPriority): number =>
+  typeof p === 'number' ? p : (ACT_PRIORITY_RANK[p] ?? 0);
+
 const AGENT_OWN_BARRIER: SemanticPriority = 50;
 
 export interface GestureAdmitOptions {
@@ -94,7 +102,9 @@ export interface GestureBridgeDeps {
   /** feature flag（embodied.timeline 编译期常量）。 */
   enabled: boolean;
   /** ActGate 当前链（双查 2）；null = 无占用。 */
-  currentAct?(): { priority: number } | null;
+  /** ActGate 当前链。priority 可能是枚举名（ActiveAct.priority='NORMAL'）或已归一数值，
+   *  比较前统一归一（F2/H1）。 */
+  currentAct?(): { priority: number | ActPriority } | null;
   /** injector Agent 独占清单（双查 3）。 */
   getAgentOwned?(): string[];
   /** Agent 独占释放（同级/更高打断路径）。 */
@@ -220,7 +230,7 @@ export function createGestureBridge(deps: GestureBridgeDeps): GestureBridge {
     const releasedAgentParams: string[] = [];
     if (domain.length) {
       const cur = deps.currentAct?.() ?? null;
-      if (cur && batchRank <= cur.priority) {
+      if (cur && batchRank <= rankOfActPriority(cur.priority)) {
         return {
           admitted: false,
           entryId: opts.entryId ?? '',

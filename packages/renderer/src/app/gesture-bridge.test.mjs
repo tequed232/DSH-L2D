@@ -306,4 +306,39 @@ test('armed 衔接回归：armed 批次被更高批打断 → 硬解除 → 原�
   assert.equal(calls.stopKeyframes, 1, '打断 armed 批 → 硬解除');
 });
 
+
+// [F2/H1 回归] ActGate 的 ActiveAct.priority 是枚举名，不是数值——归一化缺失时
+// `50 <= 'NORMAL'` 恒 false，双查静默失效（真机 5300 已实证 3s 内同级 cue 全部放行）。
+test('H1 回归：链档位为枚举名 NORMAL 时，同级 NORMAL 手势必须被拒', () => {
+  const { deps } = makeDeps({ currentAct: { runId: 8, priority: 'NORMAL', source: 'act' } });
+  const bridge = createGestureBridge(deps);
+  const ga = bridge.admit([{ id: 'kf:LArm', group: 'kf', params: { LArm: 0 }, durationMs: 1000 }], {
+    priority: 'NORMAL',
+    now: 100,
+  });
+  assert.equal(ga.admitted, false, '枚举名链必须真正拦截同级手势');
+  assert.equal(ga.rejected[0].reason, 'priority-blocked');
+});
+
+test('H1 回归：链档位为枚举名 BACKGROUND 时，NORMAL 手势放行', () => {
+  const { deps } = makeDeps({ currentAct: { runId: 9, priority: 'BACKGROUND', source: 'act' } });
+  const bridge = createGestureBridge(deps);
+  const ga = bridge.admit([{ id: 'kf:LArm', group: 'kf', params: { LArm: 0 }, durationMs: 1000 }], {
+    priority: 'NORMAL',
+    now: 100,
+  });
+  assert.equal(ga.admitted, true);
+});
+
+test('H1 回归：链档位为枚举名 FORCE 时，NORMAL 手势被拒', () => {
+  const { deps } = makeDeps({ currentAct: { runId: 10, priority: 'FORCE', source: 'act' } });
+  const bridge = createGestureBridge(deps);
+  const ga = bridge.admit([{ id: 'kf:LArm', group: 'kf', params: { LArm: 0 }, durationMs: 1000 }], {
+    priority: 'NORMAL',
+    now: 100,
+  });
+  assert.equal(ga.admitted, false);
+  assert.equal(ga.rejected[0].reason, 'priority-blocked');
+});
+
 console.log('gesture-bridge: ' + passed + ' tests passed');
