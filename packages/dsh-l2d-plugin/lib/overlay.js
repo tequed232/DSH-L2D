@@ -22,7 +22,7 @@
   // 只在 IIFE 后段声明，会以 var 提升的 undefined 被读到，startAgentPoll 抛
   // "Cannot read properties of undefined (reading 'timer')"，并让下一行
   // initEmotionSensors() 永远不执行——鼠标/注视跟随就整体不绑定（App 页眼追失效的根因）。
-  var agentLink = { state: 'unknown', lastAt: 0, timer: 0, lastSpokeAt: 0 };
+  var agentLink = { state: 'unknown', prevState: '', lastAt: 0, timer: 0, lastSpokeAt: 0 };
   // 设置热更新：外部 PUT /dsh-l2d/settings.json 后，页面需要自己发现变化（overlay 不再整份覆盖设置）
   var settingsWatch = { timer: 0, lastEyeFollow: null };
   var gazeNeutralTimer = 0;
@@ -1299,6 +1299,11 @@
       if (isL2dUiTarget(e.target)) return;
       if (e.button !== 0) return;
       feedHitProbe(e);
+      // 点击前强制采样一次：hover 采样已降到 10Hz，点击点可能还没轮到
+      try {
+        var Lp = window.DSH_L2D;
+        if (Lp && Lp.requestHitSample) Lp.requestHitSample();
+      } catch (errP) { /* ignore */ }
       if (!overModel(e)) return; // 空白处：不拦，事件照常落到下层页面
       e.stopPropagation(); // 命中模型：不传给下层界面
       // 裙摆拖拽手势取消：衣着只走右键菜单（点击/拖动位置冲突太多）
@@ -1995,17 +2000,24 @@
   var canvasEl = null;
   var rendererReady = false;
   var rendererFailed = false;
+  // 性能：挂件显示尺寸 593×741，4096 贴图（5×64MiB=320MiB 显存）纯属浪费；
+  // 2048 档肉眼无差，显存降到 80MiB、采样带宽降到 1/4。
+  // 回到高清只要把下面文件名换回 '大肥鱼.dsl2d.model3.json'。
   var MODEL_URL =
-    '/dsh-l2d/model/' + encodeURIComponent('大肥鱼.dsl2d.model3.json'); // 4096 贴图高清版；2048 降档版是 大肥鱼.dsl2d.2048.model3.json
+    '/dsh-l2d/model/' + encodeURIComponent('大肥鱼.dsl2d.2048.model3.json');
 
   /**
-   * 渲染倍率：高 DPI/Retina 用 devicePixelRatio（Mac Retina=2、Windows 150%=1.5），
-   * 普通 1080p 屏（dpr=1）至少 2× 超采样，缩小显示时更锐利；
-   * 上限 4×，画布单边/总像素的 8K 护栏在渲染包 resizeCanvas 内统一钳制。
+   * 渲染倍率：高 DPI/Retina 按 devicePixelRatio 走（Mac Retina=2、Windows 150%=1.5）。
+   * dpr=1 的普通屏**不再固定 2× 超采样**：实测它把 593×741 的挂件画成 1186×1482，
+   * 填充率 ×4，是有交互时掉到 38fps 的主因。要清晰档把返回改回 Math.max(2, ...) 即可。
+   * 上限 3×（前台），失焦/隐藏降到 1× 省 GPU 填充与带宽，回前台立即恢复；
+   * 画布单边/总像素的 8K 护栏在渲染包 resizeCanvas 内统一钳制。
    */
   function renderScale() {
     var dpr = Number(window.devicePixelRatio) || 1;
-    return Math.min(4, Math.max(2, Math.round(dpr * 100) / 100));
+    if (document.hidden === true) return 1;
+    if (document.hasFocus && !document.hasFocus()) return 1;
+    return Math.max(1, Math.min(2, Math.round(dpr * 100) / 100));
   }
 
   function loadScriptOnce(id, src) {
@@ -2087,6 +2099,25 @@
     }
   }
 
+  // 焦点/可见性变化时重算超采样倍率：前台 2~3×，失焦/隐藏 1×。
+  // 这是"回前台就顺滑、切走就省电"的关键一环，和渲染包的帧率守卫配合。
+  function applyRenderScale() {
+    if (!rendererReady || !window.DSH_L2D || !window.DSH_L2D.layout) return;
+    try {
+      var box = canvasBox();
+      window.DSH_L2D.layout(box.w, box.h, 1, renderScale());
+      reanchorGaze();
+    } catch (e) { /* 渲染包未就绪时忽略，下次事件再算 */ }
+  }
+  var focusScaleBound = false;
+  function watchFocusScale() {
+    if (focusScaleBound) return;
+    focusScaleBound = true;
+    window.addEventListener('focus', applyRenderScale);
+    window.addEventListener('blur', applyRenderScale);
+    document.addEventListener('visibilitychange', applyRenderScale);
+  }
+
   function fallbackToImage(reason) {
     rendererFailed = true;
     if (canvasEl) canvasEl.style.display = 'none';
@@ -2123,6 +2154,7 @@
         if (imgEl) imgEl.style.display = 'none';
         watchResize();
         watchDpr(); // 跨屏/缩放变化时按新 DPI 重排
+        watchFocusScale(); // 焦点/可见性变化时切换超采样倍率
         bindPhysics(); // 渲染就绪后立刻挂上每帧物理钩子
       })
       .catch(function (err) {
@@ -2624,12 +2656,16 @@
     agentLink.state = next;
     agentLink.lastAt = now;
     try {
-      if (next === 'error' && window.DSH_L2D && window.DSH_L2D.emotionSignal) {
-        window.DSH_L2D.emotionSignal({ type: 'state', data: { state: 'error' } });
+      // error 与「从 error 恢复」都要喂：只喂 error 的话，路由永远收不到恢复信号，
+      // 角色会一直挂着出错表情（实测 lastError 已空、ctx 仍是 error）。
+      if ((next === 'error' || agentLink.prevState === 'error') &&
+          window.DSH_L2D && window.DSH_L2D.emotionSignal) {
+        window.DSH_L2D.emotionSignal({ type: 'state', data: { state: next } });
       }
     } catch (e3) {
       /* 情绪信号失败忽略 */
     }
+    agentLink.prevState = next;
     // 动作链失败不能打断后续状态联动
     try {
       if (AGENT_CHAIN[next]) AGENT_CHAIN[next]();
