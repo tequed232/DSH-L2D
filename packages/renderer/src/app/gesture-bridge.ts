@@ -8,6 +8,9 @@
  * - stop：显式释放（selector 透传 core stopGesture 语义），命中 armed 批次即硬解除（stopKeyframes）；
  * - armed 生命周期单一出口（风险清单 #2）：hard disarm = armed 置空 + stopKeyframes，
  *   soft disarm = armed 置空 + releaseKfOwnership，全部收口在本文件 disarmArmed()。
+ * - armed 键域单一来源（真机回归收口）：armed 只记 entryId；armedHas 直接查时间线中
+ *   armed 批次段的 params。登记（admit 写入时间线）与查询（armedHas）共用同一批
+ *   ScheduledSegment 对象，不存在第二份键集合，结构性排除「登记键 ≠ 查询键」的失配。
  *
  * 不依赖 Cubism：ActGate / injector 通过 deps 注入，node 单测可直接跑
  * （gesture-bridge.test.mjs，测试矩阵 M1-M6/R1）。
@@ -165,11 +168,7 @@ const domainOf = (segs: GestureSegment[]): string[] =>
   [...new Set(segs.flatMap((s) => Object.keys(s.params)))].sort();
 
 /** armed 解除的单一出口（风险清单 #2）：hard = 停播；soft = 只清 ownership。 */
-function disarmArmed(
-  armed: { entryId: string; params: Set<string> } | null,
-  hard: boolean,
-  deps: GestureBridgeDeps,
-): null {
+function disarmArmed(armed: { entryId: string } | null, hard: boolean, deps: GestureBridgeDeps): null {
   if (!armed) return null;
   if (hard) deps.stopKeyframes?.();
   else deps.releaseKfOwnership?.();
@@ -182,7 +181,9 @@ function disarmArmed(
  */
 export function createGestureBridge(deps: GestureBridgeDeps): GestureBridge {
   let timeline: GestureTimelineState = emptyTimeline();
-  let armed: { entryId: string; params: Set<string> } | null = null;
+  // armed 只记批次 id（键域单一来源）：armedHas 查询用的参数键直接取自时间线里
+  // armed 批次段的 params——与 admit 写入的是同一批 ScheduledSegment 对象。
+  let armed: { entryId: string } | null = null;
 
   const disarm = (hard: boolean): void => {
     if (armed) armed = disarmArmed(armed, hard, deps);
@@ -260,11 +261,9 @@ export function createGestureBridge(deps: GestureBridgeDeps): GestureBridge {
     }
 
     // 本批成功 → armed 归属本批（情形 C：armed 归属最后一批成功批次）。
+    // 段对象已在 result.state（= timeline）里，armedHas 的参数键直接以它们为准。
     if (result.admitted.length) {
-      armed = {
-        entryId: result.entryId,
-        params: new Set(result.admitted.flatMap((s) => Object.keys(s.params))),
-      };
+      armed = { entryId: result.entryId };
     }
 
     return {
@@ -306,7 +305,12 @@ export function createGestureBridge(deps: GestureBridgeDeps): GestureBridge {
     return result.stopped.map((s) => ({ id: s.id, entryId: s.entryId }));
   };
 
-  const armedHas = (paramId: string): boolean => !!armed && armed.params.has(paramId);
+  // 纵深防御 #3 查询面（键域单一来源）：参数键取自时间线中 armed 批次段的 params，
+  // 与 admit 写入时间线的是同一批对象——登记即查询，不存在键失配的第三态。
+  // 注意 armed 批次段在到期清理（resolve）前仍留在时间线里，此处不做 active 过滤：
+  // 「已 admit 尚未到期清理」的段继续背书其参数（与原 armed.params 集合逐点等价）。
+  const armedHas = (paramId: string): boolean =>
+    !!armed && timeline.segments.some((s) => s.entryId === armed.entryId && paramId in s.params);
 
   const snapshot = (): GestureBridgeSnapshot => {
     const frame = deps.enabled ? resolveTimeline(timeline, deps.now?.() ?? nowMs()) : null;

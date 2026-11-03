@@ -223,4 +223,87 @@ test('armedHas：纵深防御 #3 查询面（armed 覆盖参数 → true；解�
   assert.equal(bridge.armedHas('RArm'), false);
 });
 
+// ---- [M1-d2 真机回归] armed 衔接（admit 登记 ↔ playKeyframes 纵深查询）----
+// 真机症状：admit 回执 admitted 非空（如 'kf:LArm'），playKeyframes 却把物理输出轨道
+// 全剔（no-valid-tracks）——armed 登记键与 armedHas 查询键失配。以下用例把「衔接」
+// 锁死：overlay gestureSegmentsFromTracks 的段形状 admit 后，每个轨道参数必须立即
+// 可被 armedHas 背书；armed 解除（到期/stop/打断）后立即失背书。
+
+test('armed 衔接回归：overlay 段形状（kf:+param / group kf / params {[param]:0}）admit 后逐轨道立即背书', () => {
+  const { deps } = makeDeps();
+  const bridge = createGestureBridge(deps);
+  // overlay.js gestureSegmentsFromTracks 的精确输出形状（U7 载荷：LArm / duration 500）
+  const segs = [
+    { id: 'kf:LArm', group: 'kf', params: { LArm: 0 }, durationMs: 500 },
+    { id: 'kf:RArm', group: 'kf', params: { RArm: 0 }, durationMs: 500 },
+  ];
+  const ga = bridge.admit(segs, { priority: 'NORMAL', now: 1000 });
+  assert.equal(ga.admitted, true);
+  assert.deepEqual(ga.admittedIds, ['kf:LArm', 'kf:RArm']);
+  // playKeyframes 纵深防御 #3 的逐轨道查询：同 tick 立即放行（衔接成立）
+  assert.equal(bridge.armedHas('LArm'), true, '登记键（params 键）= 查询键（轨道参数名）');
+  assert.equal(bridge.armedHas('RArm'), true);
+  // 持有期内每帧 resolve 旁挂不清 armed
+  bridge.resolve(1200);
+  assert.equal(bridge.armedHas('LArm'), true);
+  assert.equal(bridge.armedHas('RArm'), true);
+  // 批次到期（duration 500）→ 软解除 → 物理轨道失去背书（P2 语义恢复）
+  bridge.resolve(1000 + 500 + 1);
+  assert.equal(bridge.armedHas('LArm'), false, '到期后物理轨道无 armed 背书 → 被剔');
+  assert.equal(bridge.armedHas('RArm'), false);
+});
+
+test('armed 衔接回归：空 params 批（资产型手势）不给任何物理参数背书（P2 不放宽）', () => {
+  const { deps } = makeDeps();
+  const bridge = createGestureBridge(deps);
+  const ga = bridge.admit([{ id: 'asset:bow', params: {} }], { now: 1000 });
+  assert.equal(ga.admitted, true);
+  assert.equal(bridge.snapshot().armedEntryId, 'asset:bow', 'armed 建立');
+  assert.equal(bridge.armedHas('LArm'), false, '空域批不背书任何物理轨道');
+  assert.equal(bridge.armedHas('RArm'), false);
+});
+
+test('armed 衔接回归：同参数重入队（同通道替换）后新批次立即重新背书', () => {
+  const { deps } = makeDeps();
+  const bridge = createGestureBridge(deps);
+  const seg = (ms) => ({ id: 'kf:LArm', group: 'kf', params: { LArm: 0 }, durationMs: ms });
+  assert.equal(bridge.admit([seg(5000)], { entryId: 'E1', now: 1000 }).admitted, true);
+  assert.equal(bridge.armedHas('LArm'), true);
+  // U9 型：stop 清账 → 背书消失 → 复播再准入后背书恢复
+  bridge.stop();
+  assert.equal(bridge.armedHas('LArm'), false);
+  assert.equal(bridge.admit([seg(5000)], { entryId: 'E2', now: 1100 }).admitted, true, 'stop 后同参数可再准入');
+  assert.equal(bridge.armedHas('LArm'), true, '复播批次立即背书（清账无残留）');
+  // M6 型：同 entryId 重入队替换 → armed 归属新批次，参数键不变
+  assert.equal(bridge.admit([seg(5000)], { entryId: 'E2', now: 1200 }).admitted, true);
+  assert.equal(bridge.armedHas('LArm'), true);
+});
+
+test('armed 衔接回归：armed 批次被更高批打断 → 硬解除 → 原批独有参数立即失背书，新批参数立即获背书', () => {
+  const { deps, calls } = makeDeps();
+  const bridge = createGestureBridge(deps);
+  // 旧批 E1：RArm + LArm 两参数域
+  assert.equal(
+    bridge.admit(
+      [
+        { id: 'kf:RArm', group: 'kf', params: { RArm: 0 }, durationMs: 5000 },
+        { id: 'kf:LArm', group: 'kf', params: { LArm: 0 }, durationMs: 5000 },
+      ],
+      { entryId: 'E1', now: 1000 },
+    ).admitted,
+    true,
+  );
+  assert.equal(bridge.armedHas('RArm'), true);
+  assert.equal(bridge.armedHas('LArm'), true);
+  // FORCE 批只声明 RArm：冲突域重叠 → E1 整批 interrupted → armed 硬解除并归属新批
+  const ga2 = bridge.admit([{ id: 'kf:RArm', group: 'kf', params: { RArm: 0 }, durationMs: 5000 }], {
+    priority: 'FORCE',
+    now: 1100,
+  });
+  assert.equal(ga2.admitted, true);
+  assert.equal(bridge.armedHas('LArm'), false, '旧批（E1）被清 → 其独有参数失背书');
+  assert.equal(bridge.armedHas('RArm'), true, 'armed 归属新批，RArm 由新批背书');
+  assert.equal(calls.stopKeyframes, 1, '打断 armed 批 → 硬解除');
+});
+
 console.log('gesture-bridge: ' + passed + ' tests passed');
