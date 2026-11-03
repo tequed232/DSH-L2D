@@ -31,3 +31,6 @@ Thumbs.db
 tmp/
 coverage/
 last-run.json
+
+# W3 registry 校验产物（每次跑 validate.test.mjs 重写）
+tools/w3-registry/test-result.json

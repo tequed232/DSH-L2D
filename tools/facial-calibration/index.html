@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>facial calibration</title>
+    <style>
+      html, body { margin: 0; padding: 0; background: #808080; overflow: hidden; }
+      #cv { display: block; }
+    </style>
+  </head>
+  <body>
+    <canvas id="cv"></canvas>
+    <script src="/core.js"></script>
+    <script src="/renderer.js"></script>
+    <script>
+      (function () {
+        var q = new URLSearchParams(location.search);
+        var L = window.DSH_L2D;
+        var cv = document.getElementById('cv');
+        var W = Number(q.get('w')) || 720;
+        var H = Number(q.get('h')) || 1120;
+        var zoom = Number(q.get('zoom')) || 1;
+        var dpr = Number(q.get('dpr')) || 1;
+        var model = q.get('model') || '大肥鱼.dsl2d.2048.model3.json';
+        cv.style.width = W + 'px';
+        cv.style.height = H + 'px';
+
+        if (!L) {
+          document.title = 'ERR-NO-RENDERER';
+          return;
+        }
+
+        // CDP 驱动接口：外部改 __calTarget，页面每帧重放 sticky 参数，
+        // 保证截图时目标值在 Physics/表情/眨眼之后仍是最新生效的。
+        var target = { freeze: {}, params: {} };
+        window.__calTarget = target;
+        window.__calSet = function (spec) {
+          target.freeze = (spec && spec.freeze) || {};
+          target.params = (spec && spec.params) || {};
+        };
+        window.__calPv = function (ids) {
+          return L.readParameters ? L.readParameters(ids || []) : {};
+        };
+        window.__calCaps = function () {
+          return L.getCapabilities ? L.getCapabilities() : null;
+        };
+        // 表情叠加（对照用）：验证同一帧的表情通道与参数通道是否冲突
+        window.__calExpr = function (name) {
+          if (!name) return L.clearExpression ? L.clearExpression() : 'no-clear';
+          return L.setExpression ? L.setExpression(name) : 'no-api';
+        };
+        window.__calInfo = function () {
+          return L.getInfo ? L.getInfo() : null;
+        };
+
+        L.mount(cv, {
+          modelUrl: '/model/' + encodeURIComponent(model),
+          width: W,
+          height: H,
+          zoom: zoom,
+          dpr: dpr,
+        })
+          .then(function () {
+            // 关掉待机微动作（歪头/重心/鼓腮/嘟嘴）：微表情在 post 相位会覆盖
+            // 同帧的 CheeckPuff/Mouthpucker sticky 值，实测会让标定读数漂移。
+            if (L.setStageBusy) L.setStageBusy({ acting: true });
+            function loop() {
+              try {
+                if (Object.keys(target.freeze).length) L.setParameters(target.freeze);
+                if (Object.keys(target.params).length) L.setParameters(target.params);
+              } catch (e) {
+                /* 标定期间的参数错误不应打断渲染 */
+              }
+              requestAnimationFrame(loop);
+            }
+            requestAnimationFrame(loop);
+            window.__calReady = true;
+            document.title = 'CAL-READY';
+          })
+          .catch(function (err) {
+            window.__calError = String((err && err.message) || err);
+            document.title = 'CAL-ERR';
+          });
+      })();
+    </script>
+  </body>
+</html>

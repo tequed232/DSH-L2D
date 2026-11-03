@@ -14,12 +14,15 @@
     "texture": "node tools/texture-opt/index.mjs",
     "build:renderer": "pnpm -F @dsh/renderer build",
     "dev:server": "node tools/dev-server/index.mjs",
-    "gen:ai-tools": "node tools/gen-ai-tools/index.mjs"
+    "gen:ai-tools": "node tools/gen-ai-tools/index.mjs",
+    "test:types": "node tools/typecheck-smoke.mjs"
   },
   "engines": {
     "node": ">=22"
   },
   "devDependencies": {
-    "sharp": "^0.35.5"
+    "sharp": "^0.35.5",
+    "typescript": "^5.9.3",
+    "@types/node": "^24.0.0"
   }
 }
