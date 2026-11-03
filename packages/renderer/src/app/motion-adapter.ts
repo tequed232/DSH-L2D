@@ -165,15 +165,27 @@ export interface EmbodiedFlags {
    * 回滚 = 把 DEFAULT_EMBODIED_FLAGS['embodied.cue'] 改回 false，无需回退代码。
    */
   'embodied.cue'?: boolean;
+  /**
+   * [M1-g / G1] 单肢安全接管（LimbController 租约 + 物理输出 post 覆盖）。
+   * 默认 false = 现行为逐字节不变：admitLimb 全部拒绝（reason='limb-disabled'）、
+   * PhysicsGate.post 不碰 limb、injector 零交互。
+   * 与 `embodied.m1` **相互独立**：m1 开的是 Hip* pre 让位（共享枢纽），
+   * limb 开的是手臂叶子域 post 覆盖；两者都不要求对方为 true。
+   * 回滚 = 把 DEFAULT_EMBODIED_FLAGS['embodied.limb'] 改回 false，无需回退代码。
+   */
+  'embodied.limb'?: boolean;
 }
 
 export const DEFAULT_EMBODIED_FLAGS: Readonly<
-  Required<Pick<EmbodiedFlags, 'embodied.m1' | 'embodied.m1e' | 'embodied.timeline' | 'embodied.cue'>>
+  Required<
+    Pick<EmbodiedFlags, 'embodied.m1' | 'embodied.m1e' | 'embodied.timeline' | 'embodied.cue' | 'embodied.limb'>
+  >
 > = {
   'embodied.m1': false,
   'embodied.m1e': false,
   'embodied.timeline': false,
   'embodied.cue': false,
+  'embodied.limb': false,
 };
 
 /**
@@ -195,8 +207,14 @@ export interface PhysicsGateDeps {
   limb?: LimbControlLike | null;
   /**
    * [post] limb 写值落点：签名对齐 injector.set（index.ts 接
-   * `(core, id, value) => injector.set(core, id, value, 1)`）。
-   * 只在提供 `limb` 且 resolve 非空时调用。缺省 = resolve 结果丢弃（诊断仍可见）。
+   * `(core, id, value) => injector.set(core, id, value, 1, { mode: 'set' })`）。
+   * 只在提供 `limb` 且 resolve 非空时调用。缺省回落到 `stagePostWrite`，
+   * 两者都没有 = resolve 结果丢弃（诊断仍可见）。
+   */
+  limbWrite?(core: unknown, id: string, value: number): void;
+  /**
+   * [post] M1-a 的通用 post 落点（cue / 旧 limb 装配共用）。
+   * `limbWrite` 缺省时 limb 通道用它；两者都没有 = 无 post 通道。
    */
   stagePostWrite?(core: unknown, id: string, value: number): void;
   /** [post] resolve 的时钟（缺省 performance.now/Date.now，测试注入用）。 */
@@ -213,14 +231,20 @@ export interface PhysicsGateDeps {
  *   读到 Agent pre 值，次级链随动）、interpolate 跳过 parameterValues 落写
  *   （Agent 值不被物理覆盖）。振子状态照常推进，release 后物理平滑接管。
  * - `post`：物理后 —— post 钩子内、`injector.apply(core, 'post')` 之前（Pose800 之后）。
- *   `deps.limb.resolve(now)` 非空时逐项经 `deps.stagePostWrite` 登记 set 写，
- *   随后的 injector.apply('post') 后写胜出（叶子四肢 post 覆盖，M1-a 语义）。
+ *   `deps.limb.resolve(now)` 非空时逐项经 `deps.limbWrite`（缺省回落 `stagePostWrite`）
+ *   登记 set 写，随后的 injector.apply('post') 后写胜出（叶子四肢 post 覆盖）。
+ *   **post 通道由 `embodied.limb` 单独控制**，与 `embodied.m1`（pre 让位）互不依赖：
+ *   G1 的手臂接管绝不能因为没开 Hip 让位而失效，也不能因为开了手臂就顺带改共享枢纽行为。
  *
- * flag=false（默认）时 pre/post 是直接 return 的空实现，帧循环行为与 main 完全一致；
+ * flag=false（默认）时 pre/post 是对应通道直接 return 的空实现，帧循环行为与 main 完全一致；
  * 让位表也不会被触碰（flag 关 = 逐字节现行为，M1-a 语义不变式）。
  */
 export interface PhysicsGate {
   readonly enabled: boolean;
+  /** [pre] 让位通道是否启用（= embodied.m1）。 */
+  readonly preEnabled: boolean;
+  /** [post] limb 通道是否启用（= embodied.limb）。 */
+  readonly limbEnabled: boolean;
   /** 物理前调用点（见类注释「两个调用位置」）。flag 关 = 空操作。 */
   pre(core: unknown): void;
   /** 物理后调用点（同上）。flag 关 = 空操作。 */
@@ -230,13 +254,16 @@ export interface PhysicsGate {
 }
 
 /**
- * 创建 PhysicsGate。`flags['embodied.m1']` 缺省/false → enabled=false，pre/post 为空实现。
- * deps 全部可选：未接线的职责按「无该通道」处理，不影响其余通道。
+ * 创建 PhysicsGate。`flags['embodied.m1']` 控 pre 让位，`flags['embodied.limb']` 控 post limb，
+ * 两者缺省都是 false（= 空实现）。deps 全部可选：未接线的职责按「无该通道」处理。
  */
 export function createPhysicsGate(flags: EmbodiedFlags = {}, deps: PhysicsGateDeps = {}): PhysicsGate {
   const enabled = flags['embodied.m1'] === true;
+  const limbEnabled = flags['embodied.limb'] === true;
   return {
     enabled,
+    preEnabled: enabled,
+    limbEnabled,
     pre(_core: unknown): void {
       // [M1-b] 生产者让位：本帧独占的 pre 相位参数（Hip*）整体替换进让位登记表。
       // 空数组 = 全部恢复物理写入（release / 到期 / flag 关的统一路径）。
@@ -245,17 +272,18 @@ export function createPhysicsGate(flags: EmbodiedFlags = {}, deps: PhysicsGateDe
       physicsYield.replace(ids);
     },
     post(core: unknown): void {
-      // [M1-b] limb 通道：resolve 本帧写值，经 stagePostWrite（injector.set）登记，
+      // [M1-g] limb 通道：resolve 本帧写值，经 limbWrite（injector.set）登记，
       // 由紧随其后的 injector.apply(core, 'post') 后写胜出。
-      if (!enabled) return;
+      if (!limbEnabled) return;
       const limb = deps.limb;
-      if (!limb || !deps.stagePostWrite) return;
+      const write = deps.limbWrite ?? deps.stagePostWrite;
+      if (!limb || !write) return;
       const now = deps.now ? deps.now() : Date.now();
       const writes = limb.resolve(now);
       if (!writes || writes.size === 0) return; // 空帧无副作用
       for (const [id, value] of writes) {
         if (!Number.isFinite(value)) continue;
-        deps.stagePostWrite(core, id, value);
+        write(core, id, value);
       }
     },
     dispose(): void {

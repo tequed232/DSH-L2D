@@ -205,7 +205,7 @@ test('flag 开 + limb.resolve 非空：逐项 stagePostWrite（post 后写胜出
   physicsYield.clear();
   const deps = makeDeps();
   deps.limbWrites = new Map([['RArm', 0.8], ['LArm', -0.5]]);
-  const gate = gateWithLimb({ 'embodied.m1': true }, deps);
+  const gate = gateWithLimb({ 'embodied.m1': true, 'embodied.limb': true }, deps);
   const core = newParams();
   gate.post(core);
   assert.equal(deps.limbResolveCalls, 1);
@@ -218,7 +218,7 @@ test('flag 开 + limb.resolve 非空：逐项 stagePostWrite（post 后写胜出
 test('limb 空表 = 空帧无副作用；非有限值过滤；flag 关不触发 resolve', () => {
   physicsYield.clear();
   const deps = makeDeps();
-  const gateOn = gateWithLimb({ 'embodied.m1': true }, deps);
+  const gateOn = gateWithLimb({ 'embodied.m1': true, 'embodied.limb': true }, deps);
 
   deps.limbWrites = new Map();
   gateOn.post(newParams());
@@ -229,7 +229,7 @@ test('limb 空表 = 空帧无副作用；非有限值过滤；flag 关不触发 
   gateOn.post(newParams());
   assert.deepEqual(deps.staged, [{ core: deps.staged[0].core, id: 'RHand', value: 0.25 }]);
 
-  const gateOff = gateWithLimb({ 'embodied.m1': false }, deps);
+  const gateOff = gateWithLimb({ 'embodied.m1': false, 'embodied.limb': false }, deps);
   const callsBefore = deps.limbResolveCalls;
   gateOff.post(newParams());
   assert.equal(deps.limbResolveCalls, callsBefore, 'flag 关不得触发 resolve');

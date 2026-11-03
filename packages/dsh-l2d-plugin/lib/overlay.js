@@ -3890,6 +3890,8 @@
                 gesture: L.getGestureState ? L.getGestureState() : 'getGestureState-missing',
                 // [M1-f 第二批] cue 账本活体状态（enabled/active channels/overlay），与 gesture 并列
                 cue: L.getCueState ? L.getCueState() : 'missing',
+                // [M1-g] limb 租约活体状态（flagEnabled/size/ownership/drift/域清单）
+                limb: L.getLimbState ? L.getLimbState() : 'missing',
                 rendererEl: (document.getElementById('dsh-l2d-renderer') || {}).src || '',
                 winHasPlan: (typeof window !== 'undefined' && window.DSH_L2D) ? typeof window.DSH_L2D.normalizeActPlan : 'no-win-api',
                 sameRef: !!(typeof window !== 'undefined' && window.DSH_L2D === L),
@@ -4030,6 +4032,76 @@
             }
             var cueStopped = L.stopCue(selCore);
             return { ok: true, selector: selIn || null, stopped: cueStopped };
+          }
+          case 'l2d_limb_acquire': {
+            // [M1-g / G1] 单肢安全接管：只接 manifest 的 30 个手臂物理输出
+            // （RArm/RForearm/RWrist/RHand/RHand2/袖子/飘带 的左右两族）。
+            // 姿态层 Param36..43 / 59..62 不是物理输出，走 l2d_set_parameters 普通写，
+            // 传给本接口会被逐 id 拒（reason=rejected/not-ownable）——这是设计。
+            if (!L.admitLimb) return { ok: false, reason: 'not-supported' };
+            var limbState = L.getLimbState ? L.getLimbState() : null;
+            if (limbState && limbState.flagEnabled === false) {
+              // flag 关：明确回执，绝不静默成功（与 l2d_cue 的 cue-disabled 同口径）。
+              return { ok: false, reason: 'limb-disabled', requested: a.ids || a.side || null };
+            }
+            var limbIds = Array.isArray(a.ids) ? a.ids.map(String) : [];
+            // 便捷写法：side -> 直接取域清单（overlay 不猜模型参数名，id 全部来自 manifest）。
+            if (!limbIds.length && a.side && limbState && limbState.domains) {
+              var limbSide = String(a.side);
+              if (limbSide === 'right') limbIds = limbState.domains.rightPhysics.slice();
+              else if (limbSide === 'left') limbIds = limbState.domains.leftPhysics.slice();
+              else if (limbSide === 'both') {
+                limbIds = limbState.domains.rightPhysics.concat(limbState.domains.leftPhysics);
+              }
+            }
+            if (!limbIds.length) return { ok: false, reason: 'empty-ids' };
+            var limbOpts = {};
+            if (a.runId != null) limbOpts.runId = String(a.runId);
+            if (a.durationMs != null) limbOpts.durationMs = Number(a.durationMs);
+            if (a.priority != null) limbOpts.priority = Number(a.priority);
+            // 可选初始目标值：{RArm: 1, RForearm: 0.5, ...}（未 acquire 的 id 会被忽略）
+            if (a.values && typeof a.values === 'object' && !Array.isArray(a.values)) {
+              limbOpts.values = a.values;
+            }
+            var limbRec = L.admitLimb(limbIds, limbOpts);
+            var limbOk = !!(limbRec && limbRec.accepted);
+            var limbOut = {
+              ok: limbOk,
+              accepted: limbOk,
+              requested: limbIds,
+              reason: limbRec ? limbRec.reason : undefined,
+              runId: limbRec ? limbRec.runId : undefined,
+              acquired: limbRec ? limbRec.acquired : [],
+              rejected: limbRec ? limbRec.rejected : [],
+              injectorRejected: limbRec ? limbRec.injectorRejected : [],
+              written: limbRec && limbRec.written ? limbRec.written : [],
+              durationMs: limbRec ? limbRec.durationMs : undefined,
+              // 仲裁面：与 cue 回执同形状，G2 scheduler 直接消费
+              arbitration: {
+                admitted: limbOk,
+                rejected: limbRec ? limbRec.rejected : [],
+                entryId: limbRec ? limbRec.runId : undefined,
+                cueId: 'limb',
+              },
+            };
+            if (!limbOk && !limbOut.reason) {
+              limbOut.reason = (limbOut.rejected[0] && limbOut.rejected[0].reason) || 'limb-rejected';
+            }
+            return limbOut;
+          }
+          case 'l2d_limb_release': {
+            // [M1-g] 显式释放：runId 缺省 = 全释放；下一帧物理自然接管（无恢复逻辑）。
+            if (!L.releaseLimb) return { ok: false, reason: 'not-supported' };
+            var limbState2 = L.getLimbState ? L.getLimbState() : null;
+            if (limbState2 && limbState2.flagEnabled === false) {
+              return { ok: false, reason: 'limb-disabled' };
+            }
+            var limbRel = L.releaseLimb(a.runId != null ? String(a.runId) : undefined);
+            return {
+              ok: !limbRel || limbRel.ok !== false,
+              released: limbRel ? limbRel.released : [],
+              receipt: limbRel || null,
+            };
           }
           case 'l2d_stop_keyframes': {
             L.stopKeyframes();
