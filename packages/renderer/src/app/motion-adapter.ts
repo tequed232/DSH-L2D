@@ -165,7 +165,7 @@ export const DEFAULT_EMBODIED_FLAGS: Readonly<
 > = {
   'embodied.m1': false,
   'embodied.m1e': false,
-  'embodied.timeline': true,
+  'embodied.timeline': false,
 };
 
 /**
