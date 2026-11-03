@@ -1,151 +1,360 @@
-<p align="center">
-  <img src="docs/assets/icon.png" alt="DSH-L2D 图标" width="160" />
+<div align="center">
+
+<img src="docs/assets/icon.png" width="144" alt="DSH-L2D mascot" />
+
+# DSH-L2D
+
+### Give your DSH workspace a little life.
+
+**面向 DeepSeek Harness 的具身 Live2D 桌宠与 Agent 行为运行时**
+
+让 AI 不只通过文字回应，也能通过视线、表情、姿态与连续动作表达状态。
+
+<p>
+  <a href="https://github.com/tequed232/DSH-L2D"><img src="https://img.shields.io/badge/Platform-DeepSeek%20Harness-5865F2?style=for-the-badge" alt="Platform" /></a>
+  <a href="https://github.com/tequed232/DSH-L2D"><img src="https://img.shields.io/badge/Renderer-Live2D%20Cubism-00A6A6?style=for-the-badge" alt="Renderer" /></a>
+  <a href="https://github.com/tequed232/DSH-L2D/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-2EA44F?style=for-the-badge" alt="License" /></a>
 </p>
 
-## DSH-L2D
+<p>
+  <a href="#-功能一览">功能</a> ·
+  <a href="#-运行架构">架构</a> ·
+  <a href="#-快速开始">快速开始</a> ·
+  <a href="#-开发与验证">开发</a> ·
+  <a href="#-路线图">路线图</a>
+</p>
 
-在 DeepSeek Harness（DSH）界面上叠加一个真实渲染的 Live2D 角色：官方 Cubism 5 Web SDK、
-表情 / 动作 / 四肢姿势、AI 工具调用、余额查询、角色缩放、DSH 工作区会话状态联动。
-
----
-
-## 功能
-
-- Cubism 5 渲染：呼吸、眨眼、表情叠加、动作组、物理输出表识别
-- AI 工具通道：`l2d_set_expression` / `l2d_play_motion` / `l2d_set_pose` / `l2d_look_at` /
-  `l2d_set_parameters` / `l2d_play_keyframes` / `l2d_reset_pose`
-- Emotion_Router：鼠标/系统/媒体/`<mood>`标签 → 统一路由到表情/动作/姿势/视线，带情绪惯性与优先级仲裁
-- 眼神/躯体跟随 + 待机视线漂移（拟人微动作）；拖拽时面部微放大、松手平滑回弹
-- 外观调整集中在右键菜单「模型外观」子菜单（面部/胸口/裙摆/鞋子），不与拖拽冲突
-- 系统联动与媒体律动为可插拔传感器，默认关闭（设置面板开启）
-- 病娇彩蛋：右键「邪神模式」两段确认后常驻（暗角 + 黑脸 + 开场抚胸），只能再从菜单关掉。9 秒的 FORCE 槽只保护开场不被待机打断
-- 戳一戳动作链：随机动作，或让 DeepSeek 生成表情 / 动作 / 姿势 / 视线 / 关键帧组合；连点中断未完成动作链
-- 分区互动：摸头亲和、摸胸害羞、点脚穿/脱鞋、拖拽裙摆，右键菜单调整形态
-- 体型校正与缩放：基础画布 320×400，缩放 0.6~2.0，三种体型统一视觉系数
-- 右键菜单与独立设置面板：不遮挡角色主体
-- 余额查询与峰谷价：价格条显示在角色下方，红绿标识当前峰/谷计费
-- 自发聊天与聊天动作：完成状态回流最新回复，并按文本映射表情/动作/姿势
-- 余额查询：用户自填 DeepSeek API Key，走官方 `/user/balance`
-- 工作区联动：读取 DSH 会话状态，聚合为 `thinking / working / attention / error / idle`
-  并触发对应表情、姿势和气泡提示
+</div>
 
 ---
 
-## 轮椅玩法 
+## 🐟 项目简介
 
-创建一个新工作区，让把仓库链接（https://github.com/tequed232/DSH-L2D/）
-发给 Harness 会话 (如DeepSeek Harness  Codex)，跟着它的提示补全运行所需模型和运行所需SDK 即可
+DSH-L2D 是一个集成在 **DeepSeek Harness（DSH）** 中的 Live2D 角色系统。它由 DSH 插件宿主、Cubism 渲染器、模型无关的动作核心，以及 MCP Agent 工具接口组成。
 
----
+它的目标不是简单地“让一个 Live2D 模型动起来”，而是建立一套从 **工作区上下文 → 语义行为意图 → 模型能力适配 → 动作轨迹 → 参数仲裁 → 实际渲染** 的完整链路。
 
-## 快速开始（DSH 插件）
+当 Agent 正在思考、执行任务、遇到错误或与用户交流时，角色可以根据上下文做出相应的表情、视线和身体动作。动作由本地确定性运行时执行，模型只负责表达意图，不直接操纵每一帧的底层参数。
 
-1. 下载或构建插件包：
+> **项目状态说明**：仓库同时包含已落地代码、实验性模块和仍在推进的架构设计。本文会明确标出能力边界；“存在模块”不等于“端到端链路已完成”，设计目标也不代表已通过真实 DSH 环境验收。
 
-   ```bash
-   pnpm install
-   pnpm build:renderer
-   npm pack ./packages/dsh-l2d-plugin
-   ```
+## 🎬 项目演示
 
-2. 解压 `dsh-l2d-*.tgz`，把 `package` 目录链接到 DSH profile：
+> 视频发布后，将下方占位说明替换为真实的 Bilibili 视频卡片。GitHub README 不支持可靠的 Bilibili iframe 内嵌播放，因此采用“封面图片 + 点击跳转 B 站”的方式，兼容桌面端和移动端。
 
-   ```text
-   %USERPROFILE%\.dsh\profiles\desktop\node_modules\dsh-l2d
-   ```
+<!-- Bilibili video card: replace BV_ID and COVER_IMAGE with real values.
+[![Watch the DSH-L2D demo](COVER_IMAGE)](https://www.bilibili.com/video/BV_ID/)
+-->
 
-3. 在 profile 的 `package.json` 加入依赖与 bundle：
+**演示视频：** 暂待补充 Bilibili BV 号。发布后将在此展示可点击封面，跳转至 B 站播放。
 
-   ```json
-   "dsh-l2d": "file:./node_modules/dsh-l2d"
-   ```
+## ✨ 功能一览
 
-   `dsh.profile.bundles` 加入 `"dsh-l2d"`。
+<table>
+<tr>
+<td width="50%" valign="top">
 
-4. 在 profile 的 `cordis.patch.yml` 追加：
+### 🎭 Live2D 角色呈现
+- Live2D Cubism 5 Web 渲染
+- 表情、动作组、姿态与视线控制
+- 呼吸、眨眼与待机微动作
+- 角色拖拽、缩放和外观交互
+- DSH 页面叠加层与桌面宠物窗口路径
 
-   ```yaml
-   - insert:
-       - id: dsh-l2d
-         name: dsh-l2d
-         config: {}
-   ```
+</td>
+<td width="50%" valign="top">
 
-5. **重启 DSH**（注入表只在启动时收集一次）。
+### 🧠 Agent 具身行为
+- AI 工具调用与动作回执
+- 情绪、人格和上下文路由
+- 多阶段动作链与优先级仲裁
+- 工作区状态驱动角色反馈
+- 为不同 Live2D 模型适配能力画像
 
-模型和 Cubism Core 不入库，见下文约束。
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
 
----
+### 🧩 可扩展运行时
+- 独立 Core / Renderer / Plugin / MCP 包
+- 参数混合与所有权管理
+- Cubism 更新阶段调度
+- 模型参数扫描与能力注册表
+- 本地验收、契约与回归测试工具
 
-## 本地验证
+</td>
+<td width="50%" valign="top">
+
+### 🔒 本地优先与安全边界
+- MCP 通过本机回环 HTTP 桥接
+- 系统/媒体传感器默认关闭
+- 工作区上下文按需聚合与脱敏
+- 模型与 Cubism Core 不随仓库分发
+- Agent 不直接写入底层 Cubism 对象
+
+</td>
+</tr>
+</table>
+
+### 当前实现状态
+
+| 子系统 | 状态概述 | 说明 |
+|---|---|---|
+| DSH 插件入口 | 已有实现 | Node 插件入口、客户端入口和宿主服务桥已存在 |
+| Live2D Renderer | 已有实现 | Cubism 模型加载、WebGL 渲染和更新调度代码已存在 |
+| Motion Core | 持续完善 | 已有 ParamMixer、ActGate、语义契约、轨迹和画像相关模块 |
+| MCP Server | 已有实现 | stdio MCP 工具通过本机插件 HTTP 接口转发 |
+| Workspace Agent | 已有实现/迭代 | 有工作区快照、Session 事件和上下文桥接模块 |
+| 多容器 Presentation | 部分实现 | overlay 路径有代码与审计记录；其他 Host 容器仍需逐项接线验收 |
+| 多模型具身动作 | 持续开发 | 画像和适配基础已存在，复杂动作链的跨模型表现仍需完善 |
+| 性能治理 | 规划与迭代 | 需持续验证启动、GPU、帧率、内存和长时间运行表现 |
+
+## 🏗️ 运行架构
+
+<div align="center">
+
+<img src="https://img.shields.io/badge/Host-DSH-5865F2?style=flat-square" />
+<img src="https://img.shields.io/badge/Core-Behavior%20Engine-7B61FF?style=flat-square" />
+<img src="https://img.shields.io/badge/Render-Cubism%20WebGL-00A6A6?style=flat-square" />
+<img src="https://img.shields.io/badge/Agent-MCP-2EA44F?style=flat-square" />
+
+</div>
+
+```mermaid
+flowchart TB
+    A["DSH Workspace / Agent"] --> B["Workspace Context & Persona"]
+    B --> C["Semantic Behavior Intent"]
+    C --> D["Capability Profile / Adapter"]
+    D --> E["Motion Track / Trajectory"]
+    E --> F["WriteIntent"]
+    F --> G["Ownership & Priority Arbitration"]
+    G --> H["Cubism Parameter Injection"]
+    H --> I["Physics / Pose / WebGL Render"]
+
+    J["MCP Client"] --> K["stdio MCP Server"]
+    K --> L["Loopback HTTP Bridge"]
+    L --> C
+
+    M["DSH Plugin Host"] --> N["Presentation Adapter"]
+    N --> I
+```
+
+### 模块职责
+
+| 模块 | 路径 | 核心职责 |
+|---|---|---|
+| Core | `packages/core` | 语义动作契约、轨迹编译、参数混合、优先级和仲裁 |
+| Renderer | `packages/renderer` | Cubism 模型生命周期、WebGL、帧调度和参数注入 |
+| DSH Plugin | `packages/dsh-l2d-plugin` | Host 生命周期、客户端注入、工作区桥、设置和窗口 |
+| MCP | `packages/dsh-l2d-mcp` | Agent 工具定义、输入校验、动作调用和回执 |
+| Tools | `tools/` | 能力扫描、注册表、契约检查和运行时验收 |
+| Docs | `docs/` | 架构决策、接口约束、实现指南与 Agent 工作依据 |
+
+### 核心执行链
+
+```text
+Agent / Workspace / Persona
+          │
+          ▼
+  Semantic Behavior Intent
+          │
+          ▼
+ Model Capability Resolution
+          │
+          ▼
+  Action Chain / Trajectory
+          │
+          ▼
+      WriteIntent
+          │
+          ▼
+ Priority + Ownership Arbitration
+          │
+          ▼
+  Cubism Parameter Injection
+          │
+          ▼
+     Physics / Pose / Render
+```
+
+**重要约束：** Agent 输出的是语义意图，不是逐帧参数。动作必须经过能力检查、轨迹约束、优先级和参数所有权仲裁；未知能力按不支持处理或安全降级。
+
+## 🧠 核心行为系统
+
+### 语义意图，而不是硬编码参数
+
+Agent 可以表达“害羞地低下头并回避视线”这样的行为目标。运行时再根据当前模型的能力画像，把它映射为可用的参数轨迹和资源动作。
+
+### 模型能力画像
+
+每个模型都应拥有自己的能力说明书：
+
+| 能力状态 | 含义 | 执行策略 |
+|---|---|---|
+| `supported` | 已验证可直接表达 | 正常执行 |
+| `approximate` | 可通过近似参数或组合动作表达 | 降级执行并保留标记 |
+| `unsupported` | 已确认不具备 | 跳过该能力 |
+| `unknown` | 尚未验证 | 不得假定支持 |
+
+### 动作优先级
+
+- `BACKGROUND`：待机、呼吸和环境微动作。
+- `NORMAL`：普通交互和情绪表达。
+- `FORCE`：需要抢占低优先级行为的动作。
+
+被打断的动作需要有明确终态，并释放其占用的参数所有权。相同骨骼参数的冲突动作不能同时写入。
+
+## 🧩 DSH 集成方式
+
+当前宿主能力以仓库中的 [Host API 审计](docs/Host-API-Audit.md) 为准：
+
+| 宿主位置 | 对应扩展点 | 当前说明 |
+|---|---|---|
+| 页面悬浮层 | `shell.overlay` | 当前客户端入口已有接入路径 |
+| 右侧面板标签 | `sidebar.right.pane.tab` | keyed tab 能力；需独立完成和验收 |
+| 设置面板 | `settings.section` | 设置分区，不等于独立设置窗口 |
+| 桌面独立窗口 | `pet-window.mjs` | 复用 Electron 窗口通道；需处理独立 WebContents 边界 |
+
+角色的行为状态与展示位置必须分离。切换容器不应重新创建第二个权威 Avatar Runtime，也不应让正在播放的动作从头开始。对于独立 Electron WebContents，必须通过宿主侧状态同步，不得假设 iframe 可以跨窗口共享。
+
+## 🔌 MCP 工具
+
+`packages/dsh-l2d-mcp` 提供 stdio MCP Server，通过本机回环 HTTP 桥接插件服务。
+
+当前工具集合以运行时 `tools/list` 返回为准，README 不把静态工具名列表视为永久 API。MCP 的 `accepted` 回执只代表动作请求已受理；动作是否完成、被打断或仍在等待，应通过动作事件和状态查询确认。
+
+更多配置见 [MCP 包说明](packages/dsh-l2d-mcp/README.md)。
+
+## 🚀 快速开始
+
+### 环境要求
+
+- Node.js 22+
+- pnpm 12.5.1（以根目录 `package.json` 的 packageManager 字段为准）
+- 已安装的 DeepSeek Harness 环境
+- 用户自行准备的 Live2D 模型与 Cubism Core
+
+### 1. 获取代码
 
 ```bash
+git clone https://github.com/tequed232/DSH-L2D.git
+cd DSH-L2D
 pnpm install
+```
+
+### 2. 构建 Renderer
+
+```bash
+pnpm build:renderer
+```
+
+### 3. 打包插件
+
+```bash
+npm pack ./packages/dsh-l2d-plugin
+```
+
+将生成的插件包按 DSH profile 的插件安装方式部署。具体 profile 路径、bundle 注册和 Cordis patch 配置，请以当前 DSH 版本和插件安装说明为准；安装后重启 DSH，使宿主重新收集注入模块。
+
+### 4. 配置模型与 Cubism Core
+
+- 模型目录通过 `DSH_L2D_MODEL_DIR` 或插件当前默认路径提供。
+- Cubism Core 文件通过 `DSH_L2D_CORE` 或项目配置指定。
+- 不要将模型文件或 Core 二进制提交到仓库或未经许可的 CDN。
+
+## 🛠️ 开发与验证
+
+### 常用命令
+
+| 命令 | 作用 |
+|---|---|
+| `pnpm build:renderer` | 构建 Cubism Renderer |
+| `pnpm test:core` | 运行聚合核心测试 |
+| `pnpm test:types` | 类型 smoke 检查 |
+| `pnpm test:contract` | Renderer 契约检查 |
+| `pnpm scan:capability` | 扫描模型能力 |
+| `pnpm gen:ai-tools` | 生成 Agent 工具定义 |
+| `pnpm dev:server` | 启动本地调试服务 |
+| `pnpm accept -- --read-only` | 对运行中的插件执行只读验收 |
+| `pnpm accept` | 完整验收，部分测试会实际驱动角色 |
+
+### 本地调试
+
+```bash
 pnpm build:renderer
 pnpm dev:server
 ```
 
-打开 `http://127.0.0.1:5300/overlay-test.html` 可直接测试叠加层、动作、姿势与注入通道。
+调试服务器会输出本地访问地址。当前开发配置下可使用 `http://127.0.0.1:5300/overlay-test.html` 检查 overlay、动作和参数注入路径。
 
----
+### 验收注意事项
 
-## 模型 / Core 合规约束
+1. 先确认目标 DSH 插件服务正在运行。
+2. 优先使用 `--read-only` 做无副作用检查。
+3. 完整验收会触发部分角色动作，不要在 Agent 正在控制角色时并发执行。
+4. 单元测试通过不代表真实模型、GPU、Electron 窗口和宿主生命周期已经验收。
 
-### 1. 模型文件不入库、不打进安装包
-
-`DeepSeek免费公皮` 的授权禁止重新分发模型文件，仓库不包含任何模型。
-运行时通过 `DSH_L2D_MODEL_DIR` 或默认本地路径加载。
-
-模型署名（使用公开内容时请保留）：原画 神宫凉子 / 建模 霓虹猫_NeonNeko。
-
-### 2. Cubism Core 需自行从官方 SDK 提取
-
-`live2dcubismcore.min.js` 受 Live2D 许可约束，不可提交仓库或第三方 CDN 分发。
-请从 [Live2D 官网](https://www.live2d.com/sdk/download/web/) 下载 Cubism 5 SDK for Web，
-把 `Core/live2dcubismcore.min.js` 放到本地 `vendor/cubism/...` 路径。
-
----
-
-## 目录
+## 📁 项目结构
 
 ```text
-apps/stage-web/            早期 Web 调试壳
-packages/core/             参数仲裁器 ParamMixer
-packages/renderer/         Cubism 5 渲染包（构建为插件 assets/renderer.js）
-packages/dsh-l2d-plugin/   DSH 插件：宿主路由、overlay、AI 桥、设置
-tools/dev-server/          本地零依赖验证服务器
-tools/gen-ai-tools/        生成 AI function-calling 工具定义
-docs/                      技术方案、行为设计、提示词
+DSH-L2D/
+├── apps/
+│   └── stage-web/              # 早期 Web 调试壳
+├── packages/
+│   ├── core/                   # 模型无关的动作与参数核心
+│   ├── renderer/               # Live2D Cubism / WebGL Renderer
+│   ├── dsh-l2d-plugin/         # DSH 插件宿主与客户端
+│   └── dsh-l2d-mcp/            # stdio MCP Server
+├── tools/
+│   ├── acceptance/             # 运行时验收
+│   ├── capability-scan/        # 模型能力扫描
+│   ├── w3-registry/             # 能力注册表
+│   ├── ownership-spec/         # 参数所有权规格
+│   └── dev-server/             # 本地调试服务
+└── docs/                       # 架构、规范、审计和 Agent 指南
 ```
+
+## 🗺️ 路线图
+
+- [ ] 统一插件注册、Renderer 准备、模型加载和 Runtime 激活生命周期。
+- [ ] 让所有动作源经过单一参数写入与仲裁链。
+- [ ] 完成 sidebar、overlay、桌面窗口的 Presentation Adapter。
+- [ ] 建立模型能力画像的扫描、版本化和安全降级闭环。
+- [ ] 完善情绪到全身动作链的编排与可观测性。
+- [ ] 完善 GPU/CPU 预算、纹理质量、隐藏降频和资源回收。
+- [ ] 建立真实 DSH 环境下的长时间运行和回归验收。
+
+## 📚 设计文档
+
+| 文档 | 内容 |
+|---|---|
+| [具身行为契约](docs/Embodied-Behavior.md) | 语义行为、动作阶段与执行边界 |
+| [多模型 Motion Engine](docs/Motion-Engine-多模型架构.md) | 模型无关动作引擎架构 |
+| [AIRI 实现指南](docs/MOTION_ENGINE_AIRI_IMPLEMENTATION_GUIDE.md) | 参考实现拆解与落地建议 |
+| [能力注册表](docs/W3-Motion-Capability-Registry.md) | 动作能力与模型画像 |
+| [Host API 审计](docs/Host-API-Audit.md) | DSH 宿主扩展点与验证记录 |
+| [参数所有权不变量](docs/Ownership-Invariants.md) | 参数冲突、所有权和写入约束 |
+| [参数读写对照](docs/参数读写对照.md) | Cubism 参数读写边界 |
+| [动作链编排](docs/动作链编排-v1.md) | 动作链阶段与编排规则 |
+| [性能与多核方案](docs/性能与多核方案.md) | 性能优化设计 |
+| [README 编写规范](docs/README-STYLE-GUIDE.md) | 后续 Agent 修改 README 的统一依据 |
+
+## 🔐 资源与许可
+
+本仓库根目录使用 MIT License。第三方 SDK、模型、纹理和动作资源可能受各自独立许可约束。
+
+- Live2D Cubism Core 不随本仓库分发，请从 [Live2D 官方 SDK 页面](https://www.live2d.com/sdk/download/web/) 获取并遵循许可。
+- 模型文件不随仓库分发。使用模型前应确认作者署名、授权范围和再分发限制。
+- 本机控制服务只应监听 loopback，不应直接暴露到公网。
+- 系统/媒体传感器应由用户显式启用；工作区上下文应遵循最小化采集原则。
 
 ---
 
-## MCP
+<div align="center">
 
-`packages/dsh-l2d-mcp` 是一个 stdio 薄壳，把工具转发到本机 `POST /dsh-l2d/ai/call`。
-端口用 `DSH_L2D_URL`，否则在 `~/.dsh` 里找端口，最后试调试服 `127.0.0.1:5300`。只接受回环地址。
+**Made for DSH · Powered by Live2D Cubism**
 
-给 Agent 的工具只有：`l2d_emote`、`l2d_set_expression`、`l2d_play_motion`、`l2d_set_pose`、`l2d_gaze`、`l2d_say`、`l2d_act`、`l2d_get_state`、`l2d_reset`。
-`l2d_set_parameters` 和 `l2d_play_keyframes` 不进 MCP。`skipped` / `conflict` 是成对动作的正常返回。
-MCP 不会打开 `systemSensor` / `mediaSensor`，这两个开关默认关。
+如果你正在使用或改进 DSH-L2D，欢迎通过 Issues / Pull Requests 反馈问题与改进建议。
 
-`l2d_act` 的 `priority` 是 `BACKGROUND`、`NORMAL`、`FORCE`。低的不能打断高的，同级可以。`accepted` 只表示占上了槽，播完或被打断看 `action-done` 事件（`start` / `end` / `interrupted`）。`phase` 可用 `listening`、`thinking`、`speaking`、`settle` 四段短链，口型参数仍然不写。
-
-安装与客户端配置见 `packages/dsh-l2d-mcp/README.md`。
-
-## 灵动
-
-姿势切换走三次缓动，停住大约 6 秒后缓回 rest（动作状态机收养的终态不会被自动收回）。
-待机微动作由 **Emotion_Router** 以优先级 20 触发：歪头、重心、耸肩、鼓腮、嘟嘴，间隔 20～40 秒。
-拖拽、媒体律动、成对动作、戳一戳进行时不做微动作。
-`AngleZ` 由身体跟随、微动作、媒体律动三路相加并限幅；关掉媒体律动时这一路回到 0。
-
-可写参数和只读输出的分法见 `docs/参数读写对照.md`。
-
-## 设计文档
-
-- `docs/DSH-L2D-技术方案-v0.1.md`
-- `docs/DSH-L2D-技术栈方案-v0.2.md`
-- `docs/DSH-L2D-行为系统设计-v0.1.md`
-- `docs/AI-模型控制提示词.md`
-- `docs/参数读写对照.md`
+</div>
