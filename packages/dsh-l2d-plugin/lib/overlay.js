@@ -3652,6 +3652,50 @@
   // /ai/poll 搭车下发的反向桥快照（模型→宿主事件最近记录），供 l2d_get_state 查询
   var aiReverseState = null;
 
+  // Workspace Action 终态摘要气泡队列：连续终态不互相覆盖。
+  // 规则：2s 最小展示间隔，间隔内后到的摘要排队（最多缓存 3 条，超出丢最旧）。
+  // setEmotionBubble 只接受文本参数，失败/拒绝摘要用文字前缀区分。
+  var FEEDBACK_GAP_MS = 2000;
+  var FEEDBACK_QUEUE_MAX = 3;
+  var feedbackQueue = [];
+  var lastFeedbackShownAt = 0;
+  var feedbackPumpTimer = 0;
+
+  function feedbackText(payload) {
+    var summary = String(payload.summary || '');
+    if (payload.status === 'failed') return '[失败] ' + summary;
+    if (payload.status === 'rejected') return '[拒绝] ' + summary;
+    return summary;
+  }
+
+  function showFeedback(payload) {
+    var L = window.DSH_L2D;
+    if (!L || !L.setEmotionBubble) return;
+    try { L.setEmotionBubble(feedbackText(payload)); } catch (e) { /* 气泡失败不致命 */ }
+    lastFeedbackShownAt = Date.now();
+  }
+
+  function pumpFeedback() {
+    window.clearTimeout(feedbackPumpTimer);
+    feedbackPumpTimer = 0;
+    if (!feedbackQueue.length) return;
+    var wait = FEEDBACK_GAP_MS - (Date.now() - lastFeedbackShownAt);
+    if (wait > 0) {
+      feedbackPumpTimer = window.setTimeout(pumpFeedback, wait);
+      return;
+    }
+    showFeedback(feedbackQueue.shift());
+    if (feedbackQueue.length) {
+      feedbackPumpTimer = window.setTimeout(pumpFeedback, FEEDBACK_GAP_MS);
+    }
+  }
+
+  function enqueueFeedback(payload) {
+    feedbackQueue.push(payload);
+    while (feedbackQueue.length > FEEDBACK_QUEUE_MAX) feedbackQueue.shift();
+    pumpFeedback();
+  }
+
   function startAiPoll() {
     if (aiPollTimer) return;
     aiPollTimer = setInterval(function () {
@@ -3663,16 +3707,14 @@
         .then(function (d) {
           // 先消费搭车的反向桥快照（必须在无指令提前 return 之前，否则没指令时永远不更新）
           if (d && d.reverse) aiReverseState = d.reverse;
-          // Workspace Action 反馈：终态动作把简短摘要上气泡（用户看摘要，不看 JSON）
+          // Workspace Action 反馈：终态动作把简短摘要上气泡（用户看摘要，不看 JSON）。
+          // 后到的摘要进队列按 2s 间隔依次展示，不互相覆盖（见 startAiPoll 上方的队列定义）。
           if (d && d.reverse && Array.isArray(d.reverse.recent)) {
             for (const ev of d.reverse.recent) {
               if (ev && ev.type === 'workspace.action.result' && ev.payload && ev.payload.summary && ev.ts) {
                 if (!window.__L2D_LAST_FEEDBACK_TS__ || ev.ts > window.__L2D_LAST_FEEDBACK_TS__) {
                   window.__L2D_LAST_FEEDBACK_TS__ = ev.ts;
-                  var Lfb = window.DSH_L2D;
-                  if (Lfb && Lfb.setEmotionBubble) {
-                    try { Lfb.setEmotionBubble(ev.payload.summary); } catch (e2) { /* 气泡失败不致命 */ }
-                  }
+                  enqueueFeedback(ev.payload);
                 }
               }
             }

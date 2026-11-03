@@ -106,6 +106,27 @@ test('result：执行失败 → failed + 原因', () => {
   assert.match(r.result.message, /unknown-expression/);
 });
 
+test('result：非终态附带 progress，终态信封不带；多次轮询不回退', () => {
+  const { channel, aiInbox } = makeChannel();
+  const accepted = channel.submit(OK_REQUEST);
+  // 真实形状：页面受理即回 start 事件 + settled:false 受理回执，链随后才播完
+  aiInbox.post({ id: accepted.callId, event: { type: 'action-done', phase: 'start', ts: Date.now() } });
+  aiInbox.post({ id: accepted.callId, result: { ok: true, accepted: true, settled: false, outcome: 'pending', runId: 8, steps: 2 } });
+  const running = channel.result('req_001');
+  assert.equal(running.status, 'executing', 'settled:false 受理回执不能提前 completed');
+  assert.ok(running.progress, '非终态要带 progress');
+  assert.equal(running.progress.phase, 'pre');
+  assert.equal(typeof running.progress.percent, 'number');
+  // read 是破坏性读取，但已看到的 start 累积在 entry 里：再次轮询仍是 executing（不回退成 accepted）
+  assert.equal(channel.result('req_001').status, 'executing');
+  assert.ok(channel.result('req_001').progress, '第二次轮询仍带 progress');
+  // 链播完：end 事件收敛
+  aiInbox.post({ id: accepted.callId, event: { type: 'action-done', phase: 'end', ts: Date.now() } });
+  const done = channel.result('req_001');
+  assert.equal(done.status, 'completed');
+  assert.equal(done.progress, undefined, '终态信封保持轻量，不带 progress');
+});
+
 test('未知 requestId → null（不猜）', () => {
   const { channel } = makeChannel();
   assert.equal(channel.result('req_nope'), null);

@@ -10,6 +10,7 @@ import {
   validateWorkspaceActionResponse,
   validateAgentActionBlock,
   deriveActionStatus,
+  deriveActionProgress,
   buildActionSummary,
   extractAgentActionBlock,
   trimWorkspaceContext,
@@ -60,6 +61,34 @@ test('状态推导：accepted → executing → completed 全链', () => {
   assert.equal(deriveActionStatus({ queued: true, result: { ok: false, reason: 'write-failed' } }).status, 'failed');
 });
 
+test('状态推导：受理回执 settled:false → executing，end 事件收敛为 completed', () => {
+  // l2d_act 真实回执形状：受理即回，链还在播
+  const running = deriveActionStatus({
+    queued: true,
+    events: [{ phase: 'start', ts: 1000 }],
+    result: { ok: true, accepted: true, settled: false, outcome: 'pending' },
+  });
+  assert.equal(running.status, 'executing', '回执声明未收敛时不能提前 completed');
+  // 链播完：end 事件是权威进度（结果早已被破坏性读取消费掉）
+  const done = deriveActionStatus({
+    queued: true,
+    events: [{ phase: 'start', ts: 1000 }, { phase: 'end', ts: 6822 }],
+  });
+  assert.equal(done.status, 'completed', 'end 事件无回执也要收敛，不能永远停在 executing');
+  // 同一批里 end 已到：settled:false 也不再拦
+  assert.equal(deriveActionStatus({
+    queued: true,
+    events: [{ phase: 'start' }, { phase: 'end' }],
+    result: { ok: true, settled: false },
+  }).status, 'completed');
+  // 回执收敛 + interrupted 事件：failed 优先
+  assert.equal(deriveActionStatus({
+    queued: true,
+    events: [{ phase: 'interrupted', reason: 'preempted' }],
+    result: { ok: true, settled: false },
+  }).status, 'failed');
+});
+
 test('状态推导：守卫拒绝 = rejected（不是 failed）', () => {
   const r = deriveActionStatus({ queued: false, guardMessage: 'unknown tool: x' });
   assert.equal(r.status, 'rejected');
@@ -70,6 +99,41 @@ test('状态推导：interrupted 视为 failed 且原因可查', () => {
   const r = deriveActionStatus({ queued: true, events: [{ phase: 'interrupted', reason: 'preempted' }] });
   assert.equal(r.status, 'failed');
   assert.match(r.reason, /preempted/);
+});
+
+test('进度推导：空事件 → null（事件不足不猜）', () => {
+  assert.equal(deriveActionProgress([]), null);
+  assert.equal(deriveActionProgress(undefined), null);
+  assert.equal(deriveActionProgress([{ phase: 'interrupted', reason: 'preempted' }]), null, '无 start 也无 end 时推不出进度');
+});
+
+test('进度推导：start → pre 阶段，按曲线估算 15%', () => {
+  const p = deriveActionProgress([{ type: 'action-done', phase: 'start', ts: 1000 }], 2000);
+  assert.equal(p.phase, 'pre');
+  assert.equal(p.startedAtMs, 1000);
+  assert.equal(p.elapsedMs, 1000, '还在跑时 elapsed = now - start');
+  assert.equal(p.percent, 15);
+});
+
+test('进度推导：事件 payload 带 progress 真值优先于估算', () => {
+  const p = deriveActionProgress([
+    { type: 'action-done', phase: 'start', ts: 1000 },
+    { type: 'action-done', phase: 'main', progress: 62 },
+  ], 2000);
+  assert.equal(p.phase, 'main', '链内阶段取最后一个有信息量的 phase');
+  assert.equal(p.percent, 62, '真值覆盖 main 的估算值 50');
+  const clamped = deriveActionProgress([{ phase: 'start' }, { phase: 'post', progress: 140 }]);
+  assert.equal(clamped.percent, 100, '真值钳制到 0~100');
+});
+
+test('进度推导：end → 100%，elapsed 取 end.ts - start.ts', () => {
+  const p = deriveActionProgress([
+    { type: 'action-done', phase: 'start', ts: 1000 },
+    { type: 'action-done', phase: 'end', ts: 3500 },
+  ], 99999);
+  assert.equal(p.phase, 'end');
+  assert.equal(p.percent, 100);
+  assert.equal(p.elapsedMs, 2500, '已收敛用链的真实耗时，不吃 now 的亏');
 });
 
 test('摘要面向用户：说"做了什么"，不暴露 JSON', () => {

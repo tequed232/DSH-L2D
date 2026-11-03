@@ -542,6 +542,9 @@ function getAgentState(force = false) {
 export { getAgentState };
 
 let workspaceBridge = null;
+// Workspace Action Protocol：submit 通道在 webServer 注入闭包里创建（那里才有 aiInbox/guard），
+// workspace-agent 桥在 inject 闭包里创建；用这个中转变量把 submit 递给桥（Agent 回复闭环）。
+let workspaceActionSubmit = null;
 // W1：在 webServer 注入闭包里初始化（那里才有前台采集器与路由），桥用它取最新快照。
 let runtimeSnapshotBuilder = null;
 const workspaceEventCache = new Map();
@@ -926,6 +929,7 @@ export function apply(root, config = {}) {
       getSnapshot: () => buildRuntimeSnapshot(),
       workspace: { id: 'dsh-l2d', name: 'DSH-L2D', type: 'development' },
     });
+    workspaceActionSubmit = workspaceActions.submit;
     try {
       ctx.effect(() => () => { /* workspaceActions 无需清理（内存映射随进程结束） */ });
     } catch { /* 老宿主没有 effect */ }
@@ -1732,6 +1736,10 @@ export function apply(root, config = {}) {
       getPersona: () => readPersona(),
       // 规划上下文用「结构化事实 + 推断 + 不可得」三段，不含会话正文。
       getWorkspaceSnapshot: () => (typeof runtimeSnapshotBuilder === 'function' ? runtimeSnapshotBuilder() : null),
+      // Agent 回复闭环：桥把 Agent 回复里的动作块（extractAgentActionBlock 校验后）提交到执行通道，
+      // 通道内置守卫与去重；submit 通道尚未创建时抛错，由桥降级为 failed 回执回投。
+      submitAction: (req) => workspaceActionSubmit(req),
+      actionWorkspace: { id: 'dsh-l2d', name: 'DSH-L2D', type: 'development' },
       intervalMs: 4000,
     });
     workspaceBridge = bridge;

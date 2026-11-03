@@ -23,6 +23,8 @@ import { aggregateWorkspaceState, decide } from './choreography.mjs';
 import { personaPromptBlock } from './persona.mjs';
 import { envPromptBlock, readEnvState } from './env-state.mjs';
 import { renderSnapshotContext, summarizeSnapshot } from './workspace-snapshot.mjs';
+import { listSessionFiles, readSessionEvents } from './session-log.mjs';
+import { extractAgentActionBlock } from '../../core/src/workspace-protocol.ts';
 
 const marker = '<!-- managed-by: dsh-l2d-workspace-agent -->';
 const instructions = [
@@ -230,16 +232,86 @@ export function hasPendingAction(snapshot) {
   return false;
 }
 
+/** 从会话事件的 content（字符串或 {type:'text',text} 数组）提取纯文本。 */
+export function messageText(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  const parts = [];
+  for (const part of content) {
+    if (part && typeof part === 'object' && part.type === 'text' && typeof part.text === 'string' && part.text) {
+      parts.push(part.text);
+    }
+  }
+  return parts.join('\n');
+}
+
+/**
+ * 处理一段 Agent 回复文本（闭环的核心纯逻辑，便于单测）：
+ *   提取动作块（fail-closed 校验）→ 补全请求信封 → 提交执行通道 → 生成回投文本。
+ *
+ * Agent 回复永远不可信：只有通过 extractAgentActionBlock 校验的块才会提交，
+ * 提交后仍由通道内置守卫（guardAiCall）把关，这里不直接执行任何参数。
+ *
+ * @param {string} text Agent 的回复文本（assistant/message）
+ * @param {object} input
+ * @param {(request: object) => object|null} [input.submitAction] 执行通道（workspaceActions.submit）
+ * @param {Set<string>} [input.acked] 已回投过的 requestId 集合（同一 requestId 只回投一次）
+ * @param {{id: string, name: string, type: string}} [input.workspace] 动作块缺 workspace 时补全的信封字段
+ * @returns {{requestId: string, status: string, feedback: string, response: object|null}|null}
+ *   null = 没有可处理的动作块 / 该 requestId 已回投过
+ */
+export function handleAgentReplyText(text, { submitAction, acked, workspace } = {}) {
+  if (typeof submitAction !== 'function') return null;
+  if (typeof text !== 'string' || !text.trim()) return null;
+  const extracted = extractAgentActionBlock(text);
+  if (!extracted.ok) return null;
+  const block = extracted.block;
+  const requestId = String(block.requestId || '');
+  if (!requestId) return null;
+  if (acked && acked.has(requestId)) return null;
+
+  // 动作块只带 {type, requestId, action}；信封必需的 workspace/user/responseFormat 由宿主补全。
+  const ws = block.workspace && typeof block.workspace === 'object' && block.workspace.id
+    ? block.workspace
+    : (workspace || { id: 'dsh-l2d', name: 'DSH-L2D', type: 'development' });
+  const request = {
+    ...block,
+    workspace: ws,
+    user: block.user && typeof block.user === 'object' ? block.user : { intent: 'agent-initiated' },
+    responseFormat: { requireAction: true, requireSummary: true, language: 'zh-CN' },
+  };
+
+  let resp = null;
+  let submitError = null;
+  try {
+    resp = typeof submitAction === 'function' ? submitAction(request) : null;
+  } catch (err) {
+    submitError = String((err && err.message) || err);
+  }
+  if (acked) acked.add(requestId);
+
+  const status = resp && typeof resp.status === 'string' && resp.status ? resp.status : 'failed';
+  const rawSummary = resp && typeof resp.summary === 'string' ? resp.summary.trim() : '';
+  const summary = rawSummary || (submitError ? '提交失败：' + submitError : '执行结果未知');
+  // 防回环：回投文本不得包含 ``` 围栏，避免下一轮被再次解析成动作块
+  const feedback = ('你请求的动作已执行：' + summary + '（requestId=' + requestId + ', status=' + status + '）')
+    .replace(/```/g, "'''");
+  return { requestId, status, feedback, response: resp };
+}
+
 /**
  * @param {object} options
  * @param {object} options.ctx cordis 上下文（workspaceRegistry / sessionController）
  * @param {string} [options.homeDir]
  * @param {() => Promise<object>|object} options.getSnapshot 返回 {workspaces:[...]}
  * @param {() => object} [options.getPersona] 人设读取（默认读 persona 文件）
+ * @param {(request: object) => object|null} [options.submitAction] 动作执行通道（workspaceActions.submit）；
+ *   Agent 回复里的动作块经 extractAgentActionBlock 校验后由此提交，拿到响应信封后把摘要回投给 Agent。
+ * @param {{id: string, name: string, type: string}} [options.actionWorkspace] 动作块缺 workspace 时补全的信封字段
  * @param {number} [options.intervalMs]
  * @param {number} [options.notifyMinIntervalMs]
  */
-export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir(), '.dsh'), getSnapshot, getPersona, getWorkspaceSnapshot, intervalMs = 4000, notifyMinIntervalMs = NOTIFY_MIN_INTERVAL_MS }) {
+export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir(), '.dsh'), getSnapshot, getPersona, getWorkspaceSnapshot, submitAction = null, actionWorkspace, intervalMs = 4000, notifyMinIntervalMs = NOTIFY_MIN_INTERVAL_MS }) {
   const directory = path.join(homeDir, 'workspaces', 'live2d-agent');
   const manifestPath = path.join(homeDir, 'l2d-workspace-agent.json');
   let workspace = null;
@@ -249,6 +321,10 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
   let timer = null;
   let refreshing = false;
   let pendingEnsure = null;
+  // Agent 回复闭环状态：已见过的回复文本（防重复处理）与已回投的 requestId（一次性）
+  const seenReplyTexts = new Set();
+  const ackedRequestIds = new Set();
+  let repliesSwept = false;
 
   const gate = {
     state: null,
@@ -288,6 +364,45 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
       requestId, sessionId, mode: 'queue',
       content: [{ type: 'text', text }],
     }, new AbortController().signal);
+  }
+
+  /** 从会话日志读取本会话最近一段 assistant/message 文本（按 mtime 找到自己的 session 文件）。 */
+  function collectAgentReplyTexts() {
+    if (!sessionId) return [];
+    const files = listSessionFiles({ homeDir });
+    const entry = files.find((f) => f.sessionId === sessionId);
+    if (!entry) return [];
+    const read = readSessionEvents(entry.file);
+    if (!read.ok) return [];
+    const texts = [];
+    for (const ev of read.events) {
+      if (!ev || ev.type !== 'assistant/message') continue;
+      const data = ev.data && typeof ev.data === 'object' ? ev.data : {};
+      const msg = data.message && typeof data.message === 'object' ? data.message : null;
+      const text = messageText((msg && msg.content) || data.content);
+      if (text) texts.push(text);
+    }
+    return texts;
+  }
+
+  /**
+   * 轮询 Agent 回复（复用 refresh 的 intervalMs 节拍）：新出现的回复文本 →
+   * 提取动作块 → 提交执行通道 → 把摘要回投给 Agent（不含 ``` 围栏，防回环）。
+   * 首轮只记录历史回复，不执行旧动作（fail-safe，避免桥重启时重放陈旧请求）。
+   */
+  async function pollAgentActionReplies() {
+    if (typeof submitAction !== 'function') return;
+    for (const text of collectAgentReplyTexts()) {
+      if (seenReplyTexts.has(text)) continue;
+      seenReplyTexts.add(text);
+      while (seenReplyTexts.size > 64) seenReplyTexts.delete(seenReplyTexts.keys().next().value);
+      if (!repliesSwept) continue;
+      const outcome = handleAgentReplyText(text, { submitAction, acked: ackedRequestIds, workspace: actionWorkspace });
+      if (outcome && outcome.feedback) {
+        await prompt(outcome.feedback).catch(() => {});
+      }
+    }
+    repliesSwept = true;
   }
 
   /** 判定目标状态：error > away-return(user-direct) > 聚合状态。 */
@@ -379,6 +494,10 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
       }
       gate.lastReason = result.reason;
       gate.lastEnv = env;
+      // Agent 回复闭环：读取新回复 → 提取动作块 → 执行 → 摘要回投（失败不阻塞通知链路）
+      try {
+        await pollAgentActionReplies();
+      } catch { /* 会话日志读不到时跳过本轮 */ }
       return { ...latest, notify: { fired: result.fire, reason: result.reason, state: picked.state, why: picked.why } };
     } finally {
       refreshing = false;

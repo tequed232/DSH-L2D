@@ -591,6 +591,41 @@
         color: var(--dsh-ink-muted);
       }
 
+      .dot.info {
+        background: var(--dsh-accent);
+      }
+
+      .act-row {
+        display: flex;
+        align-items: baseline;
+        gap: var(--dsh-space-2) var(--dsh-space-3);
+        flex-wrap: wrap;
+        padding: var(--dsh-space-2) 0;
+        border-top: 1px solid var(--dsh-line);
+      }
+
+      .act-row:first-child {
+        border-top: none;
+      }
+
+      .act-name {
+        font-family: var(--dsh-font-mono);
+        font-size: 13px;
+        word-break: break-all;
+      }
+
+      .act-time {
+        margin-left: auto;
+        font: var(--dsh-text-xs);
+        color: var(--dsh-ink-muted);
+        white-space: nowrap;
+      }
+
+      .act-summary {
+        flex-basis: 100%;
+        font: var(--dsh-text-sm);
+      }
+
       @media (max-width: 640px) {
         .page {
           padding: var(--dsh-space-4) var(--dsh-space-3) var(--dsh-space-6);
@@ -674,6 +709,8 @@
       <section class="card" id="sec-dev">
         <div class="sec-head"><span class="sec-no">05</span><h2>开发者工具</h2></div>
         <p class="sec-desc">诊断信息与不常用的重活。</p>
+        <h3 class="sub-head">当前动作 <span class="hint" id="actionState"></span></h3>
+        <div id="actionList"></div>
         <div class="kv" id="devInfo"></div>
         <div class="dev-actions">
           <a href="/dsh-l2d/test.html">参数监视台</a>
@@ -698,7 +735,8 @@
           rescan: '/dsh-l2d/capability/rescan',
           call: '/dsh-l2d/ai/call',
           result: '/dsh-l2d/ai/result',
-          test: '/dsh-l2d/test.html'
+          test: '/dsh-l2d/test.html',
+          actions: '/dsh-l2d/agent/action/recent'
         };
 
         var LS_KEY = 'dsh-l2d.settings-ui.v1';
@@ -1399,6 +1437,87 @@
             });
         }
 
+        // ------------------------------------------------------------ 当前动作
+        var ACTIONS_MAX = 5;
+
+        var ACT_BADGE = {
+          completed: { cls: 'ok' },
+          failed: { cls: 'err' },
+          rejected: { cls: 'err' },
+          accepted: { cls: 'info' },
+          executing: { cls: 'info' }
+        };
+
+        function relTime(at) {
+          var t = new Date(at).getTime();
+          if (!isFinite(t)) return '—';
+          var sec = Math.round(Math.max(0, Date.now() - t) / 1000);
+          if (sec < 5) return '刚刚';
+          if (sec < 60) return sec + ' 秒前';
+          var min = Math.floor(sec / 60);
+          if (min < 60) return min + ' 分钟前';
+          var hr = Math.floor(min / 60);
+          if (hr < 24) return hr + ' 小时前';
+          return Math.floor(hr / 24) + ' 天前';
+        }
+
+        function actBadge(status) {
+          var chip = document.createElement('span');
+          chip.className = 'chip';
+          var dot = document.createElement('span');
+          dot.className = 'dot ' + (ACT_BADGE[status] ? ACT_BADGE[status].cls : '');
+          var label = document.createElement('span');
+          label.textContent = String(status || 'unknown');
+          chip.appendChild(dot);
+          chip.appendChild(label);
+          return chip;
+        }
+
+        function pollActions() {
+          if (document.hidden) return;
+          var host = $('actionList');
+          var stateEl = $('actionState');
+          function showText(text) {
+            host.textContent = '';
+            var p = document.createElement('p');
+            p.className = 'empty';
+            p.textContent = text;
+            host.appendChild(p);
+          }
+          fetchJson(API.actions).then(function (res) {
+            if (!res.ok) {
+              stateEl.textContent = res.error || '不可用';
+              showText('协议路由不可用');
+              return;
+            }
+            var items = res.data && Array.isArray(res.data.items) ? res.data.items : [];
+            stateEl.textContent = items.length ? '最近 ' + Math.min(items.length, ACTIONS_MAX) + ' 条 · 3 秒刷新' : '';
+            host.textContent = '';
+            if (!items.length) {
+              showText('暂无动作');
+              return;
+            }
+            items.slice(0, ACTIONS_MAX).forEach(function (item) {
+              var row = document.createElement('div');
+              row.className = 'act-row';
+              row.appendChild(actBadge(item && item.status));
+              var name = document.createElement('span');
+              name.className = 'act-name';
+              name.textContent = String((item && item.action && item.action.name) || '未知动作');
+              row.appendChild(name);
+              var time = document.createElement('span');
+              time.className = 'act-time';
+              time.textContent = relTime(item && item.at);
+              row.appendChild(time);
+              var summary = document.createElement('div');
+              summary.className = 'act-summary';
+              summary.textContent = String((item && item.summary) || '');
+              row.appendChild(summary);
+              host.appendChild(row);
+            });
+          });
+        }
+
         // ------------------------------------------------------------ 装配
         function localToggleRow(host, key, labelText, hintText) {
           var input = document.createElement('input');
@@ -1630,9 +1749,14 @@
         bindDev();
         loadAll();
         refreshReadouts();
+        pollActions();
         window.setInterval(refreshReadouts, 6000);
+        window.setInterval(pollActions, 3000);
         document.addEventListener('visibilitychange', function () {
-          if (!document.hidden) refreshReadouts();
+          if (!document.hidden) {
+            refreshReadouts();
+            pollActions();
+          }
         });
       })();
     </script>

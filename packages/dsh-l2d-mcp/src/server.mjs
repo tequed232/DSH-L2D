@@ -10,6 +10,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import { resolveBase } from './discover.mjs';
 import { actSettled, mergeActEvents, shapeActReceipt } from './act-result.mjs';
 import { executeActionSequence, validateActionSequence } from './action-sequence.mjs';
@@ -117,6 +118,39 @@ function toolResult(result) {
     content: [{ type: 'text', text }],
     isError: result && result.ok === false && !benign,
   };
+}
+
+/** Workspace Action Protocol：响应信封原样输出。rejected/failed 是正常信封不是 MCP 错误；只有传输层失败才 isError。 */
+const ACTION_TERMINAL = new Set(['completed', 'failed', 'rejected']);
+
+function envelopeResult(envelope, isError = false) {
+  return { content: [{ type: 'text', text: JSON.stringify(envelope) }], isError };
+}
+
+async function submitAgentAction(base, envelope) {
+  const res = await fetch(base + '/dsh-l2d/agent/action', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(envelope),
+  });
+  // 守卫拒绝的 4xx 是 text/plain；先读文本再尽力解析，避免 SyntaxError 误报 unreachable。
+  const text = await res.text();
+  let body = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = null;
+  }
+  if (!res.ok || !body || typeof body !== 'object') {
+    return {
+      err: {
+        ok: false,
+        reason: (body && (body.reason || body.error)) || text.slice(0, 200) || 'submit-rejected',
+        status: res.status,
+      },
+    };
+  }
+  return { envelope: body };
 }
 
 const server = new McpServer({
@@ -453,6 +487,96 @@ server.registerTool(
       cachedBase = '';
       return toolResult({ ok: false, reason: 'unreachable' });
     }
+  },
+);
+
+server.registerTool(
+  'l2d_agent_action',
+  {
+    description:
+      '通过双向动作协议（Workspace Action Protocol）提交一个工作区动作并等待执行结果。action.name 必须是宿主白名单内的 l2d_* 工具（如 l2d_look_at、l2d_emote、l2d_act），动作会经宿主守卫校验白名单与参数；被守卫拒绝时返回 status=rejected 的响应信封，这是正常结果而不是错误——读 summary 后改用别的动作，不要原样重试。waitMs（默认 8000，0=只提交立即返回）内拿到 completed/failed/rejected 即返回完整响应信封（summary/status/result/followUp 原样给出）；超时则返回当时状态（accepted/executing）并附 requestId 与续查端点。userIntent 写入 user.intent，是宿主理解动作目的的依据。返回的是协议信封 JSON，不是自然语言。',
+    inputSchema: {
+      action: z
+        .object({
+          name: z.string().min(1).describe('宿主白名单内的 l2d_* 工具名，例如 l2d_look_at'),
+          target: z.string().optional().describe('动作目标，可选'),
+          parameters: z.record(z.string(), z.unknown()).optional().describe('动作参数，透传给宿主工具'),
+        })
+        .describe('要执行的动作'),
+      userIntent: z.string().min(1).describe('用户意图（写入 user.intent），例如「看右侧」'),
+      workspaceNote: z.string().optional().describe('附加到 workspace.stateSummary 后面的备注，可选'),
+      requestId: z
+        .string()
+        .regex(/^[\w.-]{4,64}$/)
+        .optional()
+        .describe('请求关联 ID，缺省自动生成 req_<随机>；跨调用续查时必须复用同一个值'),
+      waitMs: z
+        .number()
+        .int()
+        .min(0)
+        .max(30000)
+        .optional()
+        .describe('等待终态的毫秒数，默认 8000；0=只提交立即返回 accepted'),
+    },
+  },
+  async ({ action, userIntent, workspaceNote, requestId, waitMs }) => {
+    const base = await baseUrl();
+    if (!base) return envelopeResult({ ok: false, reason: 'plugin-offline' }, true);
+    const rid = requestId || 'req_' + randomUUID().replace(/-/g, '').slice(0, 20);
+    const envelope = {
+      requestId: rid,
+      type: 'workspace.action',
+      action: {
+        name: action.name,
+        ...(action.target !== undefined ? { target: action.target } : {}),
+        ...(action.parameters !== undefined ? { parameters: action.parameters } : {}),
+      },
+      workspace: {
+        id: 'dsh-l2d',
+        name: 'DSH-L2D',
+        type: 'development',
+        ...(workspaceNote !== undefined ? { stateSummary: workspaceNote } : {}),
+      },
+      user: { intent: userIntent },
+      responseFormat: { requireAction: true, requireSummary: true, language: 'zh-CN' },
+    };
+    let submitted;
+    try {
+      submitted = await submitAgentAction(base, envelope);
+    } catch {
+      cachedBase = '';
+      return envelopeResult({ ok: false, reason: 'unreachable', requestId: rid }, true);
+    }
+    if (submitted.err) return envelopeResult({ ...submitted.err, requestId: rid }, true);
+
+    const wait = waitMs === undefined ? 8000 : waitMs;
+    let latest = submitted.envelope;
+    if (wait > 0 && !ACTION_TERMINAL.has(latest.status)) {
+      const deadline = Date.now() + wait;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        try {
+          const res = await fetch(base + '/dsh-l2d/agent/action/result?requestId=' + encodeURIComponent(rid), { cache: 'no-store' });
+          if (res.ok) {
+            const env = await res.json();
+            if (env && typeof env === 'object' && typeof env.status === 'string') {
+              latest = env;
+              if (ACTION_TERMINAL.has(env.status)) return envelopeResult(env);
+            }
+          }
+          // 404 = 信封尚未登记，继续等
+        } catch {
+          /* 下一轮再取 */
+        }
+      }
+      // 超时：返回当前状态 + 续查提示（不包装成自然语言，信封字段原样保留）
+      return envelopeResult({
+        ...latest,
+        followUp: { required: true, description: `动作仍在 ${latest.status}，未在 ${wait}ms 内到达终态。可携带同一 requestId 续查：GET ${base}/dsh-l2d/agent/action/result?requestId=${encodeURIComponent(rid)}` },
+        timedOut: true,
+      });
+    }
+    return envelopeResult(latest);
   },
 );
 

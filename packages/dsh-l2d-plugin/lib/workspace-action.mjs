@@ -12,6 +12,7 @@ import {
   validateWorkspaceActionRequest,
   validateWorkspaceActionResponse,
   deriveActionStatus,
+  deriveActionProgress,
   buildActionSummary,
   trimWorkspaceContext,
 } from '../../core/src/workspace-protocol.ts';
@@ -72,14 +73,23 @@ export function createWorkspaceActionChannel(options = {}) {
     const entry = tracked.get(requestId);
     if (!entry) return null;
     if (entry.final) return entry.final;
-    // aiInbox.read 是破坏性读取（result/events 取走即删），只能调一次
+    // aiInbox.read 是破坏性读取（result/events 取走即删），只能调一次：
+    // 事件累积到 entry.seenEvents，长动作多次轮询不丢已看到的 start（否则 executing 会回退成 accepted）
     const read = aiInbox.read(entry.callId) || {};
-    const events = read.events || [];
+    if (read.events && read.events.length) {
+      entry.seenEvents = (entry.seenEvents || []).concat(read.events).slice(-16);
+    }
+    const events = entry.seenEvents || [];
     const result = read.result || null;
     const st = deriveActionStatus({ queued: true, events, result });
     const receipt = result && result.ok !== undefined ? receiptLike(result) : null;
     const resp = envelope(entry.request, st.status, { reason: st.reason, receipt });
     resp.callId = entry.callId;
+    // 非终态附带进度（终态信封保持轻量，不带 progress）
+    if (st.status === 'accepted' || st.status === 'executing') {
+      const progress = deriveActionProgress(events);
+      if (progress) resp.progress = progress;
+    }
     // 终态缓存：accepted/executing 会被执行回执覆盖；completed/failed/rejected 定格
     if (st.status === 'completed' || st.status === 'failed' || st.status === 'rejected') entry.final = resp;
     return resp;

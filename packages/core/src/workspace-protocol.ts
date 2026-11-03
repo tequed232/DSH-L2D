@@ -118,17 +118,24 @@ export interface ProtocolEvent {
   type?: string;
   phase?: string;
   reason?: string;
+  /** 事件自发时间戳（ms）。action-done 事件会带；elapsedMs 靠它，不靠观测时刻倒推。 */
+  ts?: number;
+  /** 事件携带的真实进度（0~100）。有的话优先于按阶段的估算。 */
+  progress?: number;
 }
 
 export interface ProtocolResult {
   ok?: boolean;
   reason?: string;
   error?: string;
+  /** 受理回执显式声明"链还没收敛"（l2d_act 长链：settled:false, outcome:'pending'）。 */
+  settled?: boolean;
 }
 
 /**
  * 状态推导（执行状态同步）。
- * accepted：仅入队；executing：看到 start 事件；completed/failed：执行回执；
+ * accepted：仅入队；executing：看到 start 事件，或回执 ok 但 settled:false（链还在播）；
+ * completed：执行回执收敛，或 end 事件（链按计划播完，事件是权威进度）；
  * rejected：宿主守卫拒绝（guard message 带入）。interrupted 视为 failed（原因可查）。
  */
 export function deriveActionStatus(input: {
@@ -140,16 +147,84 @@ export function deriveActionStatus(input: {
   if (input.guardMessage) return { status: 'rejected', reason: input.guardMessage };
   const events = input.events || [];
   const started = events.some((e) => e && e.phase === 'start');
+  const ended = events.some((e) => e && e.phase === 'end');
   const interrupted = events.find((e) => e && e.phase === 'interrupted');
   if (input.result) {
-    if (input.result.ok === true) return { status: 'completed' };
-    const reason = input.result.reason || input.result.error || (interrupted ? 'interrupted: ' + (interrupted.reason || 'preempted') : 'execution-failed');
+    if (input.result.ok === true) {
+      if (interrupted) return { status: 'failed', reason: 'interrupted: ' + (interrupted.reason || 'preempted') };
+      // 受理回执声明未收敛：不是 completed，链真正播完以 end 事件为准
+      if (input.result.settled === false && !ended) return { status: 'executing' };
+      return { status: 'completed' };
+    }
+    // 失败原因要透出：数组形失败（failed:[{id,reason}]）取首条，别让"execution-failed"盖住真因
+    const failedList = (input.result as { failed?: unknown[] }).failed;
+    const firstFail = Array.isArray(failedList) && failedList.length ? failedList[0] : null;
+    const failDetail = typeof firstFail === 'string'
+      ? firstFail
+      : firstFail && typeof firstFail === 'object'
+        ? ((firstFail as { id?: string }).id || '?') + ':' + ((firstFail as { reason?: string }).reason || 'write-failed')
+        : null;
+    const reason = input.result.reason || input.result.error || failDetail
+      || (interrupted ? 'interrupted: ' + (interrupted.reason || 'preempted') : 'execution-failed');
     return { status: 'failed', reason };
   }
   if (interrupted) return { status: 'failed', reason: 'interrupted: ' + (interrupted.reason || 'preempted') };
+  if (ended) return { status: 'completed' };
   if (started) return { status: 'executing' };
   if (input.queued) return { status: 'accepted' };
   return { status: 'failed', reason: 'unknown' };
+}
+
+/** 进度估算曲线：链内阶段 → 百分比。只是 UI 粗估，真值以事件 payload 的 progress 为准。 */
+const PHASE_PERCENT: Record<ActionChainPhase, number> = { pre: 15, main: 50, post: 85, end: 100 };
+
+export type ActionChainPhase = 'pre' | 'main' | 'post' | 'end';
+
+export interface ActionProgress {
+  /** 当前链内阶段：事件只有 start 时视为刚进 pre，看到 end 收敛为 end。 */
+  phase: ActionChainPhase;
+  startedAtMs?: number;
+  elapsedMs?: number;
+  /** 真值（事件 payload 的 progress）优先；否则按 PHASE_PERCENT 估算；推不出来是 null。 */
+  percent?: number | null;
+}
+
+/**
+ * 进度推导（长动作进度同步）。纯函数，不碰通信层。
+ * 事件不足（空、或既无 start 也无 end）返回 null——不猜。
+ */
+export function deriveActionProgress(events?: ProtocolEvent[], nowMs: number = Date.now()): ActionProgress | null {
+  const list = (events || []).filter((e): e is ProtocolEvent => !!e);
+  if (!list.length) return null;
+  const startEvent = list.find((e) => e.phase === 'start');
+  const ended = list.some((e) => e.phase === 'end');
+  if (!startEvent && !ended) return null;
+
+  // 链内阶段：按事件顺序取最后一个有信息量的 phase
+  let phase: ActionChainPhase | null = null;
+  for (const e of list) {
+    if (e.phase === 'start') phase = phase || 'pre';
+    else if (e.phase === 'pre' || e.phase === 'main' || e.phase === 'post') phase = e.phase;
+    else if (e.phase === 'end') phase = 'end';
+  }
+
+  const progress: ActionProgress = { phase: phase || 'pre' };
+  if (startEvent && typeof startEvent.ts === 'number') {
+    progress.startedAtMs = startEvent.ts;
+    const endEvent = [...list].reverse().find((e) => e.phase === 'end');
+    const endTs = endEvent && typeof endEvent.ts === 'number' ? endEvent.ts : undefined;
+    // 已收敛用 end.ts - start.ts（链的真实耗时），还在跑用 now - start
+    progress.elapsedMs = Math.max(0, (endTs ?? nowMs) - startEvent.ts);
+  }
+
+  let real: number | null = null;
+  for (const e of list) {
+    if (typeof e.progress === 'number' && Number.isFinite(e.progress)) {
+      real = Math.max(0, Math.min(100, Math.round(e.progress)));
+    }
+  }
+  progress.percent = real ?? (phase ? PHASE_PERCENT[phase] : null);
+  return progress;
 }
 
 /** 面向用户的简短摘要（zh-CN）。给用户看的是"做了什么"，不是原始回执。 */
