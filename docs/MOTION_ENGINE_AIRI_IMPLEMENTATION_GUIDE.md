@@ -123,6 +123,8 @@ Define stable, normalized concepts, for example:
 - `face.expression`, `face.blink`
 - `body.breathing`
 
+> v2 implementation note: `face.blink` / `body.breathing` are part of `SemanticControlId`; `hand.*.pose` is an **asset**, not a numeric control (`MotionAssetCapability.kind: "pose"`), so it is not squeezed into [min,max].
+
 These are semantic channels, not promises that every model supports them. Use normalized values and semantic ranges. Avoid exposing model parameter IDs outside adapters.
 
 ### 3.2 Adapter contract
@@ -131,6 +133,7 @@ Introduce a runtime-neutral contract (names may be adjusted to match repository 
 
 ```ts
 type CapabilityStatus = "supported" | "approximate" | "unsupported" | "unknown";
+// v2 implemented: unknown is a legal fail-closed status (resolveSemanticControl returns null => not writable).
 
 interface SemanticChannelDescriptor {
   id: string;
@@ -242,6 +245,17 @@ interface SemanticMotionPlan {
 
 Validate schema, priority bounds, duration bounds, channel existence and asset existence before enqueueing. LLM may request semantic targets only. The planner/adapter resolves those into local tracks.
 
+### 4.1.1 G1 implemented lowering (v2)
+
+`SemanticMotionPlan` is the G2 planner-layer shape. What G1 actually implements is `SemanticMotionFrame`
++ `lowerFrameToIntents()` (`packages/core/src/motion-intent.ts`), which lowers a semantic frame into the
+**existing** `WriteIntent` contract: `{ id, source, priority(10/50/90), phase("pre"|"post"), params, runId? }`.
+- `priority` accepts only 10/50/90 (same values as `ACT_PRIORITY_RANK`);
+- `source` comes from the INV-6 source rank;
+- `phase` follows INV-7: writing a pre-only physics root as `post` is rejected (`pre-only-param`);
+- the semantic layer never writes model parameters directly; Mixer/ownership stays the only arbiter;
+- `blend` (override/add) is intentionally not part of the intent contract yet (M1-c gap).
+
 ### 4.2 Local trajectory generator
 
 Implement deterministic local interpolation:
@@ -289,6 +303,9 @@ Gesture phases:
 Use per-channel phase offsets, easing and limits. Gesture composition must consult capability and parameter ownership before scheduling.
 
 ### 4.5 Mixer and parameter ownership
+
+> v2: the semantic-frame -> intent lowering is now production code (`lowerFrameToIntents`), not just a
+> documentation requirement, and it consumes/produces the existing `WriteIntent` shape - no second mixer.
 
 Extend `packages/core/src/mixer.ts`; do not create a second competing mixer.
 
@@ -410,3 +427,28 @@ Acceptance:
 - Do not add AIRI's framework stack or large dependencies merely to imitate its architecture.
 - Before copying code from any upstream repository, inspect its LICENSE and preserve required notices. Architecture adaptation is preferred.
 - Report changed files, commits, tests actually executed, unverified runtime checks, risks and follow-up work.
+
+
+## 9. G1 implementation status (v2, PR #10 review fix)
+
+Contract version bumped to `MOTION_CONTRACT_VERSION = 2`; v1 profiles are rejected.
+
+| Area | File | Status |
+| --- | --- | --- |
+| Semantic vocabulary (13 controls incl. face.blink / body.breathing) | `packages/core/src/motion-contract.ts` | done |
+| Capability profile validation (unknown = fail-closed, bool asset flags) | `packages/core/src/motion-profile.ts` | done |
+| Semantic frame -> existing WriteIntent lowering (priority/phase/pre-only guard) | `packages/core/src/motion-intent.ts` | done |
+| Deterministic trajectory compile + non-throwing sampling | `packages/core/src/motion-trajectory.ts` | done |
+| Package entry exports | `packages/core/src/index.ts` | done |
+| Test wired into `test:core` | `package.json` + `packages/core/test/motion-contract.ts` | done |
+
+Still open (documented, not implemented): `SemanticMotionPlan` (planner layer) -> G2; blend (override/add)
+consumption by the Mixer -> M1-c; Cubism adapter / capability discovery -> G2; hand pose assets ->
+`MotionAssetCapability.kind: "pose"`.
+
+Recorded decisions:
+- `priority` is limited to 10/50/90; any other number is rejected by `lowerFrameToIntents`.
+- `phase` follows INV-7: pre-only physics roots (AngleX/PositionX/LeanInput/HipAngleX/...) written as
+  `post` are rejected, never silently dropped.
+- Trajectories are validated once at compile time; the frame loop calls `sampleCompiled` and never throws.
+- Easing reuses `core/src/ease.ts` (`easeInOutCubic`); there is no second easing implementation.

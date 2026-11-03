@@ -54,3 +54,22 @@ Cubism Adapter 必须基于当前模型的参数表、physics 输出、参数范
 - G5：增加第二种模型/运行时 Adapter，并用相同语义用例做兼容性测试。
 
 验收不得只依赖 DOM stub；G2 以后必须用至少两个结构不同的模型验证。模型资源未获许可不得提交仓库。
+
+
+## 契约 v2：与既有 intent 契约的关系（PR #10 review fix）
+
+`packages/core/src/motion-intent.ts` 负责把语义帧降级成**既有** `WriteIntent`，语义层不直接写模型参数：
+
+- 形状与 `docs/Embodied-Behavior.md` 一致：`{ id, source, priority(10/50/90), phase(pre|post), params, runId? }`
+- `priority` 与 `core/src/action-chain.ts` 的 `ACT_PRIORITY_RANK` 同值；`source` 与 INV-6 的 source 秩同一份；
+- INV-7 保护：物理根输入（AngleX/PositionX/LeanInput/HipAngleX 等）写成 `post` 会被直接拒绝（`pre-only-param`）；
+- `blend`（override/add）暂不进 intent 契约，等 M1-c 的 Mixer 接线；
+- 契约版本 `MOTION_CONTRACT_VERSION = 2`：新增 `unknown` 能力状态、`face.blink`/`body.breathing`
+  语义控制、帧级 `priority/phase/blend/owner`；v1 profile 与 v2 不互通。
+
+### 已实现 / 未实现
+
+- 已实现：`motion-contract.ts`（契约与常量）、`motion-profile.ts`（校验/能力解析/Adapter 选择）、
+  `motion-trajectory.ts`（编译一次 + 采样）、`motion-intent.ts`（语义帧 → intent）、
+  `packages/core/src/index.ts` 入口导出、`test:core` 接线。
+- 未实现（G2）：Cubism Adapter、能力清单生成、`SemanticMotionPlan` planner 层、blend 的 Mixer 消费。
