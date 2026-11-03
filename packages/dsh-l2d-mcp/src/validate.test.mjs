@@ -27,7 +27,7 @@ for (const group of PLAYABLE_MOTION_GROUPS) {
 }
 const idle = validateMotionGroup('Idle');
 assert.equal(idle.ok, false);
-assert.equal(idle.reason, 'unknown-motion-group');
+assert.equal(idle.reason, 'idle-not-playable'); // 与 host-guard 同码（两套 code 会让调用方分叉判断）
 assert.equal(validateMotionGroup('跳舞').ok, false);
 assert.equal(validateMotionGroup('').ok, false);
 

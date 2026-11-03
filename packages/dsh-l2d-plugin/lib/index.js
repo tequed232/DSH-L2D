@@ -25,6 +25,7 @@ import { createWorkspaceAgentBridge } from './workspace-agent.mjs';
 import { createReverseLog } from './reverse-log.mjs';
 import { normalizePresencePayload, writeEnvState } from './env-state.mjs';
 import { createModelIndexCache, guardAiCall } from './host-guard.mjs';
+import { isReservedParam } from './param-guards.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
 import { isActionTool, summarizeSession } from './session-events.mjs';
 import { setupPetWindow } from './pet-window.mjs';
@@ -729,8 +730,7 @@ function pickAllowed(value, list) {
   return typeof value === 'string' && list.includes(value) ? value : null;
 }
 
-/** 口型禁区：AI 关键帧一律不得写，留给以后的音频口型链路（与 core 的 LIPSYNC_PARAMS 对齐）。 */
-const KEYFRAME_MOUTH_BLOCKLIST = ['ParamMouthOpenY', 'ParamMouthOpen', 'ParamMouthForm'];
+/** 口型禁区：AI 关键帧一律不得写，留给以后的音频口型链路（名单单源在 param-guards）。 */
 
 function sanitizeKeyframeStep(step, allowedParams) {
   if (!step || !Array.isArray(step.tracks)) return null;
@@ -738,7 +738,7 @@ function sanitizeKeyframeStep(step, allowedParams) {
   const tracks = [];
   for (const track of step.tracks.slice(0, 5)) {
     if (!track || typeof track.param !== 'string' || !Array.isArray(track.keys)) continue;
-    if (KEYFRAME_MOUTH_BLOCKLIST.indexOf(track.param) >= 0) continue;
+    if (isReservedParam(track.param)) continue;
     if (whitelist && whitelist.indexOf(track.param) < 0) continue;
     const keys = [];
     for (const key of track.keys.slice(0, 10)) {
@@ -1047,6 +1047,11 @@ export function apply(root, config = {}) {
           return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from(guarded.message));
         }
         const queued = aiInbox.call(name, body.args || {});
+        // 守卫的降级告警不能静默丢：进 diag 日志，并随回执带出给调用方（MCP/调试脚本）。
+        if (Array.isArray(guarded.warnings) && guarded.warnings.length) {
+          diag('ai/call guard warning: ' + guarded.warnings.join(','));
+          queued.warnings = guarded.warnings;
+        }
         sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(queued), 'utf8'));
       });
     });

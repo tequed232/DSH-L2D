@@ -17,11 +17,22 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { MODEL_EXPRESSIONS, MODEL_MOTION_GROUPS } from './choreography.mjs';
+import { MODEL_EXPRESSIONS, MODEL_MOTION_GROUPS, STEP_KINDS, validateStep } from './choreography.mjs';
 import { checkParameterWrite, collectReservedParams } from './param-guards.mjs';
 
-/** 渲染端实际加载的模型文件（与 overlay.js 的 MODEL_URL 一致；2048 是降档版）。 */
-export const MODEL_FILE = '大肥鱼.dsl2d.model3.json';
+/**
+ * 渲染端实际加载的模型文件：两个入口加载的是不同变体。
+ *   - overlay.js 主窗 → 大肥鱼.dsl2d.model3.json（4096 贴图高清版）
+ *   - pet.html 独立桌宠窗 / assets/test.html → 大肥鱼.dsl2d.2048.model3.json（降档版）
+ * 两个变体 2026-11 实测 motions/expressions 完全相同，但索引按"能读到的变体取并集"，
+ * 换模型/换变体时不会因为写死其中一个文件名而误拒合法表情/动作组。
+ */
+export const MODEL_FILES = Object.freeze([
+  '大肥鱼.dsl2d.model3.json',
+  '大肥鱼.dsl2d.2048.model3.json',
+]);
+/** 兼容旧引用与测试夹具：主窗（overlay.js）加载的那个变体。 */
+export const MODEL_FILE = MODEL_FILES[0];
 /** 物理设置文件；输出表决定哪些参数默认只读。 */
 export const PHYSICS_FILE = '大肥鱼.physics3.json';
 
@@ -110,12 +121,28 @@ export function loadModelIndex(modelDir, options = {}) {
     return result;
   }
   const readJson = (file) => JSON.parse(fsImpl.readFileSync(path.join(modelDir, file), 'utf8'));
-  try {
-    const parsed = parseModel3(readJson(options.modelFile || MODEL_FILE));
-    result.expressions = new Set(parsed.expressions);
-    result.motionGroups = new Set(parsed.motionGroups);
-  } catch (err) {
-    result.warnings.push('model3-unavailable: ' + String((err && err.message) || err));
+  const modelFiles = options.modelFile
+    ? [options.modelFile]
+    : Array.isArray(options.modelFiles) && options.modelFiles.length
+      ? options.modelFiles
+      : MODEL_FILES;
+  const expressions = new Set();
+  const motionGroups = new Set();
+  const modelFailures = [];
+  for (const file of modelFiles) {
+    try {
+      const parsed = parseModel3(readJson(file));
+      for (const name of parsed.expressions) expressions.add(name);
+      for (const name of parsed.motionGroups) motionGroups.add(name);
+    } catch (err) {
+      modelFailures.push(file + ': ' + String((err && err.message) || err));
+    }
+  }
+  if (modelFailures.length < modelFiles.length) {
+    result.expressions = expressions;
+    result.motionGroups = motionGroups;
+  } else {
+    result.warnings.push('model3-unavailable: ' + modelFailures.join('; '));
   }
   try {
     result.physicsOutputs = parsePhysics3(readJson(options.physicsFile || PHYSICS_FILE));
@@ -165,6 +192,67 @@ export function extractParamIds(name, args) {
     return tracks.map((t) => (t && typeof t.param === 'string' ? t.param : null)).filter(Boolean);
   }
   return [];
+}
+
+/** MCP 工具面的动作链上限（server.mjs 的 z.array(...).max(8)）。 */
+const MAX_CHAIN_STEPS = 8;
+
+/**
+ * `/ai/call` 的 l2d_act 支持的动作步骤类型：MCP 的四种 + HTTP 调试专用的 keyframes
+ * （overlay.js playbackAct 有 `step.kind === 'keyframes'` 分支，poke 链路也会产出它）。
+ */
+export const HOST_STEP_KINDS = Object.freeze([...STEP_KINDS, 'keyframes']);
+
+const HOST_STEP_KIND_SET = new Set(HOST_STEP_KINDS);
+
+/** keyframes 步骤的轻量结构校验（口型/数值范围由渲染端 playKeyframes 终审）。 */
+function validateKeyframeStep(step, index) {
+  const at = 'chain[' + index + ']';
+  if (!step || typeof step !== 'object' || Array.isArray(step)) return [at + ' 不是对象'];
+  if (!Array.isArray(step.tracks) || step.tracks.length === 0) return [at + ' keyframes 步骤缺 tracks'];
+  const errors = [];
+  for (let i = 0; i < step.tracks.length; i++) {
+    const track = step.tracks[i];
+    if (!track || typeof track.param !== 'string' || !track.param) {
+      errors.push(at + '.tracks[' + i + '] 缺 param');
+    } else if (!Array.isArray(track.keys) || track.keys.length < 2) {
+      errors.push(at + '.tracks[' + i + '] keys 少于 2 个关键帧');
+    }
+  }
+  return errors;
+}
+
+/**
+ * l2d_act 的 chain 静态校验：MCP 侧有 validateActChain，HTTP 直连是同一条工具面，
+ * 不能成为绕过白名单的旁路。结构与取值范围复用 choreography.validateStep，
+ * 口型用同一份 param-guards 名单递归扫描。
+ *
+ * @returns {{ok:boolean, errors:string[]}}
+ */
+export function checkActChain(chain) {
+  if (chain === undefined) return { ok: true, errors: [] };
+  if (!Array.isArray(chain)) return { ok: false, errors: ['chain 必须是数组'] };
+  if (chain.length > MAX_CHAIN_STEPS) {
+    return { ok: false, errors: ['chain 超过 ' + MAX_CHAIN_STEPS + ' 步'] };
+  }
+  const errors = [];
+  for (let i = 0; i < chain.length; i++) {
+    const step = chain[i];
+    const kind = step && typeof step === 'object' ? step.kind : undefined;
+    if (!HOST_STEP_KIND_SET.has(kind)) {
+      errors.push('chain[' + i + '] kind 非法：' + String(kind));
+      continue;
+    }
+    if (kind === 'keyframes') {
+      errors.push(...validateKeyframeStep(step, i));
+      continue;
+    }
+    const result = validateStep(step, i);
+    errors.push(...((result && result.errors) || []));
+  }
+  const reserved = collectReservedParams(chain);
+  if (reserved.length) errors.push('动作链不得包含口型参数：' + reserved.join(', '));
+  return { ok: errors.length === 0, errors };
 }
 
 function deny(reason, detail, message) {
@@ -241,6 +329,12 @@ export function guardAiCall(request = {}, options = {}) {
       );
       if (!checked.ok) return deny(checked.reason, checked.params.join(','));
     }
+  }
+
+  // l2d_act：MCP 侧有 validateActChain，HTTP 直连必须同规则（不能成为绕过白名单的旁路）。
+  if (name === 'l2d_act') {
+    const chainCheck = checkActChain(args.chain);
+    if (!chainCheck.ok) return deny('invalid-chain', chainCheck.errors.join('; '));
   }
 
   return { ok: true, warnings };

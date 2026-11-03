@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build"
+    "build": "vite build",
+    "test": "node --experimental-strip-types src/app/param-ownership.test.mjs && node --experimental-strip-types src/app/keyframe-admission.test.mjs"
   },
   "dependencies": {
     "@naari3/pixi-live2d-display": "^1.2.5",

@@ -27,6 +27,9 @@
 
 export const CHOREOGRAPHY_VERSION = 1;
 
+// 口型禁区名单单一事实源（宿主/MCP/编排共用一份，避免各写一份漂移）。
+import { LIPSYNC_PARAMS } from './param-guards.mjs';
+
 /** 编排覆盖的状态。顺序是判定优先级从高到低（见 aggregateWorkspaceState）。 */
 export const CHOREOGRAPHY_STATES = [
   'error',
@@ -577,7 +580,7 @@ export function validateChoreography(map = CHOREOGRAPHY, options = {}) {
 
   // 口型禁区：编排数据里出现口型参数就直接判死。
   const blob = JSON.stringify(map);
-  for (const key of ['ParamMouthOpenY', 'ParamMouthOpen', 'ParamMouthForm']) {
+  for (const key of LIPSYNC_PARAMS) {
     if (blob.includes(key)) errors.push('编排数据里出现口型参数 ' + key);
   }
 

@@ -41,6 +41,10 @@ export function validateMotionGroup(group) {
   if (typeof group !== 'string' || !group.trim()) {
     return { ok: false, reason: 'empty-motion-group', allowed: PLAYABLE_MOTION_GROUPS };
   }
+  // 与 host 侧 host-guard 的拒绝码对齐（同一语义两套 code 会造成调用方分叉判断）。
+  if (group === 'Idle') {
+    return { ok: false, reason: 'idle-not-playable', group, allowed: PLAYABLE_MOTION_GROUPS };
+  }
   if (!MOTION_SET.has(group)) {
     return { ok: false, reason: 'unknown-motion-group', group, allowed: PLAYABLE_MOTION_GROUPS };
   }
