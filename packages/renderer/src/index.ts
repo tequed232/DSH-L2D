@@ -385,6 +385,17 @@ function waitForModel(timeoutMs: number): Promise<void> {
 
 let lastTickAt = 0;
 let driverTimer = 0;
+/** 下一帧的计划时刻（deadline 累加）。0 = 需要重新对齐。 */
+let nextTickAt = 0;
+/** 上次准入时用的目标帧率：变化时重新对齐 deadline。 */
+let gateFps = 0;
+/**
+ * rAF 间隔估计（ms），用于算「半个 vsync」容差。
+ * 初值取 5ms（高刷屏）而不是 16.7ms：初值偏大时 tol 会被钳到上限 8ms，
+ * 刚启动的前几帧会提前出帧（约 66fps 的短暂超发）。偏小只会保守等一格，观感更稳。
+ */
+let vsyncMs = 5;
+let lastRafAt = 0;
 
 // ---------------------------------------------------------------- 帧率控制
 // 目标是“看得见的稳定 60fps”。只有失焦/页面隐藏才降载，前台不主动降帧，
@@ -538,8 +549,7 @@ function tick(): void {
   // 平均 16.67ms；60Hz 屏容差更小，不会多出帧。
   const tol = Math.min(Math.max(vsyncMs / 2, 1), 8);
   if (now + tol < nextTickAt) return;
-  nextTickAt += interval;
-  if (nextTickAt < now) nextTickAt = now + interval; // 严重迟到时不补帧爆发
+  nextTickAt = Math.max(nextTickAt, now) + interval; // 严重迟到时不补帧爆发
   lastTickAt = now;
   syncStageGate();
   emotionRouter.tick(Date.now()); // 情绪路由心跳（内部自带 200ms 限频）
