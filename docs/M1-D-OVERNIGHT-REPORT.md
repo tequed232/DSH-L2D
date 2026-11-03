@@ -97,3 +97,48 @@
 2. d3 灰度的 legacy 宽容期三条件+30 分钟设计需在实施时真机观测 legacy-grace diag 静默后全量
 3. 多实例并行验收需画像重扫先行（T1 fail-closed 会 FAIL——设计使然，非缺陷）
 4. renderer.js 构建产物 EOL 归一化噪声（--ignore-cr-at-eol 零差异）——建议补 .gitattributes（MINOR，未在本轮制造改动）
+
+---
+
+## 附：任务书批准后的实施轮结果（03:26–05:25，用户授权全链开工至 07:00）
+
+### 实施完成度
+
+| 批次 | 分支 | 提交 | 状态 |
+|---|---|---|---|
+| M1-d2 Gesture 接线 + P2 收口 | `feat/m1-d2-gesture-wiring` | 87b748f / 38052bc(armed 硬化) / 0634f5b(验收诊断) / 05f5bc2(flag 还原+观测面) | **实施完成**；门禁全绿（test:core 209 含 flag 开/关两组、selftest U1..U9）；真页面 E2E（dev-server+真模型）U7/U8/U9 PASS |
+| M1-d3 消费者隔离 | `feat/m1-d3-consumer-lease` | 484f480 | **实施完成 + 真机双消费者验证全过**（见下） |
+| M1-f 第一批 Cue 编译层 | `feat/m1-f-cue-compiler` | 纯函数+词表+12 用例 | **完成**（Chief 复核：md5 三向一致、绑定逐条实证） |
+| README 双语化 | `feat/m1-batch2` 3eaaa5a | 单文件双语+锚点切换（默认中文） | 完成 |
+
+### M1-d3 真机双消费者验证记录（3081，flag ON）
+
+1. 匿名 poll 降级：空队列+held，不 403 ✓
+2. 页面接管租约：holder=c-5cf9… ✓
+3. 状态指令凭 token 通过 V1-V4 正常回执 ✓
+4. 第二消费者抢夺：恒空队列+held ✓
+5. 伪造 token 回执：409 fenced ✓
+6. 断连后接管：c-curl-2 接管（epoch 2）+ 未分发 call 重新分配 ✓
+（lease-taken-over 精确 400ms 竞态由单测 T4 锁定——真机人工制造不可行）
+
+### 环境问题立案（非代码回归，二分定案）
+
+**宿主页 overlay 模型挂载延迟/超时**：消费页 canvas 黑屏、isReady 长时间 false（>3min），
+完整 smoke 的 U1/U7/U8/U9 据此失败。二分：pre-d2 基线（b5efef6）冷启动完全复现 → 与 d2 无关。
+时间线吻合 bot DSH 实例（pid 24940）重开 + 多实例 WebGL 上下文压力；关闭多余标签页/实例后
+仍复现。影响：宿主页通道的写路径验收需等模型就绪（轮询 isReady 而非定时）；dev-server 通道
+（overlay-test.html）模型正常，可作为验收替代通道。d2 修复代理的 E2E 即在此通道完成。
+
+### 过程修正记录
+
+1. d2 词表跨批一致性：tilt 原引 FaceAngleZ（本仓模型无此参数）→ 改 AngleZ（与 M1-f 同源核实）
+2. d2 armed 双键域风险：无真机复现下仍做结构性硬化（登记=查询同一 ScheduledSegment）+4 回归用例
+3. overnight 分支首次提交的 add 路径笔误致 QA/READY 文档漏暂存 → 已补交（d3c63b8）
+4. bot 团队（用户侧 DSH）在同仓开有自己的 worktree 群（feat/m1-d 等）——命名无冲突，未触碰
+
+### 下一步建议（优先级序）
+
+1. 合并节奏：d2 → batch2 的 PR（含 armed 硬化）；d3 → d2 的 PR；M1-f 独立 PR
+2. 环境问题归因：宿主页模型挂载延迟与 bot DSH 并存的相关性需在 bot 关闭窗口期复测
+3. M1-f 第二批：编译层接渲染入口（依赖 d2 已交付的 admitGesture 面）
+4. 验收基建：m1-smoke 增加「等 isReady 再跑写路径」前置轮询（本轮教训固化）
