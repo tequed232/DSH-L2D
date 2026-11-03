@@ -47,6 +47,11 @@
  *                           （依赖 m1-gesture；M1-d2 纵深防御/收紧项）
  *     U9 gesture 清账复播   l2d_stop_keyframes 后同参数再播 → 仍可准入（Timeline 与 kf
  *                           状态同步清账，无残留；依赖 m1-gesture；M1-d2 调用点 3）
+ *     U10 cue 持有/到期     POST l2d_cue（tilt hold 0.5/1500ms）→ 回执 ok + admission.accepted；
+ *                           get_state diag.cue.channels 含 tilt；2s 后同一查询已释放（依赖 m1-cue：
+ *                           --m1-cue 开真用例；renderer 需 embodied.cue+timeline flag 开）
+ *     U11 cue 拒绝语义     l2d_cue 未知 channel → rejected unknown-channel；interruptible:false
+ *                           → rejected not-interruptible，零写值（依赖 m1-cue）
  *   人工项（永远 SKIP 列出，供勾选）
  *     H1 待机四肢由物理驱动（目视）  H2 现有动作/姿势/表情回归（目视）  H3 裙摆随 Agent 值动（M1-b 目视）
  *
@@ -85,6 +90,7 @@ const M1_FLAG = argOf('m1-flag', 'off'); // on | off | auto
 const ALLOW_WRITE = flag('allow-write');
 const HIP_READY = flag('m1-hip'); // m1-hip 交付后由执行方显式开启
 const GESTURE_READY = flag('m1-gesture'); // m1-gesture 交付后由执行方显式开启
+const CUE_READY = flag('m1-cue'); // m1-cue 交付后由执行方显式开启（renderer 需 embodied.cue+timeline）
 const HOLD_MS = Number(argOf('hold-ms', 3000)); // U1 独占时长
 const RESULT_TIMEOUT = Number(argOf('timeout', 15000));
 // 就绪门禁：不带开关 = 0（现行为，不门禁）；裸 --readiness-wait = 30s；显式 0 同样回到现行为。
@@ -694,18 +700,145 @@ async function caseGestureStopReAdmit(origin, ready) {
     /* 收尾失败不影响结论 */
   }
 }
+/** 从 get_state 回执里取 diag.cue 的活动 channel 列表；缺失返回 null（用于区分「没接线」）。 */
+export function cueChannelsFrom(stateBody) {
+  const cue = stateBody && stateBody.diag && stateBody.diag.cue;
+  if (!cue || typeof cue !== 'object' || !Array.isArray(cue.channels)) return null;
+  return cue.channels.map((c) => (c && typeof c.channel === 'string' ? c.channel : '')).filter(Boolean);
+}
+
+/** 从 l2d_cue 回执里取 rejected 列表（admission 优先，兼容 arbitration 兜底）。 */
+function cueRejectedOf(body) {
+  if (!body) return [];
+  if (body.admission && Array.isArray(body.admission.rejected)) return body.admission.rejected;
+  if (body.arbitration && Array.isArray(body.arbitration.rejected)) return body.arbitration.rejected;
+  return [];
+}
+
+/**
+ * U10 cue 持有/到期（M1-f 第二批）：hold 准入 → diag.cue 活体可见 → 超过 durationMs 后释放。
+ * readiness 门禁已在 main() 进场前完成（BLOCKED 直接 exit 3，不会执行到本函数）。
+ */
+async function caseCueHoldLifecycle(origin, ready) {
+  if (!ready) {
+    record('U10 cue 持有/到期', 'skip', 'm1-cue 未开启（交付后加 --m1-cue 跑真用例）', '自动化');
+    return;
+  }
+  const c = await call(origin, 'l2d_cue', {
+    cue: { channel: 'tilt', operation: 'hold', value: 0.5, durationMs: 1500 },
+  });
+  if (c.status !== 200 || !c.body || !c.body.id) {
+    record('U10 cue 持有/到期', false, `入队 HTTP ${c.status}: ${c.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  const r = await awaitResult(origin, c.body.id);
+  const body = r.result || {};
+  if (body.ok === false && body.reason === 'cue-disabled') {
+    record('U10 cue 持有/到期', 'skip', 'renderer cue flag 关（embodied.cue / embodied.timeline 未开启）——开 flag 后复跑', '自动化');
+    return;
+  }
+  if (body.ok !== true || !body.admission || body.admission.accepted !== true) {
+    record('U10 cue 持有/到期', false, `准入回执不符：${JSON.stringify(body).slice(0, 160)}`, '自动化');
+    return;
+  }
+
+  const s1 = await call(origin, 'l2d_get_state', {});
+  const r1 = s1.status === 200 && s1.body ? await awaitResult(origin, s1.body.id) : { result: null };
+  const active1 = cueChannelsFrom(r1.result);
+  if (active1 === null) {
+    record('U10 cue 持有/到期', false, 'get_state 缺 diag.cue（overlay/renderer 未接线）', '自动化');
+    return;
+  }
+  if (!active1.includes('tilt')) {
+    record('U10 cue 持有/到期', false, `持有期 diag.cue 未含 tilt：${JSON.stringify(active1)}`, '自动化');
+    return;
+  }
+
+  await sleep(2000);
+  const s2 = await call(origin, 'l2d_get_state', {});
+  const r2 = s2.status === 200 && s2.body ? await awaitResult(origin, s2.body.id) : { result: null };
+  const active2 = cueChannelsFrom(r2.result);
+  const ok = active2 !== null && !active2.includes('tilt');
+  record(
+    'U10 cue 持有/到期',
+    ok,
+    ok ? '持有期可见 tilt，到期后释放（2s > durationMs=1500）' : `到期后仍持有：${JSON.stringify(active2)}`,
+    '自动化',
+  );
+  try {
+    await call(origin, 'l2d_cue_stop', { selector: { all: true } });
+  } catch {
+    /* 收尾失败不影响结论 */
+  }
+}
+
+/** U11 cue 拒绝语义：未知 channel / interruptible:false → 明确 rejected，零写值。 */
+async function caseCueRejections(origin, ready) {
+  if (!ready) {
+    record('U11 cue 拒绝语义', 'skip', 'm1-cue 未开启（交付后加 --m1-cue 跑真用例）', '自动化');
+    return;
+  }
+  const c1 = await call(origin, 'l2d_cue', {
+    cue: { channel: 'not-a-channel', operation: 'hold', value: 1 },
+  });
+  if (c1.status !== 200 || !c1.body || !c1.body.id) {
+    record('U11 cue 拒绝语义', false, `未知通道入队 HTTP ${c1.status}: ${c1.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  const r1 = await awaitResult(origin, c1.body.id);
+  const b1 = r1.result || {};
+  if (b1.ok === false && b1.reason === 'cue-disabled') {
+    record('U11 cue 拒绝语义', 'skip', 'renderer cue flag 关（embodied.cue / embodied.timeline 未开启）——开 flag 后复跑', '自动化');
+    return;
+  }
+  const rejected1 = cueRejectedOf(b1);
+  const unknownRejected =
+    b1.ok === false && rejected1.some((x) => x && x.reason === 'unknown-channel');
+
+  const c2 = await call(origin, 'l2d_cue', {
+    cue: { channel: 'tilt', operation: 'hold', value: 0.5, interruptible: false },
+  });
+  if (c2.status !== 200 || !c2.body || !c2.body.id) {
+    record('U11 cue 拒绝语义', false, `不可打断入队 HTTP ${c2.status}: ${c2.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  const r2 = await awaitResult(origin, c2.body.id);
+  const b2 = r2.result || {};
+  const rejected2 = cueRejectedOf(b2);
+  const notInterruptible =
+    b2.ok === false && rejected2.some((x) => x && x.reason === 'not-interruptible');
+  const zeroWrites =
+    !b2.admission || !b2.admission.writes || Object.keys(b2.admission.writes).length === 0;
+
+  const ok = unknownRejected && notInterruptible && zeroWrites;
+  record(
+    'U11 cue 拒绝语义',
+    ok,
+    ok
+      ? '未知 channel → unknown-channel；interruptible:false → not-interruptible；零写值'
+      : `回执不符：unknown=${JSON.stringify(rejected1).slice(0, 80)} notInterruptible=${JSON.stringify(rejected2).slice(0, 80)}`,
+    '自动化',
+  );
+  try {
+    await call(origin, 'l2d_cue_stop', { selector: { all: true } });
+  } catch {
+    /* 收尾失败不影响结论 */
+  }
+}
+
 /**
  * 全流程：baseline → flag 解析 → M1 组（或整组 SKIP）→ 人工项列出。
  * 可独立调用（selftest 对 mock 宿主多轮执行）。
  *
  * @param {{origin:string, allowWrite?:boolean, m1Flag?:'on'|'off'|'auto',
- *           hipReady?:boolean, gestureReady?:boolean, holdMs?:number}} opts
+ *           hipReady?:boolean, gestureReady?:boolean, cueReady?:boolean, holdMs?:number}} opts
  */
 export async function runCases(opts) {
   const origin = String(opts.origin || '').replace(/\/+$/, '');
   const allowWrite = opts.allowWrite === true;
   const hipReady = opts.hipReady === true;
   const gestureReady = opts.gestureReady === true;
+  const cueReady = opts.cueReady === true;
   const holdMs = Number.isFinite(Number(opts.holdMs)) ? Number(opts.holdMs) : HOLD_MS;
   const holdSaved = HOLD_MS_REF.v;
   HOLD_MS_REF.v = holdMs;
@@ -736,6 +869,10 @@ export async function runCases(opts) {
       await caseGestureAdmitPositive(origin, gestureReady);
       await caseGestureAdmitNegative(origin, gestureReady);
       await caseGestureStopReAdmit(origin, gestureReady);
+      // [M1-f 第二批] cue 闭环真用例（需 --m1-cue；renderer 需 embodied.cue+timeline flag 开）。
+      // readiness 门禁在 main() 进场前已完成，BLOCKED 不会执行到这里。
+      await caseCueHoldLifecycle(origin, cueReady);
+      await caseCueRejections(origin, cueReady);
     }
 
     // 人工项：永远列出，SKIP 不拉低 verdict
@@ -767,6 +904,7 @@ async function main() {
   console.log(
     `\n[m1-smoke] origin=${CLI_ORIGIN}  m1-flag=${M1_FLAG}  allow-write=${ALLOW_WRITE}` +
       `${HIP_READY ? '  m1-hip=ready' : ''}${GESTURE_READY ? '  m1-gesture=ready' : ''}` +
+      `${CUE_READY ? '  m1-cue=ready' : ''}` +
       `${READINESS_WAIT ? `  readiness-wait=${READINESS_WAIT}ms` : ''}\n`,
   );
   // 就绪门禁：仅在显式开启时生效（--readiness-wait 0 = 现行为，不等直接进场）。
@@ -780,6 +918,7 @@ async function main() {
     m1Flag: M1_FLAG,
     hipReady: HIP_READY,
     gestureReady: GESTURE_READY,
+    cueReady: CUE_READY,
   });
   console.log(
     `\n[m1-smoke] ${summary.passed} PASS · ${summary.skipped} SKIP · ${summary.failed} FAIL` +

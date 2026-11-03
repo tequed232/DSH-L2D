@@ -148,7 +148,26 @@ admitCue(cue)                       packages/renderer/src/index.ts
 | `pnpm -F @dsh/renderer build` | PASS（含 admitCue/stopCue/getCueState 导出） |
 | `node tools/acceptance/m1-smoke.mjs --selftest` | PASS（exit 0） |
 
-## 四、风险与已知限制
+## 四、验收入口（overlay `l2d_cue`）与真机命令
+
+- `l2d_cue { cue:{channel,operation,target?,value?,durationMs?,priority?,interruptible?}, runId? }`
+  → renderer `admitCue`，回执 `{ok, cue, admission, arbitration:{admitted,rejected,entryId,cueId}}`；
+  renderer 缺 `admitCue` → `{ok:false, reason:'not-supported'}`；flag 关 → `{ok:false, reason:'cue-disabled'}`。
+- `l2d_cue_stop { selector?:{channel?,target?,all?} }` → `stopCue`（target→overlay），回执 `stopped`。
+- `l2d_get_state` 的 `diag.cue` = `getCueState()`（enabled/channels/overlay），与 `diag.gesture` 并列。
+
+真机执行（前置：被测 renderer 构建中 `embodied.timeline` 与 `embodied.cue` 均开；否则 U10/U11 记 SKIP）：
+
+```bash
+node tools/acceptance/m1-smoke.mjs --origin http://127.0.0.1:3081 \
+  --m1-flag on --allow-write --m1-cue --m1-gesture \
+  --readiness-wait 30000
+```
+
+- U10 正例：tilt hold 0.5/1500ms → `admission.accepted` + `diag.cue.channels` 含 tilt；2s 后不含（到期释放）。
+- U11 负例：未知 channel → `unknown-channel`；`interruptible:false` → `not-interruptible`，零写值。
+
+## 五、风险与已知限制
 
 1. **不做平滑过渡**：cue 持有期间通道值覆盖常规合成（注视/拖拽），clear 后下一帧
    立即交还，没有 weight 渐入渐出（REFERENCE §3.2 所述可选优化，v1 不做）。

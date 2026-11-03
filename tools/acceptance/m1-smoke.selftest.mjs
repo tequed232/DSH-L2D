@@ -57,6 +57,7 @@ export function startMockHost(profile = {}) {
     hipValue: 0.5,
     agentUntil: 0,
     agentIds: [],
+    cue: null,
     pwPre: 2,
     pwPost: 5,
     ticks: 0,
@@ -114,6 +115,7 @@ export function startMockHost(profile = {}) {
         };
         if (name === 'l2d_get_state') {
           state.getStateCalls++;
+          const cueLive = state.cue && state.cue.until > Date.now() ? state.cue : null;
           const loadingRounds = Number.isFinite(Number(profile.modelLoadingRounds)) ? Number(profile.modelLoadingRounds) : 0;
           return finish({
             ok: true,
@@ -127,7 +129,16 @@ export function startMockHost(profile = {}) {
               frames: 1000 + state.ticks * 10,
               utime: 12.34,
             },
-            diag: { bootTag: 1793684582683 },
+            diag: {
+              bootTag: 1793684582683,
+              cue: {
+                enabled: true,
+                channels: cueLive
+                  ? [{ channel: cueLive.channel, operation: 'hold', value: cueLive.value, priority: 50, startedAt: cueLive.startedAt, endsAt: cueLive.until, runId: null, params: [] }]
+                  : [],
+                overlay: null,
+              },
+            },
           });
         }
 
@@ -174,6 +185,40 @@ export function startMockHost(profile = {}) {
             state.agentUntil = Date.now() + Math.max(0, Number(a.durationMs) || 1200);
           }
           return finish({ ok: true, applied: Object.keys(a.values || {}) });
+        }
+        if (name === 'l2d_cue') {
+          // M1-f 第二批 mock renderer：最小 admitCue 语义（未知 channel / interruptible 拒绝，
+          // hold 记账到 until 供 U10 的 diag.cue 观察）。
+          const cue = a.cue || {};
+          const op = String(cue.operation || '');
+          const rej = (reason) => ({
+            ok: false,
+            reason,
+            cue,
+            admission: { accepted: false, flagEnabled: true, channel: String(cue.channel || ''), operation: op, writes: {}, rejected: [{ channel: String(cue.channel || '*'), operation: op, reason }] },
+            arbitration: { admitted: false, rejected: [{ channel: String(cue.channel || '*'), operation: op, reason }], entryId: undefined, cueId: 'cue:' + String(cue.channel || '') },
+          });
+          if (!['tilt', 'pitch', 'yaw', 'lean', 'gaze'].includes(String(cue.channel || ''))) return finish(rej('unknown-channel'));
+          if (cue.interruptible === false) return finish(rej('not-interruptible'));
+          const dur = Number(cue.durationMs);
+          const now = Date.now();
+          state.cue = {
+            channel: String(cue.channel),
+            value: Number(cue.value) || 0,
+            startedAt: now,
+            until: Number.isFinite(dur) && dur > 0 ? now + dur : now + 86400000,
+          };
+          return finish({
+            ok: true,
+            cue,
+            admission: { accepted: true, flagEnabled: true, channel: String(cue.channel), operation: op, writes: {}, rejected: [] },
+            arbitration: { admitted: true, rejected: [], entryId: 'cue:' + String(cue.channel), cueId: 'cue:' + String(cue.channel) },
+          });
+        }
+        if (name === 'l2d_cue_stop') {
+          const channel = state.cue ? state.cue.channel : null;
+          state.cue = null;
+          return finish({ ok: true, stopped: { releasedChannels: channel ? [channel] : [], releasedOverlay: null } });
         }
         if (name === 'l2d_play_keyframes') {
           const tracks = Array.isArray(a.tracks) ? a.tracks : [];
@@ -296,12 +341,13 @@ export async function selftest() {  const fails = [];
       m1Flag: 'on',
       hipReady: true,
       gestureReady: true,
+      cueReady: true,
       holdMs: 1500,
     });
     selftestStop();
     check('0 FAIL', s2.failed === 0);
     check('基线 T0..T3 全 PASS', s2.results.filter((r) => r.name.startsWith('T')).every((r) => r.verdict === true));
-    const expectPass = ['U1 acquire→post 覆盖', 'U2 release 回物理', 'U3 口型红线（任何通道 400）', 'U4 未索引组拒绝', 'U5 Hip pre 让位', 'U6 gesture 仲裁', 'U7 gesture 准入正例', 'U8 gesture 准入负例', 'U9 gesture 清账复播'];
+    const expectPass = ['U1 acquire→post 覆盖', 'U2 release 回物理', 'U3 口型红线（任何通道 400）', 'U4 未索引组拒绝', 'U5 Hip pre 让位', 'U6 gesture 仲裁', 'U7 gesture 准入正例', 'U8 gesture 准入负例', 'U9 gesture 清账复播', 'U10 cue 持有/到期', 'U11 cue 拒绝语义'];
     for (const name of expectPass) {
       const r = s2.results.find((x) => x.name === name);
       check(`${name} PASS`, !!r && r.verdict === true);
@@ -351,6 +397,7 @@ export async function selftest() {  const fails = [];
     check('0 FAIL', s5.failed === 0);
     check('U5 SKIP 占位', s5.results.find((r) => r.name === 'U5 Hip pre 让位')?.verdict === 'skip');
     check('U6 SKIP 占位', s5.results.find((r) => r.name === 'U6 gesture 仲裁')?.verdict === 'skip');
+    check('U10/U11 SKIP（--m1-cue 未开启）', s5.results.find((r) => r.name === 'U10 cue 持有/到期')?.verdict === 'skip' && s5.results.find((r) => r.name === 'U11 cue 拒绝语义')?.verdict === 'skip');
     check('其余 M1 用例照常判定', s5.results.find((r) => r.name === 'U1 acquire→post 覆盖')?.verdict === true);
   } finally {
     m5.close();

@@ -3888,6 +3888,8 @@
                 hasNote: typeof L.noteActMotion,
                 // [M1-d2 诊断] armed/timeline 活体状态（临时诊断，随 d2 验收移除或保留为观测面）
                 gesture: L.getGestureState ? L.getGestureState() : 'getGestureState-missing',
+                // [M1-f 第二批] cue 账本活体状态（enabled/active channels/overlay），与 gesture 并列
+                cue: L.getCueState ? L.getCueState() : 'missing',
                 rendererEl: (document.getElementById('dsh-l2d-renderer') || {}).src || '',
                 winHasPlan: (typeof window !== 'undefined' && window.DSH_L2D) ? typeof window.DSH_L2D.normalizeActPlan : 'no-win-api',
                 sameRef: !!(typeof window !== 'undefined' && window.DSH_L2D === L),
@@ -3979,6 +3981,55 @@
             // keyframes 播放时按轨道时长自动认领物理输出（loop 会续期），回执列出被覆盖的参数
             var kfOwned = L.getKeyframeOwnedParameters ? L.getKeyframeOwnedParameters() : [];
             return { ok: true, tracks: n, owned: kfOwned, arbitration: arbReceipt(ga) };
+          }
+          case 'l2d_cue': {
+            // [M1-f 第二批] 结构化 cue 入口：编译/准入/账本全部在 renderer（admitCue），
+            // overlay 只做入参形状校验与回执组装（字段只增不改）。
+            var cueIn = (a.cue && typeof a.cue === 'object' && !Array.isArray(a.cue)) ? a.cue : null;
+            if (!cueIn) return { ok: false, reason: 'empty-cue' };
+            if (!L.admitCue) return { ok: false, reason: 'not-supported' };
+            var cueAdm = L.admitCue(cueIn, { runId: a.runId != null ? String(a.runId) : undefined });
+            // flag 关（embodied.cue/timeline 任一关闭）→ 明确回执，不静默成功。
+            if (cueAdm && cueAdm.accepted === false && cueAdm.flagEnabled === false) {
+              return { ok: false, reason: 'cue-disabled', cue: cueIn, admission: cueAdm };
+            }
+            var cueRejected = cueAdm && Array.isArray(cueAdm.rejected) ? cueAdm.rejected : [];
+            var cueOk = !!(cueAdm && cueAdm.accepted);
+            var cueRec = {
+              ok: cueOk,
+              cue: cueIn,
+              admission: cueAdm,
+              arbitration: {
+                admitted: cueOk,
+                rejected: cueRejected,
+                entryId: cueAdm ? cueAdm.entryId : undefined,
+                cueId: cueIn.channel ? 'cue:' + String(cueIn.channel) : undefined,
+              },
+            };
+            if (!cueOk) cueRec.reason = cueRejected[0] ? cueRejected[0].reason : 'cue-rejected';
+            return cueRec;
+          }
+          case 'l2d_cue_stop': {
+            // [M1-f 第二批] 显式释放 cue：selector {channel?, target?, all?} →
+            // core CueReleaseSelector {channel?, overlay?, runId?}（target 对应 overlay）。
+            if (!L.stopCue) return { ok: false, reason: 'not-supported' };
+            var cueState = L.getCueState ? L.getCueState() : null;
+            if (cueState && cueState.enabled === false) return { ok: false, reason: 'cue-disabled' };
+            var selIn = (a.selector && typeof a.selector === 'object' && !Array.isArray(a.selector)) ? a.selector : null;
+            var selCore;
+            if (!selIn || selIn.all === true) {
+              selCore = undefined;
+            } else {
+              selCore = {};
+              if (selIn.channel != null) selCore.channel = String(selIn.channel);
+              if (selIn.target != null) selCore.overlay = String(selIn.target);
+              if (selIn.runId != null) selCore.runId = String(selIn.runId);
+              if (selCore.channel === undefined && selCore.overlay === undefined && selCore.runId === undefined) {
+                selCore = undefined;
+              }
+            }
+            var cueStopped = L.stopCue(selCore);
+            return { ok: true, selector: selIn || null, stopped: cueStopped };
           }
           case 'l2d_stop_keyframes': {
             L.stopKeyframes();
