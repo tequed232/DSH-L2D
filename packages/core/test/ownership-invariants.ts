@@ -340,93 +340,132 @@ test('INV-12 limb 功能关闭：limb intent rejected(not-owned)，physics 恢�
   assert.deepEqual(out.rejected, [{ id: 'RArm', source: 'limb', reason: 'not-owned' }]);
 });
 
-// ---- C. 状态层 S-01…06（LimbController） -----------------------------------------
+// ---- C. 状态层 S-01…06（LimbController，形状对齐渲染侧 LimbControlLike） ------------
 
 // fixture：叶子四肢 id 来自「模型画像」（这里模拟 W3 注册表给出的 20 个叶子的子集）
 const FIXTURE_LEAF_IDS = ['RArm', 'RForearm', 'LArm', 'ShoulderZ'] as const;
 
+/** 渲染侧 LimbControlLike 最小依赖面的结构镜像（packages/renderer/src/app/motion-adapter.ts）。 */
+interface LimbControlLike {
+  acquire(ids: string[], options?: { priority?: number; runId?: string; phase?: 'pre' | 'post'; durationMs?: number }): string[];
+  release(runId?: string): string[];
+  resolve(now: number): Map<string, number>;
+}
+
+test('形状对齐：LimbController 结构化满足渲染侧 LimbControlLike（acquire→string[] / release→string[] / resolve→Map）', () => {
+  const ctl = new LimbController(FIXTURE_LEAF_IDS, { enabled: true, now: () => 1000 });
+  const like: LimbControlLike = ctl; // 结构化赋值即契约
+  assert.deepEqual(like.acquire(['RArm'], { runId: 'r1' }), ['RArm']);
+  assert.deepEqual(like.release('r1'), ['RArm']);
+  assert.ok(like.resolve(1000) instanceof Map);
+  assert.equal(like.resolve(1000).size, 0);
+});
+
 test('S-01 acquire → 同一 runId release → 再 resolve：物理恢复', () => {
   const ctl = new LimbController(FIXTURE_LEAF_IDS, { enabled: true, now: () => 1000 });
-  const acq = ctl.acquire(['RArm'], { runId: 'r1' });
-  assert.deepEqual(acq.acquired, ['RArm']);
-  assert.equal(ctl.resolve().ownership.RArm!.runId, 'r1');
-  const rel = ctl.release('r1');
-  assert.deepEqual(rel.released, ['RArm']);
-  assert.equal(ctl.resolve().ownership.RArm, undefined);
+  assert.deepEqual(ctl.acquire(['RArm'], { runId: 'r1' }), ['RArm']);
+  assert.equal(ctl.ownershipSnapshot().ownership.RArm!.runId, 'r1');
+  assert.deepEqual(ctl.release('r1'), ['RArm']);
+  assert.equal(ctl.ownershipSnapshot().ownership.RArm, undefined);
   // 联调：ownership 空后 resolveWritePlan 输出 physics
-  const plan = resolveWritePlan({ now: 1000, intents: [], ownership: ctl.resolve().ownership, physics: { RArm: 0.4 } });
+  const plan = resolveWritePlan({ now: 1000, intents: [], ownership: ctl.ownershipSnapshot().ownership, physics: { RArm: 0.4 } });
   assert.deepEqual(plan.writes, [{ id: 'RArm', value: 0.4, source: 'physics', phase: 'post' }]);
 });
 
 test('S-02/S-03 ActGate 终态（interrupted / action-done）→ 立即 release，不等超时', () => {
   const ctl = new LimbController(FIXTURE_LEAF_IDS, { enabled: true, now: () => 1000 });
-  const a = ctl.acquire(['RArm', 'LArm'], { runId: 'run-a', durationMs: 60000 });
-  assert.equal(a.acquired.length, 2);
+  assert.equal(ctl.acquire(['RArm', 'LArm'], { runId: 'run-a', durationMs: 60000 }).length, 2);
   // interrupted：终态触发 release，超时远未到
-  const interrupted = ctl.release('run-a');
-  assert.deepEqual(interrupted.released.sort(), ['LArm', 'RArm']);
-  assert.equal(ctl.resolve(2000).ownership.RArm, undefined);
+  assert.deepEqual(ctl.release('run-a').sort(), ['LArm', 'RArm']);
+  assert.equal(ctl.ownershipSnapshot(2000).ownership.RArm, undefined);
   // action-done：新 runId 再走一遍
   ctl.acquire(['RArm'], { runId: 'run-b', durationMs: 60000 });
-  const done = ctl.release('run-b');
-  assert.deepEqual(done.released, ['RArm']);
+  assert.deepEqual(ctl.release('run-b'), ['RArm']);
   assert.equal(ctl.size, 0);
+  // release() 缺省 runId = 全部释放（reset 语义）
+  ctl.acquire(['RArm', 'ShoulderZ'], { runId: 'run-c' });
+  assert.deepEqual(ctl.release().sort(), ['RArm', 'ShoulderZ']);
 });
 
 test('S-04 FORCE 抢占 NORMAL：低优先级 hold 被释放；NORMAL 反向被 priority-blocked', () => {
   const ctl = new LimbController(FIXTURE_LEAF_IDS, { enabled: true, now: () => 1000 });
-  const normal = ctl.acquire(['RArm'], { runId: 'normal', priority: 50 });
-  assert.deepEqual(normal.acquired, ['RArm']);
+  assert.deepEqual(ctl.acquire(['RArm'], { runId: 'normal', priority: 50 }), ['RArm']);
   // 同级可打断（ActGate：低不打断高、同级可）：同 50 接管成功，旧 runId 失去持有
-  const sameLevelFirst = ctl.acquire(['RArm'], { runId: 'other-normal', priority: 50 });
-  assert.deepEqual(sameLevelFirst.acquired, ['RArm']);
-  assert.equal(ctl.resolve().ownership.RArm!.runId, 'other-normal');
-  assert.equal(ctl.release('normal').released.length, 0, '被接管的旧 runId 已不持有参数');
+  assert.deepEqual(ctl.acquire(['RArm'], { runId: 'other-normal', priority: 50 }), ['RArm']);
+  assert.equal(ctl.ownershipSnapshot().ownership.RArm!.runId, 'other-normal');
+  assert.deepEqual(ctl.release('normal'), [], '被接管的旧 runId 已不持有参数');
   // FORCE(90) 抢占成功，旧 runId 的持有被替换
-  const force = ctl.acquire(['RArm'], { runId: 'force', priority: 90 });
-  assert.deepEqual(force.acquired, ['RArm']);
-  assert.equal(ctl.resolve().ownership.RArm!.runId, 'force');
+  assert.deepEqual(ctl.acquire(['RArm'], { runId: 'force', priority: 90 }), ['RArm']);
+  assert.equal(ctl.ownershipSnapshot().ownership.RArm!.runId, 'force');
   // 低不打断高：NORMAL(50) 抢 FORCE 持有 → priority-blocked
-  const blocked = ctl.acquire(['RArm'], { runId: 'low', priority: 50 });
+  const blocked = ctl.acquireDetailed(['RArm'], { runId: 'low', priority: 50 });
   assert.deepEqual(blocked.acquired, []);
   assert.deepEqual(blocked.rejected, [{ id: 'RArm', reason: 'priority-blocked' }]);
-  assert.equal(ctl.resolve().ownership.RArm!.runId, 'force');
+  assert.equal(ctl.ownershipSnapshot().ownership.RArm!.runId, 'force');
   // 同级 FORCE 仍可打断
-  const sameLevelForce = ctl.acquire(['RArm'], { runId: 'force-2', priority: 90 });
-  assert.deepEqual(sameLevelForce.acquired, ['RArm']);
+  assert.deepEqual(ctl.acquire(['RArm'], { runId: 'force-2', priority: 90 }), ['RArm']);
 });
 
-test('S-05 超时兜底：expiresAt 到点 resolve 自动释放（仅保险路径）', () => {
-  let now = 1000;
-  const ctl = new LimbController(FIXTURE_LEAF_IDS, { enabled: true, now: () => now });
+test('S-05 超时兜底：expiresAt 到点 ownershipSnapshot/resolve 自动释放（仅保险路径）', () => {
+  const ctl = new LimbController(FIXTURE_LEAF_IDS, { enabled: true, now: () => 1000 });
   ctl.acquire(['RArm'], { runId: 'r1', durationMs: 200 });
-  assert.equal(ctl.resolve(1100).ownership.RArm!.runId, 'r1'); // 未到期
-  const snap = ctl.resolve(1201); // expiresAt = 1200，已过期
+  assert.equal(ctl.ownershipSnapshot(1100).ownership.RArm!.runId, 'r1'); // 未到期
+  const snap = ctl.ownershipSnapshot(1201); // expiresAt = 1200，已过期
   assert.deepEqual(snap.expired, ['RArm']);
   assert.equal(snap.ownership.RArm, undefined);
-  now = 1201;
   assert.equal(ctl.size, 0);
 });
 
 test('S-06 反复 acquire/release 1000 次无泄漏（ownership 表大小回到 0）', () => {
   const ctl = new LimbController(FIXTURE_LEAF_IDS, { enabled: true, now: () => 1000 });
   for (let i = 0; i < 1000; i++) {
-    const { runId } = ctl.acquire(['RArm', 'LArm']);
+    const { runId } = ctl.acquireDetailed(['RArm', 'LArm']);
     ctl.release(runId);
   }
   assert.equal(ctl.size, 0);
-  assert.deepEqual(ctl.resolve().ownership, {});
+  assert.deepEqual(ctl.ownershipSnapshot().ownership, {});
 });
 
-test('联调：controller 状态 + limb intent 进 resolveWritePlan → post 胜出；未知 id 拒绝', () => {
+test('值路径（LimbControlLike.resolve）：set → resolve(now) 返回持有参数写值，clamp 生效；未 set 空表', () => {
+  const ctl = new LimbController(FIXTURE_LEAF_IDS, {
+    enabled: true,
+    now: () => 1000,
+    clamp: (_id, v) => Math.max(-1, Math.min(1, v)), // renderer 注入参数 min/max
+  });
+  assert.deepEqual(ctl.acquire(['RArm', 'LArm'], { runId: 'r1' }), ['RArm', 'LArm']);
+  assert.equal(ctl.resolve(1000).size, 0, '未 set 前无写入（空帧无副作用）');
+  const applied = ctl.set('r1', { RArm: 0.8, LArm: 5 });
+  assert.deepEqual(applied.applied.sort(), ['LArm', 'RArm']);
+  const writes = ctl.resolve(1000);
+  assert.equal(writes.get('RArm'), 0.8);
+  assert.equal(writes.get('LArm'), 1, '已按 clamp 钩子钳制');
+  // 未持有 / 他人 runId / 非有限值的 set 全部忽略
+  assert.deepEqual(ctl.set('other', { ShoulderZ: 1 }).ignored, ['ShoulderZ']);
+  assert.deepEqual(ctl.set('r1', { Param36: 1 }).ignored, ['Param36']);
+  assert.deepEqual(ctl.set('r1', { RArm: Number.NaN }).ignored, ['RArm']);
+  // release 后写值消失（回物理）
+  ctl.release('r1');
+  assert.equal(ctl.resolve(1000).size, 0);
+});
+
+test('R10b：isOwnable 谓词过滤非物理输出（rejected(not-ownable)，不算错误）', () => {
+  // 谓词由调用方注入（renderer：MotionAdapter.canOwn / physics3 输出表）；fixture 模拟 LArm 非物理输出
+  const ctl = new LimbController(FIXTURE_LEAF_IDS, { enabled: true, now: () => 1000, isOwnable: (id) => id !== 'LArm' });
+  const r = ctl.acquireDetailed(['RArm', 'LArm'], { runId: 'r1' });
+  assert.deepEqual(r.acquired, ['RArm']);
+  assert.deepEqual(r.rejected, [{ id: 'LArm', reason: 'not-ownable' }]);
+  assert.equal(ctl.ownershipSnapshot().ownership.LArm, undefined);
+  assert.equal(ctl.ownershipSnapshot().ownership.RArm!.runId, 'r1');
+});
+
+test('联调：controller ownershipSnapshot + limb intent 进 resolveWritePlan → post 胜出；未知 id 拒绝', () => {
   const ctl = new LimbController(FIXTURE_LEAF_IDS, { enabled: true, now: () => 1000 });
-  const acq = ctl.acquire(['RArm'], { runId: 'r1' });
-  assert.deepEqual(acq.acquired, ['RArm']);
+  assert.deepEqual(ctl.acquire(['RArm'], { runId: 'r1' }), ['RArm']);
   // 非四肢白名单（姿态参数）不能 acquire：能力驱动，id 名单来自构造参数
-  const overreach = ctl.acquire(['Param36'], { runId: 'r1' });
+  const overreach = ctl.acquireDetailed(['Param36'], { runId: 'r1' });
   assert.deepEqual(overreach.rejected, [{ id: 'Param36', reason: 'unknown-id' }]);
 
-  const snap = ctl.resolve();
+  const snap = ctl.ownershipSnapshot();
   const plan = resolveWritePlan({
     now: 1000,
     intents: [limbIntent({ RArm: 0.8 }, { runId: 'r1' })],
@@ -439,7 +478,7 @@ test('联调：controller 状态 + limb intent 进 resolveWritePlan → post 胜
   const after = resolveWritePlan({
     now: 1000,
     intents: [limbIntent({ RArm: 0.8 }, { runId: 'r1' })],
-    ownership: ctl.resolve().ownership,
+    ownership: ctl.ownershipSnapshot().ownership,
     physics: { RArm: 0.2 },
   });
   assert.deepEqual(after.writes, [{ id: 'RArm', value: 0.2, source: 'physics', phase: 'post' }]);
@@ -450,14 +489,15 @@ test('feature flag：M1_DEFAULT_ENABLED=false；控制器缺省禁用（现行�
   assert.equal(M1_DEFAULT_ENABLED, false);
   const off = new LimbController(FIXTURE_LEAF_IDS);
   assert.equal(off.isEnabled, false);
-  const acq = off.acquire(['RArm']);
-  assert.deepEqual(acq.acquired, []);
-  assert.deepEqual(acq.rejected, [{ id: 'RArm', reason: 'disabled' }]);
-  assert.deepEqual(off.resolve(9999), { ownership: {}, expired: [] });
+  assert.deepEqual(off.acquire(['RArm']), []);
+  const detailed = off.acquireDetailed(['RArm']);
+  assert.deepEqual(detailed.rejected, [{ id: 'RArm', reason: 'disabled' }]);
+  assert.equal(off.resolve(9999).size, 0);
+  assert.deepEqual(off.ownershipSnapshot(9999), { ownership: {}, expired: [] });
   // 显式启用后行为恢复
   const on = new LimbController(FIXTURE_LEAF_IDS, { enabled: true });
   assert.equal(on.isEnabled, true);
-  assert.deepEqual(on.acquire(['RArm']).acquired, ['RArm']);
+  assert.deepEqual(on.acquire(['RArm']), ['RArm']);
 });
 
 if (process.exitCode) console.error('\nownership-invariants 测试失败\n');
