@@ -1748,6 +1748,10 @@
         plan = null;
       }
       if (plan && plan.buckets && plan.buckets.length) {
+        // 降级/超时这类「计划层」信息进 notes（kind=skip 不算失败），回执里能看见
+        if (plan.notes && L.noteActMotion) {
+          for (var n = 0; n < plan.notes.length; n++) L.noteActMotion(runId, plan.notes[n], 'skip');
+        }
         playActPlan(plan, runId, source, skipMotions);
         return;
       }
