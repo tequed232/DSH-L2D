@@ -453,7 +453,10 @@ export class EmotionRouter {
         break;
       }
       case 'state': {
+        // 只在 error 时点火、别处不清，会让 ctx 永远停在 error（宿主的 lastError
+        // 早已恢复空串，角色却一直挂着"流冷汗"）。恢复类信号必须显式清零。
         if (d.state === 'error') this.lastErrorAt = now;
+        else if (d.state) this.lastErrorAt = 0;
         break;
       }
       case 'media': {
