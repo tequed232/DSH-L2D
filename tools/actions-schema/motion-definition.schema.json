@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-l2d.local/schemas/motion-definition.schema.json",
+  "title": "DSH-L2D 动作定义文件规范（Actions JSON）",
+  "description": "单条动作知识的文件形态。字段清单对齐 docs/DSH-L2D-全量架构替换任务书 §3（19 字段）。核心纪律：actions_chain 是模型无关语义链，禁止出现具体模型参数 ID（经 motion_model_bindings + Model Adapter 映射）；仅 status=validated 的动作可进入正常执行流程；source_asset / analysis_report / validation_report 必须指向可追溯工件。",
+  "type": "object",
+  "required": [
+    "motion_id", "semantic_key", "description", "actions_chain",
+    "schema_version", "status", "created_at", "updated_at"
+  ],
+  "properties": {
+    "motion_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$", "description": "动作唯一 ID（落库为 motion_definitions.id）" },
+    "semantic_key": { "type": "string", "pattern": "^[a-z0-9]+(\\.[a-z0-9_]+)+$", "description": "语义动作键，如 greet.wave / emotion.angry（落库索引）" },
+    "description": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "emotion": { "type": ["string", "null"], "description": "情绪类别，受控词表由语义通道维护" },
+    "facial_expression": { "type": ["string", "null"], "description": "配套表情语义键" },
+    "gaze": { "type": ["string", "null"], "description": "视线语义：none / camera / target:<id> 等" },
+    "body_language": { "type": ["string", "null"], "description": "肢体语言语义描述" },
+    "source_asset": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["asset_id", "source_type", "original_path"],
+          "properties": {
+            "asset_id": { "type": "string", "description": "motion_assets.id" },
+            "source_type": { "enum": ["image", "archive", "video", "gif"] },
+            "original_path": { "type": "string" },
+            "content_hash": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "analysis_report": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["analysis_id"],
+          "properties": {
+            "analysis_id": { "type": "string", "description": "motion_analysis.id" },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "actions_chain": {
+      "type": "object",
+      "required": ["chain_id", "schema_version", "steps"],
+      "properties": {
+        "chain_id": { "type": "string" },
+        "schema_version": { "type": "string" },
+        "loop": { "type": "boolean", "default": false },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["step_index", "kind", "params"],
+            "properties": {
+              "step_index": { "type": "integer", "minimum": 0 },
+              "kind": {
+                "enum": ["expression", "motion", "pose", "look", "keyframes"],
+                "description": "expression=表情语义键；motion=语义动作片段；pose=姿态；look=视线；keyframes=语义参数轨道关键帧（参数只允许写标准语义名，不允许具体模型参数 ID）"
+              },
+              "params": {
+                "type": "object",
+                "description": "kind 相关参数。keyframes 的 track 须为语义参数名（如 bodyAngleZ）；模型实际参数 ID 由 Model Adapter 查 motion_model_bindings 得出",
+                "additionalProperties": true
+              },
+              "duration_ms": { "type": "integer", "minimum": 0 },
+              "interruptible": { "type": "boolean", "default": true, "description": "可否被更高优先级演出打断（对齐动作引擎优先级 10/50/90）" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "json_address": { "type": ["string", "null"], "description": "本文件在库中的规范存放路径" },
+    "model_compatibility": {
+      "type": "array",
+      "description": "适配结论快照（权威在 motion_model_bindings 表，此处为文件自描述冗余）",
+      "items": {
+        "type": "object",
+        "required": ["model_id", "compatible"],
+        "properties": {
+          "model_id": { "type": "string" },
+          "compatible": { "type": "boolean" },
+          "adapter_ref": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "capability_revision": { "type": ["string", "null"], "description": "能力清单 source_revision（registry.json sourceCommit）" },
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "validation_report": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["verdict"],
+          "properties": {
+            "verdict": { "enum": ["pass", "pass_with_warnings", "blocked", "failed"] },
+            "evidence": { "type": "array", "items": { "type": "string" } },
+            "validated_at": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "status": { "enum": ["draft", "analyzing", "planned", "validated", "rejected", "deprecated"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

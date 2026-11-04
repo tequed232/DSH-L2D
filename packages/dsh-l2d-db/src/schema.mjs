@@ -11,6 +11,11 @@
  *  C. 图库语义域（v2）：gallery_items / gallery_labels / prompt_templates
  *     —— 外部参考图库（角色设定表/同人图/截图/动作参考）的登记、语义标签与
  *        提示词模板注册。标签经 linked_node_id 与模型结构节点桥接。
+ *  D. 动作知识域（v3）：motion_assets / motion_analysis / motion_definitions /
+ *     action_chains / action_steps / motion_sources / model_capabilities /
+ *     motion_model_bindings / execution_history / learning_jobs
+ *     —— 落地 docs/architecture/MOTION-DATA-SCHEMA.md §2/§3（修正版）。
+ *     动作链与模型参数解耦：语义链经 motion_model_bindings 适配到具体模型。
  *
  * 约定：
  *  - 一切写入走外键 + 约束；禁推理数据冒充事实（evidence_level 三级）。
@@ -20,7 +25,7 @@
  *  - 迁移只追加不改写；schema_migrations 记录版本与耗时。
  */
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /** v1 全量 DDL。单条 exec 执行，语句间以分号分隔。 */
 export const MIGRATIONS = {
@@ -358,5 +363,128 @@ export const MIGRATIONS = {
       updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       PRIMARY KEY (template_id)
     );
+  `,
+
+  /**
+   * v3：动作知识域（2026-11-04，落地 MOTION-DATA-SCHEMA §2/§3 修正版）。
+   * 设计要点：
+   *  - 动作知识独立于模型结构域：motion_definitions 的 actions_chain 是模型无关语义链，
+   *    经 motion_model_bindings.adapter_json + Model Adapter 映射到具体模型参数；
+   *  - 仅 validated 状态的动作可进执行流程（CHECK 枚举 + 消费方纪律）；
+   *  - execution_history 修正了任务书 §2 的笔误（motion_id + model_id 双列）；
+   *  - schema_migrations 在本库 v1 已存在，不重复建。
+   * 偏差记录：Phase 1 文档写"单一 actions-lib.sqlite"，本实现并入统一注册表
+   * （bootstrap-state.sqlite），理由：同一 node:sqlite 内核、共享迁移机制、避免双库事务。
+   * 若未来需要物理拆分，按表名前缀迁出即可（表名未加域前缀即为此保留）。
+   */
+  3: `
+    CREATE TABLE IF NOT EXISTS motion_assets (
+      id            TEXT PRIMARY KEY,
+      source_type   TEXT NOT NULL CHECK (source_type IN ('image','archive','video','gif')),
+      original_path TEXT NOT NULL,
+      archive_path  TEXT,
+      content_hash  TEXT NOT NULL,
+      imported_at   TEXT NOT NULL,
+      metadata_json TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_motion_assets_hash ON motion_assets(source_type, content_hash);
+
+    CREATE TABLE IF NOT EXISTS motion_analysis (
+      id            TEXT PRIMARY KEY,
+      asset_id      TEXT NOT NULL REFERENCES motion_assets(id) ON DELETE CASCADE,
+      model_name    TEXT NOT NULL,
+      analysis_json TEXT NOT NULL,
+      confidence    REAL CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1)),
+      created_at    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_motion_analysis_asset ON motion_analysis(asset_id);
+
+    CREATE TABLE IF NOT EXISTS motion_definitions (
+      id            TEXT PRIMARY KEY,
+      semantic_key  TEXT NOT NULL,
+      description   TEXT NOT NULL,
+      emotion       TEXT,
+      expression    TEXT,
+      gaze          TEXT,
+      body_language TEXT,
+      version       INTEGER NOT NULL DEFAULT 1,
+      status        TEXT NOT NULL DEFAULT 'draft'
+                    CHECK (status IN ('draft','analyzing','planned','validated','rejected','deprecated')),
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_motion_def_semantic ON motion_definitions(semantic_key);
+    CREATE INDEX IF NOT EXISTS idx_motion_def_status ON motion_definitions(status);
+
+    CREATE TABLE IF NOT EXISTS action_chains (
+      id               TEXT PRIMARY KEY,
+      motion_id        TEXT NOT NULL REFERENCES motion_definitions(id) ON DELETE CASCADE,
+      chain_json       TEXT NOT NULL,
+      schema_version   TEXT NOT NULL,
+      validation_report TEXT,
+      created_at       TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_chains_motion ON action_chains(motion_id);
+
+    CREATE TABLE IF NOT EXISTS action_steps (
+      id          TEXT PRIMARY KEY,
+      chain_id    TEXT NOT NULL REFERENCES action_chains(id) ON DELETE CASCADE,
+      step_index  INTEGER NOT NULL,
+      kind        TEXT NOT NULL CHECK (kind IN ('expression','motion','pose','look','keyframes')),
+      params_json TEXT NOT NULL,
+      duration_ms INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_steps_chain ON action_steps(chain_id, step_index);
+
+    CREATE TABLE IF NOT EXISTS motion_sources (
+      motion_id  TEXT NOT NULL REFERENCES motion_definitions(id) ON DELETE CASCADE,
+      asset_id   TEXT NOT NULL REFERENCES motion_assets(id) ON DELETE CASCADE,
+      analysis_id TEXT REFERENCES motion_analysis(id) ON DELETE SET NULL,
+      PRIMARY KEY (motion_id, asset_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS model_capabilities (
+      id               TEXT PRIMARY KEY,
+      model_id         TEXT NOT NULL,
+      capability_json  TEXT NOT NULL,
+      source_revision  TEXT NOT NULL,
+      verified_at      TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_model_caps_model ON model_capabilities(model_id);
+
+    CREATE TABLE IF NOT EXISTS motion_model_bindings (
+      motion_id   TEXT NOT NULL REFERENCES motion_definitions(id) ON DELETE CASCADE,
+      model_id    TEXT NOT NULL,
+      adapter_json TEXT,
+      compatible  INTEGER NOT NULL DEFAULT 1,
+      verified_at TEXT NOT NULL,
+      PRIMARY KEY (motion_id, model_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS execution_history (
+      id          TEXT PRIMARY KEY,
+      motion_id   TEXT NOT NULL REFERENCES motion_definitions(id) ON DELETE CASCADE,
+      model_id    TEXT NOT NULL,
+      status      TEXT NOT NULL CHECK (status IN ('completed','interrupted','rejected','failed','timeout')),
+      request_json TEXT,
+      result_json TEXT,
+      started_at  TEXT NOT NULL,
+      finished_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_exec_motion ON execution_history(motion_id);
+
+    CREATE TABLE IF NOT EXISTS learning_jobs (
+      id                  TEXT PRIMARY KEY,
+      source_id           TEXT NOT NULL,
+      model_capability_id TEXT NOT NULL,
+      state               TEXT NOT NULL DEFAULT 'uploaded'
+                          CHECK (state IN ('uploaded','extracted','analyzed','planned','validated','persisted','failed')),
+      asset_paths_json    TEXT,
+      current_step        TEXT,
+      error_json          TEXT,
+      created_at          TEXT NOT NULL,
+      updated_at          TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_learning_jobs_state ON learning_jobs(state);
   `,
 };

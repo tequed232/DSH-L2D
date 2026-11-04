@@ -14,6 +14,8 @@ import {
   upsertModel, upsertSourceFile, upsertNode, upsertEdge, upsertParameter,
   createAnalysisJob, finishAnalysisJob, saveCapabilityProfile, addValidationFinding,
   upsertGalleryItem, upsertGalleryLabel, upsertPromptTemplate, gallerySnapshot,
+  upsertMotionAsset, upsertMotionDefinition, upsertActionChain, upsertMotionBinding,
+  recordExecution, upsertLearningJob,
 } from '../src/repo.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-l2d-db-'));
@@ -31,11 +33,11 @@ function test(name, fn) {
 test('migrations are idempotent across reopen', () => {
   const again = openDb({ path: dbFile });
   const rows = again.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get();
-  assert.equal(rows.n, 2);
+  assert.equal(rows.n, 3);
   const tables = again.prepare(
-    "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('skills','workspaces','toolchain_components','startup_checks','tasks','models','nodes','edges','parameters','parameter_bindings','semantic_labels','motions','physics_groups','analysis_jobs','probe_runs','capability_profiles','validation_findings','gallery_items','gallery_labels','prompt_templates')",
+    "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('skills','workspaces','toolchain_components','startup_checks','tasks','models','nodes','edges','parameters','parameter_bindings','semantic_labels','motions','physics_groups','analysis_jobs','probe_runs','capability_profiles','validation_findings','gallery_items','gallery_labels','prompt_templates','motion_assets','motion_analysis','motion_definitions','action_chains','action_steps','motion_sources','model_capabilities','motion_model_bindings','execution_history','learning_jobs')",
   ).get();
-  assert.equal(tables.n, 20);
+  assert.equal(tables.n, 30);
 });
 
 // ---- 2. Skill 幂等：同 name upsert = 更新
@@ -194,6 +196,51 @@ test('prompt template upsert + gallery snapshot', () => {
   assert.equal(snap.templates.length, 1);
   assert.ok(snap.items.some((r) => r.sourceClass === 'character_sheet'));
   assert.ok(snap.labels.some((r) => r.field === 'part' && r.linked === 0));
+});
+
+// ---- 14. 动作知识域：素材去重 / 链+步骤替换 / 绑定 / 执行历史 / 学习状态机 / 级联
+test('motion knowledge domain lifecycle', () => {
+  // 素材：同 source_type+hash 去重
+  upsertMotionAsset(db, { id: 'asset-1', sourceType: 'gif', originalPath: '/g/wave.gif', contentHash: 'f'.repeat(64) });
+  const dup = upsertMotionAsset(db, { id: 'asset-2', sourceType: 'gif', originalPath: '/g/other.gif', contentHash: 'f'.repeat(64) });
+  assert.equal(dup.id, 'asset-1');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM motion_assets').get().n, 1);
+  assert.throws(() => upsertMotionAsset(db, { id: 'asset-3', sourceType: 'hologram', originalPath: 'x', contentHash: '1' }));
+
+  // 定义 + 状态枚举
+  upsertMotionDefinition(db, { id: 'mot-1', semanticKey: 'greet.wave', description: '挥手打招呼', emotion: 'friendly', status: 'draft' });
+  upsertMotionDefinition(db, { id: 'mot-1', semanticKey: 'greet.wave', description: '挥手打招呼', status: 'validated', version: 2 });
+  assert.equal(db.prepare('SELECT status FROM motion_definitions WHERE id=?').get('mot-1').status, 'validated');
+  assert.throws(() => upsertMotionDefinition(db, { id: 'mot-x', semanticKey: 's', description: 'd', status: 'flying' }));
+
+  // 链 + 步骤：重写整体替换
+  const n1 = upsertActionChain(db, { chainId: 'chain-1', motionId: 'mot-1', chain: { steps: 2 }, schemaVersion: '1.0.0', steps: [
+    { id: 's1', kind: 'expression', params: { name: 'smile' }, durationMs: 300 },
+    { id: 's2', kind: 'motion', params: { semantic: 'wave_hand' }, durationMs: 900 },
+  ] });
+  assert.equal(n1, 2);
+  const n2 = upsertActionChain(db, { chainId: 'chain-1', motionId: 'mot-1', chain: { steps: 1 }, schemaVersion: '1.0.0', steps: [
+    { kind: 'keyframes', params: { track: 'ParamAngleZ' } },
+  ] });
+  assert.equal(n2, 1);
+  assert.throws(() => upsertActionChain(db, { chainId: 'c2', motionId: 'mot-1', chain: {}, schemaVersion: '1', steps: [{ kind: 'bone', params: {} }] })); // Live2D 无骨骼
+
+  // 绑定 + 执行历史 + 学习状态机
+  upsertMotionBinding(db, { motionId: 'mot-1', modelId: 'm-9', adapter: { param: 'ParamAngleZ' }, compatible: 1 });
+  upsertMotionBinding(db, { motionId: 'mot-1', modelId: 'm-9', adapter: { param: 'ParamAngleY' } });
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM motion_model_bindings').get().n, 1);
+  recordExecution(db, { execId: 'exec-1', motionId: 'mot-1', modelId: 'm-9', status: 'completed', result: { ok: true } });
+  assert.throws(() => recordExecution(db, { execId: 'exec-2', motionId: 'mot-1', modelId: 'm-9', status: 'crashed' }));
+  upsertLearningJob(db, { id: 'job-1', sourceId: 'asset-1', modelCapabilityId: 'cap-1', state: 'uploaded' });
+  upsertLearningJob(db, { id: 'job-1', sourceId: 'asset-1', modelCapabilityId: 'cap-1', state: 'analyzed', currentStep: 'plan' });
+  assert.equal(db.prepare('SELECT state FROM learning_jobs WHERE id=?').get('job-1').state, 'analyzed');
+  assert.throws(() => upsertLearningJob(db, { id: 'job-2', sourceId: 'x', modelCapabilityId: 'y', state: 'teleported' }));
+
+  // 级联：删动作定义 → 链/步骤/绑定/执行历史/来源全清
+  db.prepare("DELETE FROM motion_definitions WHERE id='mot-1'").run();
+  for (const t of ['action_chains', 'action_steps', 'motion_model_bindings', 'execution_history']) {
+    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n, 0, t);
+  }
 });
 
 console.log(`\ndsh-l2d-db: ${passed} tests passed`);

@@ -380,3 +380,117 @@ export function gallerySnapshot(db) {
   `).all();
   return { items, labels, templates };
 }
+
+// ---------------------------------------------------------------- motion knowledge（v3 动作知识域）
+
+export const MOTION_ASSET_TYPES = ['image', 'archive', 'video', 'gif'];
+export const MOTION_STATUSES = ['draft', 'analyzing', 'planned', 'validated', 'rejected', 'deprecated'];
+export const ACTION_STEP_KINDS = ['expression', 'motion', 'pose', 'look', 'keyframes'];
+export const EXECUTION_STATUSES = ['completed', 'interrupted', 'rejected', 'failed', 'timeout'];
+export const LEARNING_JOB_STATES = ['uploaded', 'extracted', 'analyzed', 'planned', 'validated', 'persisted', 'failed'];
+
+/** 幂等登记动作素材（按 source_type + content_hash 唯一，重复导入=返回已有行）。 */
+export function upsertMotionAsset(db, { id, sourceType, originalPath, contentHash, archivePath = null, metadata = null, importedAt = null }) {
+  if (!MOTION_ASSET_TYPES.includes(sourceType)) throw new Error(`upsertMotionAsset: 非法 source_type ${sourceType}`);
+  return withTransaction(db, () => {
+    const existing = db.prepare('SELECT * FROM motion_assets WHERE source_type = ? AND content_hash = ?').get(sourceType, contentHash);
+    if (existing) return existing;
+    db.prepare(`
+      INSERT INTO motion_assets (id, source_type, original_path, archive_path, content_hash, imported_at, metadata_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, sourceType, originalPath, archivePath, contentHash, importedAt ?? nowIso(), json(metadata, null));
+    return db.prepare('SELECT * FROM motion_assets WHERE id = ?').get(id);
+  });
+}
+
+/** 幂等登记动作定义（按 id upsert；status 流转不设限，消费方只认 validated）。 */
+export function upsertMotionDefinition(db, { id, semanticKey, description, emotion = null, expression = null, gaze = null, bodyLanguage = null, version = 1, status = 'draft', createdAt = null }) {
+  if (!MOTION_STATUSES.includes(status)) throw new Error(`upsertMotionDefinition: 非法 status ${status}`);
+  return withTransaction(db, () => {
+    db.prepare(`
+      INSERT INTO motion_definitions (id, semantic_key, description, emotion, expression, gaze, body_language, version, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        semantic_key = excluded.semantic_key,
+        description = excluded.description,
+        emotion = excluded.emotion,
+        expression = excluded.expression,
+        gaze = excluded.gaze,
+        body_language = excluded.body_language,
+        version = excluded.version,
+        status = excluded.status,
+        updated_at = excluded.updated_at
+    `).run(id, semanticKey, description, emotion, expression, gaze, bodyLanguage, version, status,
+      createdAt ?? nowIso(), nowIso());
+    return db.prepare('SELECT * FROM motion_definitions WHERE id = ?').get(id);
+  });
+}
+
+/** 幂等写动作链（按 chain id upsert）+ 步骤整体替换（同链重写=删旧插新，事务内一致）。 */
+export function upsertActionChain(db, { chainId, motionId, chain, schemaVersion, validationReport = null, steps = [], createdAt = null }) {
+  if (!chainId || !motionId) throw new Error('upsertActionChain: chainId 与 motionId 必填');
+  for (const s of steps) {
+    if (!ACTION_STEP_KINDS.includes(s.kind)) throw new Error(`upsertActionChain: 非法 step kind ${s.kind}`);
+  }
+  return withTransaction(db, () => {
+    db.prepare(`
+      INSERT INTO action_chains (id, motion_id, chain_json, schema_version, validation_report, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        chain_json = excluded.chain_json,
+        schema_version = excluded.schema_version,
+        validation_report = excluded.validation_report
+    `).run(chainId, motionId, json(chain, '{}'), schemaVersion, validationReport, createdAt ?? nowIso());
+    db.prepare('DELETE FROM action_steps WHERE chain_id = ?').run(chainId);
+    steps.forEach((s, i) => {
+      db.prepare(`
+        INSERT INTO action_steps (id, chain_id, step_index, kind, params_json, duration_ms)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(s.id ?? `${chainId}#${i}`, chainId, s.stepIndex ?? i, s.kind, json(s.params, '{}'), s.durationMs ?? null);
+    });
+    return db.prepare('SELECT COUNT(*) AS n FROM action_steps WHERE chain_id = ?').get(chainId).n;
+  });
+}
+
+/** 幂等写动作↔模型适配（按 motion_id + model_id upsert）。 */
+export function upsertMotionBinding(db, { motionId, modelId, adapter = null, compatible = 1, verifiedAt = null }) {
+  return withTransaction(db, () => {
+    db.prepare(`
+      INSERT INTO motion_model_bindings (motion_id, model_id, adapter_json, compatible, verified_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(motion_id, model_id) DO UPDATE SET
+        adapter_json = excluded.adapter_json,
+        compatible = excluded.compatible,
+        verified_at = excluded.verified_at
+    `).run(motionId, modelId, json(adapter, null), compatible ? 1 : 0, verifiedAt ?? nowIso());
+  });
+}
+
+/** 追加执行历史（只追加）。 */
+export function recordExecution(db, { execId, motionId, modelId, status, request = null, result = null, startedAt = null, finishedAt = null }) {
+  if (!EXECUTION_STATUSES.includes(status)) throw new Error(`recordExecution: 非法 status ${status}`);
+  return withTransaction(db, () => {
+    db.prepare(`
+      INSERT INTO execution_history (id, motion_id, model_id, status, request_json, result_json, started_at, finished_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(execId, motionId, modelId, status, json(request, null), json(result, null), startedAt ?? nowIso(), finishedAt);
+  });
+}
+
+/** 学习任务状态机推进（按 id upsert；state 枚举受 CHECK 约束）。 */
+export function upsertLearningJob(db, { id, sourceId, modelCapabilityId, state = 'uploaded', assetPaths = null, currentStep = null, error = null }) {
+  if (!LEARNING_JOB_STATES.includes(state)) throw new Error(`upsertLearningJob: 非法 state ${state}`);
+  return withTransaction(db, () => {
+    db.prepare(`
+      INSERT INTO learning_jobs (id, source_id, model_capability_id, state, asset_paths_json, current_step, error_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        state = excluded.state,
+        asset_paths_json = excluded.asset_paths_json,
+        current_step = excluded.current_step,
+        error_json = excluded.error_json,
+        updated_at = excluded.updated_at
+    `).run(id, sourceId, modelCapabilityId, state, json(assetPaths, null), currentStep, json(error, null), nowIso(), nowIso());
+    return db.prepare('SELECT * FROM learning_jobs WHERE id = ?').get(id);
+  });
+}
