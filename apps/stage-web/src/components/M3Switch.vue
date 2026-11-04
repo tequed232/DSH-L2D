@@ -42,7 +42,8 @@ const toggle = () => {
 .track {
   display: grid;
   align-items: center;
-  width: 44px;
+  /* 轨宽 44px = --dsh-control-md(40) + --dsh-space-1(4)：保持原视觉，不写死像素 */
+  width: calc(var(--dsh-control-md) + var(--dsh-space-1));
   height: var(--dsh-space-5);
   padding: var(--dsh-space-1);
   border-radius: var(--dsh-radius-full);
@@ -69,7 +70,8 @@ const toggle = () => {
 }
 
 .on .thumb {
-  transform: translateX(20px);
+  /* 位移 20px = 轨宽(44) - 左右内边距(2×4) - 滑块(16)，全部由令牌推导 */
+  transform: translateX(calc(var(--dsh-control-md) - var(--dsh-space-1) - var(--dsh-space-4)));
   background: var(--dsh-on-accent);
 }
 </style>
