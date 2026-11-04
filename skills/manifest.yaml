@@ -72,6 +72,11 @@ skills:
     scope: worker
     workspace: l2d-runtime
     required: true
+  - id: apple-google-minimal-design
+    version: 1.0.0
+    path: skills/apple-google-minimal-design/SKILL.md
+    scope: on-demand
+    required: false
 
 validation:
   required_frontmatter: [name, description]
