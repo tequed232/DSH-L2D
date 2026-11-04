@@ -71,9 +71,25 @@
 - **P3-0 注入准入达成**：`Param_Angle_Rotation84~87` [-45,45] / `Clothes5` [0,1] / `Param52` [-1,1] 全部有范围+证据；耳族（`LEar/REar1-3` 兽耳PHA/B/C）与生气族（`AngryMove1-8` 生气移动/伸缩/显隐）已定位——Phase 3 三动作跨参数族测试的 SQLite 数据就绪
 - 复现：`node tools/model-registry/enrich-ranges.mjs && node tools/model-registry/enrich-names.mjs`
 
-## 提交结构（17 笔，语义分组）
+## 合并前置条件状态（2026-11-05 更新，人工裁决执行中）
+
+| # | 前置条件 | 状态 |
+| --- | --- | --- |
+| 1 | Schema v5/v6 迁移 | ✅ 完成（v5 范围证据列 / v6 双层边界列） |
+| 2 | 509/509 参数范围完整 | ✅ 完成（476 补齐 + 16 双层落地） |
+| 3 | 509 参数名称补齐 | ✅ 完成（493 补名，0 冲突） |
+| 4 | S1/S2 测试通过 | ✅ 完成（7 测试文件 + safety-guard 12 项） |
+| 5 | E2E 13/13 | ✅ 完成 |
+| 6 | 16 项冲突双层边界策略落地 | ✅ 完成（`74ce24c`：Hard=moc3 理论边界 / Soft=w3-registry 实测摆幅，原始证据保留；Param39 案例 Hard [-1,1] / Soft [0,0.322] 与裁决一致） |
+| 7 | 61 条标签复核 | ⏳ **进行中**——分类审计视图已出 `docs/LABEL-AUDIT-CLASSIFIED.md`（耳/尾/表情/身体四族 + 命名一致性问题 N1-N4 + AngryMove1-8 探针先行警示），等待人工逐条 decide |
+| 8 | 最终 PR 回归测试 | ⏳ 待 #7 完成后执行 |
+
+**待人工**：61 条标签逐条裁决（`node tools/gallery-schema/review.mjs decide <id> approved|rejected --note "..."`）。
+
+## 提交结构（19 笔，语义分组）
 
 ```
+74ce24c feat(safety): dual-layer boundary (Hard=moc3 / Soft=w3-registry)
 c12faf4 feat(db): schema v5 range_evidence + parameter data enrichment (P3-0)
 fb2ae32 docs(p3): runtime verification plan
 db0b3a9 feat(p2-audit): human review audit report generator
