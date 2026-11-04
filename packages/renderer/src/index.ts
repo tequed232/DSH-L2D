@@ -13,6 +13,19 @@ import { LAppPal } from './app/lapppal';
 import type { LAppModel } from './app/lappmodel';
 import { ParamInjector, parameterIndexOf } from './app/param-injector';
 import { createPhysicsGate, DEFAULT_EMBODIED_FLAGS } from './app/motion-adapter';
+import { createLimbWiring, type LimbAdmitReceipt, type LimbReleaseReceipt, type LimbStateSnapshot } from './app/limb-wiring';
+import {
+  ARM_ALL_PHYSICS,
+  ARM_LEFT_PHYSICS,
+  ARM_LEFT_POSE,
+  ARM_RIGHT_PHYSICS,
+  ARM_RIGHT_POSE,
+  CROSS_DOMAIN,
+  MANIFEST_ALL_PHYSICS,
+  ROOT_ONLY,
+  SHARED_FORBIDDEN,
+} from './app/body-manifest';
+import { LimbController } from '../../core/src/limb-controller.ts';
 import { EmotionRouter, EmotionIntent, EmotionSignal } from './app/emotion-router';
 import { MotionDirector, motionsShareArm } from './app/motion-director';
 import { PoseController, POSE_IDS } from './app/pose-controller';
@@ -67,17 +80,59 @@ const motionDirector = new MotionDirector();
 const poseController = new PoseController();
 
 /**
- * [M1-b] PhysicsGate：Hip* pre 让位（生产者跳过输出）+ limb post 覆盖的帧内挂接点。
- * `embodied.m1` 默认 false（DEFAULT_EMBODIED_FLAGS）= pre/post 均为空操作，现行为逐字节不变；
- * 集成日把 flag 翻 true 即启用（settings/overlay 的开关管线由后续批次承接）。
- * pre 让位数据源是 injector 的 ownership（pre 相位独占，实际只有 HipAngleX/Y/Z）；
- * limb 控制器实例未接线（M1-c/Mixer 批次提供），post 通道在提供前为空操作。
+ * [M1-b] PhysicsGate：Hip* pre 让位（生产者跳过输出）+ [M1-g] limb post 覆盖的帧内挂接点。
+ * 两个通道各有独立 flag（都默认 false）：
+ *   - `embodied.m1`   → pre 让位（共享枢纽类，M1-b）
+ *   - `embodied.limb` → post 覆盖（手臂叶子域，M1-g/G1）
+ * flag 关时 pre/post 均为空操作，现行为逐字节不变。
  */
+const LIMB_ENABLED = DEFAULT_EMBODIED_FLAGS['embodied.limb'] === true;
+
+/**
+ * [M1-g] limb 租约：可 own 白名单 **恰好**是 manifest 的 30 个手臂物理输出
+ * （`packages/renderer/src/app/body-manifest.ts`，由 physics3 生成，非手抄）。
+ * `isOwnable` 用 manifest 而不是 injector 的（可能回落到 30/292 正则的）物理输出表——
+ * G0 §6.4 已明确 FALLBACK 正则不可当判据；真正的写入放行仍由 injector 自己把关，
+ * 两者不一致时 wiring 会把 injector 的拒绝回报成 `injector-rejected` 并整次回滚。
+ */
+const limbController = new LimbController(ARM_ALL_PHYSICS, {
+  enabled: LIMB_ENABLED,
+  isOwnable: (id) => MANIFEST_ALL_PHYSICS.has(id),
+  // 量程唯一事实源是 moc3（G0 §1.1）：没有模型时原值返回，由 injector 侧再钳一次。
+  clamp: (id, value) => {
+    const core = model?.getModel();
+    if (!core) return value;
+    const index = parameterIndexOf(core, id);
+    if (index < 0) return value;
+    const min = core.getParameterMinimumValue(index);
+    const max = core.getParameterMaximumValue(index);
+    return Math.max(min, Math.min(max, value));
+  },
+});
+
+/**
+ * [M1-g] 租约 ⇄ injector 的原子粘合层（acquire 成功即 own；失败回滚；到期联动释放）。
+ * 见 app/limb-wiring.ts 的三条不变量。
+ */
+const limbWiring = createLimbWiring({
+  controller: limbController,
+  enabled: LIMB_ENABLED,
+  ownedIds: () => injector.getAgentOwned(),
+  sink: {
+    own: (ids, durationMs, phase) => injector.own(ids, durationMs, phase),
+    release: (ids) => injector.release(ids),
+  },
+});
+
 const physicsGate = createPhysicsGate(DEFAULT_EMBODIED_FLAGS, {
   preOwnedIds: () => injector.getPreOwnedIds(),
-  stagePostWrite: (core, id, value) =>
-    injector.set(core as Parameters<typeof injector.set>[0], id, value, 1),
+  limb: limbWiring.control,
+  limbWrite: (core, id, value) =>
+    injector.set(core as Parameters<typeof injector.set>[0], id, value, 1, { mode: 'set' }),
 });
+
+/** [M1-g] 运行时漂移诊断：physics3 输出表里缺哪些 manifest id（空 = 一致）。 */
+let limbManifestMissing: string[] = [];
 
 /** 页面里加载 Cubism Core（幂等） */
 export function loadCore(url: string): Promise<void> {
@@ -399,7 +454,16 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
             if (typeof id === 'string') outputs.add(id);
           }
         }
-        if (outputs.size) injector.setPhysicsOutputs(outputs);
+        if (outputs.size) {
+          injector.setPhysicsOutputs(outputs);
+          // [M1-g] manifest 漂移诊断：30 个手臂 id 必须全部在这份真实输出表里。
+          // 缺了不阻断渲染（injector 会拒写 → acquire 整次回滚），但要在诊断面留痕。
+          const missing = ARM_ALL_PHYSICS.filter((id) => !outputs.has(id));
+          limbManifestMissing = missing;
+          if (missing.length) {
+            console.warn('[M1-g] manifest 与 physics3 输出表不一致，缺：' + missing.join(','));
+          }
+        }
       })
       .catch(() => {
         /* 保留内置兜底规则 */
@@ -1275,6 +1339,73 @@ export function getOwnedParameters(): string[] {
   return injector.getAgentOwned();
 }
 
+/**
+ * [M1-g / G1] 单肢接管：取得手臂域的 limb 租约（`embodied.limb` 默认 false）。
+ *
+ * 只有 manifest 的 30 个手臂物理输出（RArm 族 / LArm 族 / 袖子 / 飘带）可被接管；
+ * 姿态层 `Param36..43 / 59..62` **不是**物理输出，走普通 `setParameters` 即可——
+ * 把它们传给本接口会被拒（reason='rejected'，逐 id 标 not-ownable），这是设计而非缺陷
+ * （G0 §3.1 两条通道；把姿态参数塞进 own 只会得到"回执漂亮、行为不变"的假通过）。
+ *
+ * 原子性：整段请求要么全成、要么全不成（含 injector 侧被拒的 id）。
+ * 成功后同一次调用内已 `injector.own(ids, durationMs, 'post')`，物理随后被 post 覆盖。
+ */
+export function admitLimb(
+  ids: string[],
+  opts: {
+    runId?: string;
+    durationMs?: number;
+    priority?: number;
+    /** 可选初始目标值（只对成功 acquire 的 id 生效）。 */
+    values?: Record<string, number>;
+  } = {},
+): LimbAdmitReceipt {
+  const receipt = limbWiring.admit({ ids: Array.isArray(ids) ? ids : [], ...opts });
+  if (receipt.accepted) markActive();
+  return receipt;
+}
+
+/** [M1-g] 更新已持有租约的目标值（runId 必须与 acquire 时一致）；返回被接受的 id。 */
+export function setLimb(runId: string, values: Record<string, number>): string[] {
+  return limbWiring.set(runId, values || {});
+}
+
+/** [M1-g] 释放 limb 租约（runId 缺省 = 全释放）；下一帧物理自然接管，无恢复逻辑。 */
+export function releaseLimb(runId?: string): LimbReleaseReceipt {
+  return limbWiring.release(runId);
+}
+
+/**
+ * [M1-g] 诊断快照：租约状态 + 域清单（G2 planner 的能力面）。
+ * `drift` 非空 = controller 与 injector 的独占集合不一致，必须调查（正常恒为空）。
+ */
+export function getLimbState(): LimbStateSnapshot & {
+  domains: {
+    rightPhysics: readonly string[];
+    leftPhysics: readonly string[];
+    rightPose: readonly string[];
+    leftPose: readonly string[];
+    crossDomain: readonly string[];
+    sharedForbidden: readonly string[];
+    rootOnly: { head: readonly string[]; torso: readonly string[] };
+  };
+  manifestMissing: string[];
+} {
+  return {
+    ...limbWiring.snapshot(),
+    domains: {
+      rightPhysics: ARM_RIGHT_PHYSICS,
+      leftPhysics: ARM_LEFT_PHYSICS,
+      rightPose: ARM_RIGHT_POSE,
+      leftPose: ARM_LEFT_POSE,
+      crossDomain: CROSS_DOMAIN,
+      sharedForbidden: SHARED_FORBIDDEN,
+      rootOnly: ROOT_ONLY,
+    },
+    manifestMissing: [...limbManifestMissing],
+  };
+}
+
 /** 视线/头部朝向，x、y ∈ [-1, 1]，走模型自带的拖动逻辑（Angle/EyeBall 一起动） */
 export function lookAt(x: number, y: number): void {
   markActive();
@@ -1819,6 +1950,9 @@ export function resetPose(): number {
   stopKeyframes();
   stopAmbient();
   zeroAngleBus();
+  // [M1-g] limb 租约必须与 injector.releaseAll 同步清账，否则 controller 侧残留持有
+  // （injector 已被清空 → 下次 acquire 会因"controller 有、injector 无"的漂移拒绝续期）。
+  limbWiring.release();
   injector.releaseAll();
   injector.clear();
   injector.unlock();
@@ -1995,6 +2129,8 @@ export async function destroy(): Promise<void> {
   injector.clear();
   injector.unlock();
   injector.resetStats();
+  limbWiring.release(); // [M1-g] 清 limb 租约（destroy 后不残留持有，下次 mount 从零开始）
+  limbManifestMissing = [];
   physicsGate.dispose(); // [M1-b] 清掉让位登记表，避免残留状态影响下一次 mount
   if (TIMELINE_ENABLED) gestureBridge.stop(); // [M1-d2] 清手势时间线与 armed
   if (CUE_ENABLED) cueBridge.stop(); // [M1-f 第二批] 清 cue 账本（destroy 后不残留持有值）

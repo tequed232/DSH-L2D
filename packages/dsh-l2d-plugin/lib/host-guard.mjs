@@ -58,6 +58,9 @@ export const HOST_ALLOWED_TOOLS = Object.freeze([
   'l2d_posture',
   'l2d_get_state',
   'l2d_reset',
+  // [M1-g] 单肢接管（embodied.limb 默认关；flag 关时渲染端回 reason='limb-disabled'）
+  'l2d_limb_acquire',
+  'l2d_limb_release',
 ]);
 
 const ALLOWED_SET = new Set(HOST_ALLOWED_TOOLS);

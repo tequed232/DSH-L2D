@@ -70,7 +70,10 @@ assert.deepEqual(fullIndex.warnings, []);
 // ---------------------------------------------------------------------------
 // 1) 工具白名单：只放行 index.js 原 ALLOWED 集合
 // ---------------------------------------------------------------------------
-assert.equal(HOST_ALLOWED_TOOLS.length, 15);
+// 15 = index.js 原 ALLOWED 集合；17 = 追加 M1-g 的 limb 接管两条（l2d_limb_acquire/release）
+assert.equal(HOST_ALLOWED_TOOLS.length, 17);
+assert.ok(HOST_ALLOWED_TOOLS.includes('l2d_limb_acquire'));
+assert.ok(HOST_ALLOWED_TOOLS.includes('l2d_limb_release'));
 for (const tool of HOST_ALLOWED_TOOLS) {
   // 空入参可能因"缺字段"被拒（如空表情名），但绝不能是 unknown-tool。
   const r = guardAiCall({ name: tool, args: {} });
