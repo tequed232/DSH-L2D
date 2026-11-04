@@ -16,7 +16,7 @@
     "dev:server": "node tools/dev-server/index.mjs",
     "gen:ai-tools": "node tools/gen-ai-tools/index.mjs",
     "test:types": "node tools/typecheck-smoke.mjs",
-    "test:db": "node --experimental-sqlite packages/dsh-l2d-db/test/db.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/actions-repo.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/task-contract.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/capability-registry.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/ingestion-pipeline.test.mjs && node --experimental-sqlite packages/dsh-l2d-mcp/src/toolchain-status.test.mjs",
+    "test:db": "node --experimental-sqlite packages/dsh-l2d-db/test/db.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/model-adapter.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/actions-repo.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/task-contract.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/capability-registry.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/ingestion-pipeline.test.mjs && node --experimental-sqlite packages/dsh-l2d-mcp/src/toolchain-status.test.mjs",
     "accept": "node tools/acceptance/run.mjs",
     "test:contract": "node tools/renderer-contract/check.mjs",
     "scan:capability": "node tools/capability-scan/scan.mjs"

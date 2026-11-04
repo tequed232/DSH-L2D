@@ -22,4 +22,8 @@ export {
 export {
   defaultRegistryPath, validateRegistryDocument, loadCapabilityRegistry,
 } from './capability-registry.mjs';
+export {
+  validateAdapterShape, registeredParamIds,
+  bindMotionToModel, resolveMotionParams, diffModelParameterSets,
+} from './model-adapter.mjs';
 export { createIngestionPipeline } from './ingestion-pipeline.mjs';
