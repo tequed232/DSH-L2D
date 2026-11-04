@@ -34,3 +34,6 @@ last-run.json
 
 # W3 registry 校验产物（每次跑 validate.test.mjs 重写）
 tools/w3-registry/test-result.json
+
+# 运行时注册表（SQLite，含本机绝对路径，不入库）
+data/
