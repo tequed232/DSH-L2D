@@ -1,5 +1,5 @@
 /**
- * dsh-l2d · 统一注册表 schema（迁移式，v1）
+ * dsh-l2d · 统一注册表 schema（迁移式，v2）
  *
  * 两个域：
  *  A. Bootstrap 域：skills / workspaces / toolchain_components / startup_checks / tasks
@@ -8,15 +8,19 @@
  *     parameter_bindings / semantic_labels / motions / physics_groups /
  *     analysis_jobs / probe_runs / capability_profiles / validation_findings
  *     —— 对应 skills/dsh-l2d-model-intelligence SKILL.md Phase 6。
+ *  C. 图库语义域（v2）：gallery_items / gallery_labels / prompt_templates
+ *     —— 外部参考图库（角色设定表/同人图/截图/动作参考）的登记、语义标签与
+ *        提示词模板注册。标签经 linked_node_id 与模型结构节点桥接。
  *
  * 约定：
  *  - 一切写入走外键 + 约束；禁推理数据冒充事实（evidence_level 三级）。
  *  - 幂等：models 按 model_id，nodes 按 (model_id, node_key)，skills 按 name，
- *    toolchain_components 按 name —— 重复注册=更新，不产生重复行。
+ *    toolchain_components 按 name，gallery_items 按 file_name，
+ *    prompt_templates 按 template_id —— 重复注册=更新，不产生重复行。
  *  - 迁移只追加不改写；schema_migrations 记录版本与耗时。
  */
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /** v1 全量 DDL。单条 exec 执行，语句间以分号分隔。 */
 export const MIGRATIONS = {
@@ -288,5 +292,71 @@ export const MIGRATIONS = {
       evidence      TEXT                       -- JSON
     );
     CREATE INDEX IF NOT EXISTS idx_findings_model ON validation_findings(model_id, severity);
+  `,
+
+  /**
+   * v2：图库语义域（2026-11-04，图库包到达后建）。
+   * 设计要点：
+   *  - 图像侧标签与模型侧标签分表（v1 semantic_labels 绑 node_id，不动）；
+   *  - gallery_labels.linked_node_id 是图↔模型结构的可选桥（节点删除置 NULL，不级联毁图）；
+   *  - real_format 以魔数嗅探为准，与扩展名不符属正常事实（如 B站 heic 存成 .png）；
+   *  - prompt_templates 注册提示词资产本体，模板进化按 (template_id, version) 追溯。
+   */
+  2: `
+    CREATE TABLE IF NOT EXISTS gallery_items (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      file_name     TEXT NOT NULL UNIQUE,
+      real_format   TEXT NOT NULL,             -- 魔数嗅探：png/jpeg/gif/heic/webp/avif/unknown
+      ext           TEXT NOT NULL,             -- 扩展名原样
+      width         INTEGER,
+      height        INTEGER,
+      size_bytes    INTEGER,
+      sha256        TEXT,
+      source_class  TEXT NOT NULL DEFAULT 'other'
+                    CHECK (source_class IN
+                    ('character_sheet','fan_art','screenshot','gif_reference','photo','poster','other')),
+      review_state  TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (review_state IN ('pending','labeled','approved','rejected')),
+      notes         TEXT,
+      created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_gallery_items_class ON gallery_items(source_class, review_state);
+    CREATE INDEX IF NOT EXISTS idx_gallery_items_sha ON gallery_items(sha256);
+
+    CREATE TABLE IF NOT EXISTS gallery_labels (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id         INTEGER NOT NULL REFERENCES gallery_items(id) ON DELETE CASCADE,
+      field           TEXT NOT NULL
+                      CHECK (field IN
+                      ('part','expression','pose','outfit','style','scene','motion_cue','color','other')),
+      value           TEXT NOT NULL,
+      confidence      REAL CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1)),
+      evidence_level  TEXT NOT NULL DEFAULT 'inferred'
+                      CHECK (evidence_level IN ('source_exact','parser_derived','inferred')),
+      evidence        TEXT,                    -- JSON：prompt 模板、模型版本、原文摘录等
+      review_state    TEXT NOT NULL DEFAULT 'needs_review'
+                      CHECK (review_state IN ('needs_review','approved','rejected')),
+      linked_node_id  INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
+      created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      UNIQUE (item_id, field, value)
+    );
+    CREATE INDEX IF NOT EXISTS idx_gallery_labels_item ON gallery_labels(item_id, field);
+    CREATE INDEX IF NOT EXISTS idx_gallery_labels_node ON gallery_labels(linked_node_id);
+
+    CREATE TABLE IF NOT EXISTS prompt_templates (
+      template_id   TEXT NOT NULL,
+      version       TEXT NOT NULL,
+      target_class  TEXT NOT NULL
+                    CHECK (target_class IN
+                    ('character_sheet','fan_art','screenshot','gif_reference','photo','poster','other')),
+      body          TEXT NOT NULL,             -- 提示词全文
+      schema_ref    TEXT,                      -- 输出应遵守的 JSON Schema（路径/URI）
+      status        TEXT NOT NULL DEFAULT 'draft'
+                    CHECK (status IN ('draft','active','deprecated')),
+      created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY (template_id)
+    );
   `,
 };

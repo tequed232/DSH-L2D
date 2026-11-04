@@ -13,6 +13,7 @@ import {
   recordStartupCheck, startupReport, createTask, updateTaskStatus, getTask,
   upsertModel, upsertSourceFile, upsertNode, upsertEdge, upsertParameter,
   createAnalysisJob, finishAnalysisJob, saveCapabilityProfile, addValidationFinding,
+  upsertGalleryItem, upsertGalleryLabel, upsertPromptTemplate, gallerySnapshot,
 } from '../src/repo.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-l2d-db-'));
@@ -30,11 +31,11 @@ function test(name, fn) {
 test('migrations are idempotent across reopen', () => {
   const again = openDb({ path: dbFile });
   const rows = again.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get();
-  assert.equal(rows.n, 1);
+  assert.equal(rows.n, 2);
   const tables = again.prepare(
-    "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('skills','workspaces','toolchain_components','startup_checks','tasks','models','nodes','edges','parameters','parameter_bindings','semantic_labels','motions','physics_groups','analysis_jobs','probe_runs','capability_profiles','validation_findings')",
+    "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('skills','workspaces','toolchain_components','startup_checks','tasks','models','nodes','edges','parameters','parameter_bindings','semantic_labels','motions','physics_groups','analysis_jobs','probe_runs','capability_profiles','validation_findings','gallery_items','gallery_labels','prompt_templates')",
   ).get();
-  assert.equal(tables.n, 17);
+  assert.equal(tables.n, 20);
 });
 
 // ---- 2. Skill 幂等：同 name upsert = 更新
@@ -152,6 +153,47 @@ test('withTransaction rolls back on failure', () => {
     throw new Error('boom');
   }));
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM skills WHERE name='tx-skill'").get().n, 0);
+});
+
+// ---- 11. 图库条目：幂等 upsert + 非法枚举拒绝
+test('gallery item upsert + enum rejection', () => {
+  upsertGalleryItem(db, { fileName: 'dafeiyu-mature-character-sheet.png', realFormat: 'png', ext: 'png', width: 1080, height: 810, sizeBytes: 100, sha256: 'd'.repeat(64), sourceClass: 'character_sheet' });
+  upsertGalleryItem(db, { fileName: 'dafeiyu-mature-character-sheet.png', realFormat: 'png', ext: 'png', width: 1080, height: 810, sizeBytes: 200, sha256: 'd'.repeat(64), sourceClass: 'character_sheet', reviewState: 'labeled' });
+  const rows = db.prepare('SELECT COUNT(*) AS n FROM gallery_items').get();
+  assert.equal(rows.n, 1);
+  assert.equal(db.prepare('SELECT review_state FROM gallery_items').get().review_state, 'labeled');
+  assert.throws(() => upsertGalleryItem(db, { fileName: 'x', realFormat: 'png', ext: 'png', sourceClass: 'texture_atlas' }));
+  assert.throws(() => upsertGalleryItem(db, { fileName: 'y', realFormat: 'png', ext: 'png', reviewState: 'done' }));
+});
+
+// ---- 12. 图库标签：字段/证据等级约束 + 与模型节点桥接（节点删除置 NULL）
+test('gallery label constraints + node bridge with SET NULL', () => {
+  upsertModel(db, { modelId: 'm-g', sourcePath: 'x.moc3', packageHash: 'e'.repeat(64) });
+  const nodeId = upsertNode(db, { modelId: 'm-g', nodeKey: 'part:tail', nodeType: 'Part' });
+  const item = db.prepare("SELECT id FROM gallery_items WHERE file_name='dafeiyu-mature-character-sheet.png'").get();
+  const labelId = upsertGalleryLabel(db, { itemId: item.id, field: 'part', value: 'whale_tail', confidence: 0.98, evidenceLevel: 'source_exact', evidence: { view: '三视图侧/背面' }, linkedNodeId: nodeId });
+  upsertGalleryLabel(db, { itemId: item.id, field: 'part', value: 'whale_tail', confidence: 0.99, linkedNodeId: nodeId }); // 幂等（UPSERT 全量替换语义）
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM gallery_labels').get().n, 1);
+  assert.throws(() => upsertGalleryLabel(db, { itemId: item.id, field: 'shape', value: 'x' }));
+  assert.throws(() => upsertGalleryLabel(db, { itemId: item.id, field: 'part', value: 'y', evidenceLevel: 'guessed' }));
+  assert.throws(() => upsertGalleryLabel(db, { itemId: item.id, field: 'part', value: 'z', confidence: 1.5 }));
+  // 桥接：删模型节点后标签存活、linked_node_id 置 NULL
+  assert.equal(db.prepare('SELECT linked_node_id FROM gallery_labels WHERE id = ?').get(labelId).linked_node_id, nodeId);
+  db.prepare("DELETE FROM nodes WHERE model_id='m-g'").run();
+  assert.equal(db.prepare('SELECT linked_node_id FROM gallery_labels WHERE id = ?').get(labelId).linked_node_id, null);
+});
+
+// ---- 13. 提示词模板：幂等注册 + 快照汇总
+test('prompt template upsert + gallery snapshot', () => {
+  upsertPromptTemplate(db, { templateId: 'gallery-character-sheet-v1', version: '1.0.0', targetClass: 'character_sheet', body: 'You are labeling...', schemaRef: 'tools/gallery-schema/semantic-label.schema.json', status: 'active' });
+  upsertPromptTemplate(db, { templateId: 'gallery-character-sheet-v1', version: '1.1.0', targetClass: 'character_sheet', body: 'improved', status: 'active' });
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM prompt_templates').get().n, 1);
+  assert.equal(db.prepare("SELECT version FROM prompt_templates WHERE template_id='gallery-character-sheet-v1'").get().version, '1.1.0');
+  assert.throws(() => upsertPromptTemplate(db, { templateId: 't2', version: '1', targetClass: 'sticker', body: 'x' }));
+  const snap = gallerySnapshot(db);
+  assert.equal(snap.templates.length, 1);
+  assert.ok(snap.items.some((r) => r.sourceClass === 'character_sheet'));
+  assert.ok(snap.labels.some((r) => r.field === 'part' && r.linked === 0));
 });
 
 console.log(`\ndsh-l2d-db: ${passed} tests passed`);

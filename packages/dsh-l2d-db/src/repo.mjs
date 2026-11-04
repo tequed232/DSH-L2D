@@ -291,3 +291,92 @@ export function addValidationFinding(db, { modelId, severity, code, message, evi
     `).run(modelId, severity, code, message, json(evidence, null));
   });
 }
+
+// ---------------------------------------------------------------- gallery（v2 图库语义域）
+
+export const GALLERY_SOURCE_CLASSES = ['character_sheet', 'fan_art', 'screenshot', 'gif_reference', 'photo', 'poster', 'other'];
+export const GALLERY_LABEL_FIELDS = ['part', 'expression', 'pose', 'outfit', 'style', 'scene', 'motion_cue', 'color', 'other'];
+export const GALLERY_REVIEW_STATES = ['pending', 'labeled', 'approved', 'rejected'];
+export const PROMPT_TEMPLATE_STATUSES = ['draft', 'active', 'deprecated'];
+
+/** 幂等登记图库条目（按 file_name upsert；sha256 仅索引不唯一——同名覆盖、重名图允许各自登记）。 */
+export function upsertGalleryItem(db, { fileName, realFormat, ext, width = null, height = null, sizeBytes = null, sha256 = null, sourceClass = 'other', reviewState = 'pending', notes = null }) {
+  if (!fileName || !realFormat || !ext) throw new Error('upsertGalleryItem: fileName/realFormat/ext 必填');
+  if (!GALLERY_SOURCE_CLASSES.includes(sourceClass)) throw new Error(`upsertGalleryItem: 非法 source_class ${sourceClass}`);
+  if (!GALLERY_REVIEW_STATES.includes(reviewState)) throw new Error(`upsertGalleryItem: 非法 review_state ${reviewState}`);
+  return withTransaction(db, () => {
+    db.prepare(`
+      INSERT INTO gallery_items (file_name, real_format, ext, width, height, size_bytes, sha256, source_class, review_state, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(file_name) DO UPDATE SET
+        real_format = excluded.real_format,
+        ext = excluded.ext,
+        width = excluded.width,
+        height = excluded.height,
+        size_bytes = excluded.size_bytes,
+        sha256 = excluded.sha256,
+        source_class = excluded.source_class,
+        review_state = excluded.review_state,
+        notes = excluded.notes,
+        updated_at = excluded.updated_at
+    `).run(fileName, realFormat, ext, width, height, sizeBytes, sha256, sourceClass, reviewState, notes);
+    return db.prepare('SELECT * FROM gallery_items WHERE file_name = ?').get(fileName);
+  });
+}
+
+/** 幂等写图库语义标签（按 item + field + value upsert）。返回标签 id。 */
+export function upsertGalleryLabel(db, { itemId, field, value, confidence = null, evidenceLevel = 'inferred', evidence = null, reviewState = 'needs_review', linkedNodeId = null }) {
+  if (!GALLERY_LABEL_FIELDS.includes(field)) throw new Error(`upsertGalleryLabel: 非法 field ${field}`);
+  if (!['source_exact', 'parser_derived', 'inferred'].includes(evidenceLevel)) throw new Error(`upsertGalleryLabel: 非法 evidence_level ${evidenceLevel}`);
+  return withTransaction(db, () => {
+    db.prepare(`
+      INSERT INTO gallery_labels (item_id, field, value, confidence, evidence_level, evidence, review_state, linked_node_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(item_id, field, value) DO UPDATE SET
+        confidence = excluded.confidence,
+        evidence_level = excluded.evidence_level,
+        evidence = excluded.evidence,
+        review_state = excluded.review_state,
+        linked_node_id = excluded.linked_node_id
+    `).run(itemId, field, value, confidence, evidenceLevel, json(evidence, null), reviewState, linkedNodeId);
+    return db.prepare('SELECT id FROM gallery_labels WHERE item_id = ? AND field = ? AND value = ?').get(itemId, field, value).id;
+  });
+}
+
+/** 幂等注册提示词模板（按 template_id upsert；版本变更即覆盖当前指针，历史靠迁移/日志追溯）。 */
+export function upsertPromptTemplate(db, { templateId, version, targetClass, body, schemaRef = null, status = 'draft' }) {
+  if (!templateId || !version || !body) throw new Error('upsertPromptTemplate: templateId/version/body 必填');
+  if (!GALLERY_SOURCE_CLASSES.includes(targetClass)) throw new Error(`upsertPromptTemplate: 非法 target_class ${targetClass}`);
+  if (!PROMPT_TEMPLATE_STATUSES.includes(status)) throw new Error(`upsertPromptTemplate: 非法 status ${status}`);
+  return withTransaction(db, () => {
+    db.prepare(`
+      INSERT INTO prompt_templates (template_id, version, target_class, body, schema_ref, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(template_id) DO UPDATE SET
+        version = excluded.version,
+        target_class = excluded.target_class,
+        body = excluded.body,
+        schema_ref = excluded.schema_ref,
+        status = excluded.status,
+        updated_at = excluded.updated_at
+    `).run(templateId, version, targetClass, body, schemaRef, status);
+    return db.prepare('SELECT * FROM prompt_templates WHERE template_id = ?').get(templateId);
+  });
+}
+
+/** 图库快照：按 source_class 汇总条目数与标签覆盖（流水线报告用）。 */
+export function gallerySnapshot(db) {
+  const items = db.prepare(`
+    SELECT source_class AS sourceClass, review_state AS reviewState, COUNT(*) AS count
+    FROM gallery_items GROUP BY source_class, review_state ORDER BY source_class
+  `).all();
+  const labels = db.prepare(`
+    SELECT field, COUNT(*) AS count, SUM(CASE WHEN linked_node_id IS NOT NULL THEN 1 ELSE 0 END) AS linked
+    FROM gallery_labels GROUP BY field ORDER BY field
+  `).all();
+  const templates = db.prepare(`
+    SELECT template_id AS templateId, version, target_class AS targetClass, status
+    FROM prompt_templates ORDER BY template_id
+  `).all();
+  return { items, labels, templates };
+}
