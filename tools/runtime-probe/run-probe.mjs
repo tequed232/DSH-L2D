@@ -109,8 +109,10 @@ async function baseline() {
       return;
     }
 
-    // 1) 基线采样
+    // 1) 基线采样 + 注入前截图（供 GLM 多模态前后对照归因）
     const baselineSamples = await host.ops.sample([param], 30);
+    const baselineShot = path.join(ensureArtDir(), `pre-${param}-${Date.now()}.png`);
+    await host.ops.screenshot(baselineShot);
     const baselineVals = baselineSamples.map((s) => s[param]);
     const baseline = {
       median: median(baselineVals),
