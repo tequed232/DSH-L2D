@@ -1,6 +1,6 @@
 schema_version: 1
 suite: dsh-l2d-agent-skills
-suite_version: 1.0.0
+suite_version: 1.1.0
 plugin_id: dsh-l2d
 lifecycle:
   install:
