@@ -6,7 +6,10 @@ DeepSeek免费公皮/
 **/*.2048/
 
 # Cubism Core / 官方 SDK 不入库，由使用者自行下载
+# 例外：tools/motion-gif/vendor 是刻意 vendored 的 MIT 第三方代码（omggif，带 sha256 锁定与许可证副本），必须入库
 vendor/
+!tools/motion-gif/vendor/
+!tools/motion-gif/vendor/**
 **/live2dcubismcore.min.js
 **/live2dcubismcore.js
 
