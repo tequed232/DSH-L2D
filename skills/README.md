@@ -9,9 +9,9 @@ This directory contains the complete Agent Skills suite for the DSH-L2D plugin. 
 | `dsh-l2d-workspace-orchestrator` | Bootstrap, audit, dispatch, lifecycle, and model-load gate | Coordinator / main conversation |
 | `l2d-structure-inspector` | Package ingestion, MOC3 inspection, hierarchy and parameter facts | Workspace 1 — Structure |
 | `l2d-semantic-behavior` | Texture/UV semantics, motion/physics analysis, parameter probing | Workspace 2 — Semantics & Behavior |
-| `l2d-runtime-integration` | Runtime mapping, action chains, ownership arbitration, regression QA | Workspace 3 — Runtime & QA |
+| `l2d-runtime-integration` | Runtime mapping, action chains, ownership arbitration, regression QA | Workspace 3 — Runtime & QA |\n| `apple-google-minimal-design` | Cross-platform UI/UX design using Apple HIG, Material 3, and Swiss compositional discipline | On-demand design skill |
 
-The suite consists of one coordinator Skill and three specialist Skills. Cross-cutting domain rules are maintained in these role-specific Skills and the shared contracts; there is no separate model-intelligence Skill or nested model-intelligence directory.
+The suite consists of one coordinator Skill, three specialist Skills, and one on-demand cross-platform design Skill. Cross-cutting domain rules are maintained in these role-specific Skills and the shared contracts; there is no separate model-intelligence Skill or nested model-intelligence directory.
 
 The three worker conversations are persistent workspaces, not three independent model sessions that may silently drift. The orchestrator owns their creation, naming, prompt injection, dispatch, and health checks.
 
