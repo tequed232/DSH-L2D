@@ -72,11 +72,6 @@ skills:
     scope: worker
     workspace: l2d-runtime
     required: true
-  - id: dsh-l2d-model-intelligence
-    version: 2.1.0
-    path: skills/dsh-l2d-model-intelligence/SKILL.md
-    scope: shared-domain
-    required: true
 
 validation:
   required_frontmatter: [name, description]
