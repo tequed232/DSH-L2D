@@ -1,0 +1,138 @@
+/**
+ * DSH-L2D 界面令牌
+ *
+ * 全仓库只此一份。舞台页用样式表引入，调试页用 <link>，
+ * 悬浮层在注入时同步读入这份文件（见 docs/界面规范.md）。
+ *
+ * 颜色只在主题块里。字号、间距、圆角、阴影、动效、层级与主题无关，写在 :root。
+ * 悬浮层的菜单和设置面板挂在宿主页面上，所以深色令牌同时写在这些节点上，
+ * 避免被宿主自己的 data-theme 带偏。
+ */
+
+:root {
+  --dsh-font-sans:
+    system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  --dsh-font-mono:
+    ui-monospace, 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+
+  --dsh-text-xs: 400 12px/1.45 var(--dsh-font-sans);
+  --dsh-text-sm: 400 13px/1.5 var(--dsh-font-sans);
+  --dsh-text-md: 400 14px/1.55 var(--dsh-font-sans);
+  --dsh-text-label: 500 13px/1.4 var(--dsh-font-sans);
+  --dsh-text-lg: 500 16px/1.4 var(--dsh-font-sans);
+  --dsh-text-xl: 500 20px/1.3 var(--dsh-font-sans);
+  --dsh-text-2xl: 500 26px/1.25 var(--dsh-font-sans);
+
+  --dsh-space-1: 4px;
+  --dsh-space-2: 8px;
+  --dsh-space-3: 12px;
+  --dsh-space-4: 16px;
+  --dsh-space-5: 24px;
+  --dsh-space-6: 32px;
+  --dsh-space-7: 40px;
+  --dsh-space-8: 48px;
+
+  --dsh-radius-sm: 4px;
+  --dsh-radius-md: 8px;
+  --dsh-radius-lg: 12px;
+  --dsh-radius-xl: 16px;
+  --dsh-radius-full: 999px;
+
+  --dsh-control-sm: 32px;
+  --dsh-control-md: 40px;
+
+  --dsh-ease: cubic-bezier(0.2, 0, 0, 1);
+  --dsh-dur-fast: 120ms;
+  --dsh-dur: 200ms;
+  --dsh-dur-slow: 320ms;
+
+  --dsh-z-bar: 10;
+  --dsh-z-scrim: 40;
+  --dsh-z-sheet: 50;
+  --dsh-z-overlay: 2147483000;
+  --dsh-z-menu: 2147483100;
+  --dsh-z-panel: 2147483200;
+
+  --dsh-disabled-opacity: 0.4;
+
+  /* 气泡永远是浅底深字，盖在角色和宿主页面上都读得清 */
+  --dsh-bubble-bg: #f4f6f8;
+  --dsh-bubble-ink: #1c1f26;
+  --dsh-bubble-muted: #5c6573;
+  --dsh-bubble-up: #b42318;
+  --dsh-bubble-down: #087443;
+}
+
+:root,
+[data-theme='dark'],
+#dsh-l2d-root,
+.l2d-menu,
+.l2d-panel {
+  color-scheme: dark;
+
+  --dsh-bg: #101114;
+  --dsh-surface: #171a21;
+  --dsh-surface-raised: #222733;
+  --dsh-surface-sunken: #0c0e12;
+  --dsh-ink: #e8eaef;
+  --dsh-ink-muted: #b4bac6;
+  --dsh-line: rgb(232 234 239 / 0.14);
+  --dsh-line-strong: rgb(232 234 239 / 0.32);
+  --dsh-accent: #9dc1ff;
+  --dsh-on-accent: #0b1b33;
+  --dsh-accent-soft: #2a3d5c;
+  --dsh-on-accent-soft: #d6e6ff;
+  --dsh-accent-muted: #7ea2d4;
+  --dsh-danger: #ffb4ab;
+  --dsh-ok: #8fd0a8;
+  --dsh-warn: #f2cc60;
+  --dsh-up: #ff8d85;
+  --dsh-down: #8fd0a8;
+  --dsh-scrim: rgb(0 0 0 / 0.56);
+  --dsh-hover: color-mix(in srgb, var(--dsh-ink) 8%, transparent);
+  --dsh-shadow-1: 0 1px 2px rgb(0 0 0 / 0.35);
+  --dsh-shadow-2: 0 8px 24px rgb(0 0 0 / 0.35);
+  --dsh-shadow-3: 0 16px 40px rgb(0 0 0 / 0.45);
+  --dsh-shadow-drop: drop-shadow(0 8px 24px rgb(0 0 0 / 0.35));
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --dsh-bg: #f4f6f8;
+  --dsh-surface: #ffffff;
+  --dsh-surface-raised: #eef1f5;
+  --dsh-surface-sunken: #e6eaf0;
+  --dsh-ink: #1c1f26;
+  --dsh-ink-muted: #526070;
+  --dsh-line: #e1e5ec;
+  --dsh-line-strong: #c5ccd6;
+  --dsh-accent: #1e4f8a;
+  --dsh-on-accent: #ffffff;
+  --dsh-accent-soft: #e6eef8;
+  --dsh-on-accent-soft: #143864;
+  --dsh-accent-muted: #3d6eaa;
+  --dsh-danger: #b42318;
+  --dsh-ok: #087443;
+  --dsh-warn: #8a5b00;
+  --dsh-up: #b42318;
+  --dsh-down: #087443;
+  --dsh-scrim: rgb(16 17 20 / 0.45);
+  --dsh-hover: color-mix(in srgb, var(--dsh-ink) 6%, transparent);
+  --dsh-shadow-1: 0 1px 2px rgb(16 17 20 / 0.08);
+  --dsh-shadow-2: 0 8px 24px rgb(16 17 20 / 0.1);
+  --dsh-shadow-3: 0 16px 40px rgb(16 17 20 / 0.14);
+  --dsh-shadow-drop: drop-shadow(0 8px 24px rgb(16 17 20 / 0.16));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  #dsh-l2d-root,
+  .l2d-menu,
+  .l2d-panel {
+    --dsh-dur-fast: 0ms;
+    --dsh-dur: 0ms;
+    --dsh-dur-slow: 0ms;
+  }
+}

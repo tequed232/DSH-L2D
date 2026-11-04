@@ -9,6 +9,7 @@ import type { WorkspaceView } from './components/CompanionSidebar.vue';
 import CompanionPanel from './components/CompanionPanel.vue';
 import ChatArea from './components/ChatArea.vue';
 import type { ChatMessage } from './components/ChatArea.vue';
+import PluginCenterView from './components/PluginCenterView.vue';
 import { useSettings } from './composables/useSettings.ts';
 
 const { settings } = useSettings();

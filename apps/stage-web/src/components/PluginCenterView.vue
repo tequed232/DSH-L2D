@@ -9,7 +9,10 @@
  */
 import { computed, onMounted, ref } from 'vue';
 import M3Icon from './M3Icon.vue';
-import registry from '../../../../tools/w3-registry/registry.json';
+// 注册表副本（apps 内自包含）：源文件 tools/w3-registry/registry.json（仓内真实注册表）。
+// 副本原因：跨 Vite root 导入在 dev/preview 下会被 fs 策略拒绝导致主区空白（2026-11-05 审计 A1）。
+// 注册表更新后需同步本副本。
+import registry from '../data/w3-registry.json';
 
 interface RegistryEntry {
   id: string;

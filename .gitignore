@@ -37,3 +37,6 @@ tools/w3-registry/test-result.json
 
 # 运行时注册表（SQLite，含本机绝对路径，不入库）
 data/
+# 例外：stage-web 内自包含的注册表副本（Plugin Center 构建期导入）
+!apps/stage-web/src/data/
+!apps/stage-web/src/data/**

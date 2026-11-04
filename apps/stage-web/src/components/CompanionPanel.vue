@@ -23,7 +23,9 @@ const STATUS_LABEL: Record<ContextState, string> = {
   away: '离席',
 };
 
-const statusLabel = computed(() => STATUS_LABEL[settings.contextPreview]);
+// 「预览」尾缀：此胶囊来自 UI 预览状态源（settings.contextPreview），非真实运行时感知，
+// 显式标注防止误读为真实状态（2026-11-05 审计 A5）。
+const statusLabel = computed(() => `${STATUS_LABEL[settings.contextPreview]}（预览）`);
 
 // 立绘走插件现有只读路由；加载失败回退内置剪影，不出现破图。
 // 运行时绑定（:src）避免 Vite 把绝对 URL 当模块解析。
