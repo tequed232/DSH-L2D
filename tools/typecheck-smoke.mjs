@@ -65,6 +65,8 @@ function listSources() {
   if (fs.existsSync(semanticBinding)) files.push(semanticBinding);
   // M1-a 核心纯函数：resolveWritePlan / LimbController（INV 不变量承载者）
   const m1Core = [path.join(ROOT, 'packages', 'core', 'src', 'write-plan.ts'), path.join(ROOT, 'packages', 'core', 'src', 'limb-controller.ts')];
+  // M1-g/G2 部位规划器：纯函数契约（域租约/侧解析/跨源求解），类型错了会静默分配错部位
+  m1Core.push(path.join(ROOT, 'packages', 'core', 'src', 'limb-plan.ts'));
   for (const f of m1Core) if (fs.existsSync(f)) files.push(f);
 
   // P1 呈现层：自适应布局是纯计算，类型错会静默算出错的缩放/偏移

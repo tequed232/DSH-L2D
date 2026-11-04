@@ -284,3 +284,40 @@ export type {
   CueTickResult,
   CueWritesResult,
 } from './cue-loop.ts';
+
+// ---------------------------------------------------------------- M1-g/G2 部位规划器
+// 纯函数规划器/求解器：把语义动作请求映射到部位与**参数域租约**（姿态域为主战场，
+// 物理输出域仅"直写输出"兜底）。零参数名——域/侧/校准证据全部来自调用方 manifest
+// （G1 生成物）。feature flag：M1G2_DEFAULT_ENABLED=false（尚未接线，G4 才是接线点）。
+export {
+  M1G2_DEFAULT_ENABLED,
+  LIMB_SOURCE_RANK,
+  emptyLimbPlan,
+  findLimbHold,
+  planMotionAllocation,
+  settleLimbHold,
+  tickLimbPlan,
+} from './limb-plan.ts';
+export type {
+  AllocationDecision,
+  BehaviorSource,
+  LimbDecisionOutcome,
+  LimbHold,
+  LimbHoldPart,
+  LimbManifest,
+  LimbManifestPart,
+  LimbMotionCapability,
+  LimbMotionVariant,
+  LimbPlanOptions,
+  LimbPlanResult,
+  LimbPlanState,
+  LimbRejectReason,
+  LimbSettleInput,
+  LimbSettleOutcome,
+  LimbSettleResult,
+  LimbSide,
+  LimbTickResult,
+  MotionRequest,
+  SelectedPart,
+  SideConstraint,
+} from './limb-plan.ts';
