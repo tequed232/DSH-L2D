@@ -48,6 +48,7 @@ const CORE_FILE =
 const RENDERER_FILE = path.join(PKG_ROOT, 'assets', 'renderer.js');
 const TEST_FILE = path.join(PKG_ROOT, 'assets', 'test.html');
 const TOKENS_FILE = path.join(PKG_ROOT, 'assets', 'ui-tokens.css');
+const OVERLAY_CSS_FILE = path.join(PKG_ROOT, 'assets', 'overlay.css');
 const SETTINGS_HTML_FILE = path.join(PKG_ROOT, 'assets', 'settings.html');
 const CAPABILITY_DIR = path.join(L2D_ROOT, 'tools', 'capability-scan');
 const CAPABILITY_SCAN = path.join(CAPABILITY_DIR, 'scan.mjs');
@@ -901,6 +902,13 @@ export function apply(root, config = {}) {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       const buf = readIfExists(TOKENS_FILE);
       if (!buf) return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('ui-tokens.css missing'));
+      sendBuffer(res, 200, MIME['.css'], buf);
+    });
+
+    route('/dsh-l2d/overlay.css', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const buf = readIfExists(OVERLAY_CSS_FILE);
+      if (!buf) return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('overlay.css missing'));
       sendBuffer(res, 200, MIME['.css'], buf);
     });
 

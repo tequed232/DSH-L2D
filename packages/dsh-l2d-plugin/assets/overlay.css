@@ -1,0 +1,406 @@
+/**
+ * DSH-L2D 悬浮层结构样式（自 overlay.js STYLE_TEXT 外置）
+ *
+ * 由 overlay.js 注入 <link> 引入（与 ui-tokens.css 同路由分发，/dsh-l2d/overlay.css）。
+ * 颜色、字号、间距、圆角、阴影、动效都走 ui-tokens.css，这里只写结构。
+ * 例外见文件内「豁免」注释。
+ */
+
+/* 用 transform 定位而不是 left/top：拖拽时只改合成层偏移，不触发布局重排。
+   will-change 提前把图层独立出来，避免拖动过程中反复提升/降级。 */
+#dsh-l2d-root,
+.l2d-menu,
+.l2d-panel {
+  font-family: var(--dsh-font-sans);
+  color: var(--dsh-ink);
+}
+
+#dsh-l2d-root {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 320px;
+  height: 400px;
+  z-index: var(--dsh-z-overlay, 2147483000);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  contain: layout style;
+}
+
+#dsh-l2d-root .l2d-body {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  /* 角色盒不再拦事件：交互全部由 window 捕获层 + 渲染包 alpha 命中判定接管，
+     这样空白处鼠标直接透过到下层页面（点 DSH 按钮等）。 */
+  pointer-events: none;
+  cursor: grab;
+  transition:
+    filter var(--dsh-dur) var(--dsh-ease),
+    opacity var(--dsh-dur) var(--dsh-ease);
+}
+
+#dsh-l2d-root .l2d-body.dragging {
+  cursor: grabbing;
+}
+
+#dsh-l2d-root .l2d-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+#dsh-l2d-root .l2d-body img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: var(--dsh-shadow-drop);
+  transition: transform var(--dsh-dur) var(--dsh-ease);
+  will-change: transform;
+  pointer-events: none;
+}
+
+#dsh-l2d-root .l2d-body:hover img {
+  margin-bottom: var(--dsh-space-1);
+}
+
+#dsh-l2d-root .l2d-placeholder {
+  width: 64%;
+  height: 64%;
+  margin-bottom: var(--dsh-space-6);
+  /* 圆角是身体轮廓（头圆身扁），不属于界面圆角档位 —— 豁免 */
+  border-radius: 46% 46% 42% 42%;
+  background: linear-gradient(160deg, var(--dsh-accent), var(--dsh-accent-muted));
+  box-shadow: var(--dsh-shadow-2);
+}
+
+#dsh-l2d-root .l2d-chip {
+  position: absolute;
+  left: 50%;
+  bottom: auto;
+  transform: translateX(-50%);
+  top: calc(-1 * var(--dsh-control-sm) - var(--dsh-space-1));
+  pointer-events: auto;
+  cursor: pointer;
+  padding: var(--dsh-space-1) var(--dsh-space-3);
+  border-radius: var(--dsh-radius-full);
+  font: var(--dsh-text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--dsh-surface);
+  color: var(--dsh-ink-muted);
+  border: 1px solid var(--dsh-line);
+  transition:
+    background var(--dsh-dur-fast) var(--dsh-ease),
+    color var(--dsh-dur-fast) var(--dsh-ease);
+}
+
+#dsh-l2d-root .l2d-chip:hover {
+  background: var(--dsh-surface-raised);
+  color: var(--dsh-ink);
+}
+
+#dsh-l2d-root .l2d-bubble {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--dsh-space-2));
+  max-width: 200px;
+  padding: var(--dsh-space-2) var(--dsh-space-3);
+  border-radius: var(--dsh-radius-lg) var(--dsh-radius-lg) var(--dsh-radius-sm) var(--dsh-radius-lg);
+  font: var(--dsh-text-sm);
+  background: var(--dsh-bubble-bg);
+  color: var(--dsh-bubble-ink);
+  box-shadow: var(--dsh-shadow-2);
+  opacity: 0;
+  transform: translateY(var(--dsh-space-2));
+  transform-origin: bottom right;
+  transition:
+    opacity var(--dsh-dur) var(--dsh-ease),
+    transform var(--dsh-dur) var(--dsh-ease);
+  pointer-events: none;
+}
+
+#dsh-l2d-root .l2d-bubble.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+#dsh-l2d-root .l2d-bubble .price-up {
+  color: var(--dsh-bubble-up);
+  font-weight: 600;
+}
+
+#dsh-l2d-root .l2d-bubble .price-down {
+  color: var(--dsh-bubble-down);
+  font-weight: 600;
+}
+
+#dsh-l2d-root .l2d-bubble .price-sub {
+  display: block;
+  font: var(--dsh-text-xs);
+  color: var(--dsh-bubble-muted);
+}
+
+#dsh-l2d-root .l2d-price {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + var(--dsh-space-2));
+  transform: translateX(-50%);
+  max-width: min(360px, calc(100vw - var(--dsh-space-5)));
+  padding: var(--dsh-space-2) var(--dsh-space-3);
+  border-radius: var(--dsh-radius-lg);
+  font: var(--dsh-text-xs);
+  white-space: nowrap;
+  background: var(--dsh-surface);
+  color: var(--dsh-ink);
+  border: 1px solid var(--dsh-line);
+  box-shadow: var(--dsh-shadow-2);
+  opacity: 0;
+  transition: opacity var(--dsh-dur) var(--dsh-ease);
+  pointer-events: none;
+}
+
+#dsh-l2d-root .l2d-price.show {
+  opacity: 1;
+}
+
+#dsh-l2d-root .l2d-price .price-up {
+  color: var(--dsh-up);
+  font-weight: 600;
+}
+
+#dsh-l2d-root .l2d-price .price-down {
+  color: var(--dsh-down);
+  font-weight: 600;
+}
+
+#dsh-l2d-root .l2d-price .price-sub {
+  display: block;
+  font: var(--dsh-text-xs);
+  color: var(--dsh-ink-muted);
+}
+
+.l2d-menu {
+  position: fixed;
+  z-index: var(--dsh-z-menu, 2147483100);
+  min-width: 176px;
+  padding: var(--dsh-space-1);
+  border-radius: var(--dsh-radius-lg);
+  background: var(--dsh-surface);
+  color: var(--dsh-ink);
+  pointer-events: auto;
+  box-shadow: var(--dsh-shadow-3);
+  border: 1px solid var(--dsh-line);
+  display: none;
+  flex-direction: column;
+}
+
+.l2d-menu.open {
+  display: flex;
+}
+
+.l2d-menu button {
+  border: none;
+  background: transparent;
+  color: var(--dsh-ink);
+  text-align: left;
+  padding: var(--dsh-space-2) var(--dsh-space-3);
+  border-radius: var(--dsh-radius-md);
+  font: var(--dsh-text-sm);
+  cursor: pointer;
+}
+
+.l2d-menu button:hover {
+  background: var(--dsh-hover);
+}
+
+.l2d-menu .l2d-menu-title {
+  padding: var(--dsh-space-1) var(--dsh-space-3);
+  font: var(--dsh-text-xs);
+  color: var(--dsh-ink-muted);
+}
+
+/* 邪神模式特效 —— 界面规范豁免区：颜色与 0.7s 过渡保持原样，不得令牌化 */
+.l2d-yandere-fx {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2147483200;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 38%, rgba(45, 0, 14, 0.6) 100%);
+  opacity: 0;
+  transition: opacity 0.7s;
+}
+
+.l2d-yandere-fx.on {
+  opacity: 1;
+}
+
+#dsh-l2d-root.away .l2d-body {
+  filter: grayscale(0.55) brightness(0.72);
+  opacity: 0.8;
+}
+
+#dsh-l2d-root.conversation .l2d-chip {
+  background: var(--dsh-accent);
+  color: var(--dsh-on-accent);
+  border-color: transparent;
+}
+
+#dsh-l2d-root.work .l2d-chip {
+  background: var(--dsh-accent-soft);
+  color: var(--dsh-on-accent-soft);
+  border-color: transparent;
+}
+
+#dsh-l2d-root .l2d-gear {
+  position: absolute;
+  right: 0;
+  width: var(--dsh-control-sm);
+  height: var(--dsh-control-sm);
+  top: calc(-1 * var(--dsh-control-sm) - var(--dsh-space-1));
+  border-radius: var(--dsh-radius-full);
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+  cursor: pointer;
+  border: 1px solid var(--dsh-line);
+  background: var(--dsh-surface);
+  color: var(--dsh-ink);
+  font: var(--dsh-text-sm);
+  line-height: 1;
+  opacity: 0;
+  transition:
+    opacity var(--dsh-dur-fast) var(--dsh-ease),
+    background var(--dsh-dur-fast) var(--dsh-ease);
+}
+
+#dsh-l2d-root:hover .l2d-gear {
+  opacity: 1;
+}
+
+#dsh-l2d-root .l2d-gear:hover {
+  background: var(--dsh-surface-raised);
+}
+
+/* 豁免：悬浮面板是叠在宿主任意页面上的自由窗口，宽度 304px / 上限 760px
+   是按最小可读行宽（~40 汉字）与 1080p 视口推导的固定值，
+   不与舞台布局令牌联动 —— 改动需同步 docs/界面规范.md。 */
+.l2d-panel {
+  position: fixed;
+  right: var(--dsh-space-5);
+  top: var(--dsh-space-5);
+  width: 304px;
+  max-height: min(760px, calc(100vh - var(--dsh-space-8)));
+  overflow: auto;
+  padding: var(--dsh-space-4);
+  border-radius: var(--dsh-radius-xl);
+  background: var(--dsh-surface);
+  color: var(--dsh-ink);
+  pointer-events: auto;
+  box-shadow: var(--dsh-shadow-3);
+  border: 1px solid var(--dsh-line);
+  font: var(--dsh-text-sm);
+  display: none;
+  flex-direction: column;
+  gap: var(--dsh-space-3);
+  z-index: var(--dsh-z-panel, 2147483200);
+}
+
+.l2d-panel.open {
+  display: flex;
+}
+
+.l2d-panel h4 {
+  margin: 0;
+  font: var(--dsh-text-label);
+  color: var(--dsh-ink);
+}
+
+.l2d-panel .l2d-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dsh-space-2);
+}
+
+.l2d-panel .l2d-row label {
+  font: var(--dsh-text-xs);
+  color: var(--dsh-ink-muted);
+}
+
+.l2d-panel .l2d-row input[type=password],
+.l2d-panel .l2d-row input[type=number],
+.l2d-panel .l2d-row select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--dsh-space-2) var(--dsh-space-3);
+  border-radius: var(--dsh-radius-md);
+  border: 1px solid var(--dsh-line);
+  background: var(--dsh-surface-sunken);
+  color: var(--dsh-ink);
+  font: var(--dsh-text-sm);
+  outline: none;
+}
+
+.l2d-panel .l2d-row input:focus,
+.l2d-panel .l2d-row select:focus {
+  border-color: var(--dsh-accent);
+}
+
+.l2d-panel input[type=checkbox],
+.l2d-panel input[type=range] {
+  accent-color: var(--dsh-accent);
+}
+
+.l2d-panel .l2d-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--dsh-space-3);
+}
+
+.l2d-panel .l2d-inline input[type=range] {
+  flex: 1;
+}
+
+.l2d-panel .l2d-actions {
+  display: flex;
+  gap: var(--dsh-space-2);
+  justify-content: flex-end;
+}
+
+.l2d-panel .l2d-actions button {
+  border: 1px solid var(--dsh-line);
+  border-radius: var(--dsh-radius-md);
+  padding: var(--dsh-space-2) var(--dsh-space-4);
+  font: var(--dsh-text-sm);
+  cursor: pointer;
+  background: transparent;
+  color: var(--dsh-ink);
+}
+
+.l2d-panel .l2d-actions button.primary {
+  background: var(--dsh-accent);
+  color: var(--dsh-on-accent);
+  border-color: transparent;
+}
+
+.l2d-panel .l2d-hint {
+  font: var(--dsh-text-xs);
+  color: var(--dsh-ink-muted);
+}
+
+#dsh-l2d-root.conversation .l2d-bubble {
+  border-bottom-right-radius: var(--dsh-radius-sm);
+}
+
+#dsh-l2d-root :focus-visible,
+.l2d-menu :focus-visible,
+.l2d-panel :focus-visible {
+  outline: 2px solid var(--dsh-accent);
+  outline-offset: 2px;
+}

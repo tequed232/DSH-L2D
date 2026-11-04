@@ -321,6 +321,13 @@ const server = http.createServer((req, res) => {
     return send(res, 200, MIME['.css'], buf);
   }
 
+  // 悬浮层结构样式。/dsh-l2d/overlay.css 同样会走到这里（上面已剥前缀）。
+  if (urlPath === '/overlay.css') {
+    const buf = readIfExists(path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'assets', 'overlay.css'));
+    if (!buf) return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('overlay.css missing'));
+    return send(res, 200, MIME['.css'], buf);
+  }
+
   // overlay.js（便于在纯浏览器里验证叠加层逻辑）
   if (urlPath === '/overlay.js') {
     const buf = readIfExists(path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'lib', 'overlay.js'));
