@@ -357,6 +357,15 @@ export function createActionsRepository(db, { snapshotDir } = {}) {
     const dir = path.join(snapRoot, String(now.getFullYear()), String(now.getMonth() + 1).padStart(2, '0'));
     const target = path.join(dir, `${motion.id}.v${v}.json`);
     const tmp = target + '.tmp';
+    // GLM 验收 WARN-4 修复：崩溃残留孤儿（文件在而 DB 无登记）显式清理后重建；
+    // 已登记快照（DB 有 json_address）在上方 SNAPSHOT_EXISTS 分支拒绝，永不覆盖。
+    if (fs.existsSync(target)) {
+      try { fs.unlinkSync(target); } catch (unlinkErr) {
+        const err = new Error(`exportActionSnapshot: 发现孤儿快照且清理失败：${unlinkErr.message}`);
+        err.code = 'SNAPSHOT_ORPHAN_CONFLICT';
+        throw err;
+      }
+    }
     try {
       fs.mkdirSync(dir, { recursive: true });
       const body = Buffer.from(JSON.stringify(snapshot, null, 2) + '\n');

@@ -157,6 +157,33 @@ ok('G2：配对顺序颠倒（先关后开）→ PAIRING_BROKEN', () => {
   assert.equal(r.code, 'PAIRING_BROKEN');
 });
 
+ok('G2：配对索引不连续 → PAIRING_BROKEN（GLM WARN-2 补测）', () => {
+  const r = pipeline.ingest(validCandidate({
+    semanticKey: 'test.g2d',
+    chain: { schemaVersion: '1.0', steps: [
+      { index: 0, kind: 'motion', params: {}, durationMs: 500, admission: 'gate', capabilityId: 'gesture.right_finger', pairing: { pairId: 'p1', role: 'open' } },
+      { index: 1, kind: 'motion', params: {}, durationMs: 500, admission: 'step', capabilityId: 'gesture.right_finger' },
+      { index: 2, kind: 'motion', params: {}, durationMs: 500, admission: 'gate', capabilityId: 'gesture.right_finger', pairing: { pairId: 'p1', role: 'close' } },
+    ] },
+  }));
+  assert.equal(r.gate, 'G2');
+  assert.equal(r.code, 'PAIRING_BROKEN');
+});
+
+ok('G2：同链两组同 pairId（4 步 2 开 2 关）→ PAIRING_BROKEN（GLM WARN-2 补测）', () => {
+  const r = pipeline.ingest(validCandidate({
+    semanticKey: 'test.g2e',
+    chain: { schemaVersion: '1.0', steps: [
+      { index: 0, kind: 'motion', params: {}, durationMs: 500, admission: 'gate', capabilityId: 'gesture.right_finger', pairing: { pairId: 'p1', role: 'open' } },
+      { index: 1, kind: 'motion', params: {}, durationMs: 500, admission: 'gate', capabilityId: 'gesture.right_finger', pairing: { pairId: 'p1', role: 'open' } },
+      { index: 2, kind: 'motion', params: {}, durationMs: 500, admission: 'gate', capabilityId: 'gesture.right_finger', pairing: { pairId: 'p1', role: 'close' } },
+      { index: 3, kind: 'motion', params: {}, durationMs: 500, admission: 'gate', capabilityId: 'gesture.right_finger', pairing: { pairId: 'p1', role: 'close' } },
+    ] },
+  }));
+  assert.equal(r.gate, 'G2');
+  assert.equal(r.code, 'PAIRING_BROKEN');
+});
+
 ok('G2：合法开→关配对放行（PAIRED_CLOSES 正例）', () => {
   const r = pipeline.ingest(validCandidate({
     semanticKey: 'test.g2ok',
@@ -221,7 +248,16 @@ ok('G4：同能力未配对重复占用 → PARAM_OWNERSHIP_CONFLICT', () => {
   assert.equal(r.code, 'PARAM_OWNERSHIP_CONFLICT');
 });
 
-ok('G4：配对步骤共享 pairId 不算冲突（正例已在 G2 覆盖）', () => {
+ok('G4：配对步骤共享 pairId 不算冲突（GLM WARN-5：显式正例）', () => {
+  // 开→关配对链（同一 capabilityId 出现 2 次）必须能通过 G4 到达 validated
+  const r = pipeline.ingest(validCandidate({
+    semanticKey: 'test.g4ok',
+    chain: { schemaVersion: '1.0', steps: [
+      { index: 0, kind: 'motion', params: {}, durationMs: 500, admission: 'gate', capabilityId: 'gesture.right_finger', pairing: { pairId: 'px', role: 'open' } },
+      { index: 1, kind: 'motion', params: {}, durationMs: 500, admission: 'gate', capabilityId: 'gesture.right_finger', pairing: { pairId: 'px', role: 'close' } },
+    ] },
+  }));
+  assert.equal(r.status, 'validated', `reason: ${r.reason ?? ''}`);
   const logs = repo.listRejections({});
   assert.ok(logs.length >= 6, `拒绝留痕应累计，实际 ${logs.length}`);
 });

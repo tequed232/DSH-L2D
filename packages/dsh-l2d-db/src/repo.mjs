@@ -403,7 +403,9 @@ export function upsertMotionAsset(db, { id, sourceType, originalPath, contentHas
   });
 }
 
-/** 幂等登记动作定义（按 id upsert；status 流转不设限，消费方只认 validated）。 */
+/** 幂等登记动作定义（按 id upsert）。
+ * @deprecated 兼容层原语：status 不设限，可绕过 actions-repo 的 MOTION_TRANSITIONS 状态机（GLM 验收 WARN-1）。
+ * 新代码一律使用 actions-repo 的 createActionChain / transitionActionChainStatus；本接口仅限既有测试/内部调用，待 Phase 3 收敛移除。 */
 export function upsertMotionDefinition(db, { id, semanticKey, description, emotion = null, expression = null, gaze = null, bodyLanguage = null, version = 1, status = 'draft', createdAt = null }) {
   if (!MOTION_STATUSES.includes(status)) throw new Error(`upsertMotionDefinition: 非法 status ${status}`);
   return withTransaction(db, () => {
@@ -487,7 +489,8 @@ export function recordExecution(db, { execId, motionId, modelId, status, request
   });
 }
 
-/** 学习任务状态机推进（按 id upsert；state 枚举受 CHECK 约束）。 */
+/** 学习任务状态机推进（按 id upsert；state 枚举受 CHECK 约束）。
+ * @deprecated 兼容层原语：可绕过 actions-repo 的学习任务推进路径（GLM 验收 WARN-1），新代码经 Repository 语义层写入。 */
 export function upsertLearningJob(db, { id, sourceId, modelCapabilityId, state = 'uploaded', assetPaths = null, currentStep = null, error = null }) {
   if (!LEARNING_JOB_STATES.includes(state)) throw new Error(`upsertLearningJob: 非法 state ${state}`);
   return withTransaction(db, () => {

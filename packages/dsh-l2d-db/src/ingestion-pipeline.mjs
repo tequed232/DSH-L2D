@@ -190,10 +190,12 @@ export function createIngestionPipeline({ repository, registry }) {
     if (registry.status !== 'available') {
       return { ok: false, code: 'REGISTRY_UNAVAILABLE', reason: `registry 不可用（${registry.status}）：${(registry.errors ?? []).join('; ')}——fail-closed，不放行` };
     }
-    if (candidate.modelId) {
-      const m = registry.checkModel(candidate.modelId);
-      if (!m.ok) return { ok: false, code: m.code, reason: m.message };
+    // GLM 验收 WARN-3 修复：modelId 必填——缺省即拒绝，不给宽松入口
+    if (!candidate.modelId) {
+      return { ok: false, code: 'MODEL_UNREGISTERED', reason: 'candidate.modelId 缺省：G3 能力校验必须显式声明目标模型（fail-closed）' };
     }
+    const m = registry.checkModel(candidate.modelId);
+    if (!m.ok) return { ok: false, code: m.code, reason: m.message };
     for (const s of candidate.chain.steps) {
       const result = registry.checkStep(s);
       if (!result.ok) return { ok: false, code: result.code, reason: result.message };

@@ -69,7 +69,20 @@
 
 ## F. GLM 独立验收结论
 
-（验收子代理运行中，结论回填处）
+**总体结论：PASS_WITH_WARNINGS（无 P0 阻塞项）** —— GLM 独立子代理基于源码逐文件审读（A–L 共 12 项核查），非开发自述。
+
+| # | 级别 | 问题 | 处置 |
+| --- | --- | --- | --- |
+| 1 | WARN | repo.mjs 兼容原语（upsertMotionDefinition/upsertLearningJob）可绕过状态机，缺废弃标注 | ✅ 已修：@deprecated JSDoc 标注，收敛计划注明 |
+| 2 | WARN | PAIRED_CLOSES 测试覆盖不足（缺索引不连续、重复 pairId 反例） | ✅ 已修：补 2 条反例测试 |
+| 3 | WARN | g3 的 modelId 为可选，存在宽松入口 | ✅ 已修：modelId 必填（fail-closed） |
+| 4 | WARN | 孤儿快照（文件在/DB 无登记）被静默覆盖 | ✅ 已修：孤儿显式清理后重建；已登记快照仍 SNAPSHOT_EXISTS 拒绝 |
+| 5 | WARN | G4 配对豁免缺显式正例（原注释声称由 G2 覆盖） | ✅ 已修：新增 G4 配对豁免直测（test.g4ok 到达 validated） |
+| 6 | WARN | 部分用例依赖 validCandidate 组合，失败时定位粒度粗 | 📋 登记：后续测试拆分（不阻塞） |
+| 7 | WARN | G0 未做"库内已有同 hash 素材但内容不符"校验 | 📋 登记：素材内容级比对需读源文件，属 Phase 3 Asset Intelligence |
+| 8 | WARN | 缺进程崩溃注入测试（kill -9 半事务） | 📋 登记：Phase 2 剩余工作（见 §G） |
+
+修复后复跑：**72 断言组全部通过**（含 4 条新增测试）。
 
 ## G. 后续计划
 
