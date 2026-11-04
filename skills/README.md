@@ -1,6 +1,6 @@
 # DSH-L2D Agent Skills
 
-This directory defines the **install-time and startup-time skill framework** for the DSH-L2D plugin.
+This directory contains the complete Agent Skills suite for the DSH-L2D plugin. Keep all skill definitions, prompts, contracts, and implementation guidance under this single `skills/` directory.
 
 ## Skill topology
 
@@ -10,7 +10,8 @@ This directory defines the **install-time and startup-time skill framework** for
 | `l2d-structure-inspector` | Package ingestion, MOC3 inspection, hierarchy and parameter facts | Workspace 1 — Structure |
 | `l2d-semantic-behavior` | Texture/UV semantics, motion/physics analysis, parameter probing | Workspace 2 — Semantics & Behavior |
 | `l2d-runtime-integration` | Runtime mapping, action chains, ownership arbitration, regression QA | Workspace 3 — Runtime & QA |
-| `dsh-l2d-model-intelligence` | Shared end-to-end model analysis workflow and domain reference | Shared capability; invoked by the orchestrator and workers |
+
+The suite consists of one coordinator Skill and three specialist Skills. Cross-cutting domain rules are maintained in these role-specific Skills and the shared contracts; there is no separate model-intelligence Skill or nested model-intelligence directory.
 
 The three worker conversations are persistent workspaces, not three independent model sessions that may silently drift. The orchestrator owns their creation, naming, prompt injection, dispatch, and health checks.
 
@@ -36,4 +37,4 @@ A Skill file cannot itself create ChatGPT/WorkBuddy conversations, inject prompt
 
 ## Review policy
 
-This PR introduces the skill specifications and contracts. The plugin-side workspace adapter, installer, startup auditor, and model-load gate are implementation work for the coding agent and should be proposed in follow-up PRs after repository inspection and host API verification.
+This PR introduces the skill specifications and contracts. The plugin-side workspace adapter, installer, startup auditor, and model-load gate are implementation work for the coding agent and should be proposed in follow-up code PRs after repository inspection and host API verification.
