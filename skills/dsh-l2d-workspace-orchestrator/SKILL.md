@@ -11,7 +11,7 @@ Act as the single control plane for the DSH-L2D plugin. Establish a repeatable t
 
 Do not perform every specialist task in the coordinator conversation. Delegate specialist work to the three named workspaces and preserve a common source of truth.
 
-## Non-negotiable lifecycle order
+## Non-negotiable lifecycle
 
 **Install → Skill audit → Workspace bootstrap → Prompt injection verification → Startup preflight → Model-load gate → Model load → Task dispatch → Cross-check → Report.**
 
@@ -56,9 +56,30 @@ Owns texture/atlas inspection, UV and geometry-assisted semantic mapping, visual
 
 Owns runtime capability discovery, mapping semantic controls to verified parameter bindings, action-chain integration, limb ownership arbitration, regression tests, rollback design, and independent acceptance. It must preserve existing DSH-L2D controllers and compatibility.
 
-Each worker may invoke the shared `dsh-l2d-model-intelligence` skill. It must not silently expand its role into another worker's ownership domain.
+## 3. Shared domain rules
 
-## 3. Startup audit — every plugin launch
+All three specialist Skills follow the same domain constraints:
+
+- Keep original model assets immutable; write extracted and analyzed artifacts to a model-scoped workspace.
+- Distinguish source-exact facts, parser-derived facts, runtime-observed facts, heuristic associations, and human-verified conclusions.
+- Every inferred mapping must carry provenance, confidence, evidence references, and verification status.
+- Do not equate Live2D Deformers with conventional 3D bones. Parameters, Keyforms, Deformers, ArtMeshes, masks, and runtime behavior are distinct concepts.
+- Never invent parser capabilities, MCP tools, SDK availability, or successful test results.
+- Preserve existing DSH-L2D controllers and compatibility; inspect before extending or replacing anything.
+
+The end-to-end workflow is owned collectively by the three specialists:
+
+1. package ingestion, source hashing, and safe extraction — Worker 1
+2. asset inventory, MOC3 inspection, and hierarchy reconstruction — Worker 1
+3. texture/UV/geometry semantic analysis — Worker 2
+4. parameter, motion, and physics analysis — Workers 1 and 2
+5. SQLite registration with provenance and idempotent migrations — owning worker for each artifact
+6. runtime mapping, action-chain integration, and ownership arbitration — Worker 3
+7. regression testing and independent QA — Worker 3
+
+Use `database/l2d_models.sqlite3` as the default database only if repository inspection confirms that no existing canonical database should be reused. Keep large binary assets outside SQLite and reference them by content hash/path.
+
+## 4. Startup audit — every plugin launch
 
 Run a read-only audit before loading the model:
 
@@ -97,7 +118,7 @@ Return one of:
 
 Only PASS and explicitly permitted PASS_WITH_WARNINGS allow model loading. A blocked state must include machine-readable codes, evidence, remediation, and whether user approval is required.
 
-## 4. Dependency management and safe repair
+## 5. Dependency management and safe repair
 
 Use **inspect → reuse → plan → install → verify → register**.
 
@@ -110,7 +131,7 @@ Use **inspect → reuse → plan → install → verify → register**.
 - Do not perform global installs, accept proprietary licenses, incur paid costs, change system security settings, open ports, replace existing SDKs, or download very large assets without approval.
 - Live2D proprietary SDK/Editor licensing and account requirements must be respected. Never bypass licensing or authentication.
 
-## 5. Task routing
+## 6. Task routing
 
 Every task receives a shared envelope (see `skills/contracts/task-envelope.schema.json`) containing:
 - `task_id`, `analysis_job_id`, `model_id`
@@ -127,7 +148,7 @@ Routing:
 
 Do not send a worker only a vague natural-language request. Attach the relevant context, paths/IDs, acceptance criteria, and output schema. Avoid copying large binary assets into prompts; pass stable file references.
 
-## 6. Result reconciliation
+## 7. Result reconciliation
 
 Require each worker to return:
 - status: `completed | partial | blocked | failed`
@@ -139,21 +160,6 @@ Require each worker to return:
 - unresolved questions and handoff targets
 
 Reject unsupported claims. Distinguish source-exact facts, parser-derived facts, runtime-observed facts, and AI-inferred hypotheses. For disputed mappings, request evidence from the owning worker and an independent QA check from Worker 3.
-
-## 7. Shared model-intelligence workflow
-
-Use `dsh-l2d-model-intelligence` as the shared domain procedure. Keep original model files immutable. Do not equate Live2D Deformers with conventional 3D bones. Treat Parameters, Keyforms, Deformers, ArtMeshes, masks, and runtime behavior as separate but connected concepts.
-
-The canonical pipeline is:
-1. package ingestion and hash manifest
-2. safe extraction and asset inventory
-3. MOC3 and model metadata inspection
-4. hierarchy reconstruction with evidence labels
-5. texture/UV/geometry semantic analysis
-6. parameter, motion, and physics analysis
-7. SQLite registration
-8. runtime mapping and action-chain integration
-9. regression and independent QA
 
 ## 8. State and observability
 
