@@ -95,3 +95,35 @@ node tools/gallery-schema/review.mjs decide <id> rejected --note "理由"
 ```
 
 裁决后状态不可覆写（repo 层 CASE 守卫已加固）。建议裁决顺序：先第五节非动作类（争议最小）→ 尾巴族 → 耳朵族 → 表情族 → pose 族（N1 命名问题在此裁决）。
+
+## 九、裁决建议层（2026-11-05 通宵审计 · 仅供人工裁决参考，不代批）
+
+> 纪律：本节是**建议**，不是决定。所有 approved 仍须你逐条 `review.mjs decide` 落库。
+> 新增证据类型说明：`probe_numeric` = 真实运行时单参探针（probe_run 5–20，参数确实存在且可动、可恢复）；
+> `cdi3` = cdi3 显示名静态证据；`visual_pending` = 视觉语义归因尚缺（须 GLM 多模态 QA 或你亲眼确认）。
+
+### 9.1 可判（静态证据 + 数值探针齐备，建议 approved）
+
+| 标签 | 建议 | 依据 |
+|---|---|---|
+| #53 狗尾草↔Movement1 | approved | cdi3 名"1. 狗尾草" source_exact；动作组"狗尾巴草打开/关闭"真实存在 |
+| 尾巴族 4 条 whale_tail（Rotation84–87/Clothes5/Param52 通道描述） | approved | cdi3 [0]~[3]尾巴/5.尾巴/尾巴翻面 + probe_run 5–8 数值证据；**注意**：只证"参数存在且可动"，"该标签对素材视觉描述正确"仍属 visual_pending——若严格口径则同 9.2 |
+
+### 9.2 须探针/视觉归因后才能判（保留 needs_review + 所缺证据）
+
+| 标签 | 所缺证据 |
+|---|---|
+| #2/#16/#30 whale_fin_ears（耳族） | LEar/REar1–3 已 probe_numeric（存在/可动/恢复），但"鲸鳍耳发翼是否由此参数驱动"缺**视觉归因**——探针截图已存 `data/runtime-probe/`，待 GLM 多模态比对 |
+| blush / smile_open_mouth / dazed_thinking | blush 无直接参数；smile_open_mouth≠EyeSmile；dazed_thinking↔Param11 有线索——均缺视觉归因 |
+| AngryMove1–8 相关 8 组 | 单参探针全 PASS（数值层），但 8 参数各自的实际视觉效果未归因——**不得组合进正式桥接** |
+| pose 族（含 N1 hand_near_cheek/hand_to_cheek 重复） | 先裁决 N1 命名统一，再逐条判 |
+| 非动作类 17 条 | 语义不涉参数映射，按素材事实判即可（争议最小） |
+
+### 9.3 建议裁决顺序（更新）
+
+1. 第五节非动作类 17 条（无参数依赖）
+2. #53 + 尾巴族 4 条（9.1 表）
+3. 耳族 3 条 → 等 GLM 视觉归因
+4. 表情族 → 同上
+5. pose 族（N1 先行）
+6. AngryMove 相关 8 组（单参视觉归因报告产出后）
