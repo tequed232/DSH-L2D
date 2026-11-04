@@ -403,6 +403,23 @@ export function upsertMotionAsset(db, { id, sourceType, originalPath, contentHas
   });
 }
 
+/** 幂等写动作分析结果（按 id upsert；analysis 为结构化 JSON，含帧时序与审核状态）。 */
+export function upsertMotionAnalysis(db, { id, assetId, modelName, analysis, confidence = null, createdAt = null }) {
+  if (!assetId || !modelName) throw new Error('upsertMotionAnalysis: assetId/modelName 必填');
+  return withTransaction(db, () => {
+    db.prepare(`
+      INSERT INTO motion_analysis (id, asset_id, model_name, analysis_json, confidence, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        asset_id = excluded.asset_id,
+        model_name = excluded.model_name,
+        analysis_json = excluded.analysis_json,
+        confidence = excluded.confidence
+    `).run(id, assetId, modelName, json(analysis, '{}'), confidence, createdAt ?? nowIso());
+    return db.prepare('SELECT * FROM motion_analysis WHERE id = ?').get(id);
+  });
+}
+
 /** 幂等登记动作定义（按 id upsert）。
  * @deprecated 兼容层原语：status 不设限，可绕过 actions-repo 的 MOTION_TRANSITIONS 状态机（GLM 验收 WARN-1）。
  * 新代码一律使用 actions-repo 的 createActionChain / transitionActionChainStatus；本接口仅限既有测试/内部调用，待 Phase 3 收敛移除。 */
