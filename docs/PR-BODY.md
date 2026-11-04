@@ -63,9 +63,18 @@
 4. P3 剩余素材（fan_art 15 / photo 28 / screenshot 8 / other 34）未标注——按用户指示暂不开展大规模标注
 5. probe_runs 真实探针需渲染运行时，E2E 中如实标注 blocked
 
-## 提交结构（15 笔，语义分组）
+## SQLite 数据层增补（2026-11-04 晚，`c12faf4`）
+
+- **schema v5**：`parameters.range_evidence` 证据列——min/max 数据来源可审计
+- **enrich-ranges.mjs**：py-moc3 直读 `大肥鱼.moc3` 二进制（只读，read 路径 verified）补齐 **476 个 NULL 范围**（source_exact 证据留痕）；**16 项 w3-registry vs moc3 二进制冲突不覆盖**，留 `validation_findings` 待人工裁决（模式：w3-registry 实测窄摆幅 vs moc3 理论宽边界，语义互补，孰优待人裁决）
+- **enrich-names.mjs**：cdi3 中文名补齐 **493 个缺失 name**（0 冲突）
+- **P3-0 注入准入达成**：`Param_Angle_Rotation84~87` [-45,45] / `Clothes5` [0,1] / `Param52` [-1,1] 全部有范围+证据；耳族（`LEar/REar1-3` 兽耳PHA/B/C）与生气族（`AngryMove1-8` 生气移动/伸缩/显隐）已定位——Phase 3 三动作跨参数族测试的 SQLite 数据就绪
+- 复现：`node tools/model-registry/enrich-ranges.mjs && node tools/model-registry/enrich-names.mjs`
+
+## 提交结构（17 笔，语义分组）
 
 ```
+c12faf4 feat(db): schema v5 range_evidence + parameter data enrichment (P3-0)
 fb2ae32 docs(p3): runtime verification plan
 db0b3a9 feat(p2-audit): human review audit report generator
 7536628 fix(gitignore): allow vendored omggif (MIT, sha256-locked)
