@@ -119,6 +119,8 @@ export interface LimbAcquireOptions {
   phase?: 'pre' | 'post';
   /** 占用时长（毫秒，<=0 长期持有）；超时只是最后保险，主路径是显式 release。 */
   durationMs?: number;
+  /** 原子批量模式：true 时整批预检、全有或全无（缺省 false = 逐 id 判定）。与 core 同形状同语义。 */
+  atomic?: boolean;
 }
 
 /**
