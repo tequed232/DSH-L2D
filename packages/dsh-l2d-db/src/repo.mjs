@@ -260,15 +260,19 @@ export function upsertEdge(db, { modelId, srcId, dstId, edgeType, evidenceLevel 
 }
 
 /** 幂等写参数目录（按 model_id + param_id upsert）。 */
-export function upsertParameter(db, { modelId, paramId, name = null, minValue = null, maxValue = null, defaultValue = null, nodeId = null }) {
+/** 幂等写参数（按 model_id + param_id upsert）。
+ *  证据纪律：range_evidence 记录 min/max 数据来源（如 py-moc3 直读二进制 / w3-registry
+ *  交叉验证）；COALESCE 保留已有证据不回退——带证据的写入可更新证据，无证据写入不抹除。 */
+export function upsertParameter(db, { modelId, paramId, name = null, minValue = null, maxValue = null, defaultValue = null, nodeId = null, rangeEvidence = null }) {
   return withTransaction(db, () => {
     db.prepare(`
-      INSERT INTO parameters (model_id, param_id, name, min_value, max_value, default_value, node_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO parameters (model_id, param_id, name, min_value, max_value, default_value, node_id, range_evidence)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(model_id, param_id) DO UPDATE SET
         name = excluded.name, min_value = excluded.min_value, max_value = excluded.max_value,
-        default_value = excluded.default_value, node_id = excluded.node_id
-    `).run(modelId, paramId, name, minValue, maxValue, defaultValue, nodeId);
+        default_value = excluded.default_value, node_id = excluded.node_id,
+        range_evidence = COALESCE(excluded.range_evidence, parameters.range_evidence)
+    `).run(modelId, paramId, name, minValue, maxValue, defaultValue, nodeId, rangeEvidence ? JSON.stringify(rangeEvidence) : null);
     return db.prepare('SELECT id FROM parameters WHERE model_id = ? AND param_id = ?').get(modelId, paramId).id;
   });
 }

@@ -33,7 +33,7 @@ function test(name, fn) {
 test('migrations are idempotent across reopen', () => {
   const again = openDb({ path: dbFile });
   const rows = again.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get();
-  assert.equal(rows.n, 4); // v1 bootstrap+模型智能域 / v2 图库 / v3 动作知识域 / v4 Foundation 缺项
+  assert.equal(rows.n, 5); // v1 bootstrap+模型智能域 / v2 图库 / v3 动作知识域 / v4 Foundation 缺项 / v5 参数范围证据
   const tables = again.prepare(
     "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('skills','workspaces','toolchain_components','startup_checks','tasks','models','nodes','edges','parameters','parameter_bindings','semantic_labels','motions','physics_groups','analysis_jobs','probe_runs','capability_profiles','validation_findings','gallery_items','gallery_labels','prompt_templates','motion_assets','motion_analysis','motion_definitions','action_chains','action_steps','motion_sources','model_capabilities','motion_model_bindings','execution_history','learning_jobs')",
   ).get();
@@ -293,6 +293,20 @@ test('runtime_verified gate: requires runtimeEvidence probe record', () => {
   assert.equal(db.prepare('SELECT status FROM models WHERE model_id=?').get('m-rt').status, 'runtime_verified');
   const log = db.prepare("SELECT reason FROM motion_status_log WHERE motion_id='model:m-rt' AND to_status='runtime_verified'").get();
   assert.ok(log && log.reason.includes('probe-run-42'), 'runtime_verified 证据留痕');
+});
+
+// ---- 13. v5：range_evidence 证据列 + COALESCE 不回退语义
+test('range_evidence column: evidence preserved on evidence-less writes', () => {
+  const ev = { source: 'py-moc3@2fb112e', artifact: 'moc3-binary', verifiedAt: '2026-11-04T00:00:00Z' };
+  upsertParameter(db, { modelId: 'm-9', paramId: 'P1', minValue: -1, maxValue: 1, rangeEvidence: ev });
+  const withEv = db.prepare("SELECT min_value, max_value, range_evidence FROM parameters WHERE model_id='m-9' AND param_id='P1'").get();
+  assert.equal(withEv.min_value, -1);
+  assert.ok(withEv.range_evidence.includes('py-moc3'));
+  // 无证据写入不抹除已有证据（COALESCE）
+  upsertParameter(db, { modelId: 'm-9', paramId: 'P1', minValue: -2, maxValue: 2 });
+  const after = db.prepare("SELECT min_value, range_evidence FROM parameters WHERE model_id='m-9' AND param_id='P1'").get();
+  assert.equal(after.min_value, -2, '数据按 upsert 语义更新');
+  assert.ok(after.range_evidence.includes('py-moc3'), '证据不被无证据写入抹除');
 });
 
 console.log(`\ndsh-l2d-db: ${passed} tests passed`);

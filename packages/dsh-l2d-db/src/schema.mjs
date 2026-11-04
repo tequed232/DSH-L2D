@@ -527,4 +527,16 @@ export const MIGRATIONS = {
     );
     CREATE INDEX IF NOT EXISTS idx_motion_status_log_motion ON motion_status_log(motion_id);
   `,
+
+  /**
+   * v5：参数范围证据留痕（2026-11-04，P3-0 注入准入配套）。
+   * parameters 表此前无证据列——min/max 从哪来（w3-registry 交叉验证 / py-moc3 直读
+   * moc3 二进制 / 人工推导）无从审计。runtime_verified 探针的 V3/V6 判据依赖范围
+   * 证据强度，必须可追溯。
+   *  - range_evidence: JSON { source, artifact, verifiedAt, note }，NULL=无证据；
+   *  - 写入策略由 repo 层保证：COALESCE 保留已有证据，不静默回退。
+   */
+  5: `
+    ALTER TABLE parameters ADD COLUMN range_evidence TEXT;
+  `,
 };
