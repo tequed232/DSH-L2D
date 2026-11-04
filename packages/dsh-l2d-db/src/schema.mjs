@@ -539,4 +539,19 @@ export const MIGRATIONS = {
   5: `
     ALTER TABLE parameters ADD COLUMN range_evidence TEXT;
   `,
+
+  /**
+   * v6：双层安全边界（2026-11-05，用户裁决落地）。
+   *  - min_value/max_value 语义明确为 **Hard Boundary**（moc3 作者定义理论边界，
+   *    Safety Guard 硬性限幅，绝不突破）；
+   *  - 新增 soft_min/soft_max = **Soft Motion Envelope**（w3-registry 实测摆幅，
+   *    动作生成推荐范围；不覆盖模型全部合法动作，故不作为硬性限制）；
+   *  - 16 项历史冲突行按此分层：Hard=moc3 值，Soft=w3-registry 原值，
+   *    原始证据保留于 range_evidence 与 validation_findings（不覆盖不删除）；
+   *  - 注入判定在 repo 层 safety-guard.mjs（soft 优先、hard 兜底、无 hard 拒绝）。
+   */
+  6: `
+    ALTER TABLE parameters ADD COLUMN soft_min REAL;
+    ALTER TABLE parameters ADD COLUMN soft_max REAL;
+  `,
 };
