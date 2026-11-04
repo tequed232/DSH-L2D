@@ -543,6 +543,21 @@ export function recordExecution(db, { execId, motionId, modelId, status, request
   });
 }
 
+/** 写入真实渲染探针一次单参数探测记录（probe_runs；仅 runtime-probe 工具经此入口写入）。
+ *  纪律：baseline/result 为 JSON 快照；restored 表示基线是否已恢复。 */
+export function insertProbeRun(db, { analysisJobId, parameterNodeId, baseline, inputValue, result = null, restored = false }) {
+  if (!analysisJobId || !Number.isInteger(parameterNodeId)) {
+    throw new Error('insertProbeRun: analysisJobId/parameterNodeId 必填（parameterNodeId 须为 nodes.id 整数）');
+  }
+  return withTransaction(db, () => {
+    db.prepare(`
+      INSERT INTO probe_runs (analysis_job_id, parameter_node_id, baseline, input_value, result, restored)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(analysisJobId, parameterNodeId, json(baseline, '{}'), inputValue, json(result, null), restored ? 1 : 0);
+    return db.prepare('SELECT last_insert_rowid() AS id').get().id;
+  });
+}
+
 /** 学习任务状态机推进（按 id upsert；state 枚举受 CHECK 约束）。
  * @deprecated 兼容层原语：可绕过 actions-repo 的学习任务推进路径（GLM 验收 WARN-1），新代码经 Repository 语义层写入。 */
 export function upsertLearningJob(db, { id, sourceId, modelCapabilityId, state = 'uploaded', assetPaths = null, currentStep = null, error = null }) {
