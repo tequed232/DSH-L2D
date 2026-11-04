@@ -182,5 +182,29 @@ test('registeredParamIds returns exact set', () => {
   assert.equal(registeredParamIds(db, 'absent-model').size, 0);
 });
 
+// ---- 11. 独立验收修复回归：同通道重复 paramId / min>max 视为冲突映射
+test('adapter shape rejects duplicate paramId in same channel and min>max', () => {
+  const errsDup = validateAdapterShape({ channels: {
+    tail_sway: [
+      { paramId: 'TailSeg0', weight: 1.0 },
+      { paramId: 'TailSeg0', weight: 0.5 }, // 同通道重复 → 冲突
+      { paramId: 'TailSeg1', weight: 0.3 },
+    ],
+  } });
+  assert.ok(errsDup.some((e) => e.includes('重复出现')), errsDup.join('; '));
+
+  const errsRange = validateAdapterShape({ channels: {
+    tail_sway: [{ paramId: 'TailSeg0', min: 30, max: -30 }],
+  } });
+  assert.ok(errsRange.some((e) => e.includes('min > max')), errsRange.join('; '));
+
+  // 跨通道同参数合法（多通道允许）
+  const okCross = validateAdapterShape({ channels: {
+    tail_sway: [{ paramId: 'TailSeg0', weight: 1.0 }],
+    tail_lift: [{ paramId: 'TailSeg0', weight: 0.2 }],
+  } });
+  assert.equal(okCross.length, 0);
+});
+
 console.log(`\nmodel-adapter: ${passed} tests passed`);
 db.close();

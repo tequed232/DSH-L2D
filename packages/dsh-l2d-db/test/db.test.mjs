@@ -247,6 +247,54 @@ test('motion knowledge domain lifecycle', () => {
   }
 });
 
+// ---- 独立验收修复回归（2026-11-04 P1 审查）----
+
+// ---- 11. 审核闸门：已裁决 gallery 行不可被 Repository 写路径覆写
+test('review gate: approved/rejected labels and items are immutable via repo upserts', () => {
+  const item = upsertGalleryItem(db, { fileName: 'gate-test.png', realFormat: 'png', ext: 'png', sourceClass: 'fan_art' });
+  const labelId = upsertGalleryLabel(db, { itemId: item.id, field: 'part', value: 'tail', confidence: 0.6, reviewState: 'needs_review' });
+
+  // 人工裁决 approved（模拟 review.mjs 唯一入口）
+  db.prepare("UPDATE gallery_labels SET review_state='approved', evidence='{\"review\":{\"decision\":\"approved\"}}' WHERE id=?").run(labelId);
+
+  // 恶意/疏忽 upsert：同键再来一次 needs_review + 不同证据
+  const sameId = upsertGalleryLabel(db, { itemId: item.id, field: 'part', value: 'tail', confidence: 0.99, evidenceLevel: 'source_exact', evidence: { hacked: true }, reviewState: 'needs_review' });
+  assert.equal(sameId, labelId);
+  const row = db.prepare('SELECT * FROM gallery_labels WHERE id=?').get(labelId);
+  assert.equal(row.review_state, 'approved', 'review_state 不可被覆写');
+  assert.equal(row.confidence, 0.6, '已裁决标签的数据字段同样冻结');
+  assert.ok(!String(row.evidence).includes('hacked'), '已裁决标签的 evidence 不可被覆写');
+
+  // item 级：裁决后 review_state 不可被 upsert 覆写（数据字段仍可更新）
+  db.prepare("UPDATE gallery_items SET review_state='approved' WHERE id=?").run(item.id);
+  upsertGalleryItem(db, { fileName: 'gate-test.png', realFormat: 'png', ext: 'png', sourceClass: 'photo', reviewState: 'pending' });
+  const it = db.prepare('SELECT * FROM gallery_items WHERE id=?').get(item.id);
+  assert.equal(it.review_state, 'approved', 'item review_state 不可被覆写');
+  assert.equal(it.source_class, 'photo', 'item 数据字段允许正常更新');
+
+  // rejected 同样冻结
+  const l2 = upsertGalleryLabel(db, { itemId: item.id, field: 'pose', value: 'sit', reviewState: 'needs_review' });
+  db.prepare("UPDATE gallery_labels SET review_state='rejected' WHERE id=?").run(l2);
+  upsertGalleryLabel(db, { itemId: item.id, field: 'pose', value: 'sit', reviewState: 'needs_review' });
+  assert.equal(db.prepare('SELECT review_state FROM gallery_labels WHERE id=?').get(l2).review_state, 'rejected');
+});
+
+// ---- 12. runtime_verified 闸门：无探针证据不得自封状态
+test('runtime_verified gate: requires runtimeEvidence probe record', () => {
+  upsertModel(db, { modelId: 'm-rt', sourcePath: 'x.moc3', packageHash: 'd'.repeat(64), status: 'analyzed' });
+  // 无证据 → 拒绝
+  assert.throws(() => upsertModel(db, { modelId: 'm-rt', sourcePath: 'x.moc3', packageHash: 'd'.repeat(64), status: 'runtime_verified' }),
+    /runtimeEvidence/);
+  // 静态管道状态正常流转不受影响
+  upsertModel(db, { modelId: 'm-rt', sourcePath: 'x.moc3', packageHash: 'd'.repeat(64), status: 'analyzed' });
+  // 带证据 → 允许 + 留痕
+  upsertModel(db, { modelId: 'm-rt', sourcePath: 'x.moc3', packageHash: 'd'.repeat(64), status: 'runtime_verified',
+    runtimeEvidence: { probeRun: 'probe-run-42', probedBy: 'runtime-probe@0.1.0', verifiedAt: '2026-11-04T00:00:00Z' } });
+  assert.equal(db.prepare('SELECT status FROM models WHERE model_id=?').get('m-rt').status, 'runtime_verified');
+  const log = db.prepare("SELECT reason FROM motion_status_log WHERE motion_id='model:m-rt' AND to_status='runtime_verified'").get();
+  assert.ok(log && log.reason.includes('probe-run-42'), 'runtime_verified 证据留痕');
+});
+
 console.log(`\ndsh-l2d-db: ${passed} tests passed`);
 try { db.close(); } catch { /* 重复关闭忽略 */ }
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* Windows WAL 句柄延迟释放，忽略 */ }

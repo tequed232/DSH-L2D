@@ -154,7 +154,8 @@ export function analyzeTiming(frames) {
     }
   }
 
-  // 主周期：对 diff 序列做归一化自相关，取首个显著峰（循环 GIF）
+  // 主周期：对 diff 序列做归一化自相关；在所有显著峰（score>0.5）中取相关性最高者。
+  // 不取"首个显著峰"：首峰可能是半周期（倍频），最高分峰对基频更稳健；lag 从 2 起（避开单帧闪烁噪声）。
   let periodFrames = null;
   const mean = diffs.reduce((s, d) => s + d, 0) / diffs.length;
   const centered = diffs.map((d) => d - mean);

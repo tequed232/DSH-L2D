@@ -51,6 +51,16 @@ export function validateAdapterShape(adapter) {
       }
       if (e.min !== undefined && !Number.isFinite(Number(e.min))) errors.push(`channels.${ch}[${i}].min 非法`);
       if (e.max !== undefined && !Number.isFinite(Number(e.max))) errors.push(`channels.${ch}[${i}].max 非法`);
+      if (Number.isFinite(Number(e.min)) && Number.isFinite(Number(e.max)) && Number(e.min) > Number(e.max)) {
+        errors.push(`channels.${ch}[${i}] min > max（区间非法）`);
+      }
+    });
+    // 同通道重复 paramId = 冲突映射（多通道允许，同通道内不允许：权重叠加语义未定义）
+    const seen = new Map();
+    entries.forEach((e, i) => {
+      if (typeof e?.paramId !== 'string') return;
+      if (seen.has(e.paramId)) errors.push(`channels.${ch} 参数 '${e.paramId}' 重复出现（#${seen.get(e.paramId)} 与 #${i}），同一通道内参数映射必须唯一`);
+      else seen.set(e.paramId, i);
     });
   }
   return errors;

@@ -5,6 +5,9 @@
  *  - 重复注册=更新，不产生重复行；
  *  - 推断数据（semantic_labels）与解析事实（nodes/edges）分表存放；
  *  - 所有写入在事务内；非法枚举由 CHECK 拒绝，不做静默兜底。
+ *  - 审核闸门（gallery review.mjs 是唯一流转入口）：已裁决（approved/rejected）的
+ *    gallery 行不允许被任何 Repository 写路径覆写 review_state / evidence；
+ *  - 模型 runtime_verified 状态只能由运行时探针流程（带 runtimeEvidence）写入。
  */
 import { withTransaction } from './db.mjs';
 
@@ -176,10 +179,20 @@ export function getTask(db, taskId) {
 
 // ---------------------------------------------------------------- model intelligence
 
-/** 幂等登记模型（按 model_id upsert；package_hash 唯一防同一包重复建档）。 */
-export function upsertModel(db, { modelId, title = null, sourcePath, packageHash, moc3Version = null, status = 'imported' }) {
+/** 幂等登记模型（按 model_id upsert；package_hash 唯一防同一包重复建档）。
+ *  状态闸门：status='runtime_verified' 只能由运行时探针流程写入——必须同时提供
+ *  runtimeEvidence（{ probeRun, verifiedAt, probedBy, ... }），否则拒绝，防止
+ *  'validated'（静态管道）与 'runtime_verified'（真实渲染探针）两种状态被混用。 */
+export function upsertModel(db, { modelId, title = null, sourcePath, packageHash, moc3Version = null, status = 'imported', runtimeEvidence = null }) {
   if (!modelId || !sourcePath || !packageHash) throw new Error('upsertModel: modelId/sourcePath/packageHash 必填');
   return withTransaction(db, () => {
+    if (status === 'runtime_verified') {
+      if (!runtimeEvidence || typeof runtimeEvidence !== 'object') {
+        const err = new Error(`upsertModel: '${modelId}' 置 runtime_verified 需提供 runtimeEvidence（真实渲染探针证据）；静态管道验证不得自封该状态`);
+        err.code = 'RUNTIME_EVIDENCE_REQUIRED';
+        throw err;
+      }
+    }
     db.prepare(`
       INSERT INTO models (model_id, title, source_path, package_hash, moc3_version, status)
       VALUES (?, ?, ?, ?, ?, ?)
@@ -191,6 +204,12 @@ export function upsertModel(db, { modelId, title = null, sourcePath, packageHash
         status = excluded.status,
         updated_at = excluded.updated_at
     `).run(modelId, title, sourcePath, packageHash, moc3Version, status);
+    if (status === 'runtime_verified') {
+      // 证据留痕（审核可回溯；结构与 execution/probe 证据同风格）
+      db.prepare('INSERT INTO motion_status_log (motion_id, from_status, to_status, actor, reason) VALUES (?, ?, ?, ?, ?)')
+        .run(`model:${modelId}`, null, 'runtime_verified', String(runtimeEvidence.probedBy ?? 'runtime-probe'),
+          JSON.stringify({ probeRun: runtimeEvidence.probeRun ?? null, verifiedAt: runtimeEvidence.verifiedAt ?? nowIso() }));
+    }
     return db.prepare('SELECT * FROM models WHERE model_id = ?').get(modelId);
   });
 }
@@ -316,15 +335,20 @@ export function upsertGalleryItem(db, { fileName, realFormat, ext, width = null,
         size_bytes = excluded.size_bytes,
         sha256 = excluded.sha256,
         source_class = excluded.source_class,
-        review_state = excluded.review_state,
-        notes = excluded.notes,
+        -- 审核闸门：已裁决（approved/rejected）条目的 review_state/notes 不被覆写
+        review_state = CASE WHEN gallery_items.review_state IN ('approved','rejected')
+                            THEN gallery_items.review_state ELSE excluded.review_state END,
+        notes = CASE WHEN gallery_items.review_state IN ('approved','rejected')
+                     THEN gallery_items.notes ELSE excluded.notes END,
         updated_at = excluded.updated_at
     `).run(fileName, realFormat, ext, width, height, sizeBytes, sha256, sourceClass, reviewState, notes);
     return db.prepare('SELECT * FROM gallery_items WHERE file_name = ?').get(fileName);
   });
 }
 
-/** 幂等写图库语义标签（按 item + field + value upsert）。返回标签 id。 */
+/** 幂等写图库语义标签（按 item + field + value upsert）。返回标签 id。
+ *  审核闸门：已裁决（approved/rejected）标签整体不可覆写（审核基于当时的证据作出，
+ *  数据字段被事后修改会破坏裁决的审计一致性）。新证据请另立标签或走人工流程。 */
 export function upsertGalleryLabel(db, { itemId, field, value, confidence = null, evidenceLevel = 'inferred', evidence = null, reviewState = 'needs_review', linkedNodeId = null }) {
   if (!GALLERY_LABEL_FIELDS.includes(field)) throw new Error(`upsertGalleryLabel: 非法 field ${field}`);
   if (!['source_exact', 'parser_derived', 'inferred'].includes(evidenceLevel)) throw new Error(`upsertGalleryLabel: 非法 evidence_level ${evidenceLevel}`);
@@ -333,11 +357,16 @@ export function upsertGalleryLabel(db, { itemId, field, value, confidence = null
       INSERT INTO gallery_labels (item_id, field, value, confidence, evidence_level, evidence, review_state, linked_node_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(item_id, field, value) DO UPDATE SET
-        confidence = excluded.confidence,
-        evidence_level = excluded.evidence_level,
-        evidence = excluded.evidence,
-        review_state = excluded.review_state,
-        linked_node_id = excluded.linked_node_id
+        confidence = CASE WHEN gallery_labels.review_state IN ('approved','rejected')
+                          THEN gallery_labels.confidence ELSE excluded.confidence END,
+        evidence_level = CASE WHEN gallery_labels.review_state IN ('approved','rejected')
+                              THEN gallery_labels.evidence_level ELSE excluded.evidence_level END,
+        evidence = CASE WHEN gallery_labels.review_state IN ('approved','rejected')
+                        THEN gallery_labels.evidence ELSE excluded.evidence END,
+        review_state = CASE WHEN gallery_labels.review_state IN ('approved','rejected')
+                            THEN gallery_labels.review_state ELSE excluded.review_state END,
+        linked_node_id = CASE WHEN gallery_labels.review_state IN ('approved','rejected')
+                              THEN gallery_labels.linked_node_id ELSE excluded.linked_node_id END
     `).run(itemId, field, value, confidence, evidenceLevel, json(evidence, null), reviewState, linkedNodeId);
     return db.prepare('SELECT id FROM gallery_labels WHERE item_id = ? AND field = ? AND value = ?').get(itemId, field, value).id;
   });

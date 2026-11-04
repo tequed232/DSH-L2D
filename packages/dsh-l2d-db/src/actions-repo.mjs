@@ -179,10 +179,11 @@ export function createActionsRepository(db, { snapshotDir } = {}) {
 
   function upsertLearningJob(sourceId, modelCapabilityId, state, error = null) {
     if (!sourceId) return;
+    // 每次调用 = 一条新任务记录（学习任务是事件流，同 source 多次失败是合法多行）；
+    // 原 ON CONFLICT(id) 分支因 id 恒为新 uuid 而成为死代码，已移除（R10 事件只增不改）。
     db.prepare(`
       INSERT INTO learning_jobs (id, source_id, model_capability_id, state, error_json, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET state = excluded.state, error_json = excluded.error_json, updated_at = excluded.updated_at
     `).run(uuid(), sourceId, modelCapabilityId ?? 'unknown', state, error ? JSON.stringify(error) : null, nowIso(), nowIso());
   }
 
