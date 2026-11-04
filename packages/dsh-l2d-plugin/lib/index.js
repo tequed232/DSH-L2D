@@ -30,6 +30,7 @@ import { readPersona, resetPersona, writePersona } from './persona.mjs';
 import { ageSummaryState, isActionTool, legacyAgentState, summarizeSession } from './session-events.mjs';
 import { listSessionFiles, readSessionEvents } from './session-log.mjs';
 import { analyzeContext } from './context-analyzer.mjs';
+import { maybeRunStartupSkillsCheck } from './skills-toolchain.mjs';
 import { createForegroundProcessCollector } from './foreground-process.mjs';
 import { buildWorkspaceContextSnapshot } from './workspace-snapshot.mjs';
 import { setupPetWindow } from './pet-window.mjs';
@@ -821,6 +822,15 @@ export function apply(root, config = {}) {
     if (nativeKey && readSettings().apiKey !== nativeKey) writeSettings({ apiKey: nativeKey });
   } catch (err) {
     diag('同步原生 apiKey 失败: ' + String(err && err.message));
+  }
+
+  // ⓪ Skills 工具链自检（用户要求）：每次宿主「首次打开」（apply）跑一次，
+  // 检查 skills/ 目录与各 SKILL.md 的打开/可用状态；仅在发现异常时追加写
+  // $DSH_HOME/l2d-skills-check.log。自检 fail-open，任何失败不影响宿主启动。
+  try {
+    maybeRunStartupSkillsCheck({});
+  } catch {
+    /* 自检失败不阻断启动 */
   }
 
   // ② 立刻注册注入行：这一步不依赖任何服务，必须最先做

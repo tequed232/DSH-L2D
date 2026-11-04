@@ -33,7 +33,7 @@ function test(name, fn) {
 test('migrations are idempotent across reopen', () => {
   const again = openDb({ path: dbFile });
   const rows = again.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get();
-  assert.equal(rows.n, 3);
+  assert.equal(rows.n, 4); // v1 bootstrap+模型智能域 / v2 图库 / v3 动作知识域 / v4 Foundation 缺项
   const tables = again.prepare(
     "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('skills','workspaces','toolchain_components','startup_checks','tasks','models','nodes','edges','parameters','parameter_bindings','semantic_labels','motions','physics_groups','analysis_jobs','probe_runs','capability_profiles','validation_findings','gallery_items','gallery_labels','prompt_templates','motion_assets','motion_analysis','motion_definitions','action_chains','action_steps','motion_sources','model_capabilities','motion_model_bindings','execution_history','learning_jobs')",
   ).get();
@@ -213,16 +213,20 @@ test('motion knowledge domain lifecycle', () => {
   assert.equal(db.prepare('SELECT status FROM motion_definitions WHERE id=?').get('mot-1').status, 'validated');
   assert.throws(() => upsertMotionDefinition(db, { id: 'mot-x', semanticKey: 's', description: 'd', status: 'flying' }));
 
-  // 链 + 步骤：重写整体替换
+  // 链 + 步骤：R8 版本不可变——同 id 内容不同=拒绝覆盖；同内容=幂等
   const n1 = upsertActionChain(db, { chainId: 'chain-1', motionId: 'mot-1', chain: { steps: 2 }, schemaVersion: '1.0.0', steps: [
     { id: 's1', kind: 'expression', params: { name: 'smile' }, durationMs: 300 },
     { id: 's2', kind: 'motion', params: { semantic: 'wave_hand' }, durationMs: 900 },
   ] });
   assert.equal(n1, 2);
-  const n2 = upsertActionChain(db, { chainId: 'chain-1', motionId: 'mot-1', chain: { steps: 1 }, schemaVersion: '1.0.0', steps: [
-    { kind: 'keyframes', params: { track: 'ParamAngleZ' } },
+  assert.throws(() => upsertActionChain(db, { chainId: 'chain-1', motionId: 'mot-1', chain: { steps: 1 }, schemaVersion: '1.0.0', steps: [
+    { kind: 'keyframes', params: { track: 'semantic_track' } },
+  ] }), /禁止覆盖已有版本 chain_json/); // R8：修订必须走 actions-repo 版本 API
+  const n2 = upsertActionChain(db, { chainId: 'chain-1', motionId: 'mot-1', chain: { steps: 2 }, schemaVersion: '1.0.0', steps: [
+    { id: 's1', kind: 'expression', params: { name: 'smile' }, durationMs: 300 },
+    { id: 's2', kind: 'motion', params: { semantic: 'wave_hand' }, durationMs: 900 },
   ] });
-  assert.equal(n2, 1);
+  assert.equal(n2, 2); // 同内容幂等
   assert.throws(() => upsertActionChain(db, { chainId: 'c2', motionId: 'mot-1', chain: {}, schemaVersion: '1', steps: [{ kind: 'bone', params: {} }] })); // Live2D 无骨骼
 
   // 绑定 + 执行历史 + 学习状态机

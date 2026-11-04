@@ -426,21 +426,31 @@ export function upsertMotionDefinition(db, { id, semanticKey, description, emoti
   });
 }
 
-/** 幂等写动作链（按 chain id upsert）+ 步骤整体替换（同链重写=删旧插新，事务内一致）。 */
+/**
+ * 幂等写动作链（按 chain id）+ 步骤整体替换（同链重写=删旧插新，事务内一致）。
+ * R8 版本不可变（PHASE-2-GAP P0-A 必修）：已存在同 id 链时，
+ *  - chain_json 内容不同 → 拒绝覆盖（抛错），修订必须走 actions-repo 的版本 API；
+ *  - chain_json 内容相同 → 幂等返回，仅允许同步 validation_report。
+ */
 export function upsertActionChain(db, { chainId, motionId, chain, schemaVersion, validationReport = null, steps = [], createdAt = null }) {
   if (!chainId || !motionId) throw new Error('upsertActionChain: chainId 与 motionId 必填');
   for (const s of steps) {
     if (!ACTION_STEP_KINDS.includes(s.kind)) throw new Error(`upsertActionChain: 非法 step kind ${s.kind}`);
   }
   return withTransaction(db, () => {
-    db.prepare(`
-      INSERT INTO action_chains (id, motion_id, chain_json, schema_version, validation_report, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        chain_json = excluded.chain_json,
-        schema_version = excluded.schema_version,
-        validation_report = excluded.validation_report
-    `).run(chainId, motionId, json(chain, '{}'), schemaVersion, validationReport, createdAt ?? nowIso());
+    const existing = db.prepare('SELECT * FROM action_chains WHERE id = ?').get(chainId);
+    const nextJson = json(chain, '{}');
+    if (existing && existing.chain_json !== nextJson) {
+      throw new Error(`upsertActionChain: 禁止覆盖已有版本 chain_json（R8 版本不可变），chainId=${chainId}；内容修订请使用 actions-repo createActionChainVersion`);
+    }
+    if (!existing) {
+      db.prepare(`
+        INSERT INTO action_chains (id, motion_id, chain_json, schema_version, validation_report, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(chainId, motionId, nextJson, schemaVersion, validationReport, createdAt ?? nowIso());
+    } else if (validationReport !== null && validationReport !== existing.validation_report) {
+      db.prepare('UPDATE action_chains SET validation_report = ? WHERE id = ?').run(validationReport, chainId);
+    }
     db.prepare('DELETE FROM action_steps WHERE chain_id = ?').run(chainId);
     steps.forEach((s, i) => {
       db.prepare(`

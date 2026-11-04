@@ -25,7 +25,7 @@
  *  - 迁移只追加不改写；schema_migrations 记录版本与耗时。
  */
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /** v1 全量 DDL。单条 exec 执行，语句间以分号分隔。 */
 export const MIGRATIONS = {
@@ -486,5 +486,45 @@ export const MIGRATIONS = {
       updated_at          TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_learning_jobs_state ON learning_jobs(state);
+  `,
+
+  /**
+   * v4：Phase 2 Foundation 最小缺项迁移（2026-11-04，依
+   * docs/architecture/PHASE-2-FOUNDATION-GAP-AND-EXECUTION-PLAN.md P0-A/P0-B）。
+   *  - action_chains 补 json_address / content_sha256 / chain_hash 三列：
+   *    chain_hash 为语义链规范化内容的 SHA-256（幂等判定 R9），
+   *    content_sha256 为快照文件内容哈希（R6 回读核对），json_address 为不可变快照路径（R2/R3）。
+   *  - tasks（bootstrap 域既有表，复用不重建）补契约列：task_type/trace_id/
+   *    attempt/max_attempts/input_payload/output_payload（P0-B 对齐任务书 §六）。
+   *  - motion_status_log：状态转换只追加审计（拒绝留痕/转换可追溯）。
+   * 均为加列/新表，不改既有列，可重复执行由 schema_migrations 门禁。
+   */
+  4: `
+    ALTER TABLE action_chains ADD COLUMN json_address TEXT;
+    ALTER TABLE action_chains ADD COLUMN content_sha256 TEXT;
+    ALTER TABLE action_chains ADD COLUMN chain_hash TEXT;
+    CREATE INDEX IF NOT EXISTS idx_action_chains_hash ON action_chains(chain_hash);
+    ALTER TABLE action_steps ADD COLUMN admission TEXT;
+    ALTER TABLE action_steps ADD COLUMN pairing_json TEXT;
+
+    ALTER TABLE tasks ADD COLUMN task_type TEXT;
+    ALTER TABLE tasks ADD COLUMN trace_id TEXT;
+    ALTER TABLE tasks ADD COLUMN attempt INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE tasks ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 3;
+    ALTER TABLE tasks ADD COLUMN input_payload TEXT;
+    ALTER TABLE tasks ADD COLUMN output_payload TEXT;
+    CREATE INDEX IF NOT EXISTS idx_tasks_trace ON tasks(trace_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(task_type, status);
+
+    CREATE TABLE IF NOT EXISTS motion_status_log (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      motion_id   TEXT NOT NULL,
+      from_status TEXT,
+      to_status   TEXT NOT NULL,
+      actor       TEXT,
+      reason      TEXT,
+      created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_motion_status_log_motion ON motion_status_log(motion_id);
   `,
 };
