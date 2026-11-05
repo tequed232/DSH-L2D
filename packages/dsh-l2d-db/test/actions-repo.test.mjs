@@ -63,6 +63,8 @@ ok('R9 同键不同内容 → VERSION_CONFLICT（不静默覆盖）', () => {
 ok('createActionChainVersion 乐观并发：错误 expectedVersion 拒绝', () => {
   const motion = repo.getMotionBySemanticKey('test.wave');
   const chainV2 = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'pose', params: { rightArmAngle: 60 }, durationMs: 500, admission: 'step', capabilityId: 'gesture.right_finger' }] };
+  const missingDuration = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'pose', params: {} }] };
+  assert.throws(() => repo.createActionChainVersion(motion.id, { chain: missingDuration }, motion.version), /durationMs/);
   assert.throws(() => repo.createActionChainVersion(motion.id, { chain: chainV2 }, 99), (e) => e.code === 'VERSION_CONFLICT');
 });
 
