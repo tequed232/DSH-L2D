@@ -118,6 +118,123 @@
     } catch (e) { /* ignore */ }
   }
 
+  var STYLE_TEXT = [
+    // 用 transform 定位而不是 left/top：拖拽时只改合成层偏移，不触发布局重排。
+    // will-change 提前把图层独立出来，避免拖动过程中反复提升/降级。
+    // 颜色、字号、间距、圆角、阴影、动效都走 ui-tokens.css，这里只写结构。
+    '#dsh-l2d-root,.l2d-menu,.l2d-panel{font-family:var(--dsh-font-sans);color:var(--dsh-ink);}',
+    '#' + ROOT_ID + '{position:fixed;left:0;top:0;width:320px;height:400px;',
+    'z-index:var(--dsh-z-overlay,2147483000);pointer-events:none;user-select:none;-webkit-user-select:none;',
+    'will-change:transform;transform:translate3d(0,0,0);contain:layout style;}',
+    '#' + ROOT_ID + ' .l2d-body{position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;',
+    // 角色盒不再拦事件：交互全部由 window 捕获层 + 渲染包 alpha 命中判定接管，
+    // 这样空白处鼠标直接透过到下层页面（点 DSH 按钮等）。
+    'pointer-events:none;cursor:grab;transition:filter var(--dsh-dur) var(--dsh-ease),opacity var(--dsh-dur) var(--dsh-ease);}',
+    '#' + ROOT_ID + ' .l2d-body.dragging{cursor:grabbing;}',
+    '#' + ROOT_ID + ' .l2d-canvas{width:100%;height:100%;display:block;pointer-events:none;}',
+    '#' + ROOT_ID + ' .l2d-body img{width:100%;height:100%;object-fit:contain;',
+    'filter:var(--dsh-shadow-drop);',
+    'transition:transform var(--dsh-dur) var(--dsh-ease);will-change:transform;pointer-events:none;}',
+    '#' + ROOT_ID + ' .l2d-body:hover img{margin-bottom:var(--dsh-space-1);}',
+    '#' + ROOT_ID + ' .l2d-placeholder{width:64%;height:64%;margin-bottom:var(--dsh-space-6);',
+    'border-radius:46% 46% 42% 42%;background:var(--dsh-accent-soft);}',
+    '#' + ROOT_ID + ' .l2d-chip{position:absolute;left:50%;bottom:auto;transform:translateX(-50%);',
+    'top:calc(-1 * var(--dsh-control-sm) - var(--dsh-space-1));',
+    'pointer-events:auto;cursor:pointer;padding:var(--dsh-space-1) var(--dsh-space-3);border-radius:var(--dsh-radius-full);',
+    'font:var(--dsh-text-xs);font-weight:500;white-space:nowrap;',
+    'background:var(--dsh-surface);color:var(--dsh-ink-muted);border:1px solid var(--dsh-line);',
+    'transition:background var(--dsh-dur-fast) var(--dsh-ease),color var(--dsh-dur-fast) var(--dsh-ease);}',
+    '#' + ROOT_ID + ' .l2d-chip:hover{background:var(--dsh-surface-raised);color:var(--dsh-ink);}',
+    '#' + ROOT_ID + ' .l2d-bubble{position:absolute;right:0;bottom:calc(100% + var(--dsh-space-2));max-width:200px;',
+    'padding:var(--dsh-space-2) var(--dsh-space-3);',
+    'border-radius:var(--dsh-radius-lg);',
+    'font:var(--dsh-text-sm);',
+    'background:var(--dsh-bubble-bg);color:var(--dsh-bubble-ink);box-shadow:var(--dsh-shadow-2);',
+    'opacity:0;transform:translateY(var(--dsh-space-2));transform-origin:bottom right;',
+    'transition:opacity var(--dsh-dur) var(--dsh-ease),transform var(--dsh-dur) var(--dsh-ease);pointer-events:none;}',
+    '#' + ROOT_ID + ' .l2d-bubble.show{opacity:1;transform:translateY(0);}',
+    '#' + ROOT_ID + ' .l2d-bubble .price-up{color:var(--dsh-bubble-up);font-weight:600;}',
+    '#' + ROOT_ID + ' .l2d-bubble .price-down{color:var(--dsh-bubble-down);font-weight:600;}',
+    '#' + ROOT_ID + ' .l2d-bubble .price-sub{display:block;font:var(--dsh-text-xs);color:var(--dsh-bubble-muted);}',
+    '#' + ROOT_ID + ' .l2d-price{position:absolute;left:50%;top:calc(100% + var(--dsh-space-2));transform:translateX(-50%);',
+    'max-width:min(360px,calc(100vw - var(--dsh-space-5)));padding:var(--dsh-space-2) var(--dsh-space-3);',
+    'border-radius:var(--dsh-radius-lg);font:var(--dsh-text-xs);white-space:nowrap;',
+    'background:var(--dsh-surface);color:var(--dsh-ink);border:1px solid var(--dsh-line);',
+    'box-shadow:var(--dsh-shadow-2);opacity:0;transition:opacity var(--dsh-dur) var(--dsh-ease);pointer-events:none;}',
+    '#' + ROOT_ID + ' .l2d-price.show{opacity:1;}',
+    '#' + ROOT_ID + ' .l2d-price .price-up{color:var(--dsh-up);font-weight:600;}',
+    '#' + ROOT_ID + ' .l2d-price .price-down{color:var(--dsh-down);font-weight:600;}',
+    '#' + ROOT_ID + ' .l2d-price .price-sub{display:block;font:var(--dsh-text-xs);color:var(--dsh-ink-muted);}',
+    '.l2d-menu{position:fixed;z-index:var(--dsh-z-menu,2147483100);min-width:176px;padding:var(--dsh-space-1);',
+    'border-radius:var(--dsh-radius-lg);background:var(--dsh-surface);color:var(--dsh-ink);pointer-events:auto;',
+    'box-shadow:var(--dsh-shadow-2);border:1px solid var(--dsh-line);display:none;flex-direction:column;}',
+    '.l2d-menu.open{display:flex;}',
+    '.l2d-menu button{border:none;background:transparent;color:var(--dsh-ink);text-align:left;',
+    'padding:var(--dsh-space-2) var(--dsh-space-3);border-radius:var(--dsh-radius-md);font:var(--dsh-text-sm);cursor:pointer;}',
+    '.l2d-menu button:hover{background:var(--dsh-hover);}',
+    '.l2d-menu .l2d-menu-title{padding:var(--dsh-space-1) var(--dsh-space-3);font:var(--dsh-text-xs);color:var(--dsh-ink-muted);}',
+    '.l2d-yandere-fx{position:fixed;inset:0;pointer-events:none;z-index:2147483200;',
+    'background:radial-gradient(ellipse at center,rgba(0,0,0,0) 38%,rgba(45,0,14,.6) 100%);',
+    'opacity:0;transition:opacity .7s;}',
+    '.l2d-yandere-fx.on{opacity:1;}',
+    '#' + ROOT_ID + '.away .l2d-body{filter:grayscale(.55) brightness(.72);opacity:.8;}',
+    '#' + ROOT_ID + '.conversation .l2d-chip{background:var(--dsh-accent);color:var(--dsh-on-accent);',
+    'border-color:transparent;}',
+    '#' + ROOT_ID + '.work .l2d-chip{background:var(--dsh-accent-soft);color:var(--dsh-on-accent-soft);',
+    'border-color:transparent;}',
+    '#' + ROOT_ID + ' .l2d-gear{position:absolute;right:0;width:var(--dsh-control-sm);height:var(--dsh-control-sm);',
+    'top:calc(-1 * var(--dsh-control-sm) - var(--dsh-space-1));border-radius:var(--dsh-radius-full);',
+    'display:grid;place-items:center;pointer-events:auto;cursor:pointer;border:1px solid var(--dsh-line);',
+    'background:var(--dsh-surface);color:var(--dsh-ink);font:var(--dsh-text-sm);line-height:1;opacity:0;',
+    'transition:opacity var(--dsh-dur-fast) var(--dsh-ease),background var(--dsh-dur-fast) var(--dsh-ease);}',
+    '#' + ROOT_ID + ':hover .l2d-gear{opacity:1;}',
+    '#' + ROOT_ID + ' .l2d-gear:hover{background:var(--dsh-surface-raised);}',
+    // 设置面板＝浮动窗口：标题栏可拖拽、右下角可缩放、位置/尺寸/折叠态记忆（见
+    // applyPanelPrefs）。仅留一层统一高度 shadow-2，层级靠位置与字重表达。
+    '.l2d-panel{position:fixed;left:0;top:0;width:340px;min-width:280px;height:auto;',
+    'overflow:hidden;border-radius:var(--dsh-radius-lg);',
+    'background:var(--dsh-surface);color:var(--dsh-ink);pointer-events:auto;',
+    'box-shadow:var(--dsh-shadow-2);border:1px solid var(--dsh-line);',
+    'font:var(--dsh-text-sm);display:none;flex-direction:column;',
+    'z-index:var(--dsh-z-panel,2147483200);}',
+    '.l2d-panel.open{display:flex;}',
+    '.l2d-panel.collapsed{height:auto !important;}',
+    '.l2d-panel-head{display:flex;align-items:center;gap:var(--dsh-space-2);flex:none;',
+    'padding:var(--dsh-space-2) var(--dsh-space-2) var(--dsh-space-2) var(--dsh-space-4);',
+    'border-bottom:1px solid var(--dsh-line);cursor:grab;touch-action:none;',
+    'user-select:none;-webkit-user-select:none;}',
+    '.l2d-panel-head:active{cursor:grabbing;}',
+    '.l2d-panel-head h4{margin:0;font:var(--dsh-text-label);flex:1;cursor:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
+    '.l2d-panel-close{flex:none;width:24px;height:24px;display:grid;place-items:center;',
+    'border:none;border-radius:var(--dsh-radius-md);background:transparent;',
+    'color:var(--dsh-ink-muted);font:var(--dsh-text-sm);line-height:1;cursor:pointer;',
+    'transition:background var(--dsh-dur-fast) var(--dsh-ease),color var(--dsh-dur-fast) var(--dsh-ease);}',
+    '.l2d-panel-close:hover{background:var(--dsh-hover);color:var(--dsh-ink);}',
+    '.l2d-panel-body{overflow:auto;min-height:0;',
+    'padding:var(--dsh-space-4);display:flex;flex-direction:column;gap:var(--dsh-space-3);}',
+    '.l2d-panel.collapsed .l2d-panel-body,.l2d-panel.collapsed .l2d-panel-resize{display:none;}',
+    '.l2d-panel-resize{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;touch-action:none;}',
+    '.l2d-panel-resize::after{content:\'\';position:absolute;right:5px;bottom:5px;width:7px;height:7px;',
+    'border-right:2px solid var(--dsh-line-strong);border-bottom:2px solid var(--dsh-line-strong);}',
+    'body.l2d-panel-interacting,body.l2d-panel-interacting *{user-select:none !important;-webkit-user-select:none !important;cursor:default;}',
+    '.l2d-panel .l2d-row{display:flex;flex-direction:column;gap:var(--dsh-space-2);}',
+    '.l2d-panel .l2d-row label{font:var(--dsh-text-xs);color:var(--dsh-ink-muted);}',
+    '.l2d-panel .l2d-row input[type=password],.l2d-panel .l2d-row input[type=number],.l2d-panel .l2d-row select',
+    '{width:100%;box-sizing:border-box;padding:var(--dsh-space-2) var(--dsh-space-3);border-radius:var(--dsh-radius-md);',
+    'border:1px solid var(--dsh-line);background:var(--dsh-surface-sunken);color:var(--dsh-ink);',
+    'font:var(--dsh-text-sm);outline:none;}',
+    '.l2d-panel .l2d-row input:focus,.l2d-panel .l2d-row select:focus{border-color:var(--dsh-accent);}',
+    '.l2d-panel input[type=checkbox],.l2d-panel input[type=range]{accent-color:var(--dsh-accent);}',
+    '.l2d-panel .l2d-inline{display:flex;align-items:center;gap:var(--dsh-space-3);}',
+    '.l2d-panel .l2d-inline input[type=range]{flex:1;}',
+    '.l2d-panel .l2d-actions{display:flex;gap:var(--dsh-space-2);justify-content:flex-end;}',
+    '.l2d-panel .l2d-actions button{border:1px solid var(--dsh-line);border-radius:var(--dsh-radius-md);',
+    'padding:var(--dsh-space-2) var(--dsh-space-4);font:var(--dsh-text-sm);',
+    'cursor:pointer;background:transparent;color:var(--dsh-ink);}',
+    '.l2d-panel .l2d-actions button.primary{background:var(--dsh-accent);color:var(--dsh-on-accent);border-color:transparent;}',
+    '.l2d-panel .l2d-hint{font:var(--dsh-text-xs);color:var(--dsh-ink-muted);}',
+    '#dsh-l2d-root :focus-visible,.l2d-menu :focus-visible,.l2d-panel :focus-visible{outline:2px solid var(--dsh-accent);outline-offset:2px;}'
+  ].join('');
 
   var root = null;
   var imgEl = null;
@@ -127,39 +244,36 @@
   var priceEl = null;
   var menuEl = null;
 
-  // 样式注入：ui-tokens.css（令牌）+ overlay.css（结构）两条 <link>，
-  // 地址跟着 overlay.js 自己的 src 走，这样插件（/dsh-l2d/）和调试服都对得上。
-  // 替代旧的同步 XHR（阻塞主线程）与内联 STYLE_TEXT 字符串（改样式必碰逻辑）。
-  // link 加载是异步的，首帧可能短暂无样式——令牌路由 404 时组件仍能挂上，只是退回浏览器默认色。
-  function injectStylesheet(href) {
-    var link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = versioned(href);
-    link.setAttribute('data-dsh-l2d', 'style');
-    document.head.appendChild(link);
-  }
-
-  function overlayHref(file) {
+  // 同步读令牌表，避免第一帧没有颜色。地址跟着 overlay.js 自己的 src 走，
+  // 这样插件（/dsh-l2d/）和调试服都对得上。读失败时组件仍能挂上，只是退回浏览器默认色。
+  function readTokenCss() {
+    var href = '/dsh-l2d/ui-tokens.css';
     var nodes = document.getElementsByTagName('script');
     for (var i = nodes.length - 1; i >= 0; i--) {
       var src = nodes[i].getAttribute('src') || '';
       var at = src.indexOf('overlay.js');
-      if (at >= 0) return src.slice(0, at) + file;
+      if (at >= 0) {
+        href = src.slice(0, at) + 'ui-tokens.css';
+        break;
+      }
     }
-    return '/dsh-l2d/' + file;
-  }
-
-  function injectStyles() {
-    if (document.querySelector('link[data-dsh-l2d="style"][href*="ui-tokens.css"]')) return;
-    injectStylesheet(overlayHref('ui-tokens.css'));
-    injectStylesheet(overlayHref('overlay.css'));
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', href, false);
+      xhr.send();
+      if (xhr.status >= 200 && xhr.status < 300 && xhr.responseText) return xhr.responseText;
+    } catch (e) { /* 令牌路由没挂上 */ }
+    return '';
   }
 
   function ensureMounted() {
     if (document.getElementById(ROOT_ID)) return;
     if (!document.body) return;
 
-    injectStyles();
+    var style = document.createElement('style');
+    style.setAttribute('data-dsh-l2d', 'style');
+    style.textContent = readTokenCss() + STYLE_TEXT;
+    document.head.appendChild(style);
 
     root = document.createElement('div');
     root.id = ROOT_ID;
@@ -2296,9 +2410,10 @@
   }
 
   /**
-   * 强制刷新状态（调试用）：重新拉宿主设置 + 销毁并重新挂载渲染包，
+   * 强制刷新状态（调试钩子）：重新拉宿主设置 + 销毁并重新挂载渲染包，
    * 不重载整个 DSH 页面。修改设置后状态没生效、渲染卡住、或改了 overlay.js
-   * 想当场复位时用它。也挂在 window.__DSH_L2D_FORCE_REFRESH__ 上，控制台可直接调。
+   * 想当场复位时用。仅控制台可达：window.__DSH_L2D_FORCE_REFRESH__()。
+   * UI 入口（设置面板里的按钮）已按降噪需求移除。
    */
   function forceRefreshState() {
     say('正在强制刷新…', 1200);
@@ -2341,6 +2456,7 @@
   function openPanel() {
     if (!panelEl) return;
     panelOpen = true;
+    applyPanelPrefs(); // 打开时恢复/夹取位置尺寸（视口可能已变）
     panelEl.classList.add('open');
   }
 
@@ -2348,6 +2464,157 @@
     if (panelOpen) closePanel();
     else openPanel();
   }
+
+  // ------------------------------------------------ 浮动窗口：位置/尺寸/折叠态
+  // localStorage 只记几何偏好（非设置数据，不进宿主 settings.json），防抖写入；
+  // 恢复与拖拽全程夹在视口内，面板整体保持可点。
+  var PANEL_PREFS_KEY = 'dsh-l2d-panel-prefs';
+  var PANEL_MIN_W = 280;
+  var PANEL_MIN_H = 160;
+  var panelPrefsSaveTimer = 0;
+
+  function readPanelPrefs() {
+    try {
+      var p = JSON.parse(localStorage.getItem(PANEL_PREFS_KEY) || 'null');
+      if (!p || typeof p !== 'object') return null;
+      return { x: Number(p.x), y: Number(p.y), w: Number(p.w), h: Number(p.h), collapsed: p.collapsed === true };
+    } catch (err) { return null; }
+  }
+
+  function savePanelPrefs() {
+    if (!panelEl) return;
+    var prev = readPanelPrefs() || {};
+    var collapsed = panelEl.classList.contains('collapsed');
+    var prefs = {
+      x: parseInt(panelEl.style.left, 10) || 0,
+      y: parseInt(panelEl.style.top, 10) || 0,
+      w: parseInt(panelEl.style.width, 10) || panelEl.offsetWidth,
+      h: collapsed ? Math.max(PANEL_MIN_H, Number(prev.h) || 0)
+        : (parseInt(panelEl.style.height, 10) || panelEl.offsetHeight),
+      collapsed: collapsed
+    };
+    try { localStorage.setItem(PANEL_PREFS_KEY, JSON.stringify(prefs)); } catch (err) { /* 隐私模式等 */ }
+  }
+
+  function savePanelPrefsSoon() {
+    if (panelPrefsSaveTimer) clearTimeout(panelPrefsSaveTimer);
+    panelPrefsSaveTimer = setTimeout(function () {
+      panelPrefsSaveTimer = 0;
+      savePanelPrefs();
+    }, 300);
+  }
+
+  function clampPanelPoint(x, y, w, h) {
+    return {
+      x: Math.min(Math.max(x, 0), Math.max(0, window.innerWidth - w)),
+      y: Math.min(Math.max(y, 0), Math.max(0, window.innerHeight - h))
+    };
+  }
+
+  function applyPanelPrefs() {
+    if (!panelEl) return;
+    var p = readPanelPrefs();
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var w = PANEL_MIN_W;
+    var h = Math.min(560, Math.max(PANEL_MIN_H, vh - 48));
+    if (p && p.w >= PANEL_MIN_W && p.w <= vw) w = p.w;
+    if (p && p.h >= PANEL_MIN_H && p.h <= vh) h = p.h;
+    panelEl.style.width = Math.round(w) + 'px';
+    panelEl.style.height = Math.round(h) + 'px';
+    var x = p && isFinite(p.x) ? p.x : Math.max(16, vw - w - 24);
+    var y = p && isFinite(p.y) ? p.y : 24;
+    var c = clampPanelPoint(x, y, w, h);
+    panelEl.style.left = Math.round(c.x) + 'px';
+    panelEl.style.top = Math.round(c.y) + 'px';
+    panelEl.classList.toggle('collapsed', !!(p && p.collapsed));
+  }
+
+  function bindPanelWindow() {
+    if (!panelEl) return;
+    var head = panelEl.querySelector('.l2d-panel-head');
+    var grip = panelEl.querySelector('.l2d-panel-resize');
+    var closeBtn = panelEl.querySelector('.l2d-panel-close');
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function () { closePanel(); });
+    }
+
+    if (head) {
+      // 双击标题栏折叠/展开：用 pointerdown 计时判定，避免依赖浏览器 dblclick
+      // 兼容事件链（拖拽里 preventDefault 后不同内核行为不一）。
+      var lastTap = 0;
+      head.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        if (e.target.closest && e.target.closest('.l2d-panel-close')) return;
+        var now = Date.now();
+        if (now - lastTap < 350) {
+          lastTap = 0;
+          panelEl.classList.toggle('collapsed');
+          savePanelPrefsSoon();
+          return;
+        }
+        lastTap = now;
+        var box = panelEl.getBoundingClientRect();
+        var offX = e.clientX - box.left;
+        var offY = e.clientY - box.top;
+        var w = box.width;
+        function onMove(ev) {
+          var c = clampPanelPoint(ev.clientX - offX, ev.clientY - offY, w, box.height);
+          panelEl.style.left = Math.round(c.x) + 'px';
+          panelEl.style.top = Math.round(c.y) + 'px';
+        }
+        function onUp() {
+          document.removeEventListener('pointermove', onMove, true);
+          document.removeEventListener('pointerup', onUp, true);
+          document.body.classList.remove('l2d-panel-interacting');
+          savePanelPrefsSoon();
+        }
+        document.addEventListener('pointermove', onMove, true);
+        document.addEventListener('pointerup', onUp, true);
+        document.body.classList.add('l2d-panel-interacting');
+      });
+    }
+
+    if (grip) {
+      grip.setAttribute('aria-hidden', 'true');
+      grip.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var box = panelEl.getBoundingClientRect();
+        var startX = e.clientX;
+        var startY = e.clientY;
+        var w0 = box.width;
+        var h0 = box.height;
+        function onMove(ev) {
+          var w = Math.min(window.innerWidth, Math.max(PANEL_MIN_W, w0 + ev.clientX - startX));
+          var h = Math.min(window.innerHeight, Math.max(PANEL_MIN_H, h0 + ev.clientY - startY));
+          panelEl.style.width = Math.round(w) + 'px';
+          panelEl.style.height = Math.round(h) + 'px';
+        }
+        function onUp() {
+          document.removeEventListener('pointermove', onMove, true);
+          document.removeEventListener('pointerup', onUp, true);
+          document.body.classList.remove('l2d-panel-interacting');
+          savePanelPrefsSoon();
+        }
+        document.addEventListener('pointermove', onMove, true);
+        document.addEventListener('pointerup', onUp, true);
+        document.body.classList.add('l2d-panel-interacting');
+      });
+    }
+  }
+
+  // 视口缩小时把已打开的面板拉回可视区
+  window.addEventListener('resize', function () {
+    if (!panelOpen || !panelEl) return;
+    var c = clampPanelPoint(parseInt(panelEl.style.left, 10) || 0, parseInt(panelEl.style.top, 10) || 0,
+      panelEl.offsetWidth, panelEl.offsetHeight);
+    panelEl.style.left = Math.round(c.x) + 'px';
+    panelEl.style.top = Math.round(c.y) + 'px';
+    savePanelPrefsSoon();
+  });
 
   function row(labelText, control) {
     var wrap = document.createElement('div');
@@ -2362,16 +2629,31 @@
   function buildPanel() {
     if (!panelEl) return;
     panelEl.innerHTML = '';
+    panelEl.classList.remove('collapsed');
 
+    // 标题栏：拖拽把手 + 关闭。内容全部收进 .l2d-panel-body，由滚动条兜底。
+    var head = document.createElement('div');
+    head.className = 'l2d-panel-head';
     var title = document.createElement('h4');
     title.textContent = 'DSH-L2D 设置';
-    panelEl.appendChild(title);
+    var closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'l2d-panel-close';
+    closeBtn.textContent = '\u00d7';
+    closeBtn.setAttribute('aria-label', '关闭设置');
+    closeBtn.title = '关闭';
+    head.appendChild(title);
+    head.appendChild(closeBtn);
+    panelEl.appendChild(head);
+
+    var body = document.createElement('div');
+    body.className = 'l2d-panel-body';
 
     var keyInput = document.createElement('input');
     keyInput.type = 'password';
     keyInput.placeholder = settings.hasApiKey ? '已保存，留空则不修改' : 'sk-...';
     keyInput.autocomplete = 'off';
-    panelEl.appendChild(row('DeepSeek API Key（仅用于查询余额）', keyInput));
+    body.appendChild(row('DeepSeek API Key（仅用于查询余额）', keyInput));
 
     var soundWrap = document.createElement('div');
     soundWrap.className = 'l2d-inline';
@@ -2386,7 +2668,7 @@
     soundVol.value = String(settings.soundVolume);
     soundWrap.appendChild(soundToggle);
     soundWrap.appendChild(soundVol);
-    panelEl.appendChild(row('音效开关 / 音量', soundWrap));
+    body.appendChild(row('音效开关 / 音量', soundWrap));
 
     var scaleInput = document.createElement('input');
     scaleInput.type = 'range';
@@ -2397,37 +2679,37 @@
     scaleInput.addEventListener('input', function () {
       applyScale(scaleInput.value);
     });
-    panelEl.appendChild(row('角色缩放', scaleInput));
+    body.appendChild(row('角色缩放', scaleInput));
 
     var refreshInput = document.createElement('input');
     refreshInput.type = 'number';
     refreshInput.min = '15';
     refreshInput.max = '3600';
     refreshInput.value = String(settings.refreshSeconds);
-    panelEl.appendChild(row('余额刷新间隔（秒）', refreshInput));
+    body.appendChild(row('余额刷新间隔（秒）', refreshInput));
 
     var agentToggle = document.createElement('input');
     agentToggle.type = 'checkbox';
     agentToggle.checked = settings.agentLink !== false;
-    panelEl.appendChild(row('工作区联动', agentToggle));
+    body.appendChild(row('工作区联动', agentToggle));
     var sysToggle = document.createElement('input');
     sysToggle.type = 'checkbox';
     sysToggle.checked = settings.systemSensor === true;
-    panelEl.appendChild(row('系统联动（CPU/内存/电量/断网）', sysToggle));
+    body.appendChild(row('系统联动（CPU/内存/电量/断网）', sysToggle));
     var mediaToggle = document.createElement('input');
     mediaToggle.type = 'checkbox';
     mediaToggle.checked = settings.mediaSensor === true;
-    panelEl.appendChild(row('媒体律动（音乐播放时轻摆）', mediaToggle));
+    body.appendChild(row('媒体律动（音乐播放时轻摆）', mediaToggle));
 
     var petToggle = document.createElement('input');
     petToggle.type = 'checkbox';
     petToggle.checked = settings.petMode !== false; // 默认开（桌宠模式为正式行为）
-    panelEl.appendChild(row('桌宠模式（悬停零触发 · 点击只摸头）', petToggle));
+    body.appendChild(row('桌宠模式（悬停零触发 · 点击只摸头）', petToggle));
 
     var eyeFollowToggle = document.createElement('input');
     eyeFollowToggle.type = 'checkbox';
     eyeFollowToggle.checked = settings.eyeFollow !== false; // 默认开（与宿主默认值/存量迁移一致）
-    panelEl.appendChild(row('眼神跟随（鼠标驱动视线/头/身体）', eyeFollowToggle));
+    body.appendChild(row('眼神跟随（鼠标驱动视线/头/身体）', eyeFollowToggle));
 
     var clickMode = document.createElement('select');
     var modeRandom = document.createElement('option');
@@ -2439,17 +2721,17 @@
     clickMode.appendChild(modeRandom);
     clickMode.appendChild(modeApi);
     clickMode.value = settings.clickMode === 'api' ? 'api' : 'random';
-    panelEl.appendChild(row('戳一戳动作', clickMode));
+    body.appendChild(row('戳一戳动作', clickMode));
 
     var spontaneousChat = document.createElement('input');
     spontaneousChat.type = 'checkbox';
     spontaneousChat.checked = settings.spontaneousChat !== false;
-    panelEl.appendChild(row('自发聊天', spontaneousChat));
+    body.appendChild(row('自发聊天', spontaneousChat));
 
     var memeToggle = document.createElement('input');
     memeToggle.type = 'checkbox';
     memeToggle.checked = settings.memeStyle !== false;
-    panelEl.appendChild(row('梗味人设', memeToggle));
+    body.appendChild(row('梗味人设', memeToggle));
 
     var memeLevel = document.createElement('input');
     memeLevel.type = 'range';
@@ -2457,28 +2739,17 @@
     memeLevel.max = '100';
     memeLevel.step = '5';
     memeLevel.value = String(settings.memeLevel);
-    panelEl.appendChild(row('玩梗程度', memeLevel));
+    body.appendChild(row('玩梗程度', memeLevel));
 
     var autoAct = document.createElement('input');
     autoAct.type = 'checkbox';
     autoAct.checked = settings.autoAct !== false;
-    panelEl.appendChild(row('API 自主动作', autoAct));
+    body.appendChild(row('API 自主动作', autoAct));
 
     var hint = document.createElement('div');
     hint.className = 'l2d-hint';
     hint.textContent = '单击角色播放动作；悬停显示余额与当前峰/谷价。开启自发聊天后，完成状态会回流最新回复，空闲时偶尔说话。';
-    panelEl.appendChild(hint);
-
-    // 调试：强制刷新状态（不重载页面，重拉宿主设置 + 重挂渲染包）
-    var forceBtn = document.createElement('button');
-    forceBtn.type = 'button';
-    forceBtn.textContent = '↻ 强制刷新状态';
-    forceBtn.title = '重新拉取宿主设置并销毁/重挂渲染包（调试用，不重载页面）';
-    forceBtn.addEventListener('click', function () {
-      closePanel();
-      forceRefreshState();
-    });
-    panelEl.appendChild(forceBtn);
+    body.appendChild(hint);
 
     var actions = document.createElement('div');
     actions.className = 'l2d-actions';
@@ -2539,7 +2810,15 @@
 
     actions.appendChild(cancel);
     actions.appendChild(save);
-    panelEl.appendChild(actions);
+    body.appendChild(actions);
+    panelEl.appendChild(body);
+
+    var grip = document.createElement('div');
+    grip.className = 'l2d-panel-resize';
+    grip.title = '拖拽调整大小';
+    panelEl.appendChild(grip);
+
+    bindPanelWindow();
   }
 
   // 启动：初始化链任何一步抛错都不能让整个 IIFE 死掉——否则后面的 DSH_L2D_AI
