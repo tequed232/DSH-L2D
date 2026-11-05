@@ -31,6 +31,29 @@ export function validateActionSequence(input) {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Pack adjacent compatible segments into one renderer call (max 8 steps).
+ * This reduces MCP round-trips while preserving FIFO order and priority boundaries.
+ */
+export function coalesceActionSegments(segments) {
+  const batches = [];
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    const priority = segment.priority || 'NORMAL';
+    const bubble = segment.bubble || undefined;
+    let batch = batches[batches.length - 1];
+    if (!batch || batch.priority !== priority || batch.bubble !== bubble ||
+        batch.chain.length + segment.chain.length > MAX_STEPS_PER_SEGMENT) {
+      batch = { priority, ...(bubble ? { bubble } : {}), chain: [], sourceSegments: [] };
+      batches.push(batch);
+    }
+    batch.chain.push(...segment.chain);
+    batch.sourceSegments.push(index);
+  }
+  return batches;
+}
+
 const QUEUEABLE_REJECTIONS = new Set(['conflict', 'priority-blocked']);
 
 /**
@@ -47,8 +70,10 @@ export async function executeActionSequence(input, execute, options = {}) {
   const wait = options.sleep || sleep;
   const receipts = [];
 
-  for (let index = 0; index < input.segments.length; index += 1) {
-    const segment = input.segments[index];
+  const batches = coalesceActionSegments(input.segments);
+  let completedSegments = 0;
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+    const segment = batches[batchIndex];
     const queuedAt = now();
     let receipt;
     let attempts = 0;
@@ -57,7 +82,7 @@ export async function executeActionSequence(input, execute, options = {}) {
       try {
         receipt = await execute({
           chain: segment.chain,
-          priority: segment.priority || 'NORMAL',
+          priority: segment.priority,
           ...(segment.bubble ? { bubble: segment.bubble } : {}),
         });
       } catch (error) {
@@ -72,16 +97,17 @@ export async function executeActionSequence(input, execute, options = {}) {
       await wait(Math.min(retryDelayMs, Math.max(0, maxQueueWaitMs - elapsed)));
     }
 
-    receipts.push({ segment: index, attempts, receipt });
+    receipts.push({ batch: batchIndex, sourceSegments: segment.sourceSegments, attempts, receipt });
     if (!receipt || receipt.accepted !== true || receipt.outcome !== 'completed') {
       const reason = receipt?.reason || receipt?.outcome || 'execution-incomplete';
       return {
-        ok: false, status: 'stopped', reason, receipts, completedSegments: index,
-        remainingSegments: input.segments.length - index - 1,
+        ok: false, status: 'stopped', reason, receipts, completedSegments,
+        remainingSegments: input.segments.length - completedSegments,
         replanRequired: ['conflict', 'priority-blocked', 'interrupted', 'pending'].includes(reason) ||
           receipt?.outcome === 'interrupted' || receipt?.outcome === 'pending',
       };
     }
+    completedSegments += segment.sourceSegments.length;
   }
-  return { ok: true, status: 'completed', receipts, completedSegments: receipts.length, remainingSegments: 0, replanRequired: false };
+  return { ok: true, status: 'completed', receipts, completedSegments, remainingSegments: 0, replanRequired: false };
 }
