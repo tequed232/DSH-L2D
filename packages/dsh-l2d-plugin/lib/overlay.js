@@ -189,33 +189,61 @@
     'transition:opacity var(--dsh-dur-fast) var(--dsh-ease),background var(--dsh-dur-fast) var(--dsh-ease);}',
     '#' + ROOT_ID + ':hover .l2d-gear{opacity:1;}',
     '#' + ROOT_ID + ' .l2d-gear:hover{background:var(--dsh-surface-raised);}',
-    // 设置面板＝浮动窗口：标题栏可拖拽、右下角可缩放、位置/尺寸/折叠态记忆（见
-    // applyPanelPrefs）。仅留一层统一高度 shadow-2，层级靠位置与字重表达。
-    '.l2d-panel{position:fixed;left:0;top:0;width:340px;min-width:280px;height:auto;',
-    'overflow:hidden;border-radius:var(--dsh-radius-lg);',
+    // 设置面板＝响应式浮动窗口：标题栏拖拽、八向缩放、最大化/边缘吸附、四档断点、
+    // 几何记忆（{maximized, geometry, previousGeometry, collapsed}）。层级靠位置与字重表达，
+    // 仅一层统一高度 shadow-2；禁 transform:scale 整体缩放，断点用 matchMedia + 容器查询。
+    '.l2d-panel{position:fixed;left:0;top:0;width:340px;height:auto;box-sizing:border-box;',
+    'container-type:inline-size;',
+    'border-radius:var(--dsh-radius-lg);',
     'background:var(--dsh-surface);color:var(--dsh-ink);pointer-events:auto;',
     'box-shadow:var(--dsh-shadow-2);border:1px solid var(--dsh-line);',
     'font:var(--dsh-text-sm);display:none;flex-direction:column;',
     'z-index:var(--dsh-z-panel,2147483200);}',
     '.l2d-panel.open{display:flex;}',
     '.l2d-panel.collapsed{height:auto !important;}',
-    '.l2d-panel-head{display:flex;align-items:center;gap:var(--dsh-space-2);flex:none;',
+    '.l2d-panel.maximized{border-radius:0;}',
+    '.l2d-panel.fullscreen{left:0 !important;top:0 !important;width:100% !important;height:100% !important;',
+    'max-width:none !important;border-radius:0;}',
+    '.l2d-panel.fullscreen .l2d-panel-head{cursor:default;}',
+    '.l2d-panel-head{display:flex;align-items:center;gap:var(--dsh-space-1);flex:none;',
     'padding:var(--dsh-space-2) var(--dsh-space-2) var(--dsh-space-2) var(--dsh-space-4);',
     'border-bottom:1px solid var(--dsh-line);cursor:grab;touch-action:none;',
     'user-select:none;-webkit-user-select:none;}',
     '.l2d-panel-head:active{cursor:grabbing;}',
     '.l2d-panel-head h4{margin:0;font:var(--dsh-text-label);flex:1;cursor:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
-    '.l2d-panel-close{flex:none;width:24px;height:24px;display:grid;place-items:center;',
+    '.l2d-panel-btn{flex:none;width:26px;height:26px;display:grid;place-items:center;',
     'border:none;border-radius:var(--dsh-radius-md);background:transparent;',
     'color:var(--dsh-ink-muted);font:var(--dsh-text-sm);line-height:1;cursor:pointer;',
     'transition:background var(--dsh-dur-fast) var(--dsh-ease),color var(--dsh-dur-fast) var(--dsh-ease);}',
-    '.l2d-panel-close:hover{background:var(--dsh-hover);color:var(--dsh-ink);}',
+    '.l2d-panel-btn:hover{background:var(--dsh-hover);color:var(--dsh-ink);}',
     '.l2d-panel-body{overflow:auto;min-height:0;',
     'padding:var(--dsh-space-4);display:flex;flex-direction:column;gap:var(--dsh-space-3);}',
-    '.l2d-panel.collapsed .l2d-panel-body,.l2d-panel.collapsed .l2d-panel-resize{display:none;}',
-    '.l2d-panel-resize{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;touch-action:none;}',
-    '.l2d-panel-resize::after{content:\'\';position:absolute;right:5px;bottom:5px;width:7px;height:7px;',
+    '.l2d-panel.collapsed .l2d-panel-body,.l2d-panel.collapsed .l2d-ph{display:none;}',
+    // 八向缩放手柄：四边条 + 四角块（角为触屏大热区），最大化/全屏态隐藏
+    '.l2d-ph{position:absolute;z-index:2;touch-action:none;}',
+    '.l2d-ph[data-dir="n"]{top:-4px;left:12px;right:12px;height:9px;cursor:ns-resize;}',
+    '.l2d-ph[data-dir="s"]{bottom:-4px;left:12px;right:12px;height:9px;cursor:ns-resize;}',
+    '.l2d-ph[data-dir="e"]{right:-4px;top:12px;bottom:12px;width:9px;cursor:ew-resize;}',
+    '.l2d-ph[data-dir="w"]{left:-4px;top:12px;bottom:12px;width:9px;cursor:ew-resize;}',
+    '.l2d-ph[data-dir="ne"]{top:-5px;right:-5px;width:20px;height:20px;cursor:nesw-resize;}',
+    '.l2d-ph[data-dir="nw"]{top:-5px;left:-5px;width:20px;height:20px;cursor:nwse-resize;}',
+    '.l2d-ph[data-dir="se"]{bottom:-5px;right:-5px;width:20px;height:20px;cursor:nwse-resize;}',
+    '.l2d-ph[data-dir="sw"]{bottom:-5px;left:-5px;width:20px;height:20px;cursor:nesw-resize;}',
+    '.l2d-ph[data-dir="se"]::after{content:\'\';position:absolute;right:6px;bottom:6px;width:7px;height:7px;',
     'border-right:2px solid var(--dsh-line-strong);border-bottom:2px solid var(--dsh-line-strong);}',
+    '.l2d-panel.maximized .l2d-ph,.l2d-panel.fullscreen .l2d-ph{display:none;}',
+    // 边缘吸附预览
+    '.l2d-snap-ghost{position:fixed;left:0;top:0;z-index:2147483190;',
+    'background:var(--dsh-accent-soft);border:1px solid var(--dsh-accent);',
+    'border-radius:var(--dsh-radius-lg);opacity:0;pointer-events:none;',
+    'transition:opacity var(--dsh-dur-fast) var(--dsh-ease);}',
+    '.l2d-snap-ghost.on{opacity:0.55;}',
+    // 容器查询：>600px 双列表单，≤600px 单列紧凑（折叠侧栏语义：窄容器只留主列）
+    '@container (min-width:601px){',
+    '.l2d-panel-body{display:grid;grid-template-columns:1fr 1fr;align-items:start;}',
+    '.l2d-panel .l2d-hint,.l2d-panel .l2d-actions{grid-column:1/-1;}}',
+    '@container (max-width:600px){',
+    '.l2d-panel-body{padding:var(--dsh-space-3);gap:var(--dsh-space-2);}}',
     'body.l2d-panel-interacting,body.l2d-panel-interacting *{user-select:none !important;-webkit-user-select:none !important;cursor:default;}',
     '.l2d-panel .l2d-row{display:flex;flex-direction:column;gap:var(--dsh-space-2);}',
     '.l2d-panel .l2d-row label{font:var(--dsh-text-xs);color:var(--dsh-ink-muted);}',
@@ -2465,33 +2493,64 @@
     else openPanel();
   }
 
-  // ------------------------------------------------ 浮动窗口：位置/尺寸/折叠态
-  // localStorage 只记几何偏好（非设置数据，不进宿主 settings.json），防抖写入；
-  // 恢复与拖拽全程夹在视口内，面板整体保持可点。
+  // ------------------------------------------------ 浮动窗口（响应式升级版）
+  // 几何偏好存 localStorage（非设置数据，不进宿主 settings.json），300ms 防抖写入。
+  // 结构：{ maximized, geometry:{x,y,w,h}, previousGeometry, collapsed }
+  // 四档断点：≥1200 桌面浮动 / 768-1199 紧凑 / 480-767 窄窗 / ≤479 全屏（去小窗形态）。
+  // 拖拽全程 clamp 视口内；最大化/吸附前的几何独立存 previousGeometry，还原时按
+  // 当前视口重新 clamp，绝不把旧坐标直接还原进已缩小的视口。
   var PANEL_PREFS_KEY = 'dsh-l2d-panel-prefs';
-  var PANEL_MIN_W = 280;
-  var PANEL_MIN_H = 160;
+  var PANEL_MIN_W = 480;
+  var PANEL_MIN_H = 360;
+  var PANEL_DEFAULT_W = 860;
+  var PANEL_DEFAULT_H = 620;
+  var PANEL_SNAP_EDGE = 16;
   var panelPrefsSaveTimer = 0;
+  var panelGeom = null;      // 当前几何（border-box px），单一事实源
+  var panelPrevGeom = null;  // 最大化/吸附前几何
+  var panelSnapped = null;   // 运行时吸附态：'left'|'right'|null（不入盘）
+  var panelLastTap = 0;      // 标题栏双击判定
+  var snapGhostEl = null;
+
+  function panelMode() {
+    var vw = window.innerWidth;
+    if (vw <= 479) return 'fullscreen';
+    if (vw <= 767) return 'narrow';
+    if (vw <= 1199) return 'compact';
+    return 'desktop';
+  }
+
+  function validBox(b) {
+    if (!b || typeof b !== 'object') return null;
+    var x = Number(b.x), y = Number(b.y), w = Number(b.w), h = Number(b.h);
+    if (!isFinite(x) || !isFinite(y) || !isFinite(w) || !isFinite(h)) return null;
+    return { x: x, y: y, w: w, h: h };
+  }
 
   function readPanelPrefs() {
     try {
       var p = JSON.parse(localStorage.getItem(PANEL_PREFS_KEY) || 'null');
       if (!p || typeof p !== 'object') return null;
-      return { x: Number(p.x), y: Number(p.y), w: Number(p.w), h: Number(p.h), collapsed: p.collapsed === true };
+      // 旧结构 {x,y,w,h,collapsed} → 新结构迁移
+      if (!p.geometry && p.x != null) {
+        p = { maximized: false, geometry: { x: p.x, y: p.y, w: p.w, h: p.h }, previousGeometry: null, collapsed: p.collapsed === true };
+      }
+      return {
+        maximized: p.maximized === true,
+        geometry: validBox(p.geometry),
+        previousGeometry: validBox(p.previousGeometry),
+        collapsed: p.collapsed === true
+      };
     } catch (err) { return null; }
   }
 
   function savePanelPrefs() {
     if (!panelEl) return;
-    var prev = readPanelPrefs() || {};
-    var collapsed = panelEl.classList.contains('collapsed');
     var prefs = {
-      x: parseInt(panelEl.style.left, 10) || 0,
-      y: parseInt(panelEl.style.top, 10) || 0,
-      w: parseInt(panelEl.style.width, 10) || panelEl.offsetWidth,
-      h: collapsed ? Math.max(PANEL_MIN_H, Number(prev.h) || 0)
-        : (parseInt(panelEl.style.height, 10) || panelEl.offsetHeight),
-      collapsed: collapsed
+      maximized: panelEl.classList.contains('maximized'),
+      geometry: panelGeom || undefined,
+      previousGeometry: panelPrevGeom || undefined,
+      collapsed: panelEl.classList.contains('collapsed')
     };
     try { localStorage.setItem(PANEL_PREFS_KEY, JSON.stringify(prefs)); } catch (err) { /* 隐私模式等 */ }
   }
@@ -2504,100 +2563,214 @@
     }, 300);
   }
 
-  function clampPanelPoint(x, y, w, h) {
+  function clampBox(g) {
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var w = Math.min(g.w, vw);
+    var h = Math.min(g.h, vh);
     return {
-      x: Math.min(Math.max(x, 0), Math.max(0, window.innerWidth - w)),
-      y: Math.min(Math.max(y, 0), Math.max(0, window.innerHeight - h))
+      w: w, h: h,
+      x: Math.min(Math.max(g.x, 0), Math.max(0, vw - w)),
+      y: Math.min(Math.max(g.y, 0), Math.max(0, vh - h))
     };
+  }
+
+  function defaultGeom() {
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var w = Math.min(PANEL_DEFAULT_W, vw - 24);
+    var h = Math.min(PANEL_DEFAULT_H, vh - 48);
+    return { x: Math.max(12, Math.round((vw - w) / 2)), y: Math.max(12, Math.round((vh - h) / 2)), w: w, h: h };
+  }
+
+  function setGeom(g) {
+    panelGeom = { x: Math.round(g.x), y: Math.round(g.y), w: Math.round(g.w), h: Math.round(g.h) };
+    panelEl.style.left = panelGeom.x + 'px';
+    panelEl.style.top = panelGeom.y + 'px';
+    panelEl.style.width = panelGeom.w + 'px';
+    panelEl.style.height = panelGeom.h + 'px';
   }
 
   function applyPanelPrefs() {
     if (!panelEl) return;
     var p = readPanelPrefs();
+    if (panelMode() === 'fullscreen') {
+      panelEl.classList.add('fullscreen');
+      panelEl.classList.remove('maximized');
+      panelGeom = null;
+      panelPrevGeom = p && p.previousGeometry ? p.previousGeometry : null;
+      panelEl.style.left = panelEl.style.top = panelEl.style.width = panelEl.style.height = '';
+      panelEl.classList.toggle('collapsed', !!(p && p.collapsed));
+      return;
+    }
+    panelEl.classList.remove('fullscreen');
+    panelPrevGeom = p && p.previousGeometry ? p.previousGeometry : null;
+    panelSnapped = null;
+    if (p && p.maximized) {
+      panelEl.classList.add('maximized');
+      setGeom(clampBox({ x: 0, y: 0, w: window.innerWidth, h: window.innerHeight }));
+    } else {
+      panelEl.classList.remove('maximized');
+      setGeom(clampBox(p && p.geometry ? p.geometry : defaultGeom()));
+    }
+    panelEl.classList.toggle('collapsed', !!(p && p.collapsed));
+  }
+
+  function toggleMaximize() {
+    if (!panelEl || !panelOpen || panelMode() === 'fullscreen') return;
+    if (panelEl.classList.contains('maximized')) {
+      panelEl.classList.remove('maximized');
+      var g = panelPrevGeom || defaultGeom();
+      panelPrevGeom = null;
+      setGeom(clampBox(g)); // 按当前视口重新 clamp 后还原
+    } else {
+      panelPrevGeom = panelGeom || defaultGeom();
+      panelEl.classList.add('maximized');
+      setGeom({ x: 0, y: 0, w: window.innerWidth, h: window.innerHeight });
+    }
+    savePanelPrefsSoon();
+  }
+
+  function showSnapGhost(zone) {
+    if (!zone) {
+      if (snapGhostEl) snapGhostEl.classList.remove('on');
+      return;
+    }
+    if (!snapGhostEl) {
+      snapGhostEl = document.createElement('div');
+      snapGhostEl.className = 'l2d-snap-ghost';
+      document.body.appendChild(snapGhostEl);
+    }
     var vw = window.innerWidth;
     var vh = window.innerHeight;
-    var w = PANEL_MIN_W;
-    var h = Math.min(560, Math.max(PANEL_MIN_H, vh - 48));
-    if (p && p.w >= PANEL_MIN_W && p.w <= vw) w = p.w;
-    if (p && p.h >= PANEL_MIN_H && p.h <= vh) h = p.h;
-    panelEl.style.width = Math.round(w) + 'px';
-    panelEl.style.height = Math.round(h) + 'px';
-    var x = p && isFinite(p.x) ? p.x : Math.max(16, vw - w - 24);
-    var y = p && isFinite(p.y) ? p.y : 24;
-    var c = clampPanelPoint(x, y, w, h);
-    panelEl.style.left = Math.round(c.x) + 'px';
-    panelEl.style.top = Math.round(c.y) + 'px';
-    panelEl.classList.toggle('collapsed', !!(p && p.collapsed));
+    var r = zone === 'top' ? { x: 0, y: 0, w: vw, h: vh }
+      : zone === 'left' ? { x: 0, y: 0, w: Math.round(vw / 2), h: vh }
+        : { x: Math.round(vw / 2), y: 0, w: Math.round(vw / 2), h: vh };
+    snapGhostEl.style.left = r.x + 'px';
+    snapGhostEl.style.top = r.y + 'px';
+    snapGhostEl.style.width = r.w + 'px';
+    snapGhostEl.style.height = r.h + 'px';
+    snapGhostEl.classList.add('on');
+  }
+
+  function applySnap(zone) {
+    if (!panelEl || !panelOpen) return;
+    if (zone === 'top') { toggleMaximize(); return; }
+    if (!panelEl.classList.contains('maximized')) panelPrevGeom = panelGeom;
+    panelEl.classList.remove('maximized');
+    panelSnapped = zone;
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    setGeom(zone === 'left' ? { x: 0, y: 0, w: Math.round(vw / 2), h: vh } : { x: Math.round(vw / 2), y: 0, w: Math.round(vw / 2), h: vh });
+    savePanelPrefsSoon();
   }
 
   function bindPanelWindow() {
     if (!panelEl) return;
     var head = panelEl.querySelector('.l2d-panel-head');
-    var grip = panelEl.querySelector('.l2d-panel-resize');
     var closeBtn = panelEl.querySelector('.l2d-panel-close');
+    var maxBtn = panelEl.querySelector('.l2d-panel-max');
+    var collapseBtn = panelEl.querySelector('.l2d-panel-collapse');
 
-    if (closeBtn) {
-      closeBtn.addEventListener('click', function () { closePanel(); });
-    }
-
-    if (head) {
-      // 双击标题栏折叠/展开：用 pointerdown 计时判定，避免依赖浏览器 dblclick
-      // 兼容事件链（拖拽里 preventDefault 后不同内核行为不一）。
-      var lastTap = 0;
-      head.addEventListener('pointerdown', function (e) {
-        if (e.button !== 0) return;
-        if (e.target.closest && e.target.closest('.l2d-panel-close')) return;
-        var now = Date.now();
-        if (now - lastTap < 350) {
-          lastTap = 0;
-          panelEl.classList.toggle('collapsed');
-          savePanelPrefsSoon();
-          return;
-        }
-        lastTap = now;
-        var box = panelEl.getBoundingClientRect();
-        var offX = e.clientX - box.left;
-        var offY = e.clientY - box.top;
-        var w = box.width;
-        function onMove(ev) {
-          var c = clampPanelPoint(ev.clientX - offX, ev.clientY - offY, w, box.height);
-          panelEl.style.left = Math.round(c.x) + 'px';
-          panelEl.style.top = Math.round(c.y) + 'px';
-        }
-        function onUp() {
-          document.removeEventListener('pointermove', onMove, true);
-          document.removeEventListener('pointerup', onUp, true);
-          document.body.classList.remove('l2d-panel-interacting');
-          savePanelPrefsSoon();
-        }
-        document.addEventListener('pointermove', onMove, true);
-        document.addEventListener('pointerup', onUp, true);
-        document.body.classList.add('l2d-panel-interacting');
+    if (closeBtn) closeBtn.addEventListener('click', function () { closePanel(); });
+    if (maxBtn) maxBtn.addEventListener('click', toggleMaximize);
+    if (collapseBtn) {
+      collapseBtn.addEventListener('click', function () {
+        panelEl.classList.toggle('collapsed');
+        savePanelPrefsSoon();
       });
     }
 
-    if (grip) {
-      grip.setAttribute('aria-hidden', 'true');
-      grip.addEventListener('pointerdown', function (e) {
+    // 八向缩放：委托 handler 按 data-dir 计算，对边固定；最大化/全屏态隐藏手柄
+    panelEl.addEventListener('pointerdown', function (e) {
+      var grip = e.target.closest ? e.target.closest('.l2d-ph') : null;
+      if (!grip || e.button !== 0) return;
+      if (panelEl.classList.contains('maximized') || panelEl.classList.contains('fullscreen')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var dir = grip.getAttribute('data-dir');
+      var box0 = panelEl.getBoundingClientRect();
+      var startX = e.clientX;
+      var startY = e.clientY;
+      function onMove(ev) {
+        var g = { x: box0.left, y: box0.top, w: box0.width, h: box0.height };
+        var dx = ev.clientX - startX;
+        var dy = ev.clientY - startY;
+        if (dir.indexOf('e') >= 0) g.w = Math.min(window.innerWidth - g.x, Math.max(PANEL_MIN_W, box0.width + dx));
+        if (dir.indexOf('s') >= 0) g.h = Math.min(window.innerHeight - g.y, Math.max(PANEL_MIN_H, box0.height + dy));
+        if (dir.indexOf('w') >= 0) {
+          var right = box0.left + box0.width;
+          g.w = Math.min(right, Math.max(PANEL_MIN_W, box0.width - dx));
+          g.x = right - g.w;
+        }
+        if (dir.indexOf('n') >= 0) {
+          var bottom = box0.top + box0.height;
+          g.h = Math.min(bottom, Math.max(PANEL_MIN_H, box0.height - dy));
+          g.y = bottom - g.h;
+        }
+        setGeom(g);
+      }
+      function onUp() {
+        document.removeEventListener('pointermove', onMove, true);
+        document.removeEventListener('pointerup', onUp, true);
+        document.body.classList.remove('l2d-panel-interacting');
+        savePanelPrefsSoon();
+      }
+      document.addEventListener('pointermove', onMove, true);
+      document.addEventListener('pointerup', onUp, true);
+      document.body.classList.add('l2d-panel-interacting');
+    });
+
+    if (head) {
+      head.addEventListener('pointerdown', function (e) {
         if (e.button !== 0) return;
-        e.preventDefault();
-        e.stopPropagation();
-        var box = panelEl.getBoundingClientRect();
-        var startX = e.clientX;
-        var startY = e.clientY;
-        var w0 = box.width;
-        var h0 = box.height;
+        if (e.target.closest && e.target.closest('.l2d-panel-btn')) return;
+        if (panelMode() === 'fullscreen') return; // 全屏态：头部仅作标题，不拖拽
+        // 双击标题栏最大化/还原：pointerdown 计时判定，不依赖浏览器 dblclick 兼容链
+        var now = Date.now();
+        if (now - panelLastTap < 350) {
+          panelLastTap = 0;
+          toggleMaximize();
+          return;
+        }
+        panelLastTap = now;
+        // 最大化/吸附态：单击先布防，只有出现真实位移才还原并转拖拽
+        // （否则双击还原会被第一次 down 的「拖拽即还原」抢走，第二次 down 又 toggle 回去）。
+        var box0 = panelEl.getBoundingClientRect();
+        var offX = e.clientX - box0.left;
+        var offY = e.clientY - box0.top;
+        var snapZone = null;
+        var restored = !panelEl.classList.contains('maximized') && !panelSnapped;
+        function ensureRestore(curX, curY) {
+          if (restored) return box0;
+          var prev = panelPrevGeom || defaultGeom();
+          panelEl.classList.remove('maximized');
+          panelSnapped = null;
+          setGeom(clampBox({ x: curX - prev.w / 2, y: curY - 18, w: prev.w, h: prev.h }));
+          restored = true;
+          return panelEl.getBoundingClientRect();
+        }
         function onMove(ev) {
-          var w = Math.min(window.innerWidth, Math.max(PANEL_MIN_W, w0 + ev.clientX - startX));
-          var h = Math.min(window.innerHeight, Math.max(PANEL_MIN_H, h0 + ev.clientY - startY));
-          panelEl.style.width = Math.round(w) + 'px';
-          panelEl.style.height = Math.round(h) + 'px';
+          if (!restored) {
+            if (Math.abs(ev.clientX - e.clientX) < 4 && Math.abs(ev.clientY - e.clientY) < 4) return;
+            box0 = ensureRestore(ev.clientX, ev.clientY);
+            offX = Math.min(box0.width - 40, Math.max(40, ev.clientX - box0.left));
+            offY = 18;
+          }
+          setGeom(clampBox({ x: ev.clientX - offX, y: ev.clientY - offY, w: box0.width, h: box0.height }));
+          var z = null;
+          if (ev.clientY <= PANEL_SNAP_EDGE) z = 'top';
+          else if (ev.clientX <= PANEL_SNAP_EDGE) z = 'left';
+          else if (ev.clientX >= window.innerWidth - PANEL_SNAP_EDGE) z = 'right';
+          if (z !== snapZone) { snapZone = z; showSnapGhost(z); }
         }
         function onUp() {
           document.removeEventListener('pointermove', onMove, true);
           document.removeEventListener('pointerup', onUp, true);
           document.body.classList.remove('l2d-panel-interacting');
-          savePanelPrefsSoon();
+          showSnapGhost(null);
+          if (snapZone) applySnap(snapZone);
+          else if (restored) savePanelPrefsSoon();
         }
         document.addEventListener('pointermove', onMove, true);
         document.addEventListener('pointerup', onUp, true);
@@ -2606,15 +2779,29 @@
     }
   }
 
-  // 视口缩小时把已打开的面板拉回可视区
-  window.addEventListener('resize', function () {
-    if (!panelOpen || !panelEl) return;
-    var c = clampPanelPoint(parseInt(panelEl.style.left, 10) || 0, parseInt(panelEl.style.top, 10) || 0,
-      panelEl.offsetWidth, panelEl.offsetHeight);
-    panelEl.style.left = Math.round(c.x) + 'px';
-    panelEl.style.top = Math.round(c.y) + 'px';
-    savePanelPrefsSoon();
+  // Esc 关闭（键盘可达）；视口/断点变化时重排（ResizeObserver + matchMedia，
+  // 不依赖固定分辨率；跨断点时浮动↔全屏形态切换）
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && panelOpen) closePanel();
   });
+  function panelViewportChanged() {
+    if (!panelOpen || !panelEl) return;
+    var wasFullscreen = panelEl.classList.contains('fullscreen');
+    if (panelMode() === 'fullscreen' || wasFullscreen) {
+      applyPanelPrefs(); // 跨断点：形态重算
+      return;
+    }
+    if (panelEl.classList.contains('maximized')) {
+      setGeom(clampBox({ x: 0, y: 0, w: window.innerWidth, h: window.innerHeight }));
+    } else if (panelGeom) {
+      setGeom(clampBox(panelGeom));
+    }
+    savePanelPrefsSoon();
+  }
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(panelViewportChanged).observe(document.documentElement);
+  }
+  window.addEventListener('resize', panelViewportChanged);
 
   function row(labelText, control) {
     var wrap = document.createElement('div');
@@ -2631,18 +2818,32 @@
     panelEl.innerHTML = '';
     panelEl.classList.remove('collapsed');
 
-    // 标题栏：拖拽把手 + 关闭。内容全部收进 .l2d-panel-body，由滚动条兜底。
+    // 标题栏：拖拽把手 + 折叠/最大化/关闭。内容全部收进 .l2d-panel-body，由滚动条兜底。
     var head = document.createElement('div');
     head.className = 'l2d-panel-head';
     var title = document.createElement('h4');
     title.textContent = 'DSH-L2D 设置';
+    var collapseBtn = document.createElement('button');
+    collapseBtn.type = 'button';
+    collapseBtn.className = 'l2d-panel-btn l2d-panel-collapse';
+    collapseBtn.textContent = '\u2013';
+    collapseBtn.setAttribute('aria-label', '折叠设置面板');
+    collapseBtn.title = '折叠';
+    var maxBtn = document.createElement('button');
+    maxBtn.type = 'button';
+    maxBtn.className = 'l2d-panel-btn l2d-panel-max';
+    maxBtn.textContent = '\u25a1';
+    maxBtn.setAttribute('aria-label', '最大化/还原');
+    maxBtn.title = '最大化 / 还原（双击标题栏同效）';
     var closeBtn = document.createElement('button');
     closeBtn.type = 'button';
-    closeBtn.className = 'l2d-panel-close';
+    closeBtn.className = 'l2d-panel-btn l2d-panel-close';
     closeBtn.textContent = '\u00d7';
     closeBtn.setAttribute('aria-label', '关闭设置');
     closeBtn.title = '关闭';
     head.appendChild(title);
+    head.appendChild(collapseBtn);
+    head.appendChild(maxBtn);
     head.appendChild(closeBtn);
     panelEl.appendChild(head);
 
@@ -2813,10 +3014,15 @@
     body.appendChild(actions);
     panelEl.appendChild(body);
 
-    var grip = document.createElement('div');
-    grip.className = 'l2d-panel-resize';
-    grip.title = '拖拽调整大小';
-    panelEl.appendChild(grip);
+    // 八向缩放手柄（N/S/E/W + 四角，方向光标由 CSS 决定）
+    var DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+    for (var di = 0; di < DIRS.length; di++) {
+      var grip = document.createElement('div');
+      grip.className = 'l2d-ph';
+      grip.setAttribute('data-dir', DIRS[di]);
+      grip.setAttribute('aria-hidden', 'true');
+      panelEl.appendChild(grip);
+    }
 
     bindPanelWindow();
   }
