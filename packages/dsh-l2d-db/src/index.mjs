@@ -10,6 +10,11 @@ export {
   createAnalysisJob, finishAnalysisJob, saveCapabilityProfile, addValidationFinding,
 } from './repo.mjs';
 
+// ---- MCP Bridge（PR-A：工作区注册表）----
+export {
+  BRIDGE_SESSION_KEYS, upsertBridgeWorkspace, findBridgeWorkspace, updateBridgeWorkspaceSession,
+} from './bridge-repo.mjs';
+
 // ---- Phase 2 Foundation（P0-A~P0-D）----
 export {
   MOTION_TRANSITIONS, SEMANTIC_KEY_RE, canonicalChainHash,

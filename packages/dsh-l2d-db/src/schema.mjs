@@ -25,7 +25,7 @@
  *  - 迁移只追加不改写；schema_migrations 记录版本与耗时。
  */
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 7;
 
 /** v1 全量 DDL。单条 exec 执行，语句间以分号分隔。 */
 export const MIGRATIONS = {
@@ -553,5 +553,22 @@ export const MIGRATIONS = {
   6: `
     ALTER TABLE parameters ADD COLUMN soft_min REAL;
     ALTER TABLE parameters ADD COLUMN soft_max REAL;
+  `,
+
+  /**
+   * v7：MCP Bridge 工作区注册表（PR-A，B01-B04）。
+   *  - plugin_id 主键：重复 import plugin 复用同一行（ensureWorkspace 幂等，B02）；
+   *  - 两个 session 列：Chat 会话与 Model Control 会话分离（裁决书 §一）；
+   *    create() 时以空串占位（NOT NULL 可满足），ensureSession 后 UPDATE 回填；
+   *  - bridge_actions 动作持久化表留 PR-C 随队列语义一起建。
+   */
+  7: `
+    CREATE TABLE IF NOT EXISTS bridge_workspaces (
+      plugin_id          TEXT PRIMARY KEY,
+      workspace_id       TEXT NOT NULL,
+      chat_session_id    TEXT NOT NULL DEFAULT '',
+      control_session_id TEXT NOT NULL DEFAULT '',
+      created_at         INTEGER NOT NULL
+    );
   `,
 };

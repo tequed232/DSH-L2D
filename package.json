@@ -19,6 +19,7 @@
     "test:db": "node --experimental-sqlite packages/dsh-l2d-db/test/db.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/model-adapter.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/actions-repo.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/action-cache.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/task-contract.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/capability-registry.test.mjs && node --experimental-sqlite packages/dsh-l2d-db/test/ingestion-pipeline.test.mjs && node --experimental-sqlite packages/dsh-l2d-mcp/src/toolchain-status.test.mjs && node --experimental-sqlite tools/motion-gif/analyze.test.mjs",
     "accept": "node tools/acceptance/run.mjs",
     "test:breakpoint": "node --experimental-sqlite --experimental-strip-types tests/breakpoint-lab/run.mjs",
+    "test:bridge": "node --experimental-sqlite packages/mcp-bridge/tests/workspace.test.mjs",
     "bench:action-cache": "node --experimental-sqlite tests/breakpoint-lab/bench.mjs",
     "test:contract": "node tools/renderer-contract/check.mjs",
     "scan:capability": "node tools/capability-scan/scan.mjs"
