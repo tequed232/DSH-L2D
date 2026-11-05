@@ -1,0 +1,25 @@
+{
+  "comment": "breakpoint-lab fixtures：2 个模型绑定 + 3 条动作链 + 1 条参数范围。packageHash 为测试专用固定值（sha256 前缀 + 64 位十六进制）。",
+  "models": [
+    {
+      "modelId": "bp-model-a",
+      "title": "breakpoint-lab model A",
+      "sourcePath": "fixtures/model-a.model3.json",
+      "packageHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "modelId": "bp-model-b",
+      "title": "breakpoint-lab model B",
+      "sourcePath": "fixtures/model-b.model3.json",
+      "packageHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "motions": [
+    { "semanticKey": "bp.tail_sway_a", "bindModel": "bp-model-a" },
+    { "semanticKey": "bp.tail_sway_b", "bindModel": "bp-model-b" },
+    { "semanticKey": "bp.free_float", "bindModel": null }
+  ],
+  "parameters": [
+    { "modelId": "bp-model-a", "paramId": "Param_Angle_Rotation84", "min": -10, "max": 10 }
+  ]
+}
