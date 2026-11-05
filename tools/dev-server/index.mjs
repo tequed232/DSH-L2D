@@ -22,7 +22,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
 
 const PORT = Number(argOf('--port') || process.env.PORT || 5300);
-const HOST = '127.0.0.1';
+// 默认仅回环；公网/局域网部署用 DSH_HOST=0.0.0.0 显式放开
+const HOST = process.env.DSH_HOST || '127.0.0.1';
 
 const MODEL_DIR =
   process.env.DSH_L2D_MODEL_DIR || path.join(ROOT, 'DeepSeek免费公皮', 'DeepSeek');
