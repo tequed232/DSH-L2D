@@ -25,7 +25,7 @@
  *  - 迁移只追加不改写；schema_migrations 记录版本与耗时。
  */
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 /** v1 全量 DDL。单条 exec 执行，语句间以分号分隔。 */
 export const MIGRATIONS = {
@@ -570,5 +570,34 @@ export const MIGRATIONS = {
       control_session_id TEXT NOT NULL DEFAULT '',
       created_at         INTEGER NOT NULL
     );
+  `,
+
+  /**
+   * v8：MCP Bridge 动作持久化（PR-C，B10-B18，照裁决书 §十原样）。
+   *  - request_id 主键：Agent 重试同 requestId 直接复用既有行（B15 幂等）；
+   *  - state 状态机：queued → running → completed/failed/cancelled；重启恢复写
+   *    interrupted（B17，不重放）；
+   *  - execution_id：Runtime 侧执行标识（callId），排查用，可为 NULL；
+   *  - idx_bridge_actions_queue：findUnfinished（queued|running）与按时间排队扫描。
+   */
+  8: `
+    CREATE TABLE IF NOT EXISTS bridge_actions (
+      request_id         TEXT PRIMARY KEY,
+      workspace_id       TEXT NOT NULL,
+      control_session_id TEXT NOT NULL DEFAULT '',
+      action             TEXT NOT NULL,
+      args_json          TEXT NOT NULL DEFAULT '{}',
+      state              TEXT NOT NULL DEFAULT 'queued'
+                         CHECK (state IN ('queued','running','completed','failed','cancelled','interrupted')),
+      execution_id       TEXT,
+      created_at         INTEGER NOT NULL,
+      started_at         INTEGER,
+      completed_at       INTEGER,
+      memory_revision    INTEGER NOT NULL DEFAULT 0,
+      error              TEXT,
+      result_json        TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_bridge_actions_queue
+      ON bridge_actions (state, created_at);
   `,
 };

@@ -10,10 +10,17 @@ export {
   createAnalysisJob, finishAnalysisJob, saveCapabilityProfile, addValidationFinding,
 } from './repo.mjs';
 
-// ---- MCP Bridge（PR-A：工作区注册表）----
+// ---- MCP Bridge（PR-A：工作区注册表；PR-C：动作持久化）----
 export {
-  BRIDGE_SESSION_KEYS, upsertBridgeWorkspace, findBridgeWorkspace, updateBridgeWorkspaceSession,
+  BRIDGE_SESSION_KEYS, upsertBridgeWorkspace, findBridgeWorkspace, findBridgeWorkspaceByWorkspaceId,
+  updateBridgeWorkspaceSession,
 } from './bridge-repo.mjs';
+export {
+  insertRequest as insertBridgeAction, markRunning as markBridgeActionRunning,
+  markTerminal as markBridgeActionTerminal, findById as findBridgeActionById,
+  findUnfinished as findUnfinishedBridgeActions, markInterruptedAll as markInterruptedAllBridgeActions,
+  BRIDGE_ACTION_TERMINAL_STATES,
+} from './bridge-actions-repo.mjs';
 
 // ---- Phase 2 Foundation（P0-A~P0-D）----
 export {

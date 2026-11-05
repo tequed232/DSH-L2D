@@ -33,7 +33,7 @@ function test(name, fn) {
 test('migrations are idempotent across reopen', () => {
   const again = openDb({ path: dbFile });
   const rows = again.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get();
-  assert.equal(rows.n, 7); // v1 bootstrap+模型智能域 / v2 图库 / v3 动作知识域 / v4 Foundation 缺项 / v5 参数范围证据 / v6 双层边界 / v7 bridge_workspaces（MCP Bridge PR-A）
+  assert.equal(rows.n, 8); // v1 bootstrap+模型智能域 / v2 图库 / v3 动作知识域 / v4 Foundation 缺项 / v5 参数范围证据 / v6 双层边界 / v7 bridge_workspaces（MCP Bridge PR-A） / v8 bridge_actions（MCP Bridge PR-C）
   const tables = again.prepare(
     "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('skills','workspaces','toolchain_components','startup_checks','tasks','models','nodes','edges','parameters','parameter_bindings','semantic_labels','motions','physics_groups','analysis_jobs','probe_runs','capability_profiles','validation_findings','gallery_items','gallery_labels','prompt_templates','motion_assets','motion_analysis','motion_definitions','action_chains','action_steps','motion_sources','model_capabilities','motion_model_bindings','execution_history','learning_jobs')",
   ).get();

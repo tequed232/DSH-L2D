@@ -383,6 +383,13 @@ const server = http.createServer((req, res) => {
     return send(res, 200, MIME['.json'], body);
   }
 
+  // 桥动作队列状态（宿主经 globalThis.__DSH_ACTION_QUEUE__ 挂载 getState；未挂载如实上报 enabled:false）
+  if (urlPath === '/action/queue') {
+    const q = globalThis.__DSH_ACTION_QUEUE__;
+    const state = q && typeof q.getState === 'function' ? { enabled: true, ...q.getState() } : { enabled: false };
+    return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(state), 'utf8'));
+  }
+
   send(res, 404, 'text/plain; charset=utf-8', Buffer.from('404 ' + urlPath));
 });
 
