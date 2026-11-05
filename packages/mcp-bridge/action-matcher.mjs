@@ -183,13 +183,15 @@ export async function matchIntent(intent, candidates, options = {}) {
       parts: top.parts,
       llmCalls: 0, // 命中已有链：LLM 调用数=0（负面测试一）
     };
-    // GALLERY-BRIDGE §4.2：命中时自动附情绪 top-1 图（仅 score>60；无高分图不附，不空凑）。
+    // GALLERY-BRIDGE §4.2（22:30 裁定修订）：命中时取该情绪 score 排序 top-1，
+    // 附图底线 score ≥ 30（top-N 相对排序，绝对阈值 60 废弃——实测分布 [0,51.4]
+    // 结构性偏低，top-N 自适应分布漂移）。无 ≥30 的图不附，不空凑。
     // gallery 经注入（读文件/护栏在 gallery-source），未注入不附，行为与 P12 完全一致。
     const gallery = options.gallery;
     if (gallery && typeof gallery.top === 'function' && intent.emotion) {
       try {
         const [row] = await gallery.top(intent.emotion, 1);
-        if (row && Number(row.score) > 60) {
+        if (row && Number(row.score) >= 30) {
           result.attachment = {
             itemId: row.itemId,
             score: row.score,
