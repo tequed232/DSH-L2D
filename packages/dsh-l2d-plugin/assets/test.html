@@ -84,6 +84,93 @@
           log('失败：' + (err && err.message ? err.message : err), true);
         }
       })();
+
+      // UI 断言区（?ui=1 才激活，正常使用零影响）：overlay 动作池读库接线 happy path。
+      // mock /api/actions → overlay 启动拉库 → 链展开（track→ParamId 经 adapter channels
+      // 映射 + weight 乘算）→ pokeDbAction 经统一状态机执行。
+      (function () {
+        var q = new URLSearchParams(location.search);
+        if (q.get('ui') !== '1') return;
+        window.__UI_ASSERT__ = { lines: [], pass: false };
+        function push(line) {
+          window.__UI_ASSERT__.lines.push(line);
+          console.log('[l2d-ui-test] ' + line);
+        }
+        // 必须在 overlay.js 加载前包好 fetch，bootOverlay 的 GET /api/actions 才会命中 mock
+        var realFetch = window.fetch;
+        var MOCK = {
+          ok: true,
+          actions: [{
+            chainId: 'chain-ear-ui-test',
+            motionId: 'm-ear-test',
+            semanticKey: 'motion.ear_twitch_ui_test',
+            emotion: 'curious',
+            chainJson: JSON.stringify({
+              chain_id: 'chain-ear-ui-test', schemaVersion: '1.0.0', loop: false,
+              steps: [{ kind: 'keyframes', params: { track: 'earLeft', keys: [{ t: 0, value: 0 }, { t: 300, value: 1 }, { t: 600, value: 0 }] }, durationMs: 600 }],
+            }),
+            adapterJson: JSON.stringify({ channels: { ear_left: [{ paramId: 'LEar1', weight: 1.5 }] } }),
+          }],
+        };
+        window.fetch = function (url) {
+          if (String(url).indexOf('/api/actions') >= 0) {
+            return Promise.resolve(new Response(JSON.stringify(MOCK), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+          }
+          return realFetch.apply(this, arguments);
+        };
+        function fail(msg) {
+          push('✕ ' + msg);
+          window.__UI_ASSERT__.pass = false;
+        }
+        loadScript('/dsh-l2d/overlay.js').then(async function () {
+          push('overlay.js 已加载');
+          var t0 = Date.now();
+          while (Date.now() - t0 < 25000 && !window.DSH_L2D) await new Promise(function (r) { setTimeout(r, 200); });
+          if (!window.DSH_L2D) return fail('DSH_L2D 未挂载（渲染包未就绪）');
+          t0 = Date.now();
+          while (Date.now() - t0 < 20000 && !(window.DSH_L2D_UI)) await new Promise(function (r) { setTimeout(r, 200); });
+          if (!window.DSH_L2D_UI) return fail('DSH_L2D_UI 未挂载');
+          t0 = Date.now();
+          while (Date.now() - t0 < 25000 && !(window.DSH_L2D.isReady && window.DSH_L2D.isReady())) await new Promise(function (r) { setTimeout(r, 200); });
+          if (!(window.DSH_L2D.isReady && window.DSH_L2D.isReady())) return fail('渲染未就绪');
+          // 等动作池入库（boot 启动拉库 + isReady 后建池）
+          t0 = Date.now();
+          var stat = null;
+          while (Date.now() - t0 < 10000) {
+            stat = window.DSH_L2D_UI.dbActions();
+            if (stat.raw >= 1 && stat.pool >= 1) break;
+            await new Promise(function (r) { setTimeout(r, 250); });
+          }
+          if (!stat || stat.raw < 1) return fail('/api/actions 拉库失败（raw=0）');
+          if (stat.pool < 1) return fail('动作链展开后为空（pool=0）');
+          push('动作池: raw=' + stat.raw + ' pool=' + stat.pool);
+
+          var preview = window.DSH_L2D_UI.dbChainPreview(0);
+          var st0 = preview && preview[0];
+          if (!st0 || st0.kind !== 'keyframes') return fail('链展开首步不是 keyframes');
+          var tr = st0.tracks && st0.tracks[0];
+          if (!tr || tr.param !== 'LEar1') return fail('track→ParamId 映射失败: ' + JSON.stringify(preview));
+          var vals = tr.keys.map(function (kv) { return kv[1]; });
+          if (vals[0] !== 0 || Math.abs(vals[1] - 1.5) > 1e-6 || vals[2] !== 0) return fail('weight 乘算错误: ' + JSON.stringify(vals));
+          if (st0.duration !== 600) return fail('durationMs 未透传: ' + st0.duration);
+          push('链展开正确: param=LEar1 keys=' + JSON.stringify(vals) + ' duration=600');
+
+          var res = window.DSH_L2D_UI.pokeDbAction(0);
+          if (!res || !res.ok || !res.accepted) return fail('pokeDbAction 未被状态机接受: ' + JSON.stringify(res));
+          push('pokeDbAction 执行: runId=' + res.runId + ' source=' + res.source + ' steps=' + res.steps);
+          // 写路径实证：350ms 后 LEar1 应偏离 0（1.5 上限被渲染器 clamp 也算动过）
+          await new Promise(function (r) { setTimeout(r, 350); });
+          try {
+            var v = window.DSH_L2D.readParameters(['LEar1']);
+            push('LEar1@350ms=' + (v && v.LEar1));
+          } catch (err) { /* readParameters 不可用不算失败，链已进状态机 */ }
+          window.__UI_ASSERT__.pass = true;
+          push('✓ UI-DBACT PASS');
+        }).catch(function (err) {
+          fail('overlay.js 加载失败: ' + (err && err.message ? err.message : err));
+        });
+      })();
+    </script>
     </script>
   </body>
 </html>

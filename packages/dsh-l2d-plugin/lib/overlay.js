@@ -1183,6 +1183,29 @@
       focus: function () { if (panelOpen) focusPanelWindow(); },
       isOpen: function () { return panelOpen; },
     },
+    // 动作池读库（UI-FLOAT ⑤）调试/自动化钩子：不进 AI 工具白名单
+    pokeRandom: pokeRandom,
+    dbActions: function () {
+      if (dbActionRaw.length && !dbActionPoolBuilt) buildDbPool();
+      return { raw: dbActionRaw.length, pool: dbActionPool.length };
+    },
+    dbChainPreview: function (index) {
+      if (dbActionRaw.length && !dbActionPoolBuilt) buildDbPool();
+      var item = dbActionPool[Number(index) || 0];
+      return item ? JSON.parse(JSON.stringify(item.chain)) : null;
+    },
+    pokeDbAction: function (index) {
+      if (dbActionRaw.length && !dbActionPoolBuilt) buildDbPool();
+      var item = dbActionPool[Number(index) || 0];
+      if (!item) return { ok: false, accepted: false, reason: 'no-db-chain' };
+      return executePokeAction({
+        priority: 'FORCE',
+        source: 'poke-db',
+        callId: item.chainId,
+        silent: true,
+        chain: item.chain,
+      });
+    },
     actState: function () {
       var L = window.DSH_L2D;
       return L && L.currentAct ? L.currentAct() : null;
@@ -2006,9 +2029,11 @@
     var cap = pokeCapabilities();
     var expressions = cap.expressions;
     var motions = cap.motions.filter(function (name) { return name.endsWith('打开'); });
+    if (dbActionRaw.length && !dbActionPoolBuilt) buildDbPool();
     var roll = Math.random();
 
     try {
+      // 概率分段：表情 0-0.36 / 动作 0.36-0.76 / DB 动作链 0.76-0.92 / 姿势兑底
       if (roll < 0.36 && expressions.length) {
         var expression = randomOf(expressions);
         executePokeAction({
@@ -2039,6 +2064,19 @@
         return;
       }
 
+      if (roll < 0.92 && dbActionPool.length) {
+        // UI-FLOAT ⑤：SQLite 动作链入池，经 executePokeAction 走统一状态机
+        var dbItem = randomOf(dbActionPool);
+        executePokeAction({
+          priority: 'FORCE',
+          source: 'poke-db',
+          callId: dbItem.chainId,
+          bubble: '看这个~',
+          chain: dbItem.chain,
+        });
+        return;
+      }
+
       var poses = ['finger', 'grass', 'chest'];
       var poseName = randomOf(poses);
       var pose = poseName === 'chest'
@@ -2054,6 +2092,131 @@
       console.warn('[dsh-l2d] random poke failed', err);
       say('今天不太想动…', 2200);
     }
+  }
+
+  // ------------------------------------------------ 动作池读库接线（UI-FLOAT ⑤）
+  // 启动时经 GET /api/actions 拉取动作链（validated+compatible 由服务端过滤），
+  // 失败静默降级（现有随机池照常）。链展开与参数白名单防线保持在此（写路径上游），
+  // executePokeAction 的状态机语义不动。
+  var dbActionRaw = [];     // /api/actions 原始行
+  var dbActionPool = [];    // 展开并校验后的可执行链
+  var dbActionPoolBuilt = false;
+  var dbAllowedParams = {}; // 从 DB adapter 动态放行的 ParamId（不硬编码）
+
+  function dbParamAllowed(id) {
+    return SAFE_MOTION_PARAM.test(id) || dbAllowedParams[id] === true;
+  }
+
+  function parseMaybeJson(v) {
+    if (v && typeof v === 'object') return v;
+    if (typeof v !== 'string' || !v) return null;
+    try { return JSON.parse(v); } catch (err) { return null; }
+  }
+
+  function dbChannelKeys(name) {
+    // chainJson 的 track 名是 camelCase（earLeft），adapter channels 是 snake_case（ear_left）
+    var k = String(name || '');
+    return [k, k.replace(/([A-Z])/g, '_$1').toLowerCase()];
+  }
+
+  function expandDbChain(rawChain, adapter, capIds) {
+    var steps = rawChain && Array.isArray(rawChain.steps) ? rawChain.steps : [];
+    var channels = (adapter && adapter.channels) || {};
+    var out = [];
+    for (var i = 0; i < steps.length; i++) {
+      var step = steps[i];
+      if (!step || !step.kind) continue;
+      if (step.kind === 'expression') {
+        var name = step.name || step.expression;
+        if (name) out.push({ kind: 'expression', name: String(name) });
+        continue;
+      }
+      if (step.kind !== 'keyframes') continue;
+      var params = step.params || step.track || null;
+      if (!params || !params.track || !Array.isArray(params.keys)) continue;
+      var keys0 = dbChannelKeys(params.track);
+      var mapped = [];
+      for (var c = 0; c < keys0.length && !mapped.length; c++) mapped = channels[keys0[c]] || [];
+      var sw = Number(step.weight == null ? 1 : step.weight) || 1;
+      var tracks = [];
+      for (var j = 0; j < mapped.length; j++) {
+        var ch = mapped[j];
+        if (!ch || !ch.paramId) continue;
+        // 防线（写路径上游）：白名单（SAFE_MOTION_PARAM ∪ DB adapter 动态登记）+ 模型实有参数
+        if (!dbParamAllowed(ch.paramId)) continue;
+        if (capIds && !capIds[ch.paramId]) continue;
+        var cw = Number(ch.weight == null ? 1 : ch.weight) || 1;
+        var w = sw * cw;
+        var keys = [];
+        for (var k = 0; k < params.keys.length; k++) {
+          var p = params.keys[k];
+          keys.push([Number(p.t) || 0, (Number(p.value) || 0) * w]);
+        }
+        tracks.push({ param: String(ch.paramId), keys: keys });
+      }
+      if (!tracks.length) continue;
+      out.push({ kind: 'keyframes', duration: Number(step.durationMs) || undefined, tracks: tracks });
+    }
+    return out;
+  }
+
+  function buildDbPool() {
+    var L = window.DSH_L2D;
+    var cap = L && L.getCapabilities ? L.getCapabilities() : null;
+    var capParams = (cap && cap.params) || [];
+    if (!capParams.length) {
+      // 能力清单未就绪：不锁空池，等下次触发（pokeRandom/dbActions）再建
+      dbActionPoolBuilt = false;
+      return;
+    }
+    var capIds = {};
+    for (var i = 0; i < capParams.length; i++) {
+      if (capParams[i] && capParams[i].id) capIds[capParams[i].id] = true;
+    }
+    // 第一遍：收集所有 adapter 登记的 paramId，动态扩白名单
+    for (var r = 0; r < dbActionRaw.length; r++) {
+      var adapter0 = parseMaybeJson(dbActionRaw[r] && dbActionRaw[r].adapterJson);
+      var chans = (adapter0 && adapter0.channels) || {};
+      var ks = Object.keys(chans);
+      for (var m = 0; m < ks.length; m++) {
+        var entries = chans[ks[m]] || [];
+        for (var n = 0; n < entries.length; n++) {
+          if (entries[n] && entries[n].paramId) dbAllowedParams[String(entries[n].paramId)] = true;
+        }
+      }
+    }
+    // 第二遍：展开 + 校验
+    var pool = [];
+    for (var a = 0; a < dbActionRaw.length; a++) {
+      var rowA = dbActionRaw[a];
+      try {
+        var raw = parseMaybeJson(rowA && rowA.chainJson);
+        var adapter = parseMaybeJson(rowA && rowA.adapterJson);
+        var chain = expandDbChain(raw, adapter, capIds);
+        if (chain.length) {
+          pool.push({
+            chainId: String(rowA.chainId || rowA.semanticKey || ('db-' + a)),
+            semanticKey: String(rowA.semanticKey || ''),
+            emotion: String(rowA.emotion || ''),
+            chain: chain,
+          });
+        }
+      } catch (err) { /* 单链解析失败不影响其它 */ }
+    }
+    dbActionPool = pool;
+    dbActionPoolBuilt = true;
+  }
+
+  function loadDbActions() {
+    fetch('/api/actions', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || data.ok !== true || !Array.isArray(data.actions)) return;
+        dbActionRaw = data.actions;
+        dbActionPoolBuilt = false;
+        if (window.DSH_L2D && window.DSH_L2D.isReady && window.DSH_L2D.isReady()) buildDbPool();
+      })
+      .catch(function () { /* 静默降级：现有随机池照常 */ });
   }
 
   function pokeByApi(silent) {
@@ -3066,6 +3229,7 @@
   function bootOverlay() {
     try {
       ensureMounted();
+      loadDbActions(); // UI-FLOAT ⑤：动作池读库（失败静默降级）
     } catch (err) {
       try {
         fetch('/dsh-l2d/reverse/event', {
