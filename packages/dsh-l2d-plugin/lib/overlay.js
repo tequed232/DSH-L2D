@@ -383,8 +383,13 @@
     if (!bodyEl || bodyEl.querySelector('.l2d-placeholder')) return;
     var ph = document.createElement('div');
     ph.className = 'l2d-placeholder';
+    // 用户反馈：渲染失败时右下角的占位色块被当成「调试窗口」。这里明示用途，
+    // 悬停有 tooltip，出现时气泡说明一次（say 内部有节流，不刷屏）。
+    ph.title = '立绘渲染占位：模型/静态图未加载成功时显示（重启宿主可重试）';
+    ph.setAttribute('aria-hidden', 'true');
     if (imgEl) imgEl.style.display = 'none';
     bodyEl.appendChild(ph);
+    say('立绘没加载出来，先用占位图形顶着（重启宿主可重试）', 4200);
   }
 
   // 角色左上角：pos 是逻辑目标（拖拽/持久化），spring 是渲染位置。
