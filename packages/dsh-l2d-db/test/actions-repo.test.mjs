@@ -43,6 +43,13 @@ ok('createActionChain 创建 validated 动作并落链', () => {
   assert.equal(c.steps[0].kind, 'pose');
 });
 
+ok('Actions Lib：缺失或非法 durationMs 必须拒绝', () => {
+  const missingDuration = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'pose', params: {} }] };
+  assert.throws(() => repo.createActionChain({ semanticKey: 'test.no_duration', description: '缺时长', chain: missingDuration, provenance }), /durationMs/);
+  const invalidDuration = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'pose', params: {}, durationMs: 30001 }] };
+  assert.throws(() => repo.createActionChain({ semanticKey: 'test.bad_duration', description: '非法时长', chain: invalidDuration, provenance }), /durationMs/);
+});
+
 ok('R9 同键同内容 → 幂等 duplicate', () => {
   const r = repo.createActionChain({ semanticKey: 'test.wave', description: '挥手', chain: chainV1, provenance });
   assert.equal(r.status, 'duplicate');
