@@ -42,7 +42,10 @@ const instructions = [
   'Prioritize direct user interaction over background reactions.', ''
 ].join('\n');
 
-const NOTIFY_MIN_INTERVAL_MS = 30000;
+// 冷却降频（PR #27 daad87c 收敛）：反应延迟 30s→3s、轮询 4s→1.5s、轮询下限 1.5s→0.5s。
+// 与 QUEUE-SERIAL 的关系：冷却只降「发起频率」不丢请求——动作经 l2d_choreograph FIFO
+// 队列串行执行，不因冷却丢弃（原实现是拦截，现降级为节流）。
+const NOTIFY_MIN_INTERVAL_MS = 3000;
 const ACTION_STATES = new Set(['FORCE', 'NORMAL']);
 
 function readJson(file) {
@@ -240,7 +243,7 @@ export function hasPendingAction(snapshot) {
  * @param {number} [options.intervalMs]
  * @param {number} [options.notifyMinIntervalMs]
  */
-export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir(), '.dsh'), getSnapshot, getPersona, getWorkspaceSnapshot, intervalMs = 4000, notifyMinIntervalMs = NOTIFY_MIN_INTERVAL_MS }) {
+export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir(), '.dsh'), getSnapshot, getPersona, getWorkspaceSnapshot, intervalMs = 1500, notifyMinIntervalMs = NOTIFY_MIN_INTERVAL_MS }) {
   const directory = path.join(homeDir, 'workspaces', 'live2d-agent');
   const manifestPath = path.join(homeDir, 'l2d-workspace-agent.json');
   let workspace = null;
@@ -408,7 +411,7 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
 
   function start() {
     if (timer || typeof getSnapshot !== 'function') return;
-    timer = setInterval(() => { void refresh().catch(() => {}); }, Math.max(1500, intervalMs));
+    timer = setInterval(() => { void refresh().catch(() => {}); }, Math.max(500, intervalMs));
     timer.unref?.();
   }
 
