@@ -194,7 +194,12 @@ export function createActionsRepository(db, { snapshotDir } = {}) {
     const { semanticKey, description, chain, provenance, sourceId = null, modelCapabilityId = null, actor = 'pipeline' } = input;
     if (!SEMANTIC_KEY_RE.test(semanticKey ?? '')) throw new Error(`createActionChain: semantic_key 非法：${semanticKey}`);
     if (!chain || !Array.isArray(chain.steps) || chain.steps.length === 0) throw new Error('createActionChain: chain.steps 必须非空');
-    for (const s of chain.steps) if (!ACTION_STEP_KINDS.includes(s.kind)) throw new Error(`createActionChain: 非法 step kind ${s.kind}`);
+    for (const [index, s] of chain.steps.entries()) {
+      if (!ACTION_STEP_KINDS.includes(s.kind)) throw new Error(`createActionChain: 非法 step kind ${s.kind}`);
+      if (!Number.isInteger(s.durationMs) || s.durationMs < 0 || s.durationMs > 30000) {
+        throw new Error(`createActionChain: steps[${index}].durationMs 必须是 0~30000 的整数毫秒`);
+      }
+    }
     const chainHash = canonicalChainHash(chain);
     return withTransaction(db, () => {
       const decision = resolveSemanticKey(db, semanticKey, chainHash);
