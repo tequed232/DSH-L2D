@@ -100,3 +100,5 @@ pnpm run dev:server
 ## 五、本次不含（在途队列）
 
 CHAT-DECOUPLE S1/S2/S4、BRIDGE-MOUNT 三会话升级、CD-BUSY-GATE、BOOTSTRAP（v10 情绪表冻结待 v11）、Supervisor P3+、DEP-MGR Phase 2（GitHub 通道）、PR-D。
+
+> **后记（22:55）**：CODE-FIX-2 已完成（commit `c04a812`，基于本 tag），上节已知问题 #6 中的 11 条缺陷（中 4 低 7）全部修复并附回归测试；bridge 40 / supervisor 34 / db 72 例复跑全绿。修复随 `feat/model-registry` 分支滚动，tag 保持不动。
