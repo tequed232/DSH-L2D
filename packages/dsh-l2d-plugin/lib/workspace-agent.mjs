@@ -34,7 +34,7 @@ const instructions = [
   'Observe other DSH workspaces read-only. Never inspect their files or transcripts.',
   'Never prompt, steer, stop, archive, or modify another Session.',
   'Use the per-agent MCP tools by their registered names: mcp__dsh_l2d__l2d_choreograph, mcp__dsh_l2d__l2d_emote, mcp__dsh_l2d__l2d_act, mcp__dsh_l2d__l2d_say, mcp__dsh_l2d__l2d_gaze, mcp__dsh_l2d__l2d_get_state, mcp__dsh_l2d__l2d_reset, mcp__dsh_l2d__l2d_persona, mcp__dsh_l2d__l2d_workspace_status.',
-  'Prefer l2d_choreograph: presetState for simple state reactions, segments for richer multi-stage performances. Max 15 segments, max 8 steps per segment.',
+  'Prefer l2d_choreograph: presetState for simple state reactions, segments for richer multi-stage performances. Max 15 segments, max 8 steps per segment. Compatible adjacent segments are batched by the host to reduce MCP round-trips.',
   'Treat MCP receipts as authoritative. accepted only means the slot was taken; action-done events are the real progress.',
   'Receipt semantics: conflict / priority-blocked wait at the queue head with bounded retries; accepted-but-pending must never be resubmitted (it would duplicate a running motion); interrupted / timeout keep the remaining queue and report the position.',
   'React subtly to thinking/working, acknowledge attention, show restrained concern for error, and settle to idle.',

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { executeActionSequence, validateActionSequence, MAX_SEGMENTS } from './action-sequence.mjs';
+import { executeActionSequence, validateActionSequence, coalesceActionSegments, MAX_SEGMENTS } from './action-sequence.mjs';
 
 const plan = { segments: [
  { priority: 'NORMAL', chain: [{ kind: 'look', x: 0, y: 0 }, { kind: 'expression', name: '兔牙', delayMs: 100 }] },
@@ -13,10 +13,10 @@ assert.equal(validateActionSequence({ segments: [{ chain: Array.from({length:9},
 
 let count = 0;
 const done = await executeActionSequence(plan, async () => { count++; return { accepted:true, outcome:'completed', settled:true }; });
-assert.equal(done.ok, true); assert.equal(count, 2);
+assert.equal(done.ok, true); assert.equal(count, 1);
 count = 0;
 const interrupted = await executeActionSequence(plan, async () => { count++; return { accepted:true, outcome:'interrupted', reason:'interrupted' }; });
-assert.equal(interrupted.replanRequired, true); assert.equal(interrupted.remainingSegments, 1); assert.equal(count, 1);
+assert.equal(interrupted.replanRequired, true); assert.equal(interrupted.remainingSegments, 2); assert.equal(count, 1);
 
 // FIFO regression: 15 distinct actions must all run in order, even when admission
 // temporarily rejects the head item while a higher-priority run is still active.
@@ -30,7 +30,7 @@ let completed = [];
 const queued = await executeActionSequence(fifteen, async ({ chain }) => {
   submitted += 1;
   if (submitted === 1 || submitted === 2) return { accepted: false, outcome: 'rejected', reason: 'priority-blocked' };
-  completed.push(chain[0].x);
+  completed.push(...chain.map((step) => step.x));
   return { accepted: true, outcome: 'completed', settled: true };
 }, { maxQueueWaitMs: 1000, retryDelayMs: 0, sleep: async () => {} });
 assert.equal(queued.ok, true);
@@ -38,6 +38,15 @@ assert.equal(queued.completedSegments, 15);
 assert.equal(completed.length, 15);
 assert.deepEqual(completed, fifteen.segments.map((s) => s.chain[0].x));
 assert.equal(queued.receipts[0].attempts, 3);
+assert.equal(queued.receipts.length, 2, '15 steps should be packed into two renderer calls');
+assert.deepEqual(queued.receipts.map((r) => r.sourceSegments.length), [8, 7]);
+
+// Batch packing must not combine steps beyond the renderer's 10s life budget.
+const slowSegments = [0, 1].map(() => ({
+  priority: 'NORMAL',
+  chain: [{ kind: 'look', x: 0, y: 0, delayMs: 5000 }],
+}));
+assert.deepEqual(coalesceActionSegments(slowSegments).map((batch) => batch.chain.length), [1, 1]);
 
 // A still-running accepted action must not be submitted twice.
 let pendingCalls = 0;
@@ -47,7 +56,7 @@ const pending = await executeActionSequence(plan, async () => {
 });
 assert.equal(pending.reason, 'pending');
 assert.equal(pendingCalls, 1);
-assert.equal(pending.remainingSegments, 1);
+assert.equal(pending.remainingSegments, 2);
 
 // A permanent admission rejection expires with an explicit queue timeout.
 const expired = await executeActionSequence(plan, async () => ({
