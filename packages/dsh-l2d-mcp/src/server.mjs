@@ -15,6 +15,7 @@ import { actSettled, mergeActEvents, shapeActReceipt } from './act-result.mjs';
 import { executeActionSequence, validateActionSequence } from './action-sequence.mjs';
 import { CHOREOGRAPHY } from '../../dsh-l2d-plugin/lib/choreography.mjs';
 import { findReservedParams, validateActChain, validateExpressionName, validateMotionGroup } from './validate.mjs';
+import { readToolchainStatus } from './toolchain-status.mjs';
 
 let cachedBase = '';
 
@@ -453,6 +454,19 @@ server.registerTool(
       cachedBase = '';
       return toolResult({ ok: false, reason: 'unreachable' });
     }
+  },
+);
+
+server.registerTool(
+  'l2d_toolchain_status',
+  {
+    description:
+      '只读。查询 MOC3 解析工具链与运行时依赖的注册状态（python / py-moc3 / Rust 候选等），含版本、来源、提交锚点与最近一次 smoke 测试明细。数据来自统一 SQLite 注册表（data/bootstrap-state.sqlite），读不到库时如实报错，不编造状态。',
+    inputSchema: {},
+  },
+  async () => {
+    const status = readToolchainStatus({});
+    return toolResult(status);
   },
 );
 
