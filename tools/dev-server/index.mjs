@@ -157,6 +157,39 @@ const server = http.createServer((req, res) => {
     return send(res, 200, MIME['.html'], buf);
   }
 
+  // Companion Workspace（stage-web 构建产物，UIUX 改造后入口）
+  if (urlPath === '/workspace' || urlPath === '/workspace.html') {
+    const buf = readIfExists(
+      path.join(HERE, '..', '..', 'apps', 'stage-web', 'dist', 'index.html'),
+    );
+    if (!buf) {
+      return send(
+        res,
+        404,
+        'text/plain; charset=utf-8',
+        Buffer.from('workspace 未构建：pnpm -F @dsh/stage-web build'),
+      );
+    }
+    // dist 内资源引用是根绝对路径 /assets/...，改写到 /workspace-assets/ 下
+    return send(
+      res,
+      200,
+      MIME['.html'],
+      Buffer.from(buf.toString('utf8').replaceAll('/assets/', '/workspace-assets/')),
+    );
+  }
+  if (urlPath.startsWith('/workspace-assets/')) {
+    const full = resolveInside(
+      path.join(HERE, '..', '..', 'apps', 'stage-web', 'dist', 'assets'),
+      urlPath.slice('/workspace-assets/'.length),
+    );
+    if (!full) return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad path'));
+    const buf = readIfExists(full);
+    if (!buf) return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('not found'));
+    const ext = path.extname(full).toLowerCase();
+    return send(res, 200, MIME[ext] || 'application/octet-stream', buf);
+  }
+
   // Cubism Core
   if (urlPath === '/core.js') {
     const buf = readIfExists(CORE_FILE);
@@ -318,6 +351,13 @@ const server = http.createServer((req, res) => {
   if (urlPath === '/ui-tokens.css') {
     const buf = readIfExists(path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'assets', 'ui-tokens.css'));
     if (!buf) return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('ui-tokens.css missing'));
+    return send(res, 200, MIME['.css'], buf);
+  }
+
+  // 悬浮层结构样式。/dsh-l2d/overlay.css 同样会走到这里（上面已剥前缀）。
+  if (urlPath === '/overlay.css') {
+    const buf = readIfExists(path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'assets', 'overlay.css'));
+    if (!buf) return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('overlay.css missing'));
     return send(res, 200, MIME['.css'], buf);
   }
 
