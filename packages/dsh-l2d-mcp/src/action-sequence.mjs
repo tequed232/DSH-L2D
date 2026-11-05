@@ -43,8 +43,10 @@ export function coalesceActionSegments(segments) {
     const priority = segment.priority || 'NORMAL';
     const bubble = segment.bubble || undefined;
     let batch = batches[batches.length - 1];
+    const combinedChain = batch ? [...batch.chain, ...segment.chain] : segment.chain;
     if (!batch || batch.priority !== priority || batch.bubble !== bubble ||
-        batch.chain.length + segment.chain.length > MAX_STEPS_PER_SEGMENT) {
+        combinedChain.length > MAX_STEPS_PER_SEGMENT ||
+        estimateLifeMs(combinedChain) > DEFAULT_GATE.maxLifeMs) {
       batch = { priority, ...(bubble ? { bubble } : {}), chain: [], sourceSegments: [] };
       batches.push(batch);
     }
