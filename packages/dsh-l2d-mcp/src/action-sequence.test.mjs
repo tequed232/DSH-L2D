@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { executeActionSequence, validateActionSequence, MAX_SEGMENTS } from './action-sequence.mjs';
+import { executeActionSequence, validateActionSequence, coalesceActionSegments, MAX_SEGMENTS } from './action-sequence.mjs';
 
 const plan = { segments: [
  { priority: 'NORMAL', chain: [{ kind: 'look', x: 0, y: 0 }, { kind: 'expression', name: '兔牙', delayMs: 100 }] },
@@ -40,6 +40,13 @@ assert.deepEqual(completed, fifteen.segments.map((s) => s.chain[0].x));
 assert.equal(queued.receipts[0].attempts, 3);
 assert.equal(queued.receipts.length, 2, '15 steps should be packed into two renderer calls');
 assert.deepEqual(queued.receipts.map((r) => r.sourceSegments.length), [8, 7]);
+
+// Batch packing must not combine steps beyond the renderer's 10s life budget.
+const slowSegments = [0, 1].map(() => ({
+  priority: 'NORMAL',
+  chain: [{ kind: 'look', x: 0, y: 0, delayMs: 5000 }],
+}));
+assert.deepEqual(coalesceActionSegments(slowSegments).map((batch) => batch.chain.length), [1, 1]);
 
 // A still-running accepted action must not be submitted twice.
 let pendingCalls = 0;
