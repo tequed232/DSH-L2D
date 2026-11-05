@@ -46,6 +46,23 @@ function canonicalJson(value) {
   return value;
 }
 
+/** 步级时长守卫 + 链级 totalDurationMs 汇总（ACTION-DURATION；PR #27 收敛时补链级缺口）。
+ *  - 每 step durationMs 必填且 0~30000ms 整数（串行调度/超时预算/验收的基准）；
+ *  - 步间间隔（params.delayMs，≥0）一并计入链级总时长；
+ *  - 链级 totalDurationMs 必须 >0（全 0 链无法串行调度）；
+ *  - 返回值由写入方并入 validation_report 持久化（不动 chain_json / chainHash 口径）。 */
+function validateChainDurations(fnName, chain) {
+  let total = 0;
+  for (const [index, s] of chain.steps.entries()) {
+    if (!Number.isInteger(s.durationMs) || s.durationMs < 0 || s.durationMs > 30000) {
+      throw new Error(`${fnName}: steps[${index}].durationMs 必须是 0~30000 的整数毫秒`);
+    }
+    total += s.durationMs + Math.max(0, Number(s.params?.delayMs) || 0);
+  }
+  if (total <= 0) throw new Error(`${fnName}: 链级 totalDurationMs 必须 >0（steps 全 0 无法串行调度）`);
+  return total;
+}
+
 export function canonicalChainHash(chain) {
   const normalized = {
     schemaVersion: String(chain.schemaVersion),
@@ -226,7 +243,9 @@ export function createActionsRepository(db, { snapshotDir } = {}) {
     if (!SEMANTIC_KEY_RE.test(semanticKey ?? '')) throw new Error(`createActionChain: semantic_key 非法：${semanticKey}`);
     if (!chain || !Array.isArray(chain.steps) || chain.steps.length === 0) throw new Error('createActionChain: chain.steps 必须非空');
     for (const s of chain.steps) if (!ACTION_STEP_KINDS.includes(s.kind)) throw new Error(`createActionChain: 非法 step kind ${s.kind}`);
+    const totalDurationMs = validateChainDurations('createActionChain', chain);
     const chainHash = canonicalChainHash(chain);
+    const validationReport = { ...(input.validationReport || {}), totalDurationMs };
     return withTransaction(db, () => {
       const decision = resolveSemanticKey(db, semanticKey, chainHash);
       if (decision.action === 'duplicate') return { status: 'duplicate', motionId: decision.motion.id, chainId: decision.chain.id, chainHash };
@@ -242,10 +261,10 @@ export function createActionsRepository(db, { snapshotDir } = {}) {
       `).run(motionId, semanticKey, description, input.emotion ?? null, input.expression ?? null,
         input.gaze ?? null, input.bodyLanguage ?? null, nowIso(), nowIso());
       persistProvenance(motionId, provenance);
-      const chainId = insertChainRow(motionId, { chain, schemaVersion: chain.schemaVersion, validationReport: input.validationReport ?? null, chainHash, steps: chain.steps });
+      const chainId = insertChainRow(motionId, { chain, schemaVersion: chain.schemaVersion, validationReport, chainHash, steps: chain.steps });
       logTransition(motionId, null, 'validated', actor, 'ingested via G0-G4 pipeline');
       upsertLearningJob(sourceId, modelCapabilityId, 'persisted');
-      return { status: 'created', motionId, chainId, chainHash, version: 1 };
+      return { status: 'created', motionId, chainId, chainHash, version: 1, totalDurationMs };
     });
   }
 
@@ -307,7 +326,9 @@ export function createActionsRepository(db, { snapshotDir } = {}) {
     const { chain, validationReport = null, sourceId = null, modelCapabilityId = null, actor = 'pipeline' } = input;
     if (!chain || !Array.isArray(chain.steps) || chain.steps.length === 0) throw new Error('createActionChainVersion: chain.steps 必须非空');
     for (const s of chain.steps) if (!ACTION_STEP_KINDS.includes(s.kind)) throw new Error(`createActionChainVersion: 非法 step kind ${s.kind}`);
+    const totalDurationMs = validateChainDurations('createActionChainVersion', chain);
     const chainHash = canonicalChainHash(chain);
+    const report = { ...(input.validationReport || {}), totalDurationMs };
     return withTransaction(db, () => {
       const motion = getMotionRow(db, motionId);
       if (!motion) throw new Error(`createActionChainVersion: motion 不存在 ${motionId}`);
@@ -325,10 +346,10 @@ export function createActionsRepository(db, { snapshotDir } = {}) {
       db.prepare('UPDATE motion_definitions SET version = version + 1, status = ?, updated_at = ? WHERE id = ? AND version = ?')
         .run('validated', nowIso(), motionId, expectedVersion);
       persistProvenance(motionId, input.provenance);
-      const chainId = insertChainRow(motionId, { chain, schemaVersion: chain.schemaVersion, validationReport, chainHash, steps: chain.steps });
+      const chainId = insertChainRow(motionId, { chain, schemaVersion: chain.schemaVersion, validationReport: report, chainHash, steps: chain.steps });
       logTransition(motionId, fromStatus, 'validated', actor, `revision to v${expectedVersion + 1}`);
       upsertLearningJob(sourceId, modelCapabilityId, 'persisted');
-      return { status: 'created', motionId, chainId, chainHash, version: expectedVersion + 1 };
+      return { status: 'created', motionId, chainId, chainHash, version: expectedVersion + 1, totalDurationMs };
     });
   }
 

@@ -43,6 +43,26 @@ ok('createActionChain 创建 validated 动作并落链', () => {
   assert.equal(c.steps[0].kind, 'pose');
 });
 
+ok('Actions Lib：缺失或非法 durationMs 必须拒绝；链级 totalDurationMs>0（PR #27 收敛）', () => {
+  const missingDuration = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'pose', params: {} }] };
+  assert.throws(() => repo.createActionChain({ semanticKey: 'test.no_duration', description: '缺时长', chain: missingDuration, provenance }), /durationMs/);
+  const invalidDuration = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'pose', params: {}, durationMs: 30001 }] };
+  assert.throws(() => repo.createActionChain({ semanticKey: 'test.bad_duration', description: '非法时长', chain: invalidDuration, provenance }), /durationMs/);
+  const allZero = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'pose', params: {}, durationMs: 0 }] };
+  assert.throws(() => repo.createActionChain({ semanticKey: 'test.zero_total', description: '全 0 链', chain: allZero, provenance }), /totalDurationMs/);
+});
+
+ok('Actions Lib：链级 totalDurationMs 含步间间隔并持久化进 validation_report', () => {
+  const withDelay = { schemaVersion: '1.0', steps: [
+    { index: 0, kind: 'look', params: { direction: 'left', delayMs: 120 }, durationMs: 400, admission: 'step' },
+    { index: 1, kind: 'pose', params: { bodyAngleZ: 10 }, durationMs: 800, admission: 'step' },
+  ] };
+  const r = repo.createActionChain({ semanticKey: 'test.total_duration', description: '总时长', chain: withDelay, provenance });
+  assert.equal(r.totalDurationMs, 1320, '400+120(步间间隔)+800');
+  const row = repo.getActionChain(r.motionId);
+  assert.equal(row.validationReport?.totalDurationMs, 1320, '链级总时长持久化进 validation_report');
+});
+
 ok('R9 同键同内容 → 幂等 duplicate', () => {
   const r = repo.createActionChain({ semanticKey: 'test.wave', description: '挥手', chain: chainV1, provenance });
   assert.equal(r.status, 'duplicate');
@@ -181,8 +201,8 @@ ok('canonicalChainHash 对 params 键序不敏感（同内容同哈希）', () =
 
 // CODE-REVIEW-1 #1 回归：同键同内容但键序不同的重复提交应幂等 duplicate 而非 VERSION_CONFLICT
 ok('R9 同键同内容（键序不同）→ 幂等 duplicate', () => {
-  const first = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'expression', params: { ms: 100, name: '兔牙', opts: { y: 1, x: 2 } } }] };
-  const reordered = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'expression', params: { opts: { x: 2, y: 1 }, name: '兔牙', ms: 100 } }] };
+  const first = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'expression', params: { ms: 100, name: '兔牙', opts: { y: 1, x: 2 } }, durationMs: 100 }] };
+  const reordered = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'expression', params: { opts: { x: 2, y: 1 }, name: '兔牙', ms: 100 }, durationMs: 100 }] };
   const r1 = repo.createActionChain({ semanticKey: 'test.keyorder', description: '键序', chain: first, provenance });
   assert.equal(r1.status, 'created');
   const r2 = repo.createActionChain({ semanticKey: 'test.keyorder', description: '键序', chain: reordered, provenance });

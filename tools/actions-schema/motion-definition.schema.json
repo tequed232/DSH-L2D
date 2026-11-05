@@ -58,7 +58,7 @@
           "minItems": 1,
           "items": {
             "type": "object",
-            "required": ["step_index", "kind", "params"],
+            "required": ["step_index", "kind", "params", "duration_ms"],
             "properties": {
               "step_index": { "type": "integer", "minimum": 0 },
               "kind": {
@@ -70,7 +70,7 @@
                 "description": "kind 相关参数。keyframes 的 track 须为语义参数名（如 bodyAngleZ）；模型实际参数 ID 由 Model Adapter 查 motion_model_bindings 得出",
                 "additionalProperties": true
               },
-              "duration_ms": { "type": "integer", "minimum": 0 },
+              "duration_ms": { "type": "integer", "minimum": 0, "maximum": 30000, "description": "该动作的声明执行时长（毫秒）；必须显式填写，供串行调度、超时预算与验收使用" },
               "interruptible": { "type": "boolean", "default": true, "description": "可否被更高优先级演出打断（对齐动作引擎优先级 10/50/90）" }
             },
             "additionalProperties": false
