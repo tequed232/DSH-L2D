@@ -175,3 +175,222 @@ Agent 启动 stdio MCP server → 中继连宠物管道；宠物未起则先拉�
 - **已核实**（克隆 commit `88865ba` 后逐行读取）：§1.1-1.5 全部引用行号、§2 表内 WHALEL2D 侧结论、§3/§4/§5 对 WHALEL2D 侧的引用。
 - **仅据需求方转述未核实 / 快速浏览**：FishPet.Mcp 中继（§1.6）只读了头 50 行注释与结构；WHALEL2D 的 Git 历史演进、`prompt/身体说明.md` 的具体内容（词表面向 Agent 的完整文案）未取证；DSH-L2D 侧所有引用以本仓当前工作区（feat/m1-batch2）为准。
 - 审计过程中 git https 证书吊销校验失败，改用 `http.sslVerify=false` 完成克隆（公开仓库只读，无内容完整性风险；未对本仓 git 做任何写操作）。
+
+---
+
+## 6. Embodied Cue 协议设计（设计评估，未实施）
+
+> 需求方在 §5.1 基础上拍板：提供**结构化 Embodied Cue 表达协议**——不做自由文本 `〔〕` 解析
+>（§4 已否决），而是把 Body.cs 的 Word 七字段（Body.cs:16-17）收敛为一条可静态校验的结构化
+> cue，编译进现有 Gesture Timeline。本节全部为设计，未写任何生产代码。
+> 红线：**不新增绕过 shared arbitration / resolveWritePlan 的写入路径**（§4「单线程 Body 状态即仲裁」
+> 不移植的同一条理由）；编译层是纯函数，遵守 fail-closed 与能力驱动铁律。
+
+### 6.1 EmbodiedCue 结构（v1 词汇，字段不多不少）
+
+需求方起点接口 → 映射到真实类型后的定稿：
+
+```ts
+// 建议落点：packages/core/src/embodied-cue.ts（新文件，纯函数，零参数名）
+export interface EmbodiedCue {
+  /** cue 通道 id：词表数据里的键（gaze/tilt/turn/pitch/lean/eyes/brows/mouth 的泛化），非硬编码。 */
+  channel: string;
+  operation: 'hold' | 'transition' | 'overlay' | 'clear';
+  /** overlay：表情资产 id；clear：要清除的通道/资产（缺省 = 本 channel 全清）。 */
+  target?: string;
+  /** hold/transition：归一化语义值（[-1,1]），经绑定表映射到原生参数。 */
+  value?: number;
+  /** hold：持有租约时长（缺省长期持有，同 WHALE channels 词典语义，Body.cs:198）；transition：缺省 = 曲线长。 */
+  durationMs?: number;
+  /** ActGate 档位（10/50/90），缺省 50；非法值编译期拒绝（motion-contract.ts:101-103）。 */
+  priority?: 10 | 50 | 90;
+  /** v1 仅接受 true/缺省。Timeline 无「不可打断」语义，硬造会破坏同级可打断规则 → 传 false 直接拒。 */
+  interruptible?: boolean;
+}
+```
+
+编译需要的第二输入是**数据**（不是代码）：`CueChannelBinding` 通道绑定表，随词表/画像提供，
+结构与 `motion-intent.ts` 的 `ChannelBinding`（motion-intent.ts:44-58）同型：
+
+```ts
+export interface CueChannelBinding {
+  channel: string;
+  /** 通道 → 原生参数域（scale/offset/bounds 逐参数），即该通道的"冲突域"。 */
+  params: Record<string, { scale?: number; offset?: number; bounds?: readonly [number, number] }>;
+}
+```
+
+### 6.2 编译器签名与四操作映射
+
+```ts
+export interface EmbodiedCueCompileResult {
+  /** 进 enqueueGesture（gesture-timeline.ts:210）。 */
+  segments: GestureSegment[];
+  /** 进 arbitrateShared（shared-arbitration.ts:110）——表情/LeanInput 类共享通道占用声明。 */
+  sharedUses: SharedChannelUse[];
+  /** 进 stopGesture（gesture-timeline.ts:362）。 */
+  stops: StopSelector[];
+  /** 进 renderer setExpression/clearExpression（index.ts:1350/1366）的表情开关对。 */
+  overlays: Array<{ name: string; on: boolean }>;
+  /** fail-closed 回执：任何不合法输入在此列明，绝不静默丢弃。 */
+  rejected: Array<{ channel: string; operation: string; reason: string }>;
+}
+export function compileEmbodiedCue(
+  cue: EmbodiedCue,
+  bindings: readonly CueChannelBinding[],
+  now: number,
+  options?: { runId?: string; source?: SemanticSource },   // source 缺省 'motion'
+): EmbodiedCueCompileResult;
+```
+
+| operation | WHALEL2D 对应 | 编译产物 | 真实类型依据 |
+|---|---|---|---|
+| `hold` | Channel+Hold，`channels[channel] = word.Hold!`（Body.cs:198） | 一个 GestureSegment：`params` = 绑定表映射后的原生值域；`durationMs` = cue.durationMs（缺省省略 → `endAt: null` 长期持有，gesture-timeline.ts:43-44, 283-286）；`group` = `'cue:<channel>'`（clear 的 selector 锚点） | GestureSegment.params（gesture-timeline.ts:49-50）；priority 校验（:146-148） |
+| `transition` | Move 键帧段，首尾为 0（Body.cs:93-108；Repeat 生成 `0:0 … :0`，:37, 40） | 一个 GestureSegment：`params` = 参数域声明（值为曲线**终点 0**，仅作冲突域）、`durationMs` = 曲线总长 ms；**曲线写值本身走既有 keyframes 写路径**（WriteIntent `source:'keyframes'`，秩 3，write-plan.ts:36-39） | 段的 params 兼职冲突域与写值（gesture-timeline.ts:49「喂 resolveWritePlan intents 用」）；transition 的每帧值是采样不是静态值，故段只当"租约"，v1 不给 GestureSegment 加 keyframes 字段（避免改契约，同 motion-intent.ts:16-17「不偷偷加字段」原则） |
+| `overlay` | Overlay，`exp <name> 1/0` + HashSet 去重（Body.cs:86-91, 114, 199, 164） | 一条 SharedChannelUse（channelId = 表情控制 id，endsAt = now+durationMs）+ 一条 overlays 开关；占用互斥由画像 `controls[].conflicts` 数据裁决（C3） | SharedChannelUse（shared-arbitration.ts:29-38）；arbitrateShared 四态（:110-174） |
+| `clear` | Clear 表 / `-词` / 恢复（Body.cs:58, 161-167, 197, 230-237） | 一条 StopSelector：`{ group: 'cue:<channel>' }`（stopGesture 按 group AND 收窄，gesture-timeline.ts:370-374）；overlay 类 clear 走 sharedUses 释放 + overlays `{name, on:false}` | StopSelector.group（gesture-timeline.ts:108-113）；stopGesture（:362-380） |
+
+fail-closed 语义（与 enqueueGesture invalid-segment、arbitrateShared reject 同口径）：
+未知 channel（绑定表查无）、未知 operation、value 非有限数、`interruptible:false`、`target` 不在
+表情/通道清单 → 全部进 `rejected`，`segments/stops/overlays` 零产出、调用方状态零变化
+（对齐 gesture-timeline.ts:239-248 的"不产生任何副作用"与 shared-arbitration.ts:116-129）。
+**不设词表白名单兜底放行**：判不出来就拒绝，不猜。
+
+### 6.3 同通道替换 / 跨通道并存的行为推导（现有冲突判定下，零新增机制）
+
+- **同通道替换**：两个 hold cue 声明同一 channel → 绑定表相同 → params 参数域完全重叠
+  → `domainsOverlap` 为真（gesture-timeline.ts:173-176）；incoming 档位 ≥ 冲突集最高档时整批
+  准入、旧段整批 `interrupted`（:313-320，"同级可打断/高打低"）。共享通道面同理命中
+  `via:'same-channel'` → yield（shared-arbitration.ts:144-146, 164-167）。
+  **这正是 Body.cs:198 的"后来者取代"**，只是替换单位从"通道名"泛化为"参数域"。
+- **跨通道并存**：不同 channel 的绑定表参数域不相交（词表数据约定，§3.1 建议）→ 冲突集为空
+  → 两段直接并存（gesture-timeline.ts:302-308 无冲突直入）。对应 WHALE 的 gaze/tilt 并存
+  （Body.cs:44-61）。
+- **部分重叠的分歧点（有意为之）**：WHALE 对部分重叠做跨通道求和（Body.cs:218-227），
+  本仓设计为**整批原子替换**（incoming 全域 ≥ 冲突集即整批上，否则整批 priority-blocked，
+  gesture-timeline.ts:304-315）——赢家通吃，不做加法。原因即 §4 已否决的 INV-1 约束
+  （write-plan.ts:99, 223-247 每参数每帧唯一 winner；求和需要重写整条仲裁链）。
+- **overlay 与任何段并存**：overlay 不产 params 域（"资产型手势空域不冲突"，gesture-timeline.ts:15-16, 169-171），
+  互斥交给画像 conflicts 数据（C3 表情共享 key3-6 的 Timeline 替换语义，Embodied-Behavior.md §4）。
+- **最终写值仍走唯一链路**：resolveTimeline 输出活跃段（:336-356）→ 降级为 WriteIntent
+  （motion-intent.ts:129-226）→ resolveWritePlan 选 winner（write-plan.ts:144-262）→ ParamInjector
+  两相位落写（param-injector.ts:247-303）。cue 编译层**不接触 injector**。
+
+### 6.4 编译示例（完整走通一条）
+
+cue：`{ channel:'tilt', operation:'hold', value:0.5, durationMs:3000, priority:50 }`，
+绑定表含 `tilt → { FaceAngleZ: { scale:16 } }`（对应 WHALE「歪头」的 FaceAngleZ 16°，Body.cs:54）：
+
+1. `compileEmbodiedCue` 查表命中 → 产出 `segments: [{ id:'cue:tilt:hold', group:'cue:tilt',
+   durationMs:3000, priority:50, source:'motion', params:{ FaceAngleZ: 8 } }]`（0.5×16=8，clamped）。
+2. `enqueueGesture(state, segments, now)`：validateSegment 通过（gesture-timeline.ts:129-166）；
+   存量无 FaceAngleZ 域段 → 冲突集空 → 直接 admitted（:302-308）；`endAt = now+3000`（:283）。
+3. 每 帧 `resolveTimeline(now)` 输出 active（:336-356）→ WriteIntent
+   `{ source:'motion', priority:50, phase:'post', params:{ FaceAngleZ:8 } }`（FaceAngleZ 非
+   PRE_ONLY_PARAMS，motion-intent.ts:36-41, 82-84）。
+4. `resolveWritePlan`：非口型（write-plan.ts:166-168）、非四肢独占 → winner 落写（:223-247）。
+5. 3 秒后 `resolveTimeline` 将其移入 expired（:345-349）；或一句
+   `{ channel:'tilt', operation:'clear' }` → `stopGesture(state, { group:'cue:tilt' })`（:362-380）→
+   立即释放回物理（param-injector.ts:130-134 同型语义）。
+
+### 6.5 测试与回滚（cue 编译器）
+
+- **词表校验**：未知 channel / 未知 operation / 未知表情 target → rejected 非空且 segments 为空；
+  绑定表 params 必须是画像 controls 的子集（与 canExpress 同一份数据源，semantic-binding.ts:153-160）。
+- **参数域断言**：hold 的 params 值 = value×scale+offset 且 clamp 进 bounds（motion-intent.ts:178-187 同型）；
+  transition 的 durationMs = 曲线总长、params 终点值为 0。
+- **fail-closed**：NaN/Infinity value、`interruptible:false`、绑定表缺项 → rejected，且断言
+  `segments.length===0 && stops.length===0`（零副作用）。
+- **映射断言**：clear → stops[0].group === 'cue:<channel>'；overlay → sharedUses[0].endsAt 有限。
+- **回滚**：feature flag `embodied.cue`（缺省 false），模式同 `M1_DEFAULT_ENABLED`
+  （write-plan.ts:17）与 `M1E_DEFAULT_ENABLED`（continuous-action.ts:30）——flag 关 = 编译层不接线，
+  渲染层现行为零变化；编译器本身是纯函数，不在 flag 后也有单测价值。
+
+---
+
+## 7. 行为来源生命周期设计（设计评估，未实施）
+
+> 四类行为来源如何进入现有管线 `Motion Intent → Mixer/Continuous Action → Gesture Timeline →
+> ParamInjector`（帧序权威：Embodied-Behavior.md §1，index.ts:343-369 pre/post 钩子）。
+> 本节不违背 §4 冲突清单（C1-C12）与 §5 确定性顺序。全部为设计，未实施。
+
+### 7.1 四源进入路径
+
+**① Agent Intent**（语义控制主路径）：
+`admitAct`（index.ts:508 → action-chain.ts:259 ActGate）准入 NORMAL/FORCE → 链内 steps 产出
+`SemanticMotionFrame`（motion-contract.ts:163-180）→ `lowerFrameToIntents`（motion-intent.ts:129-226）
+→ `resolveWritePlan`；keyframes 类 step 走 `playKeyframes`（index.ts:770，准入排除口型/自动认领物理输出）。
+runId 绑定（R12）；interrupted / priority-blocked / action-done 终态立即释放独占（R7，
+Embodied-Behavior.md:96）。Agent 活跃期间对连续层的控制权 = `setContinuousAgentHold`
+（continuous-action.ts:371-396）：scope 内 lane 存量条目**挂起不 kill**，hold 解除原地恢复（恢复 ≠ 重启，
+startedAt/runId 不变，continuous-action.ts:9-11）。
+
+**② Autonomous Behavior（Idle/Ambient/Media）**：M1-e continuous-action 已交付（lane 仲裁）——
+三类连续动作统一 `CONTINUOUS_PRIORITY = 10`（continuous-action.ts:41），lane 秩 media(3) > ambient(2) > idle(1)
+（:51-55）；lane 间参数域重叠时秩高者胜（resolveContinuous :476-494）；media 准入释放 ambient 存量、
+ambient 撞 media 被拒（:300-322）。提交被拒三态：`agent-held` / `media-active` / `cooldown`（:113-117）。
+产出 `writes` 声明降级为 WriteIntent（source `continuous`/`ambient`，秩 1，motion-contract.ts:109-117）
+喂 resolveWritePlan——连续层永不直接写参数。Idle 情绪小动作（WHALE IdleMoods/Tick 的对应物，
+Behavior.cs:53-55, 211-228）按 §5.2 协议排程：触发前先 arbitrateShared 四态判定，queue 态 = "等 Agent
+动作结束再打哈欠"（readyAt = 冲突占用最大 endsAt，shared-arbitration.ts:169-172）。ambient 五类
+（ambient.ts:7-9）维持既有 stageGate 静音：dragging/acting 即 stopAmbient（index.ts:978-981）。
+
+**③ Interaction Behavior（拖拽/点击/戳）**：renderer 本地事件，短 NORMAL/FORCE act，`source:'poke'`
+（现有 poke 链路已产出 keyframes steps，host-guard.mjs:210；yandere-preempt 用例同 source）。
+拖拽 = `setStageBusy({dragging:true})`（index.ts:978-981）+ angleBus 直写 PositionX/Y——不进 Timeline；
+"点击换脸立即生效但第二个 Move 不叠上第一个"（WHALE motionUntil 思路，Behavior.cs:100-103）由
+act 内 `chainHasMotion` / `closeMotionsOnPreempt`（action-chain.ts:113, 142）承担。点击/戳的 cue 化：
+交互侧产出与 §6 同型的 EmbodiedCue（transition 类、FORCE 或 NORMAL），与 Agent cue 走同一编译器——
+单一编译路径保证交互与语义控制不产生两套冲突语义。
+
+**④ Emergency Override（Reset/Recovery）**：FORCE 90 一览表动作：
+`stopGesture()` 无 selector = 时间线全停（gesture-timeline.ts:367-369）→ `releaseContinuous()`
+全释放（continuous-action.ts:429-452）→ `setContinuousAgentHold(null)` → `injector.releaseAll`
+（param-injector.ts:136-140）→ `resetPose`（index.ts:1670）。对应 WHALE `Relax()`（Body.cs:230-237）
+但**按 source 清自己的**（runId/epoch 归属），不是"只清 Body 的"那种隐式约定；epoch fencing
+沿用 motionEpoch 作废模式（index.ts:1294-1302）。Recovery 为分步 FORCE 链：参数经曲线单调回中，
+禁止瞬跳（§7.3 断言）。
+
+### 7.2 优先级与占用矩阵（对照 Embodied-Behavior.md §4）
+
+| 来源 | ActGate 档位 | source 秩（INV-6） | 进入点 | 占用与释放 | 对应 §4 条目 |
+|---|---|---|---|---|---|
+| Agent Intent | NORMAL 50 / FORCE 90 | motion(2)/keyframes(3)/pose(4)/limb(6) | ActGate admitAct | runId 租约；R7 打断即释放 | C4/C5（Timeline owner/priority 声明） |
+| Idle/Ambient/Media | BACKGROUND 10（固定） | continuous/ambient(1) | submitContinuous lane | agent hold 挂起；media 互斥；冷却 | C7（LeanInput 纳入 Mixer）；永不抢占 Agent |
+| Interaction | NORMAL 50 / FORCE 90 | motion/keyframes | 本地事件 act + stageBusy | 短租约；dragging 期间静音 ambient | C6（守卫统一，own 语义不变） |
+| Emergency | FORCE 90 | —（清场者） | stop/release 全链 | 全表清空 → 回 physics | R8（释放回物理）；epoch 作废 |
+
+矩阵不变的底线：连续层（10）永不打断任何 Agent/交互占用（continuous-action.ts:38-40）；
+Interaction 与 Agent 同档竞争时按 ActGate 先后（canInterruptAct，action-chain.ts:108-110）；
+Emergency 只被"正在进行的 Emergency"挡（同级不可自动打断由 admit 判定，action-chain.ts:295）。
+
+### 7.3 HandBusy / Ended 最小交接协议
+
+WHALE 的两个回调（Behavior.cs:74-75）映射到本仓已有机制，**不需要新增回调类型**：
+
+| WHALEL2D | 本仓对应物 | 证据 |
+|---|---|---|
+| `HandBusy` 查询（切手势前问 Agent 手是否在用，Behavior.cs:104） | 组合谓词：`currentAct() != null`（index.ts:520-522）∨ `arbitrateShared` 判定 ∈ {reject('held-indefinitely'), queue}。queue 态是本仓增强：携带 readyAt 排队等 Agent 完，WHALE 只能放弃 | shared-arbitration.ts:164-173 |
+| `Ended` 回调（EndMood 末尾通知，Behavior.cs:126） | `action-done` 事件 phase `'end'`/`'interrupted'`（action-chain.ts:190-207），携带 runId/priority/source，订阅方据此恢复 | ActGate finish/release 产出 |
+| `Restore()` 重放 shown 值（Body.cs:240-243） | 连续层条目挂起而非 kill → hold 清除后**原地恢复**（suspended→resumed，continuous-action.ts:391-395），写声明由 resolveContinuous 重新输出——比 WHALE 的"重新 set 一遍"更强：状态从未丢 | continuous-action.ts:9-11, 156-163 |
+| `Forget()/Resume()`（渲染器重启重建，Body.cs:246-249, Behavior.cs:83-88） | epoch fencing：reset 后旧收养/等待全部作废 | index.ts:1294-1302 |
+
+**Recovery 曲线约束**（吸收 FishPet.Tests "动作从静止开始回静止" 思想，Program.cs:20-28）：
+所有 Recovery/transition 词表的键帧必须首尾为 0，编译器对绑定表资产做静态校验（§6.5 同一校验器），
+运行期不再兜底——fail-closed 前置到资产层。
+
+### 7.4 行为生命周期语义测试（设计）
+
+吸收 WHALE FishPet.Tests（264 行无窗口断言）的四类思想，落在本仓纯函数面上：
+
+1. **无残留**：mood/hold 结束后 ownership/sticky/lease 全清（FishPet.Tests Program.cs:48-49 对账
+   → 本仓断言 `resolveTimeline().active` 为空 ∨ `injector.getAgentOwned()` 不含该 runId 参数）。
+2. **同通道替换**：新 cue 准入 → 旧段出现在 `interrupted` 且 `resolveWritePlan` 当帧只剩新值
+   （Program.cs:177-178 通道替换思想的纯函数版）。
+3. **所有权释放**：action-done(end) → `setContinuousAgentHold(null)` 后 suspended 条目全部出现在
+   resumed 且 startedAt/runId 不变（"恢复不重启"）。
+4. **闲置多样性**：idle 排程 N 轮不重复连抽、全部 lane/情绪可达、深夜加权可观测
+   （Program.cs:130-151 的 300 轮断言思想；权重函数做成注入参数保证确定性）。
+
+以上测试全部进 `packages/core/test/` 接 `test:core` 门禁（Consolidated-M1-Plan.md §2.3 同约定）；
+实施时的回归底线 = §5 确定性顺序（CASE-22 顺序无关）与 INV-1…12 全绿不回退。
