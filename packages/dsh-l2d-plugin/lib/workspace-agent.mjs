@@ -360,6 +360,10 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
           result = { fire: false, reason: 'action-pending' };
         }
       }
+      // 决定轮结束后把当前状态固化为 previousState：
+      // 否则稳态期间 previousState 恒 ≠ picked.state，decide() 的 same-state/refreshMs
+      // 抑制永不生效（working 的 25s 刷新脉冲会被退化成 cooldown+rate 兜底）。
+      gate.previousState = picked.state;
 
       if (result.fire) {
         const text = buildNotifyPrompt({

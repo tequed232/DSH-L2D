@@ -165,5 +165,53 @@ ok('canonicalChainHash 与顺序无关的字段序列稳定', () => {
   assert.equal(h1, h2);
 });
 
+// CODE-REVIEW-1 #1 回归：params 键序不同但内容相同 → 同一哈希（R9 幂等）
+ok('canonicalChainHash 对 params 键序不敏感（同内容同哈希）', () => {
+  const a = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'expression', params: { name: '兔牙', ms: 100 } }] };
+  const b = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'expression', params: { ms: 100, name: '兔牙' } }] };
+  assert.equal(canonicalChainHash(a), canonicalChainHash(b));
+  // 嵌套对象同样规范化
+  const c = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'expression', params: { opts: { y: 1, x: 2 } } }] };
+  const d = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'expression', params: { opts: { x: 2, y: 1 } } }] };
+  assert.equal(canonicalChainHash(c), canonicalChainHash(d));
+  // 内容真的不同 → 哈希不同
+  const e = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'expression', params: { name: '兔牙', ms: 200 } }] };
+  assert.notEqual(canonicalChainHash(a), canonicalChainHash(e));
+});
+
+// CODE-REVIEW-1 #1 回归：同键同内容但键序不同的重复提交应幂等 duplicate 而非 VERSION_CONFLICT
+ok('R9 同键同内容（键序不同）→ 幂等 duplicate', () => {
+  const first = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'expression', params: { ms: 100, name: '兔牙', opts: { y: 1, x: 2 } } }] };
+  const reordered = { schemaVersion: '1.0', steps: [{ index: 0, kind: 'expression', params: { opts: { x: 2, y: 1 }, name: '兔牙', ms: 100 } }] };
+  const r1 = repo.createActionChain({ semanticKey: 'test.keyorder', description: '键序', chain: first, provenance });
+  assert.equal(r1.status, 'created');
+  const r2 = repo.createActionChain({ semanticKey: 'test.keyorder', description: '键序', chain: reordered, provenance });
+  assert.equal(r2.status, 'duplicate');
+});
+
+// CODE-REVIEW-1 #3 回归：motion_sources 按分析声明的 assetId 配对（不按位置）
+ok('provenance 分析按 assetId 归属关联（位置错序不张冠李戴）', () => {
+  const aA = 'sha256:' + 'b'.repeat(64);
+  const aB = 'sha256:' + 'c'.repeat(64);
+  const prov = {
+    assets: [
+      { id: 'asset-A', sourceType: 'image', originalPath: '/x/a.png', contentHash: aA },
+      { id: 'asset-B', sourceType: 'image', originalPath: '/x/b.png', contentHash: aB },
+    ],
+    analyses: [
+      // 分析 1 声明属于 asset-B，分析 2 声明属于 asset-A —— 与 assets 顺序相反
+      { id: 'an-B', assetId: 'asset-B', modelName: 'vlm', analysis: { which: 'B' } },
+      { id: 'an-A', assetId: 'asset-A', modelName: 'vlm', analysis: { which: 'A' } },
+    ],
+  };
+  const r = repo.createActionChain({ semanticKey: 'test.pairing', description: '配对', chain: chainV1, provenance: prov });
+  const rows = db.prepare('SELECT ms.asset_id AS assetId, ms.analysis_id AS analysisId FROM motion_sources ms WHERE ms.motion_id = ?').all(r.motionId);
+  const anRow = db.prepare("SELECT analysis_json FROM motion_analysis WHERE id = ?").get(rows.find((x) => x.assetId === 'asset-B')?.analysisId);
+  assert.ok(anRow, 'asset-B 应有关联分析');
+  assert.ok(anRow.analysis_json.includes('which'), '关联的分析应是声明属于 asset-B 的那条');
+  const rowA = db.prepare("SELECT analysis_json FROM motion_analysis WHERE id = ?").get(rows.find((x) => x.assetId === 'asset-A')?.analysisId);
+  assert.ok(rowA, 'asset-A 应有关联分析');
+});
+
 console.log(`\n结果：${process.exitCode ? '存在失败' : '全部通过'}（${passed} 项断言组）`);
 if (process.exitCode) process.exit(1);

@@ -34,17 +34,28 @@ export const MOTION_TRANSITIONS = {
   deprecated: [],
 };
 
-/** 规范化语义链并计算内容哈希（幂等判定的唯一依据，R9）。 */
+/** 规范化语义链并计算内容哈希（幂等判定的唯一依据，R9）。
+ *  对象键递归排序后序列化：同内容不同键序必须得到同一哈希，否则 R9 幂等失效。 */
+function canonicalJson(value) {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const k of Object.keys(value).sort()) out[k] = canonicalJson(value[k]);
+    return out;
+  }
+  return value;
+}
+
 export function canonicalChainHash(chain) {
   const normalized = {
     schemaVersion: String(chain.schemaVersion),
     steps: (chain.steps || []).map((s) => ({
       index: s.index,
       kind: s.kind,
-      params: s.params ?? {},
+      params: canonicalJson(s.params ?? {}),
       durationMs: s.durationMs ?? null,
-      admission: s.admission ?? null,
-      pairing: s.pairing ?? null,
+      admission: canonicalJson(s.admission ?? null),
+      pairing: canonicalJson(s.pairing ?? null),
     })),
   };
   return 'sha256:' + crypto.createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
@@ -154,6 +165,7 @@ export function createActionsRepository(db, { snapshotDir } = {}) {
       assetIds.push(db.prepare('SELECT id FROM motion_assets WHERE source_type = ? AND content_hash = ?').get(a.sourceType, a.contentHash).id);
     }
     const analysisIds = [];
+    const analysisByAsset = new Map(); // an.assetId -> 分析行 id（按声明归属配对，不按位置）
     for (const an of provenance?.analyses ?? []) {
       const analysisId = uuid(); // 行 id 全局唯一；来源逻辑 id 记入分析体内
       db.prepare(`
@@ -163,13 +175,14 @@ export function createActionsRepository(db, { snapshotDir } = {}) {
         typeof an.analysis === 'string' ? an.analysis : JSON.stringify({ ...(an.analysis ?? {}), sourceAnalysisId: an.id ?? null }),
         an.confidence ?? null, nowIso());
       analysisIds.push(analysisId);
+      if (an.assetId) analysisByAsset.set(String(an.assetId), analysisId);
     }
-    // motion_sources：motion × asset 关联；分析挂到首个 asset（简化记录，保留全部分析行）
-    assetIds.forEach((assetId, i) => {
+    // motion_sources：motion × asset 关联；分析按其声明的 assetId 挂载（无声明则不带 analysis_id）
+    assetIds.forEach((assetId) => {
       db.prepare(`
         INSERT OR IGNORE INTO motion_sources (motion_id, asset_id, analysis_id)
         VALUES (?, ?, ?)
-      `).run(motionId, assetId, analysisIds[i] ?? analysisIds[0] ?? null);
+      `).run(motionId, assetId, analysisByAsset.get(String(assetId)) ?? null);
     });
     return { assetIds, analysisIds };
   }
@@ -408,10 +421,24 @@ export function createActionsRepository(db, { snapshotDir } = {}) {
     withTransaction(db, () => {
       db.prepare('UPDATE action_chains SET json_address = ?, content_sha256 = ? WHERE id = ?').run(target, contentSha256, chainRow.id);
     });
-    // 回读核对（R6 第 6 步）：剔除文件内 contentSha256 字段后按同一口径重算
-    const written = fs.readFileSync(target);
-    const parsedSnapshot = JSON.parse(written.toString('utf8'));
-    delete parsedSnapshot.contentSha256;
+    // 回读核对（R6 第 6 步）：剔除文件内 contentSha256 字段后按同一口径重算。
+    // parse 失败（磁盘损坏/内容截断）同样走补偿，否则 json_address 残留指向坏文件，
+    // 且重导出被 SNAPSHOT_EXISTS 永久阻塞。
+    let parsedSnapshot;
+    try {
+      const written = fs.readFileSync(target);
+      parsedSnapshot = JSON.parse(written.toString('utf8'));
+      delete parsedSnapshot.contentSha256;
+    } catch (verifyErr) {
+      try { fs.unlinkSync(target); } catch { /* 补偿失败则留痕 */ }
+      withTransaction(db, () => {
+        db.prepare('UPDATE action_chains SET json_address = NULL, content_sha256 = NULL WHERE id = ?').run(chainRow.id);
+      });
+      const err = new Error(`exportActionSnapshot: 回读核对失败（${verifyErr.message}），已补偿回滚（文件删除 + 列清空）`);
+      err.code = 'PERSIST_VERIFY_FAILED';
+      err.cause = verifyErr;
+      throw err;
+    }
     const recomputed = sha256Hex(Buffer.from(JSON.stringify(parsedSnapshot)));
     if (recomputed !== contentSha256) {
       try { fs.unlinkSync(target); } catch { /* 补偿失败则留痕 */ }
