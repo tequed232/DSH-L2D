@@ -37,7 +37,9 @@ assert.equal(queued.ok, true);
 assert.equal(queued.completedSegments, 15);
 assert.equal(completed.length, 15);
 assert.deepEqual(completed, fifteen.segments.map((s) => s.chain[0].x));
-assert.equal(queued.receipts[0].attempts, 3);\nassert.equal(queued.receipts.length, 2, '15 steps should be packed into two renderer calls');\nassert.deepEqual(queued.receipts.map((r) => r.sourceSegments.length), [8, 7]);
+assert.equal(queued.receipts[0].attempts, 3);
+assert.equal(queued.receipts.length, 2, '15 steps should be packed into two renderer calls');
+assert.deepEqual(queued.receipts.map((r) => r.sourceSegments.length), [8, 7]);
 
 // A still-running accepted action must not be submitted twice.
 let pendingCalls = 0;
