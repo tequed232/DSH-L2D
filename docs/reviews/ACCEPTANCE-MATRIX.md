@@ -60,6 +60,9 @@
 ## 修复队列联动
 CODE-REVIEW-1（17 条：4 中 13 低）：中级 4 条已修 `0ca6d21`（actions-repo chainHash 键序/快照补偿/provenance 配对、workspace-agent previousState）——与域 3 幂等证据直接相关；低级 13 条修复中。
 
+## 流程规则（用户裁定，2026-11-05）
+**每次完成任务（commit 合入）之后，必须跑 `npm run test:chain15`**：15 条连续动作链经 QUEUE-SERIAL 队列串行路径通跑（15/15 完成、零丢弃、顺序正确、实测总时长与链级 totalDurationMs 一致、每步记录提交/开始/完成/等待四项时间）。通跑不绿不得关闭任务。链库扩充/队列/合批/duration 语义变更时同步更新 tests/chain-15。
+
 ## 结论
 - 当前**无任何一项虚假 VERIFIED**：Timeline 层诚实标 BLOCKED（预估时长非真实事件），其余按证据状态映射。
 - 端到端链路（Agent intent → … → Observer → status feedback）为 **UNVERIFIED**：需 PR-D（Timeline 事件）+ P12 落地后才具备验证条件。
