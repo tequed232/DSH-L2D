@@ -112,8 +112,9 @@ await okAsync('scope 白名单：l2d_chat_tool 注册 throw / l2d_action_enqueue
   assert.throws(() => scoped.registerTool('workspace_delete', () => {}), /scope-forbidden/);
   scoped.registerTool('l2d_action_enqueue', async () => ({}));
   scoped.registerTool('l2d_get_status_snapshot', async () => ({}));
-  assert.ok(inner.tools.l2d_action_enqueue && inner.tools.l2d_get_status_snapshot, '白名单前缀正常透传');
-  assert.deepEqual(scoped.allowedPrefixes, ['l2d_action_', 'l2d_get_status']);
+  scoped.registerTool('l2d_gallery_top', async () => ({}));
+  assert.ok(inner.tools.l2d_action_enqueue && inner.tools.l2d_get_status_snapshot && inner.tools.l2d_gallery_top, '白名单前缀正常透传');
+  assert.deepEqual(scoped.allowedPrefixes, ['l2d_action_', 'l2d_get_status', 'l2d_gallery_']);
   assert.throws(() => createScopedRegistry(inner, []), /allowedPrefixes/);
 });
 
