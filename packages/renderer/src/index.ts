@@ -12,6 +12,7 @@ import { LAppSubdelegate } from './app/lappsubdelegate';
 import { LAppPal } from './app/lapppal';
 import type { LAppModel } from './app/lappmodel';
 import { ParamInjector, parameterIndexOf } from './app/param-injector';
+import { isHostable } from './app/param-host-policy';
 import { EmotionRouter, EmotionIntent, EmotionSignal } from './app/emotion-router';
 import { MotionDirector, motionsShareArm } from './app/motion-director';
 import { PoseController, POSE_IDS } from './app/pose-controller';
@@ -1065,6 +1066,9 @@ function setParameterChecked(id: string, value: number, weight = 1): string | nu
   if (!core) return 'not-ready';
   const num = Number(value);
   if (!Number.isFinite(num)) return 'invalid-value';
+  // Node Ownership：外部（agent）通道只允许写托管白名单内的参数；
+  // 白名单外（发型/裙子/配饰/四肢等）拒写，口型红线仍由 injector 更早优先拒绝。
+  if (!isHostable(id)) return 'not_hostable';
   // AngleZ / PositionX / PositionY 可能被拖拽、微动作、媒体同时写，先记账再统一注入
   if (id === 'AngleZ' || id === 'PositionX' || id === 'PositionY') {
     if (!paramExists(core, id)) return 'not-exist';
@@ -1074,7 +1078,7 @@ function setParameterChecked(id: string, value: number, weight = 1): string | nu
   }
   // 入口校验：不存在 → not-exist；物理输出未独占 → physics-output（与 injector.set 同判）
   if (!paramExists(core, id)) return 'not-exist';
-  return injector.set(core, id, num, weight) ? null : 'rejected';
+  return injector.set(core, id, num, weight, { channel: 'agent' }) ? null : 'rejected';
 }
 
 export function setParameter(id: string, value: number, weight = 1): boolean {
@@ -1083,7 +1087,7 @@ export function setParameter(id: string, value: number, weight = 1): boolean {
 
 export interface ApplyReport {
   ok: string[];
-  /** 失败项：`参数名:reason`（not-exist / physics-output / mouth-locked / invalid-value / not-ready / rejected） */
+  /** 失败项：`参数名:reason`（not-exist / not_hostable / physics-output / mouth-locked / invalid-value / not-ready / rejected） */
   failed: string[];
 }
 
@@ -1113,7 +1117,8 @@ export function setParameters(values: Record<string, number>, weight = 1): Apply
 export function ownParameters(ids: string[], durationMs = 1200, phase: 'pre' | 'post' = 'post'): string[] {
   if (!model?.getModel()) return [];
   markActive();
-  return injector.own(ids, durationMs, phase);
+  // agent 通道：只允许认领托管白名单内的参数（defaultOwnership='none'）
+  return injector.own(ids, durationMs, phase, { channel: 'agent' });
 }
 
 /** 主动释放 Agent 独占；下一帧物理自然接管，不需要恢复逻辑。 */
@@ -1757,6 +1762,8 @@ export interface ParamMeta {
   min: number;
   max: number;
   def: number;
+  /** Node Ownership：是否在托管白名单内（仅表示可托管，读≠控制权） */
+  hostable?: boolean;
 }
 
 export interface Capabilities {
@@ -1791,6 +1798,7 @@ export function getCapabilities(): Capabilities | null {
         min: +core.getParameterMinimumValue(i).toFixed(3),
         max: +core.getParameterMaximumValue(i).toFixed(3),
         def: +core.getParameterDefaultValue(i).toFixed(3),
+        hostable: isHostable(id.getString()),
       });
     }
   } catch {

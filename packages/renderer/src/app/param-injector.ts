@@ -2,9 +2,22 @@ import type { CubismModel } from '@framework/model/cubismmodel';
 import type { CubismIdHandle } from '@framework/id/cubismid';
 import { CubismFramework } from '@framework/live2dcubismframework';
 import { ParamOwnership, DEFAULT_OWN_DURATION_MS, selectOwnableIds } from './param-ownership.ts';
+import { filterHostable, isHostable } from './param-host-policy.ts';
 import { LIPSYNC_PARAMS } from '../../../core/src/index.ts';
 
 export type InjectionMode = 'set' | 'add';
+
+/**
+ * 写入通道：agent = 外部 API（setParameters/setParameter/ownParameters），
+ * 受 Node Ownership 托管白名单约束；runtime = 渲染器既有执行路径
+ * （keyframes/ambient/pose/gaze），不受白名单影响。缺省 runtime，
+ * 由外部入口显式声明 'agent'，白名单闸门只作用于该通道。
+ */
+export type WriteChannel = 'agent' | 'runtime';
+
+export interface ChannelOptions {
+  channel?: WriteChannel;
+}
 
 interface StickyValue {
   value: number;
@@ -111,14 +124,25 @@ export class ParamInjector {
     return this.ownership.isOwned(id);
   }
 
-  /** 认领参数；到期自动释放，避免永久脱离物理。返回实际登记的 id。 */
-  public own(ids: Iterable<string>, durationMs: number = DEFAULT_OWN_DURATION_MS, phase: 'pre' | 'post' = 'post'): string[] {
+  /**
+   * 认领参数；到期自动释放，避免永久脱离物理。返回实际登记的 id。
+   * channel='agent' 时只允许认领托管白名单内的参数（defaultOwnership='none'，
+   * 口型红线同拒）；runtime 通道维持原筛选（物理输出 + 非口型）。
+   */
+  public own(
+    ids: Iterable<string>,
+    durationMs: number = DEFAULT_OWN_DURATION_MS,
+    phase: 'pre' | 'post' = 'post',
+    opts: ChannelOptions = {},
+  ): string[] {
     // 只有物理输出需要「物理默认 + Agent 覆盖」；非物理参数保持普通写入（add/set 语义不变）。
     // 口型参数不允许被任何通道认领。筛选逻辑抽成纯函数，便于单测。
-    const candidates = Array.from(ids).filter((raw) => {
+    let candidates = Array.from(ids).filter((raw) => {
       const id = typeof raw === 'string' ? raw.trim() : '';
       return !!id && !MOUTH_PARAMS.has(id);
     });
+    // Node Ownership 白名单：仅 agent 通道受托管集约束，runtime 通道不受影响。
+    if (opts.channel === 'agent') candidates = filterHostable(candidates);
     const filtered = selectOwnableIds(candidates, (id) => this.isPhysicsOutput(id));
     const accepted = this.ownership.own(filtered, { durationMs, phase });
     // 相位可能变化（pre↔post）：清掉旧 sticky，下一帧按新相位重写，避免一帧写错位置
@@ -143,7 +167,7 @@ export class ParamInjector {
     return this.ownership.list();
   }
 
-  public set(model: CubismModel, id: string, value: number, weight = 1): boolean {
+  public set(model: CubismModel, id: string, value: number, weight = 1, opts: ChannelOptions = {}): boolean {
     this.calls++;
     if (!id || !Number.isFinite(value)) {
       this.skipped++;
@@ -151,6 +175,12 @@ export class ParamInjector {
     }
     // 口型红线：不区分通道，直接拒绝
     if (MOUTH_PARAMS.has(id)) {
+      this.skipped++;
+      return false;
+    }
+    // Node Ownership 白名单：仅 agent 通道受托管集约束（口型红线已在上方优先拒绝）；
+    // runtime 通道（keyframes/ambient/pose/gaze）不受影响。
+    if (opts.channel === 'agent' && !isHostable(id)) {
       this.skipped++;
       return false;
     }
