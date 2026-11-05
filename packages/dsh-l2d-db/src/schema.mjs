@@ -25,7 +25,7 @@
  *  - 迁移只追加不改写；schema_migrations 记录版本与耗时。
  */
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 /** v1 全量 DDL。单条 exec 执行，语句间以分号分隔。 */
 export const MIGRATIONS = {
@@ -626,5 +626,27 @@ export const MIGRATIONS = {
     );
     CREATE INDEX IF NOT EXISTS idx_observer_dispatch_pending
       ON observer_dispatch_log (status, created_at);
+  `,
+
+  /**
+   * v10：图库打分表（GALLERY-BRIDGE-DECREE §3 DDL 原样，后端席实施）。
+   *  - item_id 主键=gallery_items.id（一图一分，upsert 幂等）；
+   *  - scorer 三态：rule-engine-v1 / vision-agent-v1 / blend-v1；
+   *    导入纪律（§3）：vision/blend 优先于 rule-engine——已有高分来源行时
+   *    rule-engine 重导入不得覆盖（gallery-repo 守卫）；
+   *  - breakdown_json 保留规则分/视觉分两层明细（§2 合成规则）；
+   *  - 打分 Agent 禁直写主库（§5）：唯一写入口 = gallery-repo（导入脚本消费
+   *    data/gallery-scores-draft.json）。
+   */
+  10: `
+    CREATE TABLE IF NOT EXISTS gallery_scores (
+      item_id INTEGER PRIMARY KEY REFERENCES gallery_items(id),
+      score REAL NOT NULL CHECK (score >= 0 AND score <= 100),
+      breakdown_json TEXT NOT NULL,
+      scorer TEXT NOT NULL,            -- 'rule-engine-v1' | 'vision-agent-v1' | 'blend-v1'
+      scored_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_gallery_scores_score
+      ON gallery_scores (score DESC);
   `,
 };

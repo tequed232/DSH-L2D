@@ -6,7 +6,7 @@
  * Chat 会话零 l2d 工具（工具不注册进 Chat 侧 registry 即可，无需反向过滤）。
  */
 
-export const DEFAULT_ALLOWED_PREFIXES = Object.freeze(['l2d_action_', 'l2d_get_status']);
+export const DEFAULT_ALLOWED_PREFIXES = Object.freeze(['l2d_action_', 'l2d_get_status', 'l2d_gallery_']);
 
 /**
  * @param {{registerTool: Function}} innerRegistry 底层 MCP registry（如 McpServer）

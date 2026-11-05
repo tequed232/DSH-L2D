@@ -41,10 +41,12 @@ const db = openDb({ path: path.join(tmp, 'obs.sqlite') });
 
 console.log('P1 Workspace Observer（obs.*）');
 
-ok('迁移 v9：observer_dispatch_log 已建，SCHEMA_VERSION 推进到 9', () => {
-  assert.equal(SCHEMA_VERSION, 9);
+ok('迁移 v10：gallery_scores 已建；v9 observer_dispatch_log 仍在；SCHEMA_VERSION 推进到 10', () => {
+  assert.equal(SCHEMA_VERSION, 10);
   const cols = db.prepare("SELECT name FROM pragma_table_info('observer_dispatch_log')").all().map((c) => c.name);
   assert.deepEqual(cols.sort(), ['attempts', 'created_at', 'dispatched_at', 'event_id', 'last_error', 'status', 'workspace_id']);
+  const g = db.prepare("SELECT name FROM pragma_table_info('gallery_scores')").all().map((c) => c.name);
+  assert.deepEqual(g.sort(), ['breakdown_json', 'item_id', 'score', 'scored_at', 'scorer']);
 });
 
 ok('obs.state.running：前台工具在途 → running，taskId=callId', () => {

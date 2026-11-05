@@ -183,6 +183,28 @@ export async function matchIntent(intent, candidates, options = {}) {
       parts: top.parts,
       llmCalls: 0, // 命中已有链：LLM 调用数=0（负面测试一）
     };
+    // GALLERY-BRIDGE §4.2：命中时自动附情绪 top-1 图（仅 score>60；无高分图不附，不空凑）。
+    // gallery 经注入（读文件/护栏在 gallery-source），未注入不附，行为与 P12 完全一致。
+    const gallery = options.gallery;
+    if (gallery && typeof gallery.top === 'function' && intent.emotion) {
+      try {
+        const [row] = await gallery.top(intent.emotion, 1);
+        if (row && Number(row.score) > 60) {
+          result.attachment = {
+            itemId: row.itemId,
+            score: row.score,
+            sourceClass: row.sourceClass,
+            emotionSummary: row.emotionSummary || '',
+            base64: row.base64 || null,
+            mimeType: row.mimeType || null,
+            fileMissing: row.fileMissing === true,
+            oversized: row.oversized === true,
+          };
+        }
+      } catch {
+        /* 附图失败不影响检索结果（状态解耦原则） */
+      }
+    }
   } else if (top && top.score >= thresholds.compat) {
     result = {
       status: 'compat',
