@@ -257,5 +257,85 @@ ok('优先级常量与构造约束：STATUS_PRIORITY 全覆盖；interval 30-120
   assert.throws(() => new WorkspaceObserver({ dedup: createDedupFromRepo(db), source: () => [] }), /onDispatch/);
 });
 
+// ---- CODE-FIX-2 回归（M4 / L3）----
+
+/** fake clock：setTimeout 返回可检查的 timer 对象（tests 排程断言用）。 */
+function fakeClock() {
+  const timers = [];
+  let nextId = 0;
+  return {
+    timers,
+    setTimeout: (fn, ms) => { const t = { id: ++nextId, fn, ms, cleared: false }; timers.push(t); return t; },
+    clearTimeout: (t) => { if (t) t.cleared = true; },
+    Date: { now: () => BASE },
+  };
+}
+
+okAsync('obs.lifecycle.stop（M4 回归）：poll 在途时 stop() → finally 不重新排程，观察器真停', async () => {
+  const dbS = openDb({ path: path.join(tmp, 'obs-stop.sqlite') });
+  const clock = fakeClock();
+  let releaseDispatch;
+  const dispatchGate = new Promise((resolve) => { releaseDispatch = resolve; });
+  let dispatched = 0;
+  const obs = new WorkspaceObserver({
+    dedup: createDedupFromRepo(dbS),
+    onDispatch: async () => { await dispatchGate; dispatched++; },
+    source: () => [{ workspaceId: 'ws', sessionId: 's', summary: summarize([{ dt: 0, type: 'tool/call', data: { callId: 'c1', name: 'bash' } }]), seq: 1 }],
+    clock,
+  });
+  obs.start();
+  assert.equal(clock.timers.length, 1, 'start → 已排程');
+  clock.timers[0].fn(); // 触发 poll：进入 onDispatch，阻塞在 dispatchGate（poll 在途）
+  await new Promise((r) => setImmediate(r));
+  obs.stop(); // 此时已触发 timer 的 clearTimeout 无效，必须靠 stopped 标志拦住 finally
+  assert.equal(obs.stopped, true, 'stop → stopped 置位');
+  releaseDispatch();
+  await new Promise((r) => setImmediate(r)); // poll 完成 + finally 执行
+  assert.equal(dispatched, 1, '在途 poll 恰好完成一次调度');
+  assert.equal(clock.timers.length, 1, 'finally 检查 stopped → 不重新排程（原实现无条件重启，永远停不下来）');
+  obs.start();
+  assert.equal(clock.timers.length, 2, 'stop→start 生命周期可重启（stopped 复位）');
+});
+
+okAsync('obs.poll-error（L3 回归 a）：source 抛错 → log + stats.pollErrors，不再静默吞掉', async () => {
+  const clock = fakeClock();
+  const logs = [];
+  const obs = new WorkspaceObserver({
+    dedup: { recordDispatchPending: () => ({ inserted: true, status: 'pending' }), markDispatched: () => {}, markFailed: () => {}, findDispatch: () => null },
+    onDispatch: () => {},
+    source: () => { throw new Error('snapshot io failure'); },
+    clock,
+    log: (m) => logs.push(m),
+  });
+  obs.start();
+  clock.timers[0].fn();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(obs.stats.pollErrors, 1, 'pollErrors 计数（原实现 .catch(() => {}) 全吞）');
+  assert.equal(obs.lastError, 'snapshot io failure');
+  assert.ok(logs.some((m) => /poll failed/.test(m)), '连续失败可察觉');
+});
+
+okAsync('obs.dispatch-isolation（L3 回归 b）：单工作区 recordDispatchPending 抛错不中断整轮', async () => {
+  const dbI = openDb({ path: path.join(tmp, 'obs-iso.sqlite') });
+  const snapOf = (ws) => ({ workspaceId: ws, sessionId: 's-' + ws, summary: summarize([{ dt: 0, type: 'tool/call', data: { callId: 'c1', name: 'bash' } }]), seq: 1 });
+  const realDedup = createDedupFromRepo(dbI);
+  const obs = new WorkspaceObserver({
+    dedup: {
+      ...realDedup,
+      recordDispatchPending: (ws, ev) => {
+        if (ws === 'ws-a') throw new Error('db locked');
+        return realDedup.recordDispatchPending(ws, ev);
+      },
+    },
+    onDispatch: () => {},
+    source: () => [snapOf('ws-a'), snapOf('ws-b')],
+  });
+  const results = await obs.poll();
+  assert.equal(results[0].outcome, 'error', 'ws-a 故障被隔离为 outcome=error');
+  assert.equal(results[0].workspaceId, 'ws-a');
+  assert.equal(results[1].outcome, 'dispatched', '排在其后的 ws-b 照常处理（原实现异常上抛中断整轮）');
+  assert.equal(obs.stats.dispatchErrors, 1);
+});
+
 console.log(`\n结果：${process.exitCode ? '存在失败' : '全部通过'}（${passed} 项用例）`);
 if (process.exitCode) process.exit(1);

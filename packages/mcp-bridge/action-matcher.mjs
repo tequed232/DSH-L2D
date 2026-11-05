@@ -144,22 +144,30 @@ export async function matchIntent(intent, candidates, options = {}) {
     return { status: 'unmatched', reason: `registry-${registry.status || 'unavailable'}`, llmCalls: 0 };
   }
 
-  const thresholds = {
-    adopt: Number.isFinite(local.matchThreshold) ? local.matchThreshold : DEFAULT_THRESHOLDS.adopt,
-    compat: DEFAULT_THRESHOLDS.compat,
-  };
+  // L2：compat 随 adopt 联动——matchThreshold < 0.65 时 compat 区间 [compat, adopt)
+  // 收缩为空集（降低 adopt 阈值即放宽整体口径，不会静默变形为「全部按采用」之外的
+  // 其他语义）；matchThreshold > 0.85 时 compat 保持 0.65 不变。
+  const adopt = Number.isFinite(local.matchThreshold) ? local.matchThreshold : DEFAULT_THRESHOLDS.adopt;
+  const thresholds = { adopt, compat: Math.min(DEFAULT_THRESHOLDS.compat, adopt) };
 
   // 缓存（P2：进程内结果缓存 + 命中率指标；SQLite 持久化留 P5，见报告 Known Issues）
   const cacheEnabled = local.cacheEnabled === true;
-  const cache = cacheEnabled && options.cache && typeof options.cache.get === 'function' ? options.cache : null;
+  // L1：get/set 存在即可用作缓存（原实现只校验 get，命中路径直接 cache.stats.hits += 1
+  // → 注入无 stats 的自定义 cache 抛 TypeError）；stats 访问处守卫——无 stats 仅
+  // 不计命中率，缓存功能本身不受影响（不静默禁用缓存）。
+  const cache =
+    cacheEnabled && options.cache &&
+    typeof options.cache.get === 'function' && typeof options.cache.set === 'function'
+      ? options.cache
+      : null;
   const cacheKey = cache ? JSON.stringify([intent.modelId, intent.capabilityId, intent.status, intent.emotion, intent.expression]) : null;
   if (cache) {
     const hit = cache.get(cacheKey);
     if (hit) {
-      options.cache.stats.hits += 1;
+      if (cache.stats) cache.stats.hits += 1;
       return { ...hit, fromCache: true, llmCalls: 0 };
     }
-    options.cache.stats.misses += 1;
+    if (cache.stats) cache.stats.misses += 1;
   }
 
   const preferTagged = settings.emotionRouting?.preferTaggedActions === true;
@@ -226,7 +234,7 @@ export async function matchIntent(intent, candidates, options = {}) {
     }
   }
 
-  if (cache) options.cache.stats && options.cache.set(cacheKey, result);
+  if (cache) cache.set(cacheKey, result);
   return result;
 }
 

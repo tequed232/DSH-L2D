@@ -64,6 +64,8 @@ export function countGalleryScores(db) {
  *   emotionSummary = 该 item 的 expression 标签值（逗号连接，最多 3 个；无标签空串）。
  */
 export function listTopGalleryItems(db, { emotion, limit = 3 } = {}) {
+  // L8：limit 为 0/负数显式返回空集（「上限 clamp」语义下 0 条请求 ≠ 回退取 3 条）
+  if (Number.isInteger(limit) && limit <= 0) return [];
   const n = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 3) : 3;
   const base = `
     SELECT s.item_id AS itemId, s.score AS score, s.scorer AS scorer,

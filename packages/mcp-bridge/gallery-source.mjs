@@ -9,7 +9,11 @@
  *  - 无 score 数据 → 上层返回空集 + 提示，不退化为全量随机。
  *
  * 依赖注入：db 经 listTopGalleryItems（repo 唯一读入口），fsImpl 可注入（测试）。
+ * 默认实现 = 顶层 import node:fs 的同步 readFileSync（M1 修复：动态 import 返回
+ * Promise，sniffMime(Promise) 恒 null → 未注入 fsImpl 时附图整体静默失效且产生
+ * unhandled rejection；同步读取保证默认路径与注入路径行为一致）。
  */
+import fs from 'node:fs';
 import path from 'node:path';
 import { listTopGalleryItems } from '../dsh-l2d-db/src/gallery-repo.mjs';
 
@@ -31,7 +35,7 @@ function sniffMime(buf) {
 export function createGallerySource({ db, galleryDir, fsImpl }) {
   if (!db || typeof db.prepare !== 'function') throw new Error('createGallerySource: db 必填');
   if (typeof galleryDir !== 'string' || !galleryDir) throw new Error('createGallerySource: galleryDir 必填');
-  const fs = fsImpl || { readFileSync: (p) => import('node:fs').then((m) => m.readFileSync(p)) };
+  const fsImplFinal = fsImpl || fs;
   return {
     async top(emotion, limit = 3) {
       const rows = listTopGalleryItems(db, { emotion, limit });
@@ -44,7 +48,7 @@ export function createGallerySource({ db, galleryDir, fsImpl }) {
         }
         let buf;
         try {
-          buf = fs.readFileSync(path.join(galleryDir, row.fileName));
+          buf = fsImplFinal.readFileSync(path.join(galleryDir, row.fileName));
         } catch {
           out.fileMissing = true;
           return out;

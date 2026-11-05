@@ -153,21 +153,34 @@ export class WorkspaceObserver {
     this.clock = clock ?? { setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (id) => clearTimeout(id), Date };
     this.log = log;
     this.timer = null;
+    this.stopped = false;
     this.lastError = null;
-    this.stats = { polls: 0, dispatched: 0, duplicates: 0, silenced: 0, failed: 0 };
+    this.stats = { polls: 0, dispatched: 0, duplicates: 0, silenced: 0, failed: 0, pollErrors: 0, dispatchErrors: 0 };
   }
 
   start() {
+    // M4：stop() 置位后，poll 在途的 finally 不得重新排程（原实现 poll 完成后
+    // 无条件 start()，stop() 对已触发 timer 无效 → 观察器永远停不下来）。
+    // start() 显式复位 stopped，支持 stop → start 重启生命周期。
+    this.stopped = false;
     if (this.timer) return;
     this.timer = this.clock.setTimeout(() => {
-      void this.poll().catch(() => {}).finally(() => {
-        this.timer = null;
-        this.start();
-      });
+      void this.poll()
+        .catch((err) => {
+          // L3：poll 异常不再静默吞掉——记 log + stats.pollErrors，连续失败可察觉
+          this.lastError = String((err && err.message) || err);
+          this.stats.pollErrors += 1;
+          this.log(`poll failed: ${this.lastError}`);
+        })
+        .finally(() => {
+          this.timer = null;
+          if (!this.stopped) this.start();
+        });
     }, this.pollIntervalMs);
   }
 
   stop() {
+    this.stopped = true;
     if (this.timer) this.clock.clearTimeout(this.timer);
     this.timer = null;
   }
@@ -200,19 +213,29 @@ export class WorkspaceObserver {
 
     const results = [];
     for (const { snap, verdict } of pending) {
-      const event = buildWorkspaceEvent({
-        workspaceId: snap.workspaceId,
-        sessionId: snap.sessionId,
-        status: verdict.status,
-        taskId: verdict.taskId,
-        waitingAgentId: verdict.waitingAgentId,
-        errorCode: verdict.errorCode,
-        seq: snap.seq,
-        timestamp: this.clock.Date.now(),
-        revision: snap.revision,
-      });
-      const outcome = await this.dispatchOnce(snap, event);
-      results.push({ workspaceId: snap.workspaceId, eventId: event.eventId, status: verdict.status, outcome });
+      // L3：单工作区故障（recordDispatchPending 抛错等）不得中断整轮——
+      // try/catch 隔离，排在其后的工作区事件照常处理
+      try {
+        const event = buildWorkspaceEvent({
+          workspaceId: snap.workspaceId,
+          sessionId: snap.sessionId,
+          status: verdict.status,
+          taskId: verdict.taskId,
+          waitingAgentId: verdict.waitingAgentId,
+          errorCode: verdict.errorCode,
+          seq: snap.seq,
+          timestamp: this.clock.Date.now(),
+          revision: snap.revision,
+        });
+        const outcome = await this.dispatchOnce(snap, event);
+        results.push({ workspaceId: snap.workspaceId, eventId: event.eventId, status: verdict.status, outcome });
+      } catch (error) {
+        const msg = String((error && error.message) || error);
+        this.stats.dispatchErrors += 1;
+        this.lastError = msg;
+        this.log(`dispatch setup failed for ${snap.workspaceId}: ${msg}`);
+        results.push({ workspaceId: snap.workspaceId, eventId: null, status: verdict.status, outcome: 'error' });
+      }
     }
     return results;
   }

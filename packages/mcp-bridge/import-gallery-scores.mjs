@@ -13,7 +13,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { openDb, resolveDbPath } from '../dsh-l2d-db/src/db.mjs';
 import { upsertGalleryScore, countGalleryScores, seedMotionDirectorTemplate } from '../dsh-l2d-db/src/gallery-repo.mjs';
 
@@ -36,7 +36,7 @@ function argOf(flag) {
 }
 
 /** 容错解析 draft：支持 {items:[...]}（camelCase/snake_case）或 {itemId: {...}} 映射两种形态。 */
-function parseDraft(raw) {
+export function parseDraft(raw) {
   const parsed = JSON.parse(raw);
   const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.items) ? parsed.items : null;
   if (list) {
@@ -46,6 +46,7 @@ function parseDraft(raw) {
       breakdown: it.breakdown ?? (typeof it.breakdown_json === 'string' ? safeJson(it.breakdown_json) : {}),
       scorer: String(it.scorer || 'rule-engine-v1'),
       scoredAt: it.scoredAt ?? it.scored_at,
+      fileMissing: it.file_missing === true || it.fileMissing === true,
     })).filter((it) => Number.isInteger(it.itemId) && it.itemId > 0 && Number.isFinite(it.score));
   }
   if (parsed && typeof parsed === 'object') {
@@ -56,6 +57,7 @@ function parseDraft(raw) {
         breakdown: it?.breakdown ?? (typeof it?.breakdown_json === 'string' ? safeJson(it.breakdown_json) : {}),
         scorer: String(it?.scorer || 'rule-engine-v1'),
         scoredAt: it?.scoredAt ?? it?.scored_at,
+        fileMissing: it?.file_missing === true || it?.fileMissing === true,
       }))
       .filter((it) => Number.isInteger(it.itemId) && it.itemId > 0 && Number.isFinite(it.score));
   }
@@ -66,6 +68,47 @@ function safeJson(text) {
   try { return JSON.parse(text); } catch { return {}; }
 }
 
+/**
+ * 逐条 upsert（L4/L6 修复）：
+ *  - file_missing=true 条目跳过不写（L6：缺失文件的图不得带分进入 top-N 池，
+ *    GALLERY_DIR 配置漂移时宁可空集也不投错图）；
+ *  - 写入异常区分 FOREIGN KEY 拒绝（skippedFk）与其它错误（skippedError，
+ *    打印 err.message）——原空 catch 把 schema 不匹配 / I/O / repo 缺陷全部
+ *    归为 FK，导入静默漏数且误导统计口径；
+ * @returns {{applied, skippedPrecedence, skippedFk, skippedError, skippedFileMissing}}
+ */
+export function applyEntries(db, entries, { dryRun = false, log = (msg) => console.error(msg) } = {}) {
+  let applied = 0;
+  let skippedPrecedence = 0;
+  let skippedFk = 0;
+  let skippedError = 0;
+  let skippedFileMissing = 0;
+  for (const it of entries) {
+    if (it.fileMissing === true) {
+      skippedFileMissing += 1;
+      log(`[import] 条目 ${it.itemId} file_missing=true → 跳过（不进 top-N 池）`);
+      continue;
+    }
+    if (dryRun) { applied++; continue; }
+    try {
+      const r = upsertGalleryScore(db, it);
+      if (r.applied) applied++;
+      else skippedPrecedence++;
+    } catch (err) {
+      const msg = String((err && err.message) || err);
+      if (/FOREIGN KEY/i.test(msg)) {
+        skippedFk++; // item_id 不在 gallery_items（FK 拒绝）
+      } else {
+        skippedError++;
+        log(`[import] 条目 ${it.itemId} 写入失败（非 FK）：${msg}`);
+      }
+    }
+  }
+  return { applied, skippedPrecedence, skippedFk, skippedError, skippedFileMissing };
+}
+
+// ---- 主流程（仅 CLI 直跑执行；被测试 import 时跳过）----
+function main() {
 const dbArg = argOf('--db');
 const db = openDb(dbArg ? { path: dbArg } : {});
 const dryRun = process.argv.includes('--dry-run');
@@ -101,19 +144,11 @@ if (!entries.length) {
   process.exit(0);
 }
 
-let applied = 0;
-let skippedPrecedence = 0;
-let skippedFk = 0;
-for (const it of entries) {
-  if (dryRun) { applied++; continue; }
-  try {
-    const r = upsertGalleryScore(db, it);
-    if (r.applied) applied++;
-    else skippedPrecedence++;
-  } catch {
-    skippedFk++; // item_id 不在 gallery_items（FK 拒绝）等
-  }
-}
-console.log(`[import] 条目 ${entries.length}：applied=${applied} skipped(precision)=${skippedPrecedence} skipped(fk)=${skippedFk}`);
+const stats = applyEntries(db, entries, { dryRun });
+console.log(`[import] 条目 ${entries.length}：applied=${stats.applied} skipped(precision)=${stats.skippedPrecedence} skipped(fk)=${stats.skippedFk} skipped(error)=${stats.skippedError} skipped(file_missing)=${stats.skippedFileMissing}`);
 console.log(`[import] 库内 gallery_scores 总数=${dryRun ? '(dry-run)' : countGalleryScores(db)}`);
 if (dryRun) console.log('[import] dry-run：未写库');
+}
+
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) main();

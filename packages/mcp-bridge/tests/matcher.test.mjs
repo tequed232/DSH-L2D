@@ -244,5 +244,38 @@ okAsync('ret.settings.switch：localRetrieval.enabled=false → disabled 短路'
   assert.equal(composerCalls, 0);
 });
 
+// ---- CODE-FIX-2 回归（L1 / L2）----
+
+okAsync('ret.cache.guard（L1 回归）：cache 有 get/set 无 stats → 不抛 TypeError，照常工作', async () => {
+  // 原实现命中路径直接 cache.stats.hits += 1 → 注入无 stats 的自定义 cache 抛 TypeError
+  const store = new Map();
+  const statsLessCache = { get: (k) => store.get(k) ?? null, set: (k, v) => store.set(k, v) }; // 无 stats
+  const opts = {
+    successRate: () => 1,
+    settings: { localRetrieval: { cacheEnabled: true } },
+    cache: statsLessCache,
+  };
+  const r1 = await matchIntent({ modelId: 'm-cur', capabilityId: 'gesture.right_finger', status: 'waiting_input' }, [CAND], opts);
+  assert.equal(r1.status, 'compat', '首次检索正常返回（0.70 落 compat；原实现此处抛 TypeError）');
+  const r2 = await matchIntent({ modelId: 'm-cur', capabilityId: 'gesture.right_finger', status: 'waiting_input' }, [CAND], opts);
+  assert.equal(r2.fromCache, true, '无 stats 的 cache 仍可命中缓存');
+});
+
+okAsync('ret.threshold.compat-link（L2 回归）：matchThreshold<0.65 时 compat=adopt 联动（区间收缩为空集，语义显式）', async () => {
+  // 原实现 compat 恒 0.65：matchThreshold<0.65 时 [0.65, adopt) 为空集，compat 永不可达。
+  // 候选分数 0.70 = capability 0.35 + status 0.25 + successRate 0.10（sr=1，精确命中两维）。
+  const r = await matchIntent(
+    { modelId: 'm-cur', capabilityId: 'gesture.right_finger', status: 'waiting_input' }, [CAND],
+    { successRate: () => 1, settings: { localRetrieval: { matchThreshold: 0.5 } } }
+  );
+  assert.equal(r.status, 'adopted', '0.70 ≥ adopt(0.5)：compat 区间空集 → 按采用处理（口径放宽语义显式化，非静默变形）');
+  // adopt 上调（>0.85）时 compat 保持 0.65 不变，区间不塌缩
+  const r2 = await matchIntent(
+    { modelId: 'm-cur', capabilityId: 'gesture.right_finger', status: 'waiting_input' }, [CAND],
+    { successRate: () => 1, settings: { localRetrieval: { matchThreshold: 0.95 } } }
+  );
+  assert.equal(r2.status, 'compat', 'matchThreshold=0.95 时 0.70 落入 compat（compat 保持 0.65）');
+});
+
 console.log(`\n结果：${process.exitCode ? '存在失败' : '全部通过'}（${passed} 项用例）`);
 if (process.exitCode) process.exit(1);
