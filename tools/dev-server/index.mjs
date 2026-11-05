@@ -52,14 +52,54 @@ function argOf(flag) {
   return i >= 0 ? process.argv[i + 1] : null;
 }
 
-function send(res, status, type, buf) {
-  res.writeHead(status, {
+function send(res, status, type, buf, cors = true) {
+  const headers = {
     'Content-Type': type,
     'Content-Length': buf.length,
     'Cache-Control': 'no-store',
-    'Access-Control-Allow-Origin': '*',
-  });
+  };
+  // 写路由不带 CORS 头：跨站 JS 写完也读不到响应，配合 writeGuard 的 Origin 校验。
+  if (cors) headers['Access-Control-Allow-Origin'] = '*';
+  res.writeHead(status, headers);
   res.end(buf);
+}
+
+// 写方法防护：浏览器发起的跨站写会带 Origin 头，非同源一律 403。
+// 非浏览器客户端（curl/Agent）无 Origin 不受影响；部署到非回环 host 时用实际 host 比对，同样兼容。
+function writeGuard(req, res) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  let same = false;
+  try { same = new URL(String(origin)).host === String(req.headers.host || ''); } catch { same = false; }
+  if (!same) {
+    send(res, 403, 'text/plain; charset=utf-8', Buffer.from('cross-origin write blocked'), false);
+    return false;
+  }
+  return true;
+}
+
+// JSON body 读取：统一 16KB 上限（超限直接断开），所有 POST/PUT 路由必须走这里。
+const BODY_LIMIT = 16 * 1024;
+function readJsonBody(req, res, onBody) {
+  const chunks = [];
+  let total = 0;
+  req.on('data', (c) => {
+    total += c.length;
+    if (total > BODY_LIMIT) {
+      req.destroy();
+      return;
+    }
+    chunks.push(c);
+  });
+  req.on('end', () => {
+    let body = {};
+    try {
+      body = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
+    } catch {
+      return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'), false);
+    }
+    onBody(body);
+  });
 }
 
 function readIfExists(p) {
@@ -121,6 +161,8 @@ const memSettings = {
   autoAct: true,
   petMode: true,
 };
+// 可通过 /settings.json 修改的键（白名单，防原型污染/任意键注入）
+const SETTING_KEYS = new Set(Object.keys(memSettings));
 
 function settingsView() {
   return {
@@ -234,22 +276,18 @@ const server = http.createServer((req, res) => {
   // ---- overlay.js 依赖的宿主接口（本地版，语义与插件一致）
   if (urlPath === '/settings.json') {
     if (req.method === 'PUT' || req.method === 'POST') {
-      const chunks = [];
-      req.on('data', (c) => chunks.push(c));
-      req.on('end', () => {
-        let patch = {};
-        try {
-          patch = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
-        } catch {
-          return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
-        }
+      if (!writeGuard(req, res)) return;
+      return readJsonBody(req, res, (body) => {
+        const patch = { ...body };
         if (patch.clearApiKey === true) patch.apiKey = '';
         if (patch.apiKey === '') delete patch.apiKey;
         delete patch.clearApiKey;
-        Object.assign(memSettings, patch);
+        // 白名单拷贝：直接 Object.assign 会连 "__proto__" / "constructor" 一起吃下（原型污染）。
+        for (const key of Object.keys(patch)) {
+          if (SETTING_KEYS.has(key)) memSettings[key] = patch[key];
+        }
         return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(settingsView()), 'utf8'));
       });
-      return;
     }
     return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(settingsView()), 'utf8'));
   }
@@ -274,6 +312,7 @@ const server = http.createServer((req, res) => {
   // 本地不真正调用 DeepSeek：让前端走随机动作兜底
   if (urlPath === '/ai-action.json') {
     if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+    if (!writeGuard(req, res)) return;
     const body = { ok: false, reason: 'no-key' };
     return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(body), 'utf8'));
   }
@@ -298,18 +337,8 @@ const server = http.createServer((req, res) => {
     if (req.method !== 'POST') {
       return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
     }
-    const chunks = [];
-    req.on('data', (c) => {
-      chunks.push(c);
-      if (chunks.reduce((n, b) => n + b.length, 0) > 16 * 1024) req.destroy();
-    });
-    req.on('end', () => {
-      let body = {};
-      try {
-        body = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
-      } catch {
-        return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
-      }
+    if (!writeGuard(req, res)) return;
+    return readJsonBody(req, res, (body) => {
       const name = String(body.name || '').trim();
       if (!AI_ALLOWED.has(name)) {
         return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('unknown tool: ' + name));
@@ -317,7 +346,6 @@ const server = http.createServer((req, res) => {
       const queued = aiInbox.call(name, body.args || {});
       return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(queued), 'utf8'));
     });
-    return;
   }
 
   if (urlPath === '/ai/poll') {
@@ -330,22 +358,14 @@ const server = http.createServer((req, res) => {
       return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(aiInbox.read(id)), 'utf8'));
     }
     if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
-    const chunks = [];
-    req.on('data', (c) => chunks.push(c));
-    req.on('end', () => {
-      let body = {};
-      try {
-        body = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
-      } catch {
-        return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
-      }
+    if (!writeGuard(req, res)) return;
+    return readJsonBody(req, res, (body) => {
       const saved = aiInbox.post(body);
       if (!saved.ok) {
-        return send(res, 400, 'text/plain; charset=utf-8', Buffer.from(saved.reason || 'id required'));
+        return send(res, 400, 'text/plain; charset=utf-8', Buffer.from(saved.reason || 'id required'), false);
       }
       return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true }), 'utf8'));
     });
-    return;
   }
 
   // 界面令牌。/dsh-l2d/ui-tokens.css 也会走到这里（上面已剥前缀）。

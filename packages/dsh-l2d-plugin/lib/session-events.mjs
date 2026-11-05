@@ -236,6 +236,12 @@ export function ageSummaryState(input = {}, options = {}) {
   const lastEventAt = Number(input.lastEventAt) || 0;
   const ageMs = lastEventAt ? Math.max(0, now - lastEventAt) : null;
 
+  // 无时间戳（lastEventAt=0）无法判断新鲜度：一律视为陈旧，强制 idle 并清子态，
+  // 避免 working/waiting-* 在「时间未知」的会话里永久冻结。
+  if (ageMs === null) {
+    return { state: 'idle', substate: null, ageMs: null };
+  }
+
   if (substate && ageMs !== null && ageMs <= thresholds.waitingHoldMs) {
     return { state, substate, ageMs };
   }

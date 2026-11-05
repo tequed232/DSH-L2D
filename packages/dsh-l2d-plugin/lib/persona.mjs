@@ -55,6 +55,8 @@ function deepFreezeClone(value) {
 }
 
 function clamp01(value, fallback) {
+  // 空字符串/纯空白不是合法数值（Number('')===0 会把 0~1 钳位值静默压到 0），走 fallback。
+  if (typeof value === 'string' && !value.trim()) return fallback;
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(1, Math.max(0, n));

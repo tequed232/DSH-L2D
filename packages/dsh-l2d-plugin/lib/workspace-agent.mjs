@@ -214,8 +214,9 @@ export function decideNotification(input) {
 
   // 桥的最小通知间隔：30s 内不重复（error 例外）。
   const sinceLastNotify = now - (Number(input.lastNotifyAt) || 0);
-  if (!isError && sinceLastNotify < Number(input.notifyMinIntervalMs || NOTIFY_MIN_INTERVAL_MS)) {
-    return { fire: false, reason: 'notify-cooldown', retryAfterMs: NOTIFY_MIN_INTERVAL_MS - sinceLastNotify, decision };
+  const minInterval = Number(input.notifyMinIntervalMs) || NOTIFY_MIN_INTERVAL_MS;
+  if (!isError && sinceLastNotify < minInterval) {
+    return { fire: false, reason: 'notify-cooldown', retryAfterMs: minInterval - sinceLastNotify, decision };
   }
   return { fire: true, reason: 'fire', decision };
 }
@@ -260,6 +261,7 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
     firesByState: {},
     lastNotifyAt: 0,
     lastFingerprint: '',
+    lastStatusText: '',
     lastEnv: null,
     lastReason: '',
   };
@@ -322,7 +324,11 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
       latestSnapshot = wsSnapshot;
       const snapshotText = wsSnapshot ? renderSnapshotContext(wsSnapshot) : '';
       const status = renderStatus(snapshot, workspace.id, persona, env);
-      writeAtomic(path.join(directory, 'agent.md'), status);
+      // 内容未变则跳过写盘：每 4s 一次 tmp+rename 的磁盘 churn 不值得。
+      if (status !== gate.lastStatusText) {
+        writeAtomic(path.join(directory, 'agent.md'), status);
+        gate.lastStatusText = status;
+      }
 
       const nextFingerprint = fingerprint(snapshot, workspace.id, env, persona);
       const changed = nextFingerprint !== gate.lastFingerprint;
@@ -375,11 +381,22 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
           userInput: !!(env && env.available && env.state === 'conversation'),
           snapshotText,
         });
-        await prompt(text).catch(() => {});
-        gate.lastAnyFireAt = now;
-        gate.lastNotifyAt = now;
-        (gate.firesByState[picked.state] = gate.firesByState[picked.state] || []).push(now);
-        gate.lastFireAtByState[picked.state] = now;
+        // 发送失败不消耗频次预算：否则 controller 持续故障时 lastNotifyAt/firesByState
+        // 照记，真实通知反而被 rate/cooldown 拦死。
+        let sent = true;
+        try {
+          await prompt(text);
+        } catch {
+          sent = false;
+        }
+        if (sent) {
+          gate.lastAnyFireAt = now;
+          gate.lastNotifyAt = now;
+          (gate.firesByState[picked.state] = gate.firesByState[picked.state] || []).push(now);
+          gate.lastFireAtByState[picked.state] = now;
+        } else {
+          result = { fire: false, reason: 'notify-send-failed' };
+        }
       }
       gate.lastReason = result.reason;
       gate.lastEnv = env;

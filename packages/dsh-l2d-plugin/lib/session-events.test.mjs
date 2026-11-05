@@ -3,6 +3,7 @@ import {
   DEFAULT_SESSION_THRESHOLDS,
   SESSION_SUBSTATE,
   TOOL_STATUS,
+  ageSummaryState,
   aggregateState,
   classifyToolMarkers,
   classifyToolResult,
@@ -358,5 +359,23 @@ assert.equal(emptySummary.state, 'idle');
 assert.equal(emptySummary.ageMs, null);
 assert.equal(emptySummary.lastTool, null);
 assert.equal(emptySummary.substate, null);
+
+// 18) CODE-REVIEW-1 #12 回归：事件缺 time（lastEventAt=0）→ 强制 idle 并清子态，不冻结。
+{
+  const frozen = ageSummaryState(
+    { state: 'working', substate: SESSION_SUBSTATE.WAITING_ANSWER, lastEventAt: 0 },
+    { now: t1 },
+  );
+  assert.equal(frozen.state, 'idle', '无时间戳的 working 不得永久冻结');
+  assert.equal(frozen.substate, null, '无时间戳的 waiting-* 子态必须清掉');
+  assert.equal(frozen.ageMs, null);
+  // 时间正常时行为不受影响
+  const normal = ageSummaryState(
+    { state: 'working', substate: SESSION_SUBSTATE.WAITING_APPROVAL, lastEventAt: t1 - 1000 },
+    { now: t1 },
+  );
+  assert.equal(normal.state, 'working');
+  assert.equal(normal.substate, SESSION_SUBSTATE.WAITING_APPROVAL);
+}
 
 console.log('session-events ok');

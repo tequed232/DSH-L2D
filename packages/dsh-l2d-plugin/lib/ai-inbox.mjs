@@ -27,8 +27,10 @@ export function createAiInbox(options = {}) {
     call(name, args) {
       const item = { id: ++seq, name, args: args || {}, ts: Date.now() };
       queue.push(item);
-      while (queue.length > maxQueue) queue.shift();
-      return { ok: true, id: item.id, queued: queue.length };
+      let dropped = 0;
+      while (queue.length > maxQueue) { queue.shift(); dropped++; }
+      // 溢出必须显式反馈：静默丢弃会让调用方拿着 ok:true 的 id 永远等不到结果。
+      return dropped ? { ok: true, id: item.id, queued: queue.length, dropped } : { ok: true, id: item.id, queued: queue.length };
     },
 
     poll() {
@@ -38,15 +40,20 @@ export function createAiInbox(options = {}) {
     post(body) {
       const id = Number(body && body.id);
       if (!id) return { ok: false, reason: 'id required' };
-      if (body.event) {
+      const hasEvent = body.event !== undefined;
+      const hasResult = body.result !== undefined;
+      if (!hasEvent && !hasResult) return { ok: false, reason: 'event or result required' };
+      // event 与 result 允许同一条 post：分开处理，互不挤占。
+      if (hasEvent) {
         const list = events.get(id) || [];
         list.push(body.event);
         while (list.length > maxEventsPerId) list.shift();
         events.set(id, list);
         trim(events);
       }
-      if (body.result !== undefined && body.event === undefined) {
-        results.set(id, body.result || { ok: false, reason: 'empty' });
+      if (hasResult) {
+        // 仅 undefined/null 视为空结果；false/0 等合法 falsy 值原样保留。
+        results.set(id, body.result ?? { ok: false, reason: 'empty' });
         trim(results);
       }
       return { ok: true };
