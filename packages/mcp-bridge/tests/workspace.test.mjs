@@ -43,7 +43,7 @@ const PLUGIN_ID = 'dsh-l2d';
 console.log('PR-A Workspace / 双会话 / 记忆镜像（B01-B04）');
 
 ok('migration v7：bridge_workspaces 表已建，SCHEMA_VERSION 与迁移数同步', () => {
-  assert.equal(SCHEMA_VERSION, 8, 'SCHEMA_VERSION 应随 v8（bridge_actions）推进到 8');
+  assert.equal(SCHEMA_VERSION, 9, 'SCHEMA_VERSION 应随 v9（observer_dispatch_log）推进到 9');
   const cols = db.prepare("SELECT name FROM pragma_table_info('bridge_workspaces')").all().map((c) => c.name);
   assert.deepEqual(cols.sort(), ['chat_session_id', 'control_session_id', 'created_at', 'plugin_id', 'workspace_id']);
 });

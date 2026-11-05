@@ -25,7 +25,7 @@
  *  - 迁移只追加不改写；schema_migrations 记录版本与耗时。
  */
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 /** v1 全量 DDL。单条 exec 执行，语句间以分号分隔。 */
 export const MIGRATIONS = {
@@ -599,5 +599,32 @@ export const MIGRATIONS = {
     );
     CREATE INDEX IF NOT EXISTS idx_bridge_actions_queue
       ON bridge_actions (state, created_at);
+  `,
+
+  /**
+   * v9：Supervisor Observer 查重表（P12 修正案收窄：本版本只落此单表）。
+   *  - action_emotions / action_chain_tags 表形**冻结**：动作身份已改为模型锚定
+   *    （model_id + model_version + action_id，BOOTSTRAP-DECREE §0.3/§9.1），
+   *    原锚 motion_definitions.id 的 v9 设计作废，待 BOOTSTRAP-PHASE0 对账后随 v10 落地。
+   *  - dispatchOnce 查重（SUPERVISOR-DECREE §2）：Outbox 语义——recordPending 用
+   *    INSERT OR IGNORE 抢占（status='pending'）→ 调度成功置 dispatched / 失败置
+   *    failed（attempts 递增）；崩溃发生在 pending 中间 → 重启扫描 pending 重放，
+   *    不漏调度、不重复执行。
+   *  - 时间列由 repo 层显式传值（对齐 v7/v8 风格，不用 DEFAULT 表达式）。
+   */
+  9: `
+    CREATE TABLE IF NOT EXISTS observer_dispatch_log (
+      workspace_id  TEXT NOT NULL,
+      event_id      TEXT NOT NULL,
+      status        TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending','dispatched','failed')),
+      attempts      INTEGER NOT NULL DEFAULT 0,
+      last_error    TEXT,
+      dispatched_at INTEGER,
+      created_at    INTEGER NOT NULL,
+      PRIMARY KEY (workspace_id, event_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_observer_dispatch_pending
+      ON observer_dispatch_log (status, created_at);
   `,
 };
