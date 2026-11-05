@@ -34,7 +34,7 @@ const instructions = [
   'Observe other DSH workspaces read-only. Never inspect their files or transcripts.',
   'Never prompt, steer, stop, archive, or modify another Session.',
   'Use the per-agent MCP tools by their registered names: mcp__dsh_l2d__l2d_choreograph, mcp__dsh_l2d__l2d_emote, mcp__dsh_l2d__l2d_act, mcp__dsh_l2d__l2d_say, mcp__dsh_l2d__l2d_gaze, mcp__dsh_l2d__l2d_get_state, mcp__dsh_l2d__l2d_reset, mcp__dsh_l2d__l2d_persona, mcp__dsh_l2d__l2d_workspace_status.',
-  'Prefer l2d_choreograph: presetState for simple state reactions, segments for richer multi-stage performances. Max 3 segments, max 8 steps per segment.',
+  'Prefer l2d_choreograph: presetState for simple state reactions, segments for richer multi-stage performances. Max 15 segments, max 8 steps per segment. Compatible adjacent segments are batched by the host to reduce MCP round-trips.',
   'Treat MCP receipts as authoritative. accepted only means the slot was taken; action-done events are the real progress.',
   'When a receipt says conflict / priority-blocked / interrupted / pending, stop and read the receipt before replanning a different chain. Never retry the same chain.',
   'React subtly to thinking/working, acknowledge attention, show restrained concern for error, and settle to idle.',
@@ -42,7 +42,7 @@ const instructions = [
   'Prioritize direct user interaction over background reactions.', ''
 ].join('\n');
 
-const NOTIFY_MIN_INTERVAL_MS = 30000;
+const NOTIFY_MIN_INTERVAL_MS = 3000;
 const ACTION_STATES = new Set(['FORCE', 'NORMAL']);
 
 function readJson(file) {
@@ -142,7 +142,7 @@ export function buildNotifyPrompt({ status, persona, env, receipt, notifyState, 
     '- 所有输出（行为分析、气泡台词）必须使用简体中文。',
     '- 所有表情、动作、气泡都要符合上述人设（性格关键词、情绪表达强度、主动程度、亲密程度、动作偏好）。',
     '- 用 mcp__dsh_l2d__l2d_choreograph：简单状态反应传 presetState，复杂编排传 segments（1~3 段，每段最多 8 步）。',
-    '- 上次回执是 interrupted / priority-blocked / conflict / pending 时不要原样重试；换一条链，或等下一轮。',
+    '- 仅在未接纳（accepted=false）的 conflict / priority-blocked 回执上允许队列有限重试；accepted=true 的 pending 不得重复提交。interrupted/timeout 保留剩余队列并报告位置。',
     '- 用户正在输入或已离席时不要主动演出。',
     '- 如果判断不值得回应，只回一行结论，不要展开分析。',
     '- 不要联系或修改其他会话。',
@@ -239,7 +239,7 @@ export function hasPendingAction(snapshot) {
  * @param {number} [options.intervalMs]
  * @param {number} [options.notifyMinIntervalMs]
  */
-export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir(), '.dsh'), getSnapshot, getPersona, getWorkspaceSnapshot, intervalMs = 4000, notifyMinIntervalMs = NOTIFY_MIN_INTERVAL_MS }) {
+export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir(), '.dsh'), getSnapshot, getPersona, getWorkspaceSnapshot, intervalMs = 1500, notifyMinIntervalMs = NOTIFY_MIN_INTERVAL_MS }) {
   const directory = path.join(homeDir, 'workspaces', 'live2d-agent');
   const manifestPath = path.join(homeDir, 'l2d-workspace-agent.json');
   let workspace = null;
@@ -387,7 +387,7 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
 
   function start() {
     if (timer || typeof getSnapshot !== 'function') return;
-    timer = setInterval(() => { void refresh().catch(() => {}); }, Math.max(1500, intervalMs));
+    timer = setInterval(() => { void refresh().catch(() => {}); }, Math.max(500, intervalMs));
     timer.unref?.();
   }
 
