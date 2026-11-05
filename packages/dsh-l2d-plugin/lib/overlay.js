@@ -564,8 +564,16 @@
 
   function setSwitch(id, value) {
     var L = window.DSH_L2D;
-    if (!L || !L.setParameter) return;
-    L.setParameter(id, value, 1);
+    if (!L) return;
+    // UI 本地交互（换装/配饰开关）走 runtime 通道：不受 Node Ownership 托管白名单
+    // 约束（白名单管 Agent 控制权）；旧渲染包无 runtime 入口时回退 agent 通道。
+    if (L.setParametersRuntime) {
+      var one = {};
+      one[id] = value;
+      L.setParametersRuntime(one, 1);
+    } else if (L.setParameter) {
+      L.setParameter(id, value, 1);
+    }
     if (L.markActive) L.markActive();
   }
 
@@ -1125,7 +1133,10 @@
     if (physParams.angleZ) vals[physParams.angleZ.id] = normToValue(physParams.angleZ, physics.leanZ);
     if (physParams.posX) vals[physParams.posX.id] = normToValue(physParams.posX, physics.posX);
     if (physParams.posY) vals[physParams.posY.id] = normToValue(physParams.posY, physics.posY);
-    L.setParameters(vals);
+    // UI 本地拖拽走 runtime 通道：不受 Node Ownership 托管白名单约束（白名单管
+    // Agent 控制权）；旧渲染包无 runtime 入口时回退 agent 通道。
+    if (L.setParametersRuntime) L.setParametersRuntime(vals);
+    else L.setParameters(vals);
     // 头部朝向已交给 gaze（眼神/躯体跟随）统一处理，这里不再双写 AngleX/Y
   }
 

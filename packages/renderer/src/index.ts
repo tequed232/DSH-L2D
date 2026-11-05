@@ -1061,14 +1061,14 @@ function applyAmbientFace(core: CoreModel): void {
  * 修复前两者都在 applied；修复后都进 failed 且 reason=not-exist
  * （本模型真实手臂参数是 Param36/39/40/41/42/43 与 59~62）。
  */
-function setParameterChecked(id: string, value: number, weight = 1): string | null {
+function setParameterChecked(id: string, value: number, weight = 1, channel: 'agent' | 'runtime' = 'agent'): string | null {
   const core = model?.getModel();
   if (!core) return 'not-ready';
   const num = Number(value);
   if (!Number.isFinite(num)) return 'invalid-value';
   // Node Ownership：外部（agent）通道只允许写托管白名单内的参数；
-  // 白名单外（发型/裙子/配饰/四肢等）拒写，口型红线仍由 injector 更早优先拒绝。
-  if (!isHostable(id)) return 'not_hostable';
+  // runtime 通道（UI 本地交互）不受白名单约束，口型红线仍由 injector 更早优先拒绝。
+  if (channel === 'agent' && !isHostable(id)) return 'not_hostable';
   // AngleZ / PositionX / PositionY 可能被拖拽、微动作、媒体同时写，先记账再统一注入
   if (id === 'AngleZ' || id === 'PositionX' || id === 'PositionY') {
     if (!paramExists(core, id)) return 'not-exist';
@@ -1078,7 +1078,7 @@ function setParameterChecked(id: string, value: number, weight = 1): string | nu
   }
   // 入口校验：不存在 → not-exist；物理输出未独占 → physics-output（与 injector.set 同判）
   if (!paramExists(core, id)) return 'not-exist';
-  return injector.set(core, id, num, weight, { channel: 'agent' }) ? null : 'rejected';
+  return injector.set(core, id, num, weight, { channel }) ? null : 'rejected';
 }
 
 export function setParameter(id: string, value: number, weight = 1): boolean {
@@ -1097,7 +1097,24 @@ export function setParameters(values: Record<string, number>, weight = 1): Apply
   const failed: string[] = [];
   const src = values || {};
   for (const key of Object.keys(src)) {
-    const reason = setParameterChecked(key, src[key], weight);
+    const reason = setParameterChecked(key, src[key], weight, 'agent');
+    if (reason === null) ok.push(key);
+    else failed.push(key + ':' + reason);
+  }
+  return { ok, failed };
+}
+
+/**
+ * runtime 通道批量写：UI 本地交互（拖拽倾斜/位移、换装/配饰开关等）专用。
+ * 不受 Node Ownership 托管白名单约束（白名单管 Agent/AI 控制权，UI 交互属
+ * runtime 域）；口型红线与物理输出保护依然生效。
+ */
+export function setParametersRuntime(values: Record<string, number>, weight = 1): ApplyReport {
+  const ok: string[] = [];
+  const failed: string[] = [];
+  const src = values || {};
+  for (const key of Object.keys(src)) {
+    const reason = setParameterChecked(key, src[key], weight, 'runtime');
     if (reason === null) ok.push(key);
     else failed.push(key + ':' + reason);
   }
@@ -2139,6 +2156,7 @@ const api = {
   // 控制
   setParameter,
   setParameters,
+  setParametersRuntime,
   ownParameters,
   releaseParameters,
   getOwnedParameters,
