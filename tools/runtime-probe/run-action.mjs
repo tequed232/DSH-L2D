@@ -26,11 +26,6 @@ function argOf(flag, def = null) {
   return i >= 0 ? process.argv[i + 1] : def;
 }
 
-/** camelCase 轨道名 → snake_case 通道名（tailSway ↔ tail_sway） */
-function trackToChannel(track) {
-  return track.replace(/([A-Z])/g, '_$1').toLowerCase();
-}
-
 async function main() {
   const motionId = argOf('--motion');
   const cycles = Number(argOf('--cycles', '2'));
@@ -38,7 +33,7 @@ async function main() {
 
   const { openDb } = await import(pathToFileURL(path.join(ROOT, 'packages', 'dsh-l2d-db', 'src', 'db.mjs')).href);
   const adapterMod = await import(pathToFileURL(path.join(ROOT, 'packages', 'dsh-l2d-db', 'src', 'model-adapter.mjs')).href);
-  const guardMod = await import(pathToFileURL(path.join(ROOT, 'packages', 'dsh-l2d-db', 'src', 'safety-guard.mjs')).href);
+  const actionPlanMod = await import(pathToFileURL(path.join(ROOT, 'packages', 'dsh-l2d-db', 'src', 'action-plan.mjs')).href);
   const db = openDb({ startDir: ROOT });
 
   // ---- 1) SQLite：动作 + 链 ----
@@ -56,60 +51,19 @@ async function main() {
   }
   const channels = resolved.channels;
 
-  // ---- 3) Safety Guard：全部轨道极值预检（原子性）----
-  const skips = [];
-  const plans = []; // { track, channel, entries:[{paramId, weight, keys:[[t,v]]}] }
-  const lookupParamRow = (pid) => db.prepare('SELECT * FROM parameters WHERE model_id = ? AND param_id = ?').get(MODEL_ID, pid);
-  for (const step of chain.steps ?? []) {
-    if (step.kind === 'expression') {
-      skips.push({ step: step.step_index, kind: 'expression', semantic: step.params?.semantic, reason: '表情语义无 adapter 通道/无 Expression 绑定——如实跳过，不猜测' });
-      continue;
-    }
-    if (step.kind !== 'keyframes') { skips.push({ step: step.step_index, kind: step.kind, reason: '未知 step kind' }); continue; }
-    const track = step.params?.track;
-    const chName = trackToChannel(track ?? '');
-    const entries = channels[chName];
-    if (!entries) { skips.push({ step: step.step_index, kind: 'keyframes', track, reason: `无通道映射 ${chName}（adapter 未绑定）——如实跳过` }); continue; }
-    const keys = (step.params?.keys ?? []).map((k) => [k.t, k.value]);
-    if (!keys.length) { skips.push({ step: step.step_index, track, reason: '空 keys' }); continue; }
-    // Parameter Resolver：通道值空间为归一化 [-1,1]（MOTION-DATA-SCHEMA 约定），
-    // 按每个参数的 Hard 范围（SQLite 注册表）线性缩放：v → min + (v+1)/2 × (max-min)。
-    // 权重乘在归一化值上（缩放前），保证多段级联幅值按权重衰减。
-    const entriesResolved = entries.map((e) => {
-      const row = lookupParamRow(e.paramId);
-      if (!row || row.min_value === null || row.max_value === null) return null;
-      return {
-        param: e.paramId,
-        weight: e.weight ?? 1,
-        min: row.min_value,
-        max: row.max_value,
-        keys: keys.map(([t, v]) => {
-          const nv = Math.max(-1, Math.min(1, v * (e.weight ?? 1)));
-          return [t, row.min_value + ((nv + 1) / 2) * (row.max_value - row.min_value)];
-        }),
-      };
-    });
-    if (entriesResolved.some((e) => e === null)) {
-      skips.push({ step: step.step_index, track, reason: '通道内参数无 Hard 范围证据——guard fail-closed，跳过' });
-      continue;
-    }
-    const extremes = keys.map(([, v]) => v);
-    const batch = entries.map((e) => {
-      const row = lookupParamRow(e.paramId);
-      const nv = Math.max(-1, Math.min(1, Math.max(...extremes) * (e.weight ?? 1)));
-      return { paramId: e.paramId, value: row.min_value + ((nv + 1) / 2) * (row.max_value - row.min_value) };
-    });
-    const guardResult = guardMod.checkInjectionBatch(batch, lookupParamRow, { strict: true });
-    if (!guardResult.ok) {
-      console.log(JSON.stringify({ verdict: 'REJECTED', reason: 'SAFETY_GUARD_BATCH_REJECT', step: step.step_index, track, violations: guardResult.violations }));
-      process.exitCode = 3; return;
-    }
-    plans.push({
-      step: step.step_index, track, channel: chName,
-      tracks: entriesResolved.map((e) => ({ param: e.param, keys: e.keys })),
-      durationMs: step.duration_ms ?? Math.max(...keys.map(([t]) => t)),
-    });
+  // ---- 3) 编译 + Safety Guard：纯函数 compileActionPlan（原 run-action 内联逻辑，
+  //         已抽至 packages/dsh-l2d-db/src/action-plan.mjs，供上游调用缓存复用）----
+  const compiled = actionPlanMod.compileActionPlan(
+    chain,
+    channels,
+    (pid) => db.prepare('SELECT * FROM parameters WHERE model_id = ? AND param_id = ?').get(MODEL_ID, pid),
+  );
+  if (compiled.guardViolation) {
+    console.log(JSON.stringify({ verdict: 'REJECTED', reason: 'SAFETY_GUARD_BATCH_REJECT', step: compiled.guardViolation.step, track: compiled.guardViolation.track, violations: compiled.guardViolation.violations }));
+    process.exitCode = 3; return;
   }
+  const plans = compiled.plans;
+  const skips = compiled.skips;
 
   // ---- 4) Runtime：真实执行 ----
   const dv = await startDevServer(5321);

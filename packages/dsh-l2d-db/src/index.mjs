@@ -13,7 +13,7 @@ export {
 // ---- Phase 2 Foundation（P0-A~P0-D）----
 export {
   MOTION_TRANSITIONS, SEMANTIC_KEY_RE, canonicalChainHash,
-  createActionsRepository,
+  createActionsRepository, resolveActionModelHash,
 } from './actions-repo.mjs';
 export {
   WORKSPACE_IDS, CONTRACT_STATUSES, DB_STATUS_BY_CONTRACT, contractStatusOfDbStatus,

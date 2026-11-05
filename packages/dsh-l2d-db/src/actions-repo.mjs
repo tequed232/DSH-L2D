@@ -115,6 +115,24 @@ export function resolveSemanticKey(db, semanticKey, chainHash) {
   return { action: 'version_conflict', motion, expectedVersion: motion.version, chain: chainWithSteps(db, { ...latest, __version: chains.length }) };
 }
 
+/**
+ * 动作 → 模型哈希映射（供 action-cache 缓存键使用）。
+ * 经 motion_model_bindings join models.package_hash；多绑定取最近 verified_at。
+ * 未绑模型返回 null——调用方缓存键退化为 model_id，缓存统计单列 unbound 计数。
+ * 只读查询，不新增表。
+ */
+export function resolveActionModelHash(db, motionId) {
+  const row = db.prepare(`
+    SELECT m.package_hash AS packageHash
+    FROM motion_model_bindings b
+    JOIN models m ON m.model_id = b.model_id
+    WHERE b.motion_id = ?
+    ORDER BY b.verified_at DESC
+    LIMIT 1
+  `).get(motionId);
+  return row ? row.packageHash : null;
+}
+
 // ---------------------------------------------------------------- repository
 
 export function createActionsRepository(db, { snapshotDir } = {}) {
