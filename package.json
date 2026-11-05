@@ -20,8 +20,10 @@
     "accept": "node tools/acceptance/run.mjs",
     "test:breakpoint": "node --experimental-sqlite --experimental-strip-types tests/breakpoint-lab/run.mjs",
     "test:bridge": "node --experimental-sqlite packages/mcp-bridge/tests/workspace.test.mjs && node packages/mcp-bridge/tests/status-reporter.test.mjs && node packages/mcp-bridge/tests/mcp-tools.test.mjs && node --experimental-sqlite packages/mcp-bridge/tests/action-queue.test.mjs && node --experimental-sqlite packages/mcp-bridge/tests/continuous.test.mjs",
+    "test:supervisor": "node --experimental-sqlite packages/mcp-bridge/tests/observer.test.mjs && node --experimental-sqlite packages/mcp-bridge/tests/matcher.test.mjs",
     "bench:action-cache": "node --experimental-sqlite tests/breakpoint-lab/bench.mjs",
     "test:contract": "node tools/renderer-contract/check.mjs",
+    "test:deps": "node --experimental-sqlite tools/dependency-manager/test/version-resolver.test.mjs && node --experimental-sqlite tools/dependency-manager/test/compat-check.test.mjs && node --experimental-sqlite tools/dependency-manager/test/audit-log.test.mjs && node --experimental-sqlite tools/dependency-manager/test/scan.test.mjs && node --experimental-sqlite tools/dependency-manager/test/transaction.test.mjs && node --experimental-sqlite tools/dependency-manager/test/manager.test.mjs",
     "scan:capability": "node tools/capability-scan/scan.mjs"
   },
   "engines": {
