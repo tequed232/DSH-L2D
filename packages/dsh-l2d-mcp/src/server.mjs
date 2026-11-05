@@ -278,7 +278,7 @@ server.registerTool(
 server.registerTool(
   'l2d_choreograph',
   {
-    description: '混合动作编排入口。简单状态反应优先传 presetState（error/attention/working/thinking/idle/bootstrap/user-direct），程序复用 choreography.mjs 已验证的预设链；复杂对话、情绪或多阶段演出则由 Agent 自行生成 segments（1~3 段，每段最多 8 步）。两者只能选一个。程序逐段调用现有 l2d_act，只有上一段明确 completed 才执行下一段。返回 conflict / priority-blocked / interrupted / pending 时必须停止，读取回执后重新规划不同的链，不要原样重试。只允许 expression / motion / pose / look；表情和动作必须使用当前模型真实白名单。',
+    description: '混合动作编排入口。简单状态反应优先传 presetState（error/attention/working/thinking/idle/bootstrap/user-direct），程序复用 choreography.mjs 已验证的预设链；复杂对话、情绪或多阶段演出则由 Agent 自行生成 segments（1~15 段，每段最多 8 步）。两者只能选一个。程序以 FIFO 队列逐段调用现有 l2d_act；上一段明确 completed 后才出队下一段。conflict / priority-blocked 会在队列头等待并有限重试；accepted=true 但 pending 不会重复提交，避免重复动作。interrupted / timeout 会保留剩余队列并返回明确状态。只允许 expression / motion / pose / look；表情和动作必须使用当前模型真实白名单。',
     inputSchema: {
       presetState: z.enum(['error', 'attention', 'working', 'thinking', 'idle', 'bootstrap', 'user-direct']).optional(),
       segments: z.array(z.object({
@@ -300,7 +300,7 @@ server.registerTool(
         })).min(1).max(8),
         priority: z.enum(['BACKGROUND', 'NORMAL', 'FORCE']).optional(),
         bubble: z.string().max(40).optional(),
-      })).min(1).max(3).optional(),
+      })).min(1).max(15).optional(),
     },
   },
   async ({ presetState, segments }) => {
