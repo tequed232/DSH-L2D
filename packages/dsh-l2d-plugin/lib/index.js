@@ -848,6 +848,14 @@ export function apply(root, config = {}) {
           }
         }
         table.push({ kind: 'script', placement: 'body', text: injectRowText() });
+        // UI-FLOAT 特批（本席文件所有权例外，仅此一处注入注册）：全局设置入口。
+        // lib/settings-entry.js 整体内联（无 src，不新增路由）；幂等标记 __DSH_SETTINGS_ENTRY__ 防重复。
+        try {
+          const entrySrc = fs.readFileSync(path.join(PKG_ROOT, 'lib', 'settings-entry.js'), 'utf8');
+          const entryDup = typeof table.some === 'function'
+            && table.some((r) => r && typeof r.text === 'string' && r.text.indexOf('__DSH_SETTINGS_ENTRY__') >= 0);
+          if (!entryDup) table.push({ kind: 'script', placement: 'body', text: entrySrc });
+        } catch { /* 入口文件缺失不影响宿主 */ }
       } catch {
         /* 注入表异常不应影响宿主启动 */
       }

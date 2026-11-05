@@ -261,6 +261,8 @@
     'cursor:pointer;background:transparent;color:var(--dsh-ink);}',
     '.l2d-panel .l2d-actions button.primary{background:var(--dsh-accent);color:var(--dsh-on-accent);border-color:transparent;}',
     '.l2d-panel .l2d-hint{font:var(--dsh-text-xs);color:var(--dsh-ink-muted);}',
+    '.l2d-row label{transition:color var(--dsh-dur-fast) var(--dsh-ease);}',
+    '.l2d-row.l2d-group-flash label{color:var(--dsh-accent);}',
     '#dsh-l2d-root :focus-visible,.l2d-menu :focus-visible,.l2d-panel :focus-visible{outline:2px solid var(--dsh-accent);outline-offset:2px;}'
   ].join('');
 
@@ -1145,6 +1147,24 @@
   }
 
   // 调试/自动化测试钩子：不进 AI 工具白名单
+  // 设置窗口管理钩子：供全局设置入口（lib/settings-entry.js）的
+  // SettingsWindowManager 调用。单实例语义：已开则聚焦+锚到分组，不重复创建。
+  function focusPanelWindow() {
+    if (!panelEl || !panelOpen) return;
+    var head = panelEl.querySelector('.l2d-panel-head');
+    if (head && head.focus) head.focus({ preventScroll: true });
+  }
+  function focusPanelGroup(group) {
+    if (!panelEl || !panelOpen || !group) return;
+    var target = panelEl.querySelector('.l2d-row[data-group="' + String(group).replace(/"/g, '') + '"]');
+    if (!target) return;
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    target.classList.remove('l2d-group-flash');
+    // 触发重绘以重放高亮
+    void target.offsetWidth;
+    target.classList.add('l2d-group-flash');
+    setTimeout(function () { target.classList.remove('l2d-group-flash'); }, 1400);
+  }
   window.DSH_L2D_UI = {
     chatActionForReply: chatActionForReply,
     executePokeAction: executePokeAction,
@@ -1153,6 +1173,16 @@
     setBodyType: setBodyType,
     cycleBodyType: cycleBodyType,
     zoneAt: zoneAt,
+    settings: {
+      open: function (group) {
+        if (!panelOpen) openPanel();
+        if (group) focusPanelGroup(group);
+        else focusPanelWindow();
+      },
+      close: function () { closePanel(); },
+      focus: function () { if (panelOpen) focusPanelWindow(); },
+      isOpen: function () { return panelOpen; },
+    },
     actState: function () {
       var L = window.DSH_L2D;
       return L && L.currentAct ? L.currentAct() : null;
@@ -2803,9 +2833,10 @@
   }
   window.addEventListener('resize', panelViewportChanged);
 
-  function row(labelText, control) {
+  function row(labelText, control, group) {
     var wrap = document.createElement('div');
     wrap.className = 'l2d-row';
+    if (group) wrap.setAttribute('data-group', group); // 设置入口二级菜单锚点
     var lab = document.createElement('label');
     lab.textContent = labelText;
     wrap.appendChild(lab);
@@ -2821,6 +2852,7 @@
     // 标题栏：拖拽把手 + 折叠/最大化/关闭。内容全部收进 .l2d-panel-body，由滚动条兜底。
     var head = document.createElement('div');
     head.className = 'l2d-panel-head';
+    head.setAttribute('tabindex', '-1'); // SettingsWindowManager 焦点落点
     var title = document.createElement('h4');
     title.textContent = 'DSH-L2D 设置';
     var collapseBtn = document.createElement('button');
@@ -2854,7 +2886,7 @@
     keyInput.type = 'password';
     keyInput.placeholder = settings.hasApiKey ? '已保存，留空则不修改' : 'sk-...';
     keyInput.autocomplete = 'off';
-    body.appendChild(row('DeepSeek API Key（仅用于查询余额）', keyInput));
+    body.appendChild(row('DeepSeek API Key（仅用于查询余额）', keyInput, 'account'));
 
     var soundWrap = document.createElement('div');
     soundWrap.className = 'l2d-inline';
@@ -2869,7 +2901,7 @@
     soundVol.value = String(settings.soundVolume);
     soundWrap.appendChild(soundToggle);
     soundWrap.appendChild(soundVol);
-    body.appendChild(row('音效开关 / 音量', soundWrap));
+    body.appendChild(row('音效开关 / 音量', soundWrap, 'behavior'));
 
     var scaleInput = document.createElement('input');
     scaleInput.type = 'range';
@@ -2880,37 +2912,37 @@
     scaleInput.addEventListener('input', function () {
       applyScale(scaleInput.value);
     });
-    body.appendChild(row('角色缩放', scaleInput));
+    body.appendChild(row('角色缩放', scaleInput, 'appearance'));
 
     var refreshInput = document.createElement('input');
     refreshInput.type = 'number';
     refreshInput.min = '15';
     refreshInput.max = '3600';
     refreshInput.value = String(settings.refreshSeconds);
-    body.appendChild(row('余额刷新间隔（秒）', refreshInput));
+    body.appendChild(row('余额刷新间隔（秒）', refreshInput, 'account'));
 
     var agentToggle = document.createElement('input');
     agentToggle.type = 'checkbox';
     agentToggle.checked = settings.agentLink !== false;
-    body.appendChild(row('工作区联动', agentToggle));
+    body.appendChild(row('工作区联动', agentToggle, 'behavior'));
     var sysToggle = document.createElement('input');
     sysToggle.type = 'checkbox';
     sysToggle.checked = settings.systemSensor === true;
-    body.appendChild(row('系统联动（CPU/内存/电量/断网）', sysToggle));
+    body.appendChild(row('系统联动（CPU/内存/电量/断网）', sysToggle, 'behavior'));
     var mediaToggle = document.createElement('input');
     mediaToggle.type = 'checkbox';
     mediaToggle.checked = settings.mediaSensor === true;
-    body.appendChild(row('媒体律动（音乐播放时轻摆）', mediaToggle));
+    body.appendChild(row('媒体律动（音乐播放时轻摆）', mediaToggle, 'behavior'));
 
     var petToggle = document.createElement('input');
     petToggle.type = 'checkbox';
     petToggle.checked = settings.petMode !== false; // 默认开（桌宠模式为正式行为）
-    body.appendChild(row('桌宠模式（悬停零触发 · 点击只摸头）', petToggle));
+    body.appendChild(row('桌宠模式（悬停零触发 · 点击只摸头）', petToggle, 'behavior'));
 
     var eyeFollowToggle = document.createElement('input');
     eyeFollowToggle.type = 'checkbox';
     eyeFollowToggle.checked = settings.eyeFollow !== false; // 默认开（与宿主默认值/存量迁移一致）
-    body.appendChild(row('眼神跟随（鼠标驱动视线/头/身体）', eyeFollowToggle));
+    body.appendChild(row('眼神跟随（鼠标驱动视线/头/身体）', eyeFollowToggle, 'appearance'));
 
     var clickMode = document.createElement('select');
     var modeRandom = document.createElement('option');
@@ -2922,17 +2954,17 @@
     clickMode.appendChild(modeRandom);
     clickMode.appendChild(modeApi);
     clickMode.value = settings.clickMode === 'api' ? 'api' : 'random';
-    body.appendChild(row('戳一戳动作', clickMode));
+    body.appendChild(row('戳一戳动作', clickMode, 'behavior'));
 
     var spontaneousChat = document.createElement('input');
     spontaneousChat.type = 'checkbox';
     spontaneousChat.checked = settings.spontaneousChat !== false;
-    body.appendChild(row('自发聊天', spontaneousChat));
+    body.appendChild(row('自发聊天', spontaneousChat, 'behavior'));
 
     var memeToggle = document.createElement('input');
     memeToggle.type = 'checkbox';
     memeToggle.checked = settings.memeStyle !== false;
-    body.appendChild(row('梗味人设', memeToggle));
+    body.appendChild(row('梗味人设', memeToggle, 'behavior'));
 
     var memeLevel = document.createElement('input');
     memeLevel.type = 'range';
@@ -2940,12 +2972,12 @@
     memeLevel.max = '100';
     memeLevel.step = '5';
     memeLevel.value = String(settings.memeLevel);
-    body.appendChild(row('玩梗程度', memeLevel));
+    body.appendChild(row('玩梗程度', memeLevel, 'behavior'));
 
     var autoAct = document.createElement('input');
     autoAct.type = 'checkbox';
     autoAct.checked = settings.autoAct !== false;
-    body.appendChild(row('API 自主动作', autoAct));
+    body.appendChild(row('API 自主动作', autoAct, 'behavior'));
 
     var hint = document.createElement('div');
     hint.className = 'l2d-hint';
