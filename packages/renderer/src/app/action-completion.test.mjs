@@ -48,3 +48,21 @@ test('派发中途注册的监听者不收当前事件，下一轮生效（快�
   bus.emit({ kind: 'motion', executionId: '2', group: 'g', phase: 'end', owned: [] });
   assert.equal(late.length, 1, '下一轮起正常派发');
 });
+
+test('PR-A 三态：事件总线透传 end / interrupted / failed 与 reason', () => {
+  const bus = createCompletionBus();
+  const got = [];
+  bus.subscribe((e) => got.push(e));
+  bus.emit({ kind: 'motion', executionId: '10', group: 'g', phase: 'failed', reason: 'start-rejected', owned: [] });
+  bus.emit({ kind: 'keyframes', executionId: '11', group: '', phase: 'interrupted', reason: 'stop-called', owned: [] });
+  bus.emit({ kind: 'motion', executionId: '12', group: 'g', phase: 'end', owned: [] });
+  assert.equal(got.length, 3);
+  assert.equal(got[0].phase, 'failed');
+  assert.equal(got[0].reason, 'start-rejected');
+  assert.equal(got[1].phase, 'interrupted');
+  assert.equal(got[1].reason, 'stop-called');
+  assert.equal(got[2].phase, 'end');
+  assert.equal(got[2].reason, undefined, 'end 事件不携带 reason');
+  const phases = new Set(got.map((e) => e.phase));
+  assert.equal(phases.size, 3, '三态必须是三种不同状态');
+});

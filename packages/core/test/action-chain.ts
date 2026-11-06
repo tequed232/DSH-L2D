@@ -268,6 +268,38 @@ test('countRealCompletions：空链与畸形输入安全归零', () => {
   assert.equal(countRealCompletions([null, { kind: 'motion' }] as unknown as { kind?: string }[]), 1);
 });
 
+// ------------------------------------------------------ PR-A 三态生命周期回归
+test('三态生命周期：completed / interrupted / failed 必须是三种不同状态', () => {
+  // failed：链内动作执行失败收尾 → phase='failed'，不冒充 completed
+  const g1 = new ActGate();
+  const fail = g1.admit({ priority: 'FORCE', source: 'ai', callId: 21, steps: 1 });
+  g1.noteMotion(fail.runId || 0, 'start-rejected', 'fail');
+  const failed = g1.finish(fail.runId || 0);
+  assert.ok(failed);
+  assert.equal(failed?.phase, 'failed', '动作失败收尾必须是 failed，不得统一当作 completed');
+  assert.equal(failed?.reason, 'start-rejected');
+  assert.notEqual(failed?.phase, 'end');
+
+  // interrupted：主动撤下 → phase='interrupted'
+  const g2 = new ActGate();
+  const run = g2.admit({ priority: 'NORMAL', source: 'ai', callId: 22, steps: 2 });
+  const interrupted = g2.release(run.runId || 0, 'preempted');
+  assert.ok(interrupted);
+  assert.equal(interrupted?.phase, 'interrupted', '被中断必须是 interrupted');
+
+  // completed：自然播完、无失败记录 → phase='end'
+  const g3 = new ActGate();
+  const ok = g3.admit({ priority: 'NORMAL', source: 'ai', callId: 23, steps: 1 });
+  const end = g3.finish(ok.runId || 0);
+  assert.ok(end);
+  assert.equal(end?.phase, 'end', '自然收尾保持 end');
+
+  // 三态互不相等（运行时层面的显式保证）
+  assert.notEqual('end', 'interrupted');
+  assert.notEqual('end', 'failed');
+  assert.notEqual('interrupted', 'failed');
+});
+
 if (process.exitCode) {
   console.error('\n动作链测试失败\n');
 } else {

@@ -648,10 +648,20 @@ const actionCompletionBus = createCompletionBus();
 export const onActionCompletion = (cb: (event: ActionCompletionEvent) => void): (() => void) =>
   actionCompletionBus.subscribe(cb);
 
-/** 派发真实完成事件；executionId 缺失时不产事件（无消费者可关联，纯噪音）。 */
-function emitActionCompletion(kind: 'motion' | 'keyframes', executionId: string, group: string, owned: string[]): void {
+/** 派发真实完成事件；executionId 缺失时不产事件（无消费者可关联，纯噪音）。
+ *  三态生命周期（PR-A）：phase 必须区分 end/interrupted/failed，不得统一当作 completed。 */
+function emitActionCompletion(
+  kind: 'motion' | 'keyframes',
+  executionId: string,
+  group: string,
+  owned: string[],
+  phase: 'end' | 'interrupted' | 'failed' = 'end',
+  reason?: string,
+): void {
   if (!executionId) return;
-  actionCompletionBus.emit({ kind, executionId, group, phase: 'end', owned });
+  const event: ActionCompletionEvent = { kind, executionId, group, phase, owned };
+  if (reason) event.reason = reason;
+  actionCompletionBus.emit(event);
 }
 
 export { closeMotionsOnPreempt, preemptedYandere, motionsShareArm, motionResultKind };
@@ -995,6 +1005,12 @@ export function getKeyframeOwnedParameters(): string[] {
 }
 
 export function stopKeyframes(): void {
+  // PR-A 三态：飞行中的被追踪执行被显式停止 → interrupted（非 completed）。
+  // owned 必须在释放前快照，与自然收敛同一份出口核对语义。
+  if (kfActive && kfExecutionId) {
+    const owned = kfOwnedForTracks.slice();
+    emitActionCompletion('keyframes', kfExecutionId, '', owned, 'interrupted', 'stop-called');
+  }
   kfActive = false;
   kfTracks = [];
   kfExecutionId = '';
@@ -1552,6 +1568,9 @@ export async function playMotionAsync(
     motionCompletionDone = true; // start 失败无终点可言，防御看门狗/事件残留
     poseOwnedByMotion = false;
     if (finishResolve) finishResolve();
+    // PR-A 三态：start 被拒是 failed（非 completed）——同步回执之外的异步消费者
+    // （事件订阅链）也必须拿到明确失败，不再静默无事件。
+    emitActionCompletion('motion', executionId, target, injector.getAgentOwned(), 'failed', 'start-rejected');
     return { status: 'failed', reason: 'start-rejected', group: target };
   }
   motionDirector.commit(target);

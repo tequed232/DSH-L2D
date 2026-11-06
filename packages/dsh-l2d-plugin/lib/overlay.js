@@ -1589,6 +1589,29 @@
     if (!st || !st.runId || !st.expected) return;
     if (!ev || String(ev.executionId || '') !== String(st.callId)) return;
     if (!actStillCurrent(st.runId)) return; // 已被打断/超时收尾，预估路径已归位
+    // PR-A 三态生命周期：interrupted / failed 不等期望数凑齐，立即终态收尾，
+    // 不冒充 completed（end 才走 seen 计数路径）。
+    if (ev && (ev.phase === 'interrupted' || ev.phase === 'failed')) {
+      var apiT = window.DSH_L2D;
+      var e2t = null;
+      if (ev.phase === 'failed' && apiT && apiT.noteActMotion) {
+        apiT.noteActMotion(st.runId, ev.reason || 'runtime-failed', 'fail');
+        e2t = apiT.finishAct ? apiT.finishAct(st.runId) : null; // → phase:'failed'
+      } else {
+        e2t = apiT && apiT.releaseAct ? apiT.releaseAct(st.runId, ev.reason || ev.phase) : null; // → phase:'interrupted'
+      }
+      actCompletionState = { runId: 0, callId: null, expected: 0, seen: 0, owned: [] };
+      if (!e2t) return; // 预估兜底先到：终态已发过，不重复
+      e2t.completionSource = 'runtime-event';
+      if (ev.owned) e2t.ownedParams = ev.owned.slice();
+      postActEvent(e2t);
+      if (actingTimer) {
+        clearTimeout(actingTimer);
+        actingTimer = 0;
+      }
+      if (apiT && apiT.setStageBusy) apiT.setStageBusy({ acting: false });
+      return;
+    }
     st.seen++;
     if (ev.owned) st.owned = ev.owned;
     if (st.seen < st.expected) return;
