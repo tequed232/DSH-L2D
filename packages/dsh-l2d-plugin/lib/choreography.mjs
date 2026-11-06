@@ -28,7 +28,7 @@
 export const CHOREOGRAPHY_VERSION = 1;
 
 // 口型禁区名单单一事实源（宿主/MCP/编排共用一份，避免各写一份漂移）。
-import { LIPSYNC_PARAMS } from './param-guards.mjs';
+import { collectReservedParams } from './param-guards.mjs';
 
 /** 编排覆盖的状态。顺序是判定优先级从高到低（见 aggregateWorkspaceState）。 */
 export const CHOREOGRAPHY_STATES = [
@@ -399,30 +399,32 @@ export function decide(input = {}, gate = DEFAULT_GATE) {
 
   // 2. 状态没变：无 refreshMs 的状态不重播；有 refreshMs 的持续态必须等到刷新周期。
   //    （只靠 cooldown 不够：working 的 cooldown 只有 8s，但刷新节拍是 25s。）
+  //    FORCE 状态（user-direct）豁免 same-state：每条用户消息都要有反应，由 cooldown/rate 防风暴。
   const refreshMs = Number(entry.refreshMs) || 0;
   const sameState = input.previousState != null && String(input.previousState) === state;
   const lastStateFireAt = Number(lastFireAtByState[state]) || 0;
-  if (!force && sameState) {
+  const forceEntry = entry.priority === 'FORCE';
+  if (!force && !forceEntry && sameState) {
     if (refreshMs <= 0) return { ...base, reason: 'same-state' };
     const since = now - lastStateFireAt;
     if (since < refreshMs) return { ...base, reason: 'refresh', retryAfterMs: refreshMs - since };
   }
 
-  // 3. 状态稳定时间（防「刚进入就触发、马上又切走」的空动作）。
+  // 3. 状态稳定时间（防「刚进入就触发、马上又切走」的空动作）。FORCE 豁免。
   const dwellRemaining = Math.max(0, Number(entry.minDwellMs) || 0) - (now - stateSince);
-  if (!force && dwellRemaining > 0) {
+  if (!force && !forceEntry && dwellRemaining > 0) {
     return { ...base, reason: 'dwell', retryAfterMs: dwellRemaining };
   }
 
-  // 4. 同状态冷却。
+  // 4. 同状态冷却（FORCE 也保留：连续对话靠它防刷屏）。
   const cooldownRemaining = Math.max(0, Number(entry.cooldownMs) || 0) - (now - lastStateFireAt);
   if (!force && cooldownRemaining > 0) {
     return { ...base, reason: 'cooldown', retryAfterMs: cooldownRemaining };
   }
 
-  // 5. 全局最小间隔。
+  // 5. 全局最小间隔。FORCE 豁免（用户直接对话的反应不该被环境动作的间隔拖住）。
   const gapRemaining = settings.minGapMs - (now - lastAnyFireAt);
-  if (!force && gapRemaining > 0) {
+  if (!force && !forceEntry && gapRemaining > 0) {
     return { ...base, reason: 'min-gap', retryAfterMs: gapRemaining };
   }
 
@@ -604,10 +606,11 @@ export function validateChoreography(map = CHOREOGRAPHY, options = {}) {
     warnings.push(...result.warnings);
   }
 
-  // 口型禁区：编排数据里出现口型参数就直接判死。
-  const blob = JSON.stringify(map);
-  for (const key of LIPSYNC_PARAMS) {
-    if (blob.includes(key)) errors.push('编排数据里出现口型参数 ' + key);
+  // 口型禁区：编排数据里出现口型参数名（键或精确字符串值）就判死。
+  // 用 param-guards 的精确匹配，避免对整份 JSON 做子串误报（label/trigger 文案含参数名会误杀）。
+  const reservedHits = collectReservedParams(map);
+  for (const key of reservedHits) {
+    errors.push('编排数据里出现口型参数 ' + key);
   }
 
   // 模型白名单可被其他模型覆盖；默认表用常量。

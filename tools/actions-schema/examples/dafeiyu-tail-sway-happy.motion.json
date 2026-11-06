@@ -1,0 +1,85 @@
+{
+  "motion_id": "dafeiyu.tail-sway-happy",
+  "semantic_key": "emotion.happy.tail_sway",
+  "description": "开心时鲸尾左右摆动，后发与裙摆随动（参考图库 GIF 动作线索 + 设定表动态暗示）",
+  "emotion": "happy",
+  "facial_expression": "smile_open_mouth",
+  "gaze": "camera",
+  "body_language": "tail_sway",
+  "source_asset": {
+    "asset_id": "asset-gallery-gif-batch-pending",
+    "source_type": "gif",
+    "original_path": "gallery/gif_reference (待登记具体资产)",
+    "content_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "analysis_report": {
+    "analysis_id": "pending-motion-analysis",
+    "confidence": 0.55
+  },
+  "actions_chain": {
+    "chain_id": "chain-dafeiyu-tail-sway-1",
+    "schema_version": "1.0.0",
+    "loop": true,
+    "steps": [
+      {
+        "step_index": 0,
+        "kind": "expression",
+        "params": { "semantic": "smile_open_mouth", "blend": "add" },
+        "duration_ms": 400,
+        "interruptible": true
+      },
+      {
+        "step_index": 1,
+        "kind": "keyframes",
+        "params": {
+          "track": "tailSway",
+          "keys": [
+            { "t": 0, "value": 0 },
+            { "t": 450, "value": 1 },
+            { "t": 900, "value": -1 },
+            { "t": 1350, "value": 0 }
+          ],
+          "easing": "sine"
+        },
+        "duration_ms": 1350,
+        "interruptible": true
+      },
+      {
+        "step_index": 2,
+        "kind": "keyframes",
+        "params": {
+          "track": "hairSway",
+          "keys": [
+            { "t": 0, "value": 0 },
+            { "t": 550, "value": 0.6 },
+            { "t": 1100, "value": -0.6 },
+            { "t": 1650, "value": 0 }
+          ],
+          "easing": "sine",
+          "note": "后发随动延迟于尾摆，产拖曳感"
+        },
+        "duration_ms": 1650,
+        "interruptible": true
+      }
+    ]
+  },
+  "json_address": "tools/actions-schema/examples/dafeiyu-tail-sway-happy.motion.json",
+  "model_compatibility": [
+    { "model_id": "dafeiyu", "compatible": true, "adapter_ref": "motion_model_bindings(motion_id=dafeiyu.tail-sway-happy)" }
+  ],
+  "capability_revision": "pending-registry-scan",
+  "schema_version": "1.0.0",
+  "confidence": 0.55,
+  "validation_report": {
+    "verdict": "blocked",
+    "evidence": [
+      "语义参数 tailSway/hairSway 尚未经 Model Adapter 映射到真实参数族（候选 Skirt*/LateHair*/Movement* 见 tools/gallery-schema/reference/dafeiyu-parameters.txt）",
+      "probe_runs 未执行：绑定验证属 Model Inspector 职责",
+      "GIF 源资产尚未逐帧分析入库"
+    ],
+    "validated_at": "2026-11-04T12:40:00+08:00"
+  },
+  "status": "draft",
+  "created_at": "2026-11-04T12:40:00+08:00",
+  "updated_at": "2026-11-04T12:40:00+08:00"
+}

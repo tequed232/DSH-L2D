@@ -12,7 +12,7 @@ import { LAppSubdelegate } from './app/lappsubdelegate';
 import { LAppPal } from './app/lapppal';
 import type { LAppModel } from './app/lappmodel';
 import { ParamInjector, parameterIndexOf } from './app/param-injector';
-import { createPhysicsGate, DEFAULT_EMBODIED_FLAGS } from './app/motion-adapter';
+import { isHostable } from './app/param-host-policy';
 import { EmotionRouter, EmotionIntent, EmotionSignal } from './app/emotion-router';
 import { MotionDirector, motionsShareArm } from './app/motion-director';
 import { PoseController, POSE_IDS } from './app/pose-controller';
@@ -55,19 +55,6 @@ let currentZoom = 1;
 const injector = new ParamInjector();
 const motionDirector = new MotionDirector();
 const poseController = new PoseController();
-
-/**
- * [M1-b] PhysicsGate：Hip* pre 让位（生产者跳过输出）+ limb post 覆盖的帧内挂接点。
- * `embodied.m1` 默认 false（DEFAULT_EMBODIED_FLAGS）= pre/post 均为空操作，现行为逐字节不变；
- * 集成日把 flag 翻 true 即启用（settings/overlay 的开关管线由后续批次承接）。
- * pre 让位数据源是 injector 的 ownership（pre 相位独占，实际只有 HipAngleX/Y/Z）；
- * limb 控制器实例未接线（M1-c/Mixer 批次提供），post 通道在提供前为空操作。
- */
-const physicsGate = createPhysicsGate(DEFAULT_EMBODIED_FLAGS, {
-  preOwnedIds: () => injector.getPreOwnedIds(),
-  stagePostWrite: (core, id, value) =>
-    injector.set(core as Parameters<typeof injector.set>[0], id, value, 1),
-});
 
 /** 页面里加载 Cubism Core（幂等） */
 export function loadCore(url: string): Promise<void> {
@@ -348,10 +335,6 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
     applyGazeBody(core);
     flushAngleBus(core);
     injector.apply(core, 'pre');
-    // [M1-b PhysicsGate·物理前] flag 开启时把本帧 pre 相位独占的 Hip* 写进让位登记表：
-    // Physics600 对这些输出跳过缓存回写与落写（chained 裙摆/腿链随 Agent 值），
-    // 振子状态保温，release 后物理平滑接管。flag 关（默认）= 空操作，现行为不变。
-    physicsGate.pre(core);
   });
   model.setPostLateUpdateHook((core, deltaTimeSeconds) => {
     phaseDiag.post++;
@@ -360,10 +343,6 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
       poseController.update(core, deltaTimeSeconds, injector);
     }
     applyAmbientFace(core);
-    // [M1-b PhysicsGate·物理后] flag 开启时按 LimbControlLike.resolve 覆盖叶子四肢：
-    // resolve 非空则逐项经 stagePostWrite（injector.set）登记，由下一行 injector.apply('post')
-    // 后写胜出（M1-a post 语义）。flag 关（默认）= 空操作，现行为不变。
-    physicsGate.post(core);
     injector.apply(core, 'post');
     applyGazeEyes(core);
   });
@@ -904,7 +883,9 @@ const clamp = (v: number): number => (v < -1 ? -1 : v > 1 ? 1 : v);
  * body：拖拽或 setParameters；ambient：待机微动作；media：媒体律动。
  * 优先级 body > ambient > media，超出幅度从低优先级往下砍。
  */
-const ANGLE_BUS_CAP = { AngleZ: 15, PositionX: 10, PositionY: 10 } as const;
+// AngleZ 上限对齐模型输入范围 ±30（S1-RACE：验收契约 setParameter('AngleZ',20)
+// 要求原值生效，15 的旧上限会把 agent 直写削成 15）。混控保护语义不变。
+const ANGLE_BUS_CAP = { AngleZ: 30, PositionX: 10, PositionY: 10 } as const;
 type BusParam = keyof typeof ANGLE_BUS_CAP;
 type BusChannel = 'body' | 'gaze' | 'ambient' | 'media';
 const angleBus: Record<BusParam, Record<BusChannel, number>> = {
@@ -1082,11 +1063,14 @@ function applyAmbientFace(core: CoreModel): void {
  * 修复前两者都在 applied；修复后都进 failed 且 reason=not-exist
  * （本模型真实手臂参数是 Param36/39/40/41/42/43 与 59~62）。
  */
-function setParameterChecked(id: string, value: number, weight = 1): string | null {
+function setParameterChecked(id: string, value: number, weight = 1, channel: 'agent' | 'runtime' = 'agent'): string | null {
   const core = model?.getModel();
   if (!core) return 'not-ready';
   const num = Number(value);
   if (!Number.isFinite(num)) return 'invalid-value';
+  // Node Ownership：外部（agent）通道只允许写托管白名单内的参数；
+  // runtime 通道（UI 本地交互）不受白名单约束，口型红线仍由 injector 更早优先拒绝。
+  if (channel === 'agent' && !isHostable(id)) return 'not_hostable';
   // AngleZ / PositionX / PositionY 可能被拖拽、微动作、媒体同时写，先记账再统一注入
   if (id === 'AngleZ' || id === 'PositionX' || id === 'PositionY') {
     if (!paramExists(core, id)) return 'not-exist';
@@ -1096,7 +1080,7 @@ function setParameterChecked(id: string, value: number, weight = 1): string | nu
   }
   // 入口校验：不存在 → not-exist；物理输出未独占 → physics-output（与 injector.set 同判）
   if (!paramExists(core, id)) return 'not-exist';
-  return injector.set(core, id, num, weight) ? null : 'rejected';
+  return injector.set(core, id, num, weight, { channel }) ? null : 'rejected';
 }
 
 export function setParameter(id: string, value: number, weight = 1): boolean {
@@ -1105,7 +1089,7 @@ export function setParameter(id: string, value: number, weight = 1): boolean {
 
 export interface ApplyReport {
   ok: string[];
-  /** 失败项：`参数名:reason`（not-exist / physics-output / mouth-locked / invalid-value / not-ready / rejected） */
+  /** 失败项：`参数名:reason`（not-exist / not_hostable / physics-output / mouth-locked / invalid-value / not-ready / rejected） */
   failed: string[];
 }
 
@@ -1115,7 +1099,24 @@ export function setParameters(values: Record<string, number>, weight = 1): Apply
   const failed: string[] = [];
   const src = values || {};
   for (const key of Object.keys(src)) {
-    const reason = setParameterChecked(key, src[key], weight);
+    const reason = setParameterChecked(key, src[key], weight, 'agent');
+    if (reason === null) ok.push(key);
+    else failed.push(key + ':' + reason);
+  }
+  return { ok, failed };
+}
+
+/**
+ * runtime 通道批量写：UI 本地交互（拖拽倾斜/位移、换装/配饰开关等）专用。
+ * 不受 Node Ownership 托管白名单约束（白名单管 Agent/AI 控制权，UI 交互属
+ * runtime 域）；口型红线与物理输出保护依然生效。
+ */
+export function setParametersRuntime(values: Record<string, number>, weight = 1): ApplyReport {
+  const ok: string[] = [];
+  const failed: string[] = [];
+  const src = values || {};
+  for (const key of Object.keys(src)) {
+    const reason = setParameterChecked(key, src[key], weight, 'runtime');
     if (reason === null) ok.push(key);
     else failed.push(key + ':' + reason);
   }
@@ -1135,7 +1136,8 @@ export function setParameters(values: Record<string, number>, weight = 1): Apply
 export function ownParameters(ids: string[], durationMs = 1200, phase: 'pre' | 'post' = 'post'): string[] {
   if (!model?.getModel()) return [];
   markActive();
-  return injector.own(ids, durationMs, phase);
+  // agent 通道：只允许认领托管白名单内的参数（defaultOwnership='none'）
+  return injector.own(ids, durationMs, phase, { channel: 'agent' });
 }
 
 /** 主动释放 Agent 独占；下一帧物理自然接管，不需要恢复逻辑。 */
@@ -1275,6 +1277,18 @@ export async function playMotionAsync(
   }
   const no = Math.max(0, Math.min(list.length - 1, Math.floor(Number(opts.index) || 0)));
   const priority = opts.interrupt || opts.priority === 3 ? 3 : opts.priority || 2;
+
+  // S2-ADMIT：冷启动边界 waitForAllMotions 会被个别 404 动作饿死（_motionCount 永不
+  // 齐平 → 状态机停在 WaitLoadMotion），目标动作预载缓存缺失时 LAppModel.startMotion
+  // 会拿 undefined 同步返回 -1（start-rejected），异步 loadMotion 落位后重试才成功。
+  // 这里对目标动作做有界（≤3s）预载等待，把「首击必败」收敛为一次成功调用；
+  // 确实不存在的动作等满 3s 后放行，由 startMotion 自行报错（语义不变）。
+  {
+    const preloadT0 = performance.now();
+    while (!model.getMotionDuration(target, no) && performance.now() - preloadT0 < 3000) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
 
   markActive();
   const core = model.getModel();
@@ -1779,6 +1793,8 @@ export interface ParamMeta {
   min: number;
   max: number;
   def: number;
+  /** Node Ownership：是否在托管白名单内（仅表示可托管，读≠控制权） */
+  hostable?: boolean;
 }
 
 export interface Capabilities {
@@ -1813,6 +1829,7 @@ export function getCapabilities(): Capabilities | null {
         min: +core.getParameterMinimumValue(i).toFixed(3),
         max: +core.getParameterMaximumValue(i).toFixed(3),
         def: +core.getParameterDefaultValue(i).toFixed(3),
+        hostable: isHostable(id.getString()),
       });
     }
   } catch {
@@ -1849,7 +1866,6 @@ export async function destroy(): Promise<void> {
   injector.clear();
   injector.unlock();
   injector.resetStats();
-  physicsGate.dispose(); // [M1-b] 清掉让位登记表，避免残留状态影响下一次 mount
   motionDirector.reset();
   poseOwnedByMotion = false;
   poseController.resetToRest();
@@ -1928,22 +1944,6 @@ export function getInfo(): Record<string, number | string> | null {
       } catch {
         parts.push(name + '=?');
       }
-    }
-    // M1-d1 观测通道：当前被 own 的参数动态并入（pre 相位锁定值可从 pv 读到，
-    // 释放后自动消失）。固定清单不含 Hip* 等 pre 相位参数，U5 类验收必须经此读取。
-    try {
-      const ownedIds = injector.getAgentOwned() as unknown as string[];
-      for (const oid of ownedIds || []) {
-        if (ids.includes(oid)) continue;
-        try {
-          const oh = idMgr.getId(oid);
-          parts.push(oid + '=' + core.getParameterValueById(oh).toFixed(3) + '*');
-        } catch {
-          parts.push(oid + '=?');
-        }
-      }
-    } catch {
-      /* owned 快照不可用时静默——固定清单照常输出 */
     }
     // 判定是否真的在动：与上次采样比较
     try {
@@ -2170,6 +2170,7 @@ const api = {
   // 控制
   setParameter,
   setParameters,
+  setParametersRuntime,
   ownParameters,
   releaseParameters,
   getOwnedParameters,

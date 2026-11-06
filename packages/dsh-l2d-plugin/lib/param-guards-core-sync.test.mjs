@@ -53,9 +53,11 @@ const indexSource = read('packages/dsh-l2d-plugin/lib/index.js');
 assert.ok(!indexSource.includes('KEYFRAME_MOUTH_BLOCKLIST'), 'index.js 的旧名单常量应已删除');
 assert.ok(indexSource.includes('isReservedParam'), 'index.js 应用 isReservedParam 判口型');
 
-// choreography 的编排扫描必须遍历 LIPSYNC_PARAMS 而不是硬编码三项
+// choreography 的口型禁区必须用 param-guards 的精确匹配（collectReservedParams），
+// 而不是对 LIPSYNC_PARAMS 做子串遍历（子串会误杀 label/trigger 文案含参数名的情况）。
 const choreo = read('packages/dsh-l2d-plugin/lib/choreography.mjs');
-assert.match(choreo, /for \(const key of LIPSYNC_PARAMS\)/, 'choreography 应遍历 LIPSYNC_PARAMS');
+assert.ok(choreo.includes('collectReservedParams(map)'), 'choreography 口型禁区应精确匹配（collectReservedParams）');
+assert.ok(!/for \(const key of LIPSYNC_PARAMS\)/.test(choreo), 'choreography 不应再对 LIPSYNC_PARAMS 做子串遍历');
 
 // ---------------------------------------------------------------------------
 // 3) MCP 侧共用同一份（validate.mjs 通过 collectReservedParams 复用）

@@ -1,0 +1,99 @@
+{
+  "batchId": "batch-2-2026-11-04-gif-motion",
+  "template": "gallery-gif-motion-v1",
+  "method": "目视首帧/动图 + tools/motion-gif 逐帧时序分析（analysisId 可追溯）",
+  "items": [
+    {
+      "fileName": "1790571183144.gif",
+      "labels": [
+        {
+          "field": "motion_cue",
+          "value": "chibi_dog_tail_grass_wave",
+          "confidence": 0.85,
+          "evidenceLevel": "parser_derived",
+          "evidence": {
+            "visual": "Q版角色手持狗尾草挥动（夜空背景）",
+            "timing": { "analysisId": "analysis:gif:efed0ba94ef4bdf5", "frames": 207, "durationMs": 6880, "periodFrames": 5 },
+            "modelAffinity": "Movement1（cdi3 参数名 '1. 狗尾草'，0-1 有范围证据）"
+          }
+        },
+        {
+          "field": "part",
+          "value": "chibi_dog_tail_grass_prop",
+          "confidence": 0.9,
+          "evidenceLevel": "source_exact",
+          "evidence": { "note": "手持道具：狗尾草" }
+        },
+        {
+          "field": "style",
+          "value": "chibi",
+          "confidence": 0.95,
+          "evidenceLevel": "source_exact",
+          "evidence": { "note": "Q版二头身" }
+        },
+        {
+          "field": "scene",
+          "value": "night_sky",
+          "confidence": 0.8,
+          "evidenceLevel": "source_exact",
+          "evidence": { "note": "深蓝夜空背景带星点" }
+        }
+      ]
+    },
+    {
+      "fileName": "27260cb26da951ab70f83962775ec1579bd0e52d8885184725abc160ec3bd31b.gif",
+      "labels": [
+        {
+          "field": "expression",
+          "value": "dazed_thinking",
+          "confidence": 0.9,
+          "evidenceLevel": "source_exact",
+          "evidence": { "note": "呆滞脸 + 口水 + 思考气泡'正在思考...'" }
+        },
+        {
+          "field": "motion_cue",
+          "value": "loading_spinner_single_shot",
+          "confidence": 0.7,
+          "evidenceLevel": "parser_derived",
+          "evidence": {
+            "visual": "头顶加载转圈图标",
+            "timing": { "analysisId": "analysis:gif:27260cb26da951ab", "frames": 19, "durationMs": 1900, "repeatedFrameRatio": 1.0, "note": "单次播放后画面趋稳（diff 低于噪声阈值）" },
+            "modelAffinity": "Param11（cdi3 参数名 '呆滞'）"
+          }
+        },
+        {
+          "field": "scene",
+          "value": "speech_bubble_text",
+          "confidence": 0.85,
+          "evidenceLevel": "source_exact",
+          "evidence": { "transcript": "正在思考……", "note": "原文带引号摘录入册" }
+        }
+      ]
+    },
+    {
+      "fileName": "1791949382162.gif",
+      "reclassify": "photo",
+      "note": "目视判明为实拍玩偶照片序列（非 Live2D 渲染/动画参考），source_class 修正为 photo",
+      "labels": [
+        {
+          "field": "motion_cue",
+          "value": "head_pat_interaction_plush",
+          "confidence": 0.75,
+          "evidenceLevel": "parser_derived",
+          "evidence": {
+            "visual": "真实玩偶被手摸头（Q版女仆造型实体化）",
+            "timing": { "analysisId": "analysis:gif:1791949382162", "frames": 60, "durationMs": 2000, "periodFrames": 10 },
+            "note": "实拍素材，动作参考价值=交互姿态示意，非模型参数映射对象"
+          }
+        },
+        {
+          "field": "part",
+          "value": "chibi_plush_doll",
+          "confidence": 0.9,
+          "evidenceLevel": "source_exact",
+          "evidence": { "note": "实拍玩偶：女仆装+鲸鳍耳发+蓝白配色" }
+        }
+      ]
+    }
+  ]
+}

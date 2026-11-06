@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-l2d.local/schemas/gallery-semantic-labels.schema.json",
+  "title": "DSH-L2D 图库语义标注输出契约",
+  "description": "视觉标注 pass 对单张图库图像产出的语义标签集合。写入 gallery_labels 表前必须通过本 Schema 校验。证据等级三级：source_exact（图上有文字/设定表直给）、parser_derived（由工具从图内容结构化提取）、inferred（视觉推断）。禁止把 inferred 冒充更高等级。",
+  "type": "object",
+  "required": ["fileName", "labels"],
+  "properties": {
+    "fileName": {
+      "type": "string",
+      "description": "必须与 gallery_items.file_name 完全一致（登记键）"
+    },
+    "sourceClass": {
+      "enum": ["character_sheet", "fan_art", "screenshot", "gif_reference", "photo", "poster", "other"],
+      "description": "若与登记时启发式分类不同，以此为准回写 gallery_items.source_class"
+    },
+    "labels": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["field", "value", "evidenceLevel"],
+        "properties": {
+          "field": {
+            "enum": ["part", "expression", "pose", "outfit", "style", "scene", "motion_cue", "color", "other"],
+            "description": "part=身体/装饰部件；expression=表情；pose=姿态；outfit=服装；style=画风；scene=场景；motion_cue=GIF 动态线索；color=配色"
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "受控词表值（snake_case），词表由 taxonomy 维护；新值允许但须在 review 时裁决"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "evidenceLevel": {
+            "enum": ["source_exact", "parser_derived", "inferred"]
+          },
+          "evidence": {
+            "type": "object",
+            "description": "证据指针：设定表文字原文 / 图中区域描述 / prompt 模板 id 与版本",
+            "properties": {
+              "promptTemplate": { "type": "string" },
+              "promptVersion": { "type": "string" },
+              "quote": { "type": "string", "description": "图上原文（source_exact 必填此项）" },
+              "region": { "type": "string", "description": "区域描述，如 三视图-侧面-下半身" }
+            },
+            "additionalProperties": true
+          },
+          "linkedNodeKey": {
+            "type": "string",
+            "description": "可选：对应模型结构 nodes.node_key（如 part:tail）。入库时解析为 linked_node_id；解析不到则留空，不得编造"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "notes": { "type": "string" }
+  },
+  "additionalProperties": false
+}

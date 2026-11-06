@@ -34,15 +34,18 @@ const instructions = [
   'Observe other DSH workspaces read-only. Never inspect their files or transcripts.',
   'Never prompt, steer, stop, archive, or modify another Session.',
   'Use the per-agent MCP tools by their registered names: mcp__dsh_l2d__l2d_choreograph, mcp__dsh_l2d__l2d_emote, mcp__dsh_l2d__l2d_act, mcp__dsh_l2d__l2d_say, mcp__dsh_l2d__l2d_gaze, mcp__dsh_l2d__l2d_get_state, mcp__dsh_l2d__l2d_reset, mcp__dsh_l2d__l2d_persona, mcp__dsh_l2d__l2d_workspace_status.',
-  'Prefer l2d_choreograph: presetState for simple state reactions, segments for richer multi-stage performances. Max 3 segments, max 8 steps per segment.',
+  'Prefer l2d_choreograph: presetState for simple state reactions, segments for richer multi-stage performances. Max 15 segments, max 8 steps per segment. Compatible adjacent segments are batched by the host to reduce MCP round-trips.',
   'Treat MCP receipts as authoritative. accepted only means the slot was taken; action-done events are the real progress.',
-  'When a receipt says conflict / priority-blocked / interrupted / pending, stop and read the receipt before replanning a different chain. Never retry the same chain.',
+  'Receipt semantics: conflict / priority-blocked wait at the queue head with bounded retries; accepted-but-pending must never be resubmitted (it would duplicate a running motion); interrupted / timeout keep the remaining queue and report the position.',
   'React subtly to thinking/working, acknowledge attention, show restrained concern for error, and settle to idle.',
   'While the user is typing (conversation) or away, stay quiet: no proactive performance.',
   'Prioritize direct user interaction over background reactions.', ''
 ].join('\n');
 
-const NOTIFY_MIN_INTERVAL_MS = 30000;
+// 冷却降频（PR #27 daad87c 收敛）：反应延迟 30s→3s、轮询 4s→1.5s、轮询下限 1.5s→0.5s。
+// 与 QUEUE-SERIAL 的关系：冷却只降「发起频率」不丢请求——动作经 l2d_choreograph FIFO
+// 队列串行执行，不因冷却丢弃（原实现是拦截，现降级为节流）。
+const NOTIFY_MIN_INTERVAL_MS = 3000;
 const ACTION_STATES = new Set(['FORCE', 'NORMAL']);
 
 function readJson(file) {
@@ -142,7 +145,7 @@ export function buildNotifyPrompt({ status, persona, env, receipt, notifyState, 
     '- 所有输出（行为分析、气泡台词）必须使用简体中文。',
     '- 所有表情、动作、气泡都要符合上述人设（性格关键词、情绪表达强度、主动程度、亲密程度、动作偏好）。',
     '- 用 mcp__dsh_l2d__l2d_choreograph：简单状态反应传 presetState，复杂编排传 segments（1~3 段，每段最多 8 步）。',
-    '- 上次回执是 interrupted / priority-blocked / conflict / pending 时不要原样重试；换一条链，或等下一轮。',
+    '- 仅在未接纳（accepted=false）的 conflict / priority-blocked 回执上允许队列有限重试；accepted=true 的 pending 不得重复提交。interrupted/timeout 保留剩余队列并报告位置。',
     '- 用户正在输入或已离席时不要主动演出。',
     '- 如果判断不值得回应，只回一行结论，不要展开分析。',
     '- 不要联系或修改其他会话。',
@@ -214,8 +217,9 @@ export function decideNotification(input) {
 
   // 桥的最小通知间隔：30s 内不重复（error 例外）。
   const sinceLastNotify = now - (Number(input.lastNotifyAt) || 0);
-  if (!isError && sinceLastNotify < Number(input.notifyMinIntervalMs || NOTIFY_MIN_INTERVAL_MS)) {
-    return { fire: false, reason: 'notify-cooldown', retryAfterMs: NOTIFY_MIN_INTERVAL_MS - sinceLastNotify, decision };
+  const minInterval = Number(input.notifyMinIntervalMs) || NOTIFY_MIN_INTERVAL_MS;
+  if (!isError && sinceLastNotify < minInterval) {
+    return { fire: false, reason: 'notify-cooldown', retryAfterMs: minInterval - sinceLastNotify, decision };
   }
   return { fire: true, reason: 'fire', decision };
 }
@@ -239,7 +243,7 @@ export function hasPendingAction(snapshot) {
  * @param {number} [options.intervalMs]
  * @param {number} [options.notifyMinIntervalMs]
  */
-export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir(), '.dsh'), getSnapshot, getPersona, getWorkspaceSnapshot, intervalMs = 4000, notifyMinIntervalMs = NOTIFY_MIN_INTERVAL_MS }) {
+export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir(), '.dsh'), getSnapshot, getPersona, getWorkspaceSnapshot, intervalMs = 1500, notifyMinIntervalMs = NOTIFY_MIN_INTERVAL_MS }) {
   const directory = path.join(homeDir, 'workspaces', 'live2d-agent');
   const manifestPath = path.join(homeDir, 'l2d-workspace-agent.json');
   let workspace = null;
@@ -260,6 +264,7 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
     firesByState: {},
     lastNotifyAt: 0,
     lastFingerprint: '',
+    lastStatusText: '',
     lastEnv: null,
     lastReason: '',
   };
@@ -322,7 +327,11 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
       latestSnapshot = wsSnapshot;
       const snapshotText = wsSnapshot ? renderSnapshotContext(wsSnapshot) : '';
       const status = renderStatus(snapshot, workspace.id, persona, env);
-      writeAtomic(path.join(directory, 'agent.md'), status);
+      // 内容未变则跳过写盘：每 4s 一次 tmp+rename 的磁盘 churn 不值得。
+      if (status !== gate.lastStatusText) {
+        writeAtomic(path.join(directory, 'agent.md'), status);
+        gate.lastStatusText = status;
+      }
 
       const nextFingerprint = fingerprint(snapshot, workspace.id, env, persona);
       const changed = nextFingerprint !== gate.lastFingerprint;
@@ -360,6 +369,10 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
           result = { fire: false, reason: 'action-pending' };
         }
       }
+      // 决定轮结束后把当前状态固化为 previousState：
+      // 否则稳态期间 previousState 恒 ≠ picked.state，decide() 的 same-state/refreshMs
+      // 抑制永不生效（working 的 25s 刷新脉冲会被退化成 cooldown+rate 兜底）。
+      gate.previousState = picked.state;
 
       if (result.fire) {
         const text = buildNotifyPrompt({
@@ -371,11 +384,22 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
           userInput: !!(env && env.available && env.state === 'conversation'),
           snapshotText,
         });
-        await prompt(text).catch(() => {});
-        gate.lastAnyFireAt = now;
-        gate.lastNotifyAt = now;
-        (gate.firesByState[picked.state] = gate.firesByState[picked.state] || []).push(now);
-        gate.lastFireAtByState[picked.state] = now;
+        // 发送失败不消耗频次预算：否则 controller 持续故障时 lastNotifyAt/firesByState
+        // 照记，真实通知反而被 rate/cooldown 拦死。
+        let sent = true;
+        try {
+          await prompt(text);
+        } catch {
+          sent = false;
+        }
+        if (sent) {
+          gate.lastAnyFireAt = now;
+          gate.lastNotifyAt = now;
+          (gate.firesByState[picked.state] = gate.firesByState[picked.state] || []).push(now);
+          gate.lastFireAtByState[picked.state] = now;
+        } else {
+          result = { fire: false, reason: 'notify-send-failed' };
+        }
       }
       gate.lastReason = result.reason;
       gate.lastEnv = env;
@@ -387,7 +411,7 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
 
   function start() {
     if (timer || typeof getSnapshot !== 'function') return;
-    timer = setInterval(() => { void refresh().catch(() => {}); }, Math.max(1500, intervalMs));
+    timer = setInterval(() => { void refresh().catch(() => {}); }, Math.max(500, intervalMs));
     timer.unref?.();
   }
 
