@@ -31,8 +31,9 @@ test('policy 契约字段不被放宽', () => {
   });
 });
 
-test('初始托管集 = 已核实的 8 个真实 Parameter ID', () => {
+test('初始托管集 = 已核实的 8 个真实 Parameter ID + Angle 短名别名（S1-RACE）', () => {
   assert.deepEqual([...MANAGED_PARAM_IDS].sort(), [
+    'AngleX', 'AngleY', 'AngleZ',
     'ParamAngleX', 'ParamAngleY', 'ParamAngleZ',
     'ParamBodyAngleX', 'ParamBodyAngleY', 'ParamBodyAngleZ',
     'ParamEyeBallX', 'ParamEyeBallY',
@@ -44,7 +45,8 @@ test('isHostable：托管 id 命中，非托管（含真实存在但未托管的
   // 空白容忍
   assert.equal(isHostable('  ParamEyeBallX '), true);
   // 大肥鱼模型真实存在但不在白名单：头发/裙摆/尾巴/耳朵/四肢/拖拽输入
-  for (const id of ['Clothes5', 'Param_Angle_Rotation84', 'Param52', 'LEar1', 'REar1', 'AngleZ', 'PositionX', 'Param36', 'AngryMove']) {
+  // （AngleX/Y/Z 已随 S1-RACE 修复登记为托管别名；PositionX 维持拒绝，见 param-host-policy.ts 注释）
+  for (const id of ['Clothes5', 'Param_Angle_Rotation84', 'Param52', 'LEar1', 'REar1', 'PositionX', 'Param36', 'AngryMove']) {
     assert.equal(isHostable(id), false, id);
   }
   assert.equal(isHostable('ParamNotExistXYZ'), false);

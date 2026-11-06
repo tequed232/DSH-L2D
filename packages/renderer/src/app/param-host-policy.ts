@@ -43,8 +43,19 @@ export const HOST_POLICY: HostPolicy = {
  * 初始托管集：已对照大肥鱼模型（大肥鱼.dsl2d）SQLite parameters 注册表逐一核实，
  * 全部为该模型真实存在的 Parameter ID（ParamAngle* 与 ParamBodyAngle* 范围 ±30，
  * ParamEyeBall* 范围 ±1）。
+ *
+ * S1-RACE 修复（2026-11-05）：模型里 AngleX/Y/Z（短名）与 ParamAngleX/Y/Z（规范名）
+ * 是并存的两套真实参数；overlay 验收契约（overlay-test.html?s1=1 的
+ * setParameter('AngleZ', 20)）与外部 MCP 写入使用短名，此前不在托管集内，
+ * agent 通道在 setParameterChecked 入口被 not_hostable 拒绝——S1 sticky 断言
+ * 由此长期失败（stickyAccepted=false，写入未进入 angleBus→注入链）。
+ * 短名与既有 ParamAngle* 条目属同一物理输入族，故一并登记；
+ * PositionX/Y/Z 维持拒绝（agent 通道无既有条目对应，留待产品裁决）。
  */
 export const MANAGED_PARAM_IDS: readonly string[] = [
+  'AngleX',
+  'AngleY',
+  'AngleZ',
   'ParamAngleX',
   'ParamAngleY',
   'ParamAngleZ',

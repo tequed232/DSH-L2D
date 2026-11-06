@@ -883,7 +883,9 @@ const clamp = (v: number): number => (v < -1 ? -1 : v > 1 ? 1 : v);
  * body：拖拽或 setParameters；ambient：待机微动作；media：媒体律动。
  * 优先级 body > ambient > media，超出幅度从低优先级往下砍。
  */
-const ANGLE_BUS_CAP = { AngleZ: 15, PositionX: 10, PositionY: 10 } as const;
+// AngleZ 上限对齐模型输入范围 ±30（S1-RACE：验收契约 setParameter('AngleZ',20)
+// 要求原值生效，15 的旧上限会把 agent 直写削成 15）。混控保护语义不变。
+const ANGLE_BUS_CAP = { AngleZ: 30, PositionX: 10, PositionY: 10 } as const;
 type BusParam = keyof typeof ANGLE_BUS_CAP;
 type BusChannel = 'body' | 'gaze' | 'ambient' | 'media';
 const angleBus: Record<BusParam, Record<BusChannel, number>> = {
