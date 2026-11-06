@@ -364,7 +364,16 @@ export class ActGate {
   }
 
   /** 自然播完。runId 对不上（已被打断或本来就不是这条）则忽略。 */
-  finish(runId: number): ActionDoneEvent | null {
+  /**
+   * 收尾当前链。
+   * @param endReason 非失败终因（如 'timeout'）：计划内终态（README 验收契约
+   *   D 项 —— 整组超时在计划层 ~300ms 收敛，end.reason='timeout'，属于正常
+   *   结束，不是执行失败）。携带 endReason 且链内无真实失败（noteMotion fail）
+   *   时，phase='end' 且 reason=endReason。
+   *   链内动作失败（noteMotion fail）仍优先判 'failed'——真实失败不得被
+   *   endReason 掩盖。
+   */
+  finish(runId: number, endReason?: string): ActionDoneEvent | null {
     if (!this.active || this.active.runId !== runId) return null;
     const reason = this.motionFail && this.motionFail.runId === runId ? this.motionFail.reason : undefined;
     const notes = this.motionSkips && this.motionSkips.runId === runId ? this.motionSkips.notes : undefined;
@@ -373,7 +382,8 @@ export class ActGate {
     this.motionSkips = null;
     // 三态生命周期：链内动作失败收尾 → phase='failed'（不再冒充 completed）；
     // reason 保留失败根因（start-rejected 等），调用方可区分处理。
-    const event = doneEvent(this.active, failed ? 'failed' : 'end', reason, notes);
+    // 计划内终因（timeout 等）→ phase='end' 且 reason=endReason。
+    const event = doneEvent(this.active, failed ? 'failed' : 'end', failed ? reason : endReason, notes);
     this.active = null;
     return event;
   }

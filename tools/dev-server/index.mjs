@@ -417,7 +417,17 @@ const server = http.createServer(async (req, res) => {
   if (urlPath === '/overlay-test.html') {
     const buf = readIfExists(path.join(PUBLIC_DIR, 'overlay-test.html'));
     if (!buf) return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('overlay-test.html missing'));
-    return send(res, 200, MIME['.html'], buf);
+    // [accept C/D] 注入构建标记 ?v=<启动时间戳>：真机宿主以同样方式在 overlay.js
+    // 的 script src 上带 v=（overlay.js 从 document.currentScript.src 解析为
+    // diag.bootTag）。裸加载时 bootTag='' → 数字 0 < MIN_BOOT_TAG → accept 判
+    // 「旧实例，回执不可信」记 WARN。这里对齐真机注入语义，本地验收可真 PASS。
+    const html = buf
+      .toString('utf8')
+      .replace(
+        'src="/dsh-l2d/overlay.js"',
+        `src="/dsh-l2d/overlay.js?v=${Date.now()}"`,
+      );
+    return send(res, 200, MIME['.html'], Buffer.from(html, 'utf8'));
   }
 
   // AI 指令：外部 Agent 通过这里驱动角色

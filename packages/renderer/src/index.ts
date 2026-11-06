@@ -670,8 +670,8 @@ export function admitAct(input: ActAdmitInput = {}) {
   return result;
 }
 
-export function finishAct(runId: number) {
-  return actGate.finish(runId);
+export function finishAct(runId: number, endReason?: string) {
+  return actGate.finish(runId, endReason);
 }
 
 export function releaseAct(runId?: number, reason?: string) {
