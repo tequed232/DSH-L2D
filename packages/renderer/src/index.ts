@@ -22,9 +22,11 @@ import { sampleAmbient, type AmbientKind } from '../../core/src/ambient.ts';
 import { LIPSYNC_PARAMS } from '../../core/src/index.ts';
 import { normalizeActChain } from '../../core/src/chain-normalize.ts';
 import { admitKeyframeTrack } from './app/keyframe-admission.ts';
+import { createCompletionBus, type ActionCompletionEvent } from './app/action-completion.ts';
 import {
   ActGate,
   closeMotionsOnPreempt,
+  countRealCompletions,
   getActPhaseTemplate,
   motionResultKind,
   preemptedYandere,
@@ -339,6 +341,8 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
   model.setPostLateUpdateHook((core, deltaTimeSeconds) => {
     phaseDiag.post++;
     kfTick(performance.now());
+    // PR-D：收割非 Loop 动作的真实终点（onFinishedMotionHandler 在 updateMotion 中途只能置标记）
+    motionCompletionTick();
     if (!poseOwnedByMotion) {
       poseController.update(core, deltaTimeSeconds, injector);
     }
@@ -509,12 +513,48 @@ export function noteActMotion(runId: number, reason: string, kind?: 'fail' | 'sk
   actGate.noteMotion(runId, reason, kind === 'skip' ? 'skip' : 'fail');
 }
 
+export { countRealCompletions };
+
+// ---------------------------------------------------------------- 真实完成事件（PR-D）
+//
+// 裁决书「不得预估时长」：完成信号只来自运行时真实终点——
+//   motion    : Cubism onFinishedMotionHandler（非 Loop 自然收敛；Loop 无终点不产事件）
+//   keyframes : kfTick 的 elapsed >= kfDuration 收敛（非 loop）
+// overlay 订阅后按 executionId（=/ai/call 的 callId）转发 ai-inbox 事件通道；
+// HttpActionExecutor 消费真实事件并做 ownership 出口核对（详见 action-executor.mjs）。
+const actionCompletionBus = createCompletionBus();
+
+/** 订阅真实完成事件；返回退订函数。监听方异常不反噬渲染。 */
+export const onActionCompletion = (cb: (event: ActionCompletionEvent) => void): (() => void) =>
+  actionCompletionBus.subscribe(cb);
+
+/** 派发真实完成事件；executionId 缺失时不产事件（无消费者可关联，纯噪音）。 */
+function emitActionCompletion(kind: 'motion' | 'keyframes', executionId: string, group: string, owned: string[]): void {
+  if (!executionId) return;
+  actionCompletionBus.emit({ kind, executionId, group, phase: 'end', owned });
+}
+
 export { closeMotionsOnPreempt, preemptedYandere, motionsShareArm, motionResultKind };
 
 /** 动作诊断，不参与渲染决策。 */
 let motionDiag = { group: 'none', startedAt: 0, playing: false };
 /** playMotionAsync 的收招定时器（Loop 动作回卷前收养终态姿势）；reset 必须能撤掉它。 */
 let motionStopTimer = 0;
+/**
+ * PR-D：非 Loop 动作的真实终点待处理标记。onFinishedMotionHandler 在 updateMotion
+ * 中途触发，不能就地改动作队列/姿势层；置为待处理闭包，由 postLateUpdate 钩子在
+ * 同帧 update 结束后统一收割（motionCompletionTick）。
+ */
+let motionFinishPending: (() => void) | null = null;
+/** 本次动作的完成是否已收割（自然收敛与看门狗兜底双路径，防双发完成事件）。 */
+let motionCompletionDone = false;
+/** PR-D：postLateUpdate 相位收割待处理的真实终点（不能在 updateMotion 中途改队列/姿势）。 */
+function motionCompletionTick(): void {
+  const harvest = motionFinishPending;
+  if (!harvest) return;
+  motionFinishPending = null;
+  harvest();
+}
 /**
  * 动作纪元：reset 递增。旧动作的收招定时器看到纪元变化即自行作废，
  * 避免 reset 之后 adoptAfterMotion 又把终态姿势（如 finger）收养回来。
@@ -691,6 +731,8 @@ export interface KeyframesOptions {
   /** 总时长 ms；缺省取所有轨道最大时间 */
   duration?: number;
   loop?: boolean;
+  /** PR-D：完成事件关联键（=/ai/call 的 callId）。缺省不产出完成事件。 */
+  executionId?: string | number;
 }
 
 interface KfTrackRuntime {
@@ -710,6 +752,8 @@ let kfAutoOwned: string[] = [];
 /** 本次 keyframes 涉及的、已被 ownership 覆盖的物理输出（回执用，含调用方原本就 own 的） */
 let kfOwnedForTracks: string[] = [];
 let kfRenewAt = 0;
+/** PR-D：本次 keyframes 的完成事件关联键（executionId 关联） */
+let kfExecutionId = '';
 
 function releaseKfOwnership(): void {
   if (!kfAutoOwned.length) return;
@@ -808,6 +852,7 @@ export function playKeyframes(tracks: KeyframeTrack[], opts: KeyframesOptions = 
   kfTracks = accepted;
   kfDuration = Math.max(16, Math.min(KF_MAX_MS, Number(opts.duration) || maxT));
   kfLoop = !!opts.loop;
+  kfExecutionId = opts.executionId == null ? '' : String(opts.executionId);
   kfStart = performance.now();
   kfActive = true;
   kfAutoOwned = ownedNow;
@@ -825,6 +870,7 @@ export function getKeyframeOwnedParameters(): string[] {
 export function stopKeyframes(): void {
   kfActive = false;
   kfTracks = [];
+  kfExecutionId = '';
   releaseKfOwnership();
 }
 
@@ -851,7 +897,12 @@ function kfTick(now: number): void {
 
   if (!kfLoop && elapsed >= kfDuration) {
     kfActive = false;
+    // PR-D：真实完成事件。owned 必须在释放前快照（releaseKfOwnership 会清空清单），
+    // 出口核对语义：完成时刻仍被认领的物理输出，理想应为空（本次 auto-owned 已释放）。
+    const owned = kfOwnedForTracks.slice();
     releaseKfOwnership();
+    emitActionCompletion('keyframes', kfExecutionId, '', owned);
+    kfExecutionId = '';
     return;
   }
   // loop 长时间播放：到期前续期，避免后半段被 injector 拒写
@@ -1217,6 +1268,8 @@ export interface PlayMotionOptions {
   priority?: number;
   interrupt?: boolean;
   awaitFinish?: boolean;
+  /** PR-D：完成事件关联键（=/ai/call 的 callId）。缺省不产出完成事件。 */
+  executionId?: string | number;
 }
 
 export interface PlayMotionResult {
@@ -1306,14 +1359,23 @@ export async function playMotionAsync(
     });
   }
   const epoch = motionEpoch;
-  const adoptAfterMotion = (): void => {
-    motionStopTimer = 0;
+  const executionId = opts.executionId == null ? '' : String(opts.executionId);
+  motionCompletionDone = false;
+  motionFinishPending = null;
+  const completeMotion = (natural: boolean): void => {
+    if (motionStopTimer) {
+      window.clearTimeout(motionStopTimer);
+      motionStopTimer = 0;
+    }
     if (epoch !== motionEpoch) {
       // reset 已发生：收养作废（停动作/姿势收养都归 reset 负责），只放行 awaitFinish 等待者，
-      // 否则 playMotionAsync 的 finished promise 会永久挂起
+      // 否则 playMotionAsync 的 finished promise 会永久挂起。不消耗 motionCompletionDone，
+      // 不产完成事件——后续动作的终点归属它自己的 completeMotion。
       if (finishResolve) finishResolve();
       return;
     }
+    if (motionCompletionDone) return; // 自然收敛已收割，看门狗只做幂等空转
+    motionCompletionDone = true;
     try {
       model.stopMotions();
     } catch {
@@ -1324,20 +1386,43 @@ export async function playMotionAsync(
     if (terminal) poseController.adoptPreset(terminal);
     else poseController.adopt(injector.snapshot(core, POSE_IDS));
     if (finishResolve) finishResolve();
+    // PR-D：真实终点只认自然收敛；看门狗/预估路径不发事件（裁决书：不得预估时长）。
+    if (natural) {
+      emitActionCompletion('motion', executionId, target, injector.getAgentOwned());
+    }
+  };
+  const adoptAfterMotion = (): void => {
+    completeMotion(false);
   };
   const motionDuration = model.getMotionDuration(target, no) || 1.25;
-  // Loop 动作会在 duration 处瞬间回到起点；必须在回卷前一点取样收养，
-  // 否则读到的是下一圈开头的默认姿势。
-  motionStopTimer = window.setTimeout(
-    adoptAfterMotion,
-    Math.max(250, motionDuration * 1000 - 120)
-  );
-  const handle = model.startMotion(target, no, priority);
+  const loopMotion = model.isMotionLoop(target, no);
+  if (loopMotion) {
+    // Loop 动作会在 duration 处瞬间回到起点；必须在回卷前一点取样收养，
+    // 否则读到的是下一圈开头的默认姿势。Loop 无自然终点，不产完成事件（保持预估兜底）。
+    motionStopTimer = window.setTimeout(
+      adoptAfterMotion,
+      Math.max(250, motionDuration * 1000 - 120)
+    );
+  } else {
+    // 非 Loop：真实终点 = onFinishedMotionHandler 自然收敛（motionFinishPending →
+    // postLateUpdate 收割）。定时器降级为 fail-closed 看门狗（真实信号丢失才收养），
+    // 时长取 duration + 2s——预估不再充当完成信号（裁决书）。
+    motionStopTimer = window.setTimeout(
+      adoptAfterMotion,
+      Math.max(250, motionDuration * 1000 + 2000)
+    );
+  }
+  const onNaturalFinish = (): void => {
+    motionFinishPending = () => completeMotion(true);
+  };
+  const handle = model.startMotion(target, no, priority, onNaturalFinish);
   if (handle === -1) {
     if (motionStopTimer) {
       window.clearTimeout(motionStopTimer);
       motionStopTimer = 0;
     }
+    motionFinishPending = null;
+    motionCompletionDone = true; // start 失败无终点可言，防御看门狗/事件残留
     poseOwnedByMotion = false;
     if (finishResolve) finishResolve();
     return { status: 'failed', reason: 'start-rejected', group: target };
@@ -1717,6 +1802,8 @@ export function resetPerformance(): { ok: boolean; params: number } {
     window.clearTimeout(motionStopTimer);
     motionStopTimer = 0;
   }
+  motionFinishPending = null;
+  motionCompletionDone = true;
   try {
     model?.stopMotions();
   } catch {

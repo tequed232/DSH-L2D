@@ -1004,6 +1004,20 @@ export class LAppModel extends CubismUserModel {
     }
   }
 
+  /**
+   * PR-D：动作是否为 Loop（motion3.json Meta.Loop）。未命中预载缓存返回 false——
+   * 此时按非 Loop 处理（等自然终点 + 看门狗兜底）；真 Loop 且缓存缺失时，
+   * 完成事件由看门狗收养路径补位（不产完成事件，预估兜底语义不变）。
+   */
+  public isMotionLoop(group: string, no: number): boolean {
+    try {
+      const motion = this._motions.get(`${group}_${no}`);
+      return !!motion && motion.getLoop();
+    } catch {
+      return false;
+    }
+  }
+
   /** 停掉当前动作；下一帧会自动回到 Idle。 */
   public stopMotions(): void {
     this._motionManager.stopAllMotions();
