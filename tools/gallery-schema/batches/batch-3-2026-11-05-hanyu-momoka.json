@@ -1,0 +1,62 @@
+{
+  "batchId": "batch-3-2026-11-05-hanyu-momoka",
+  "template": "gallery-static-art-v1",
+  "promptTemplate": "gallery-static-art-v1",
+  "promptVersion": "v1+agent-visual",
+  "annotator": "live2d-agent (workspace agent, 目视标注)",
+  "method": "目视整图（官方立绘 4 张，bwiki 明日方舟「遥/羽生萌萌香」图库），仅标注图中可见的表情/姿态/动作线索；证据等级 inferred（非源文件元数据）。",
+  "source": {
+    "character": "羽生萌萌香（遥 / Haruka）",
+    "franchise": "明日方舟（Arknights），东 势力，护佑者，2025-08-02 实装",
+    "origin": "https://wiki.biligame.com/arknights/遥",
+    "fetchedAt": "2026-11-05"
+  },
+  "items": [
+    {
+      "fileName": "hanyu_momoka_e0.png",
+      "labels": [
+        { "field": "expression", "value": "gentle_smile", "confidence": 0.9, "evidenceLevel": "inferred", "evidence": { "visual": "嘴角上扬、双眼明亮，温和笑意" } },
+        { "field": "pose", "value": "left_hand_raised_palm_up", "confidence": 0.9, "evidenceLevel": "inferred", "evidence": { "visual": "左手抬至胸前高度、掌心朝上" } },
+        { "field": "pose", "value": "right_hand_holds_ring_staff", "confidence": 0.9, "evidenceLevel": "inferred", "evidence": { "visual": "右手斜持环形法杖立于身侧" } },
+        { "field": "motion_cue", "value": "bubble_float_hand_gesture", "confidence": 0.85, "evidenceLevel": "inferred", "evidence": { "visual": "指尖上方漂浮数颗气泡，可表达指尖上抬/泡泡缓升" } },
+        { "field": "outfit", "value": "idol_stage_dress_blue_red", "confidence": 0.9, "evidenceLevel": "inferred", "evidence": { "visual": "蓝色礼服短裙 + 红色披风外披 + 白色外套" } },
+        { "field": "style", "value": "official_anime_art", "confidence": 0.95, "evidenceLevel": "inferred", "evidence": { "visual": "官方立绘，透明背景全身像" } },
+        { "field": "scene", "value": "transparent_background", "confidence": 0.95, "evidenceLevel": "inferred", "evidence": { "visual": "无背景，纯透明底" } },
+        { "field": "part", "value": "full_body", "confidence": 0.95, "evidenceLevel": "inferred", "evidence": { "visual": "头部至鞋尖完整全身" } }
+      ]
+    },
+    {
+      "fileName": "hanyu_momoka_e2.jpg",
+      "labels": [
+        { "field": "expression", "value": "playful_smile", "confidence": 0.8, "evidenceLevel": "inferred", "evidence": { "visual": "张口笑、眼神俏皮" } },
+        { "field": "pose", "value": "midair_jump_legs_curled", "confidence": 0.85, "evidenceLevel": "inferred", "evidence": { "visual": "腾空跃起、双腿微屈收拢，左手前伸、右臂外张" } },
+        { "field": "motion_cue", "value": "ribbon_dynamic_twirl", "confidence": 0.8, "evidenceLevel": "inferred", "evidence": { "visual": "丝带与披风环绕人物形成旋转动势" } },
+        { "field": "pose", "value": "arms_outstretched_dynamic", "confidence": 0.8, "evidenceLevel": "inferred", "evidence": { "visual": "双臂前后张开，配合跳跃构图" } },
+        { "field": "style", "value": "official_anime_art", "confidence": 0.95, "evidenceLevel": "inferred", "evidence": { "visual": "官方精二立绘，环形舞台背景" } },
+        { "field": "scene", "value": "night_stage_circle_frame", "confidence": 0.85, "evidenceLevel": "inferred", "evidence": { "visual": "夜间都市舞台、环形灯架与飘带" } }
+      ]
+    },
+    {
+      "fileName": "hanyu_momoka_skin1.jpg",
+      "labels": [
+        { "field": "expression", "value": "calm_gentle_gaze", "confidence": 0.85, "evidenceLevel": "inferred", "evidence": { "visual": "神情安静柔和、目光低垂" } },
+        { "field": "pose", "value": "seated_kneeling_on_stage", "confidence": 0.85, "evidenceLevel": "inferred", "evidence": { "visual": "跪坐/盘坐于舞台台面，双手托住小物件" } },
+        { "field": "motion_cue", "value": "fabric_drape_flow", "confidence": 0.8, "evidenceLevel": "inferred", "evidence": { "visual": "和服长袖与衣摆大面积垂坠铺展" } },
+        { "field": "motion_cue", "value": "goldfish_swim_around", "confidence": 0.7, "evidenceLevel": "inferred", "evidence": { "visual": "多条金鱼围绕人物游动，带水流与气泡" } },
+        { "field": "outfit", "value": "japanese_kimono_robes", "confidence": 0.9, "evidenceLevel": "inferred", "evidence": { "visual": "和风层叠长袍、宽袖" } },
+        { "field": "scene", "value": "japanese_stage_water", "confidence": 0.85, "evidenceLevel": "inferred", "evidence": { "visual": "和风楼阁舞台、水纹与红灯笼" } }
+      ]
+    },
+    {
+      "fileName": "hanyu_momoka_halfbody.png",
+      "labels": [
+        { "field": "expression", "value": "gentle_smile", "confidence": 0.9, "evidenceLevel": "inferred", "evidence": { "visual": "半身特写，微笑直视" } },
+        { "field": "pose", "value": "left_hand_bubble_gesture", "confidence": 0.9, "evidenceLevel": "inferred", "evidence": { "visual": "左手抬起、指尖拨弄气泡" } },
+        { "field": "pose", "value": "right_hand_holds_ring_staff", "confidence": 0.85, "evidenceLevel": "inferred", "evidence": { "visual": "右手扶着环形法杖" } },
+        { "field": "motion_cue", "value": "bubble_float_hand_gesture", "confidence": 0.85, "evidenceLevel": "inferred", "evidence": { "visual": "手部与气泡的位置关系清晰，适合做手指/泡泡动作参考" } },
+        { "field": "part", "value": "upper_body_portrait", "confidence": 0.95, "evidenceLevel": "inferred", "evidence": { "visual": "头部至大腿上半身裁切" } },
+        { "field": "outfit", "value": "idol_stage_dress_blue_red", "confidence": 0.9, "evidenceLevel": "inferred", "evidence": { "visual": "蓝色礼服 + 红色披风" } }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+[
+  { "kind": "expression", "name": "兔牙" },
+  { "kind": "motion", "name": "竖手指打开" },
+  { "kind": "look", "x": 0.45, "y": 0.5 }
+]
