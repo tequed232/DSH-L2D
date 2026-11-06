@@ -52,16 +52,16 @@
 | 全局设置入口 + 二级菜单 | **VERIFIED** | `a81095c` settings-entry.js（落位实测正确：侧栏底部账户上方；菜单外观/行为与联动/账户与余额；Esc/外点/键盘焦点循环）；15/15 |
 | 动作池读库接线 | **VERIFIED** | `0624a9b` /api/actions→adapter 映射→状态机执行（happy path 4/4 + 追加回归 5/5） |
 | S1 sticky 写入 | **VERIFIED** | `0222e83`（见域 4） |
-| S2 动作准入（startMotion -1） | **UNVERIFIED** | 存量 FAIL 另案 S2-ADMIT 调查中（区分断言预期 vs 准入缺陷） |
-| S2/S4 断言页其余项 | **PARTIAL** | S4 PASS；S2 见上行 |
+| S2 动作准入（startMotion -1） | **VERIFIED** | `8bb1080` playMotionAsync 目标动作有界预载等待（≤3s）——根因为产品准入真缺陷（404 动作致 _motionCount 永不齐平→缓存未命中走异步 fetch 分支同步返回 -1）；S1/S2/S4 三轮连续稳定复跑全绿 |
+| S2/S4 断言页其余项 | **VERIFIED** | S2 PASS / S4 PASS（3 轮稳定）；waitForAllMotions 计数饥饿留渲染席 backlog（不阻塞断言） |
 
 ## 域 7 · MCP Bridge 挂载（新增，2026-11-06）
 | 项 | 状态 | 证据 / 缺口 |
 |---|---|---|
 | Bridge/WorkspaceManager/StatusReporter 挂载 | **VERIFIED（装配）** | `a51e8cf` 真机 l2d-bridge.sqlite 生成，schema v10 全 39 表迁移成功；fail-open 设计 |
 | l2d_* 工具注册 + gallery 装配 | **VERIFIED（装配）** | `798c503` validateAction 与 /api/actions 同口径；2MB/魔数/穿越护栏在 source 层 |
-| Workspace import 双会话（B01 语义真机落地） | **UNVERIFIED** | ⚠️ 真机 bridge_workspaces=0 行——import 链路疑被静默跳过，陆溯源核查中（12:00 前必须闭环） |
-| 状态上报文件 | **VERIFIED（语义）** | idle 不发为 B06 裁决；心跳文件实施中 |
+| Workspace import 双会话（B01 语义真机落地） | **VERIFIED** | `db161d0` 根因修复（挂载段 origin 块级作用域 ReferenceError 被 fail-open 静默吞）→ 真机重启 `mcp bridge ready` + bridge_workspaces 1 行双会话回填 |
+| 状态上报文件 | **VERIFIED（语义）** | idle 不发为 B06 裁决；心跳 `98c28d2` 真机 60s 首跳命中（initialized:true, uptimeMs:60008） |
 | live CDP 抓包 | **UNVERIFIED** | 脚本已备，宿主在线后补抓 |
 
 ## 必测故障清单覆盖度（第三方 §3 对照）
@@ -80,7 +80,7 @@
 ## 流程规则（用户裁定，2026-11-05 生效）
 **每次完成任务（commit 合入）之后，必须跑 `pnpm run test:chain15`**。通跑不绿不得关闭任务。链库/队列/合批/duration 语义变更时同步更新 tests/chain-15。本规则已实际执行 3 次（PR-CONVERGE 后 / BRIDGE-MOUNT 后 / S1-RACE 后），全绿。
 
-## 结论（2026-11-06 09:10）
-- 无任何一项虚假 VERIFIED：Timeline 层诚实 BLOCKED；Bridge workspace import 诚实 UNVERIFIED（0 行实况）。
-- 12:00 验收前关键路径：①Bridge workspace import 闭环（陆溯源）②S2-ADMIT（苏格致-2）③心跳文件（陆溯源，已批准）。
-- 全量回归基线：test:core / test:db 74 / test:bridge 40 / test:supervisor 34 / test:deps / test:chain15 5 组 / playwright 85+。
+## 结论（2026-11-06 09:00，12:00 验收基线 · HEAD `8bb1080`）
+- **主线核心链路全绿**：Runtime 队列 / Observer / SQLite / Safety / DepManager / UI 全域 VERIFIED；Bridge 装配+运行+import+心跳全 VERIFIED。
+- 仅存 BLOCKED：Timeline 层真实事件（PR-D 待办，executor 注入点已留）；仅存 backlog：waitForAllMotions 计数饥饿、占位色块失败分类、61 条标注审计。
+- 无任何一项虚假 VERIFIED。全量回归基线：test:core / test:db 74 / test:bridge 40 / test:supervisor 34 / test:deps / test:chain15 5 组 / playwright 85+ / 渲染包单测 20。
