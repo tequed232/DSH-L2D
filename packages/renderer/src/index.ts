@@ -34,7 +34,7 @@ import { createCueBridge, type CueBridgeSnapshot, type CueStopOutcome } from './
 // 这条 import——bundle 里成了裸全局引用，IIFE 顶层执行即抛 ReferenceError，
 // window.DSH_L2D 永不挂载，模型加载必失败（截图报错 DEFAULT_EMBODIED_FLAGS is not defined）。
 // motion-adapter 不反向 import index，无循环依赖。
-import { DEFAULT_EMBODIED_FLAGS } from './app/motion-adapter';
+import { DEFAULT_EMBODIED_FLAGS, createPhysicsGate } from './app/motion-adapter';
 import type { EmbodiedCue } from '../../core/src/embodied-cue.ts';
 import type { CueReleaseSelector } from '../../core/src/cue-loop.ts';
 import type { StopSelector } from '../../core/src/gesture-timeline.ts';
@@ -72,6 +72,16 @@ let currentZoom = 1;
 const injector = new ParamInjector();
 const motionDirector = new MotionDirector();
 const poseController = new PoseController();
+
+// [M1-b] PhysicsGate 接线（根修：此前 index.ts 只有 destroy 处孤调用
+// physicsGate.dispose()，实例从未创建——destroy 必抛 ReferenceError，
+// 清理中断、实例残留，下一次挂载被污染；即「模型导入失败」根因之一）。
+// 接线位置遵循 motion-adapter.ts「两个调用位置」契约：pre 钩子尾、post 钩子
+// injector.apply('post') 前。flag 关（默认）时 pre/post/dispose 全部空实现，
+// 帧循环行为与未接线时逐字节一致。limb 通道未接（M1-G 规划中，README 路线图）。
+const physicsGate = createPhysicsGate(DEFAULT_EMBODIED_FLAGS, {
+  preOwnedIds: () => injector.getPreOwnedIds(),
+});
 
 /** 页面里加载 Cubism Core（幂等） */
 export function loadCore(url: string): Promise<void> {
@@ -324,6 +334,15 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
 
   const { dir, file } = splitUrl(opts.modelUrl);
   const mgr = sub.getLive2DManager();
+  // [H2] 错误监听先于 loadModelUrl：moc 同步失败链可能在 loadModelUrl 返回前
+  // 就派发 dsh:l2d:model-error（旧实现监听器在 waitForModel 内才挂载，早期错误
+  // 丢失 → 永远卡 15s 超时）。earlyError 由 waitForModel 轮询消费，mount 重试时重置。
+  const earlyErrorRef: { message: string | null } = { message: null };
+  const onEarlyModelError = (ev: Event) => {
+    const detail = (ev as CustomEvent).detail as { message?: string } | undefined;
+    earlyErrorRef.message = detail?.message || '模型资源加载失败';
+  };
+  window.addEventListener('dsh:l2d:model-error', onEarlyModelError);
   model = mgr.loadModelUrl(dir, file);
 
   // 拉一份 model3.json：表情名与动作组清单从这里来，供 getCapabilities() 自省
@@ -335,7 +354,11 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
     /* 拿不到就不提供自省，不影响渲染 */
   }
 
-  await waitForModel(15000);
+  try {
+    await waitForModel(15000, earlyErrorRef);
+  } finally {
+    window.removeEventListener('dsh:l2d:model-error', onEarlyModelError);
+  }
   // 首次动作调用必须等预加载完成，否则一定命中「缓存尚未写入」的竞态。
   await model.waitForAllMotions(12000);
 
@@ -352,6 +375,9 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
     applyGazeBody(core);
     flushAngleBus(core);
     injector.apply(core, 'pre');
+    // [M1-b] 生产者让位：pre 相位独占参数（Hip*）写入物理让位表；
+    // 本钩子返回后、物理 evaluate（Physics600）前生效。flag 关 = 空操作。
+    physicsGate.pre(core);
   });
   model.setPostLateUpdateHook((core, deltaTimeSeconds) => {
     phaseDiag.post++;
@@ -366,6 +392,9 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
       poseController.update(core, deltaTimeSeconds, injector);
     }
     applyAmbientFace(core);
+    // [M1-b] limb 通道（当前未接 limb deps，flag 关/空表 = 空操作）：
+    // resolve 写值经 stagePostWrite 登记，由下一行 injector.apply('post') 后写胜出。
+    physicsGate.post(core);
     injector.apply(core, 'post');
     applyGazeEyes(core);
     // [M1-f 第二批] cue 写值必须晚于 applyGazeEyes：gaze 通道写的就是 ParamEyeBallX/Y，
@@ -399,7 +428,7 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
   startLoop();
 }
 
-function waitForModel(timeoutMs: number): Promise<void> {
+function waitForModel(timeoutMs: number, earlyErrorRef?: { message: string | null }): Promise<void> {
   const t0 = performance.now();
   return new Promise((resolve, reject) => {
     // 快速失败：lappmodel.loadAssets 检测到模型资源缺失/损坏时派发
@@ -416,6 +445,11 @@ function waitForModel(timeoutMs: number): Promise<void> {
     window.addEventListener('dsh:l2d:model-error', onModelError);
     const tick = () => {
       if (!onModelError) return; // 已被错误事件 reject，轮询作废
+      // [H2] 消费早期错误缓冲（监听器挂载前派发的失败不丢失）
+      if (earlyErrorRef && earlyErrorRef.message) {
+        cleanup();
+        return reject(new Error(earlyErrorRef.message));
+      }
       if (model && model.getModel()) {
         cleanup();
         return resolve();
@@ -2142,7 +2176,7 @@ export async function destroy(): Promise<void> {
   injector.clear();
   injector.unlock();
   injector.resetStats();
-  physicsGate.dispose(); // [M1-b] 清掉让位登记表，避免残留状态影响下一次 mount
+  physicsGate.dispose(); // [M1-b] 清掉让位登记表，避免残留状态影响下一次 mount（physicsGate 为模块级 const，实例必存在）
   if (TIMELINE_ENABLED) gestureBridge.stop(); // [M1-d2] 清手势时间线与 armed
   if (CUE_ENABLED) cueBridge.stop(); // [M1-f 第二批] 清 cue 账本（destroy 后不残留持有值）
   motionDirector.reset();
