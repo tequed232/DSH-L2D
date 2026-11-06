@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-l2d.local/schemas/result-envelope.schema.json",
+  "title": "DSH-L2D Worker Result Envelope",
+  "type": "object",
+  "required": ["task_id", "analysis_job_id", "model_id", "status", "summary", "evidence", "tests"],
+  "properties": {
+    "task_id": {"type": "string"},
+    "analysis_job_id": {"type": "string"},
+    "model_id": {"type": "string"},
+    "status": {"enum": ["completed", "partial", "blocked", "failed"]},
+    "summary": {"type": "string"},
+    "artifacts": {"type": "array", "items": {"type": "string"}},
+    "database_record_ids": {"type": "array", "items": {"type": "string"}},
+    "evidence": {"type": "array", "items": {"type": "object", "required": ["ref", "provenance"], "properties": {"ref": {"type": "string"}, "provenance": {"enum": ["source_exact", "parser_derived", "runtime_observed", "heuristic", "human_verified"]}, "confidence": {"type": "number", "minimum": 0, "maximum": 1}}}},
+    "tests": {"type": "array", "items": {"type": "object", "required": ["name", "status"], "properties": {"name": {"type": "string"}, "status": {"enum": ["passed", "failed", "skipped", "blocked"]}, "details": {"type": "string"}}}},
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "unresolved": {"type": "array", "items": {"type": "string"}},
+    "handoff": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

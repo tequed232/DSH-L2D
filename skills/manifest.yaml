@@ -1,0 +1,94 @@
+schema_version: 1
+suite: dsh-l2d-agent-skills
+suite_version: 1.1.0
+plugin_id: dsh-l2d
+lifecycle:
+  install:
+    register_all_skills: true
+    validate_before_enable: true
+    bootstrap_workspaces: true
+    load_model: false
+  startup:
+    audit_skills: true
+    audit_prompts: true
+    audit_workspaces: true
+    audit_mcp_and_toolchain: true
+    load_model_only_after_preflight: true
+  safe_auto_repair:
+    project_local_dependencies: true
+    regenerate_missing_default_prompt: true
+    overwrite_custom_prompt: false
+    install_global_packages: false
+    accept_proprietary_licenses: false
+    open_network_ports: false
+
+shared_context:
+  database: database/l2d_models.sqlite3
+  toolchain_registry: config/l2d-toolchain.json
+  task_envelope_schema: skills/contracts/task-envelope.schema.json
+  result_envelope_schema: skills/contracts/result-envelope.schema.json
+
+workspaces:
+  - id: l2d-structure
+    title: "L2D · 01 结构解析"
+    skill: l2d-structure-inspector
+    prompt: skills/prompts/01-structure.md
+    purpose: "模型包、MOC3、节点层级、Deformer、ArtMesh、参数与证据"
+    required: true
+  - id: l2d-semantics
+    title: "L2D · 02 语义与行为"
+    skill: l2d-semantic-behavior
+    prompt: skills/prompts/02-semantics-behavior.md
+    purpose: "纹理、UV、视觉语义、Motion、Physics、参数动态探测"
+    required: true
+  - id: l2d-runtime
+    title: "L2D · 03 运行时与验收"
+    skill: l2d-runtime-integration
+    prompt: skills/prompts/03-runtime-qa.md
+    purpose: "控制器映射、动作链、四肢所有权仲裁、回归测试与验收"
+    required: true
+
+skills:
+  - id: dsh-l2d-workspace-orchestrator
+    version: 1.0.0
+    path: skills/dsh-l2d-workspace-orchestrator/SKILL.md
+    scope: coordinator
+    required: true
+  - id: l2d-structure-inspector
+    version: 1.0.0
+    path: skills/l2d-structure-inspector/SKILL.md
+    scope: worker
+    workspace: l2d-structure
+    required: true
+  - id: l2d-semantic-behavior
+    version: 1.0.0
+    path: skills/l2d-semantic-behavior/SKILL.md
+    scope: worker
+    workspace: l2d-semantics
+    required: true
+  - id: l2d-runtime-integration
+    version: 1.0.0
+    path: skills/l2d-runtime-integration/SKILL.md
+    scope: worker
+    workspace: l2d-runtime
+    required: true
+  - id: apple-google-minimal-design
+    version: 1.0.0
+    path: skills/apple-google-minimal-design/SKILL.md
+    scope: on-demand
+    required: false
+
+validation:
+  required_frontmatter: [name, description]
+  require_unique_skill_ids: true
+  require_all_workspace_prompts: true
+  require_prompt_skill_match: true
+  require_manifest_paths_exist: true
+  require_semver: true
+  block_model_load_on:
+    - missing_required_skill
+    - invalid_frontmatter
+    - missing_workspace_prompt
+    - failed_prompt_injection
+    - unavailable_required_runtime_adapter
+    - unsafe_or_unverified_binary_dependency

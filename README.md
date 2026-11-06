@@ -222,7 +222,7 @@ Agent 可以表达“害羞地低下头并回避视线”这样的行为目标�
 
 `packages/dsh-l2d-mcp` 提供 stdio MCP Server，通过本机回环 HTTP 桥接插件服务。
 
-当前工具集合以运行时 `tools/list` 返回为准，README 不把静态工具名列表视为永久 API。MCP 的 `accepted` 回执只代表动作请求已受理；动作是否完成、被打断或仍在等待，应通过动作事件和状态查询确认。
+当前工具集合以运行时 `tools/list` 返回与实时 MCP schema 为最高事实源，仓库内文档（含 [Agent 动作编排指南](docs/agent/README.md)）只提供辅助知识、调用策略和工作流程。MCP 的 `accepted` 回执只代表动作请求已受理；动作是否完成、被打断或仍在等待，应通过动作事件和状态查询确认。
 
 更多配置见 [MCP 包说明](packages/dsh-l2d-mcp/README.md)。
 
@@ -339,6 +339,11 @@ DSH-L2D/
 | [动作链编排](docs/动作链编排-v1.md) | 动作链阶段与编排规则 |
 | [性能与多核方案](docs/性能与多核方案.md) | 性能优化设计 |
 | [README 编写规范](docs/README-STYLE-GUIDE.md) | 后续 Agent 修改 README 的统一依据 |
+| [技术方案 v0.1](docs/DSH-L2D-技术方案-v0.1.md) | 早期整体技术方案 |
+| [技术栈方案 v0.2](docs/DSH-L2D-技术栈方案-v0.2.md) | 技术栈选型与分层方案 |
+| [行为系统设计 v0.1](docs/DSH-L2D-行为系统设计-v0.1.md) | 行为系统早期设计 |
+| [AI 模型控制提示词](docs/AI-模型控制提示词.md) | 模型控制提示词参考 |
+| [Agent 动作编排指南](docs/agent/README.md) | Workspace Agent 能力发现、动作组合与回执验证的学习指南 |
 
 ## 🔐 资源与许可
 
@@ -358,3 +363,16 @@ DSH-L2D/
 如果你正在使用或改进 DSH-L2D，欢迎通过 Issues / Pull Requests 反馈问题与改进建议。
 
 </div>
+
+`l2d_act` 的 `priority` 是 `BACKGROUND`、`NORMAL`、`FORCE`。低的不能打断高的，同级可以。`accepted` 只表示占上了槽，播完或被打断看 `action-done` 事件（`start` / `end` / `interrupted`）。`phase` 可用 `listening`、`thinking`、`speaking`、`settle` 四段短链，口型参数仍然不写。
+
+安装与客户端配置见 `packages/dsh-l2d-mcp/README.md`。
+
+## 灵动
+
+姿势切换走三次缓动，停住大约 6 秒后缓回 rest（动作状态机收养的终态不会被自动收回）。
+待机微动作由 **Emotion_Router** 以优先级 20 触发：歪头、重心、耸肩、鼓腮、嘟嘴，间隔 20～40 秒。
+拖拽、媒体律动、成对动作、戳一戳进行时不做微动作。
+`AngleZ` 由身体跟随、微动作、媒体律动三路相加并限幅；关掉媒体律动时这一路回到 0。
+
+可写参数和只读输出的分法见 `docs/参数读写对照.md`。
