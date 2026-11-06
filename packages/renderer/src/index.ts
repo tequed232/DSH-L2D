@@ -30,6 +30,11 @@ import {
   type GestureSegmentInput,
 } from './app/gesture-bridge';
 import { createCueBridge, type CueBridgeSnapshot, type CueStopOutcome } from './app/cue-bridge';
+// P0 修复（模型加载失败）：DEFAULT_EMBODIED_FLAGS 在 514/531 行被使用，但此前漏了
+// 这条 import——bundle 里成了裸全局引用，IIFE 顶层执行即抛 ReferenceError，
+// window.DSH_L2D 永不挂载，模型加载必失败（截图报错 DEFAULT_EMBODIED_FLAGS is not defined）。
+// motion-adapter 不反向 import index，无循环依赖。
+import { DEFAULT_EMBODIED_FLAGS } from './app/motion-adapter';
 import type { EmbodiedCue } from '../../core/src/embodied-cue.ts';
 import type { CueReleaseSelector } from '../../core/src/cue-loop.ts';
 import type { StopSelector } from '../../core/src/gesture-timeline.ts';
@@ -397,9 +402,28 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
 function waitForModel(timeoutMs: number): Promise<void> {
   const t0 = performance.now();
   return new Promise((resolve, reject) => {
+    // 快速失败：lappmodel.loadAssets 检测到模型资源缺失/损坏时派发
+    // 'dsh:l2d:model-error'，这里立即 reject，不等 15s 超时空转（P0 修复）。
+    let onModelError: ((ev: Event) => void) | null = (ev) => {
+      cleanup();
+      const detail = (ev as CustomEvent).detail as { message?: string } | undefined;
+      reject(new Error(detail?.message || '模型资源加载失败'));
+    };
+    const cleanup = () => {
+      if (onModelError) window.removeEventListener('dsh:l2d:model-error', onModelError);
+      onModelError = null;
+    };
+    window.addEventListener('dsh:l2d:model-error', onModelError);
     const tick = () => {
-      if (model && model.getModel()) return resolve();
-      if (performance.now() - t0 > timeoutMs) return reject(new Error('模型加载超时'));
+      if (!onModelError) return; // 已被错误事件 reject，轮询作废
+      if (model && model.getModel()) {
+        cleanup();
+        return resolve();
+      }
+      if (performance.now() - t0 > timeoutMs) {
+        cleanup();
+        return reject(new Error('模型加载超时'));
+      }
       setTimeout(tick, 60);
     };
     tick();
