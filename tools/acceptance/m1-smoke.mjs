@@ -3,8 +3,19 @@
  * M1 真机验收冒烟（一条命令，风格对齐 run.mjs）。
  *
  *   node tools/acceptance/m1-smoke.mjs --origin http://127.0.0.1:3081
+ *   node tools/acceptance/m1-smoke.mjs --origin http://127.0.0.1:3081 --readiness-wait 30000
  *   node tools/acceptance/m1-smoke.mjs --m1-flag on --allow-write   # 集成日：M1 写路径真用例
  *   node tools/acceptance/m1-smoke.mjs --selftest                   # 对内置 mock 宿主自测（不碰真机）
+ *
+ * 就绪门禁（--readiness-wait <ms>，默认不加 = 0 = 现行为）：
+ *   宿主页 overlay 的模型挂载是异步的（3081 已知现象：HTTP 早通、模型未就绪），
+ *   不等就进场会把环境问题记成用例 FAIL。加 --readiness-wait 后先在 [0, ms] 内有上限轮询，
+ *   按 L0 服务连通 / L1 消费者在线 / L2 模型就绪 三层判定（见 readiness.mjs）：
+ *     READY         → 进场跑用例
+ *     MODEL-LOADING → 继续等（readiness 中），到期仍不就绪 = BLOCKED
+ *     NO-CONSUMER   → 页面没在 poll AI 队列，等也无用，到期 = BLOCKED
+ *     BLOCKED       → L0 就不通，直接 BLOCKED
+ *   裸 --readiness-wait（不带数值）= 30000ms。BLOCKED 即 exit 3，不跑用例、不写状态。
  *
  * 开关组（embodied.m1 flag 的镜像开关，见 Consolidated-M1-Plan §2 约束 4）：
  *   --m1-flag on|off|auto   默认 off。
@@ -29,6 +40,18 @@
  *                           独占窗口内 HipAngleX 锁 Agent 值、释放后回物理（依赖 m1-hip：--m1-hip 开真用例）
  *     U6 gesture 仲裁       POST l2d_act keyframes 步 → 回执/事件含仲裁标记（依赖 m1-gesture：
  *                           --m1-gesture 开真用例；字段以交付为准，当前按占位契约断言）
+ *     U7 gesture 准入正例   POST l2d_play_keyframes（无占用）→ 回执 arbitration.flagEnabled=true
+ *                           且 admitted 非空（依赖 m1-gesture；M1-d2）
+ *     U8 gesture 准入负例   先 l2d_set_parameters own RArm，再 l2d_play_keyframes 同参数
+ *                           → 拒绝 reason='gesture-priority-blocked'，Agent 独占不被释放
+ *                           （依赖 m1-gesture；M1-d2 纵深防御/收紧项）
+ *     U9 gesture 清账复播   l2d_stop_keyframes 后同参数再播 → 仍可准入（Timeline 与 kf
+ *                           状态同步清账，无残留；依赖 m1-gesture；M1-d2 调用点 3）
+ *     U10 cue 持有/到期     POST l2d_cue（tilt hold 0.5/1500ms）→ 回执 ok + admission.accepted；
+ *                           get_state diag.cue.channels 含 tilt；2s 后同一查询已释放（依赖 m1-cue：
+ *                           --m1-cue 开真用例；renderer 需 embodied.cue+timeline flag 开）
+ *     U11 cue 拒绝语义     l2d_cue 未知 channel → rejected unknown-channel；interruptible:false
+ *                           → rejected not-interruptible，零写值（依赖 m1-cue）
  *   人工项（永远 SKIP 列出，供勾选）
  *     H1 待机四肢由物理驱动（目视）  H2 现有动作/姿势/表情回归（目视）  H3 裙摆随 Agent 值动（M1-b 目视）
  *
@@ -40,12 +63,20 @@
  * SKIP 语义：占位 / 未开启的用例记 SKIP，不计入 verdict（学 perf-idle 双后端幂态的处理）。
  * 每项标注「自动化 / 需人工」。
  *
- * 退出码：0 无 FAIL（SKIP/WARN 不算）；1 有 FAIL；2 连不上服务。
+ * 退出码：0 无 FAIL（SKIP/WARN 不算）；1 有 FAIL；2 连不上服务；3 就绪门禁 BLOCKED。
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  DEFAULT_READINESS_WAIT_MS,
+  DEFAULT_CONSUMER_TIMEOUT_MS,
+  EXIT_BLOCKED,
+  waitForReadiness,
+  formatReadinessLines,
+  formatTick,
+} from './readiness.mjs';
 
 const args = process.argv.slice(2);
 const argOf = (name, def) => {
@@ -59,8 +90,11 @@ const M1_FLAG = argOf('m1-flag', 'off'); // on | off | auto
 const ALLOW_WRITE = flag('allow-write');
 const HIP_READY = flag('m1-hip'); // m1-hip 交付后由执行方显式开启
 const GESTURE_READY = flag('m1-gesture'); // m1-gesture 交付后由执行方显式开启
+const CUE_READY = flag('m1-cue'); // m1-cue 交付后由执行方显式开启（renderer 需 embodied.cue+timeline）
 const HOLD_MS = Number(argOf('hold-ms', 3000)); // U1 独占时长
 const RESULT_TIMEOUT = Number(argOf('timeout', 15000));
+// 就绪门禁：不带开关 = 0（现行为，不门禁）；裸 --readiness-wait = 30s；显式 0 同样回到现行为。
+const READINESS_WAIT = readReadinessWait();
 
 const SELFTEST = flag('selftest');
 const THIS_FILE = fileURLToPath(import.meta.url);
@@ -77,6 +111,15 @@ function readOrigin() {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** 解析 --readiness-wait：缺省 0；裸开关默认 30s；非法数值按默认处理。 */
+function readReadinessWait() {
+  if (!flag('readiness-wait')) return 0;
+  const raw = argOf('readiness-wait', '');
+  if (raw === '' || raw.startsWith('--')) return DEFAULT_READINESS_WAIT_MS;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_READINESS_WAIT_MS;
+}
 
 // ---------------------------------------------------------------------------
 // 判定辅助（selftest 直接打这些纯函数）
@@ -165,6 +208,69 @@ async function getState(origin) {
   } catch {
     return null;
   }
+}
+
+/**
+ * 单轮就绪探针（三层一次探完，交给 classifyReadiness 判）。
+ * L0 失败直接返回，不再往队列灌调用；L1 无回执说明没人 poll——
+ * 此时排队的 l2d_get_state 是只读的，页面后到时执行也只是一次读取，无副作用。
+ */
+async function probeReadiness(origin, consumerTimeoutMs = DEFAULT_CONSUMER_TIMEOUT_MS) {
+  let connected = false;
+  let httpStatus = 0;
+  let error = '';
+  try {
+    const r = await getJson(origin, `${origin}/dsh-l2d/ai/result?id=0`);
+    httpStatus = r.status;
+    connected = r.status === 200;
+  } catch (e) {
+    error = (e && e.message) || String(e);
+  }
+  if (!connected) return { connected: false, httpStatus, error };
+
+  const t0 = Date.now();
+  let served = false;
+  let modelReady = null;
+  try {
+    const c = await call(origin, 'l2d_get_state', {});
+    if (c.status === 200 && c.body && c.body.id) {
+      const r = await awaitResult(origin, c.body.id, consumerTimeoutMs);
+      if (r.result) {
+        served = true;
+        modelReady = r.result.ready === true;
+      }
+    }
+  } catch {
+    /* 回执异常按「未服务」处理 */
+  }
+  return { connected: true, httpStatus, served, latencyMs: Date.now() - t0, modelReady };
+}
+
+/**
+ * 就绪门禁：有上限轮询到 READY 或超时。返回带 exitCode 的结论（0 放行 / 3 BLOCKED）。
+ * log=true 时打分层状态行（轮次进度 + 收尾块）。
+ *
+ * @param {{origin:string, maxWaitMs?:number, intervalMs?:number,
+ *          consumerTimeoutMs?:number, log?:boolean}} opts
+ */
+export async function runReadinessGate(opts) {
+  const origin = String(opts.origin || '').replace(/\/+$/, '');
+  const maxWaitMs = Number.isFinite(Number(opts.maxWaitMs)) ? Math.max(0, Number(opts.maxWaitMs)) : DEFAULT_READINESS_WAIT_MS;
+  const consumerTimeoutMs = Number.isFinite(Number(opts.consumerTimeoutMs))
+    ? Math.max(100, Number(opts.consumerTimeoutMs))
+    : DEFAULT_CONSUMER_TIMEOUT_MS;
+  const log = opts.log !== false;
+
+  if (log) {
+    console.log(`[m1-smoke] 就绪门禁：origin=${origin} 上限 ${maxWaitMs}ms（L0 连通 → L1 消费者 → L2 模型）`);
+  }
+  const verdict = await waitForReadiness(() => probeReadiness(origin, consumerTimeoutMs), {
+    maxWaitMs,
+    intervalMs: opts.intervalMs,
+    onTick: log ? (t) => console.log(formatTick(t)) : null,
+  });
+  if (log) for (const line of formatReadinessLines(verdict)) console.log(line);
+  return verdict;
 }
 
 /** M1 组整组开关：flag 解析（auto = 探测运行时标记，当前渲染层未接线，回落 off）。 */
@@ -474,18 +580,265 @@ async function caseGestureArbitration(origin, ready) {
   }
 }
 
+/** U7 gesture 准入正例（M1-d2）：无占用时 play_keyframes 回执含 arbitration 且 admitted 非空。 */
+async function caseGestureAdmitPositive(origin, ready) {
+  if (!ready) {
+    record('U7 gesture 准入正例', 'skip', 'm1-gesture 未交付（交付后加 --m1-gesture 跑真用例）', '自动化');
+    return;
+  }
+  const c = await call(origin, 'l2d_play_keyframes', {
+    tracks: [{ param: 'LArm', keys: [[0, 0.4], [500, 0.4]] }],
+    duration: 500,
+  });
+  if (c.status !== 200 || !c.body) {
+    record('U7 gesture 准入正例', false, `HTTP ${c.status}: ${c.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  const r7 = await awaitResult(origin, c.body.id);
+  const body7 = r7.result || {};
+  const arb = body7.arbitration;
+  const ok =
+    body7.ok === true &&
+    !!arb &&
+    arb.flagEnabled === true &&
+    Array.isArray(arb.admitted) &&
+    arb.admitted.length > 0;
+  record(
+    'U7 gesture 准入正例',
+    ok,
+    ok ? `admitted=${JSON.stringify(arb.admitted)}` : `回执不符：${JSON.stringify(body7).slice(0, 160)}`,
+    '自动化',
+  );
+}
+
+/** U8 gesture 准入负例（M1-d2）：Agent 独占同参数 → 拒绝且独占不被释放（收紧项）。 */
+async function caseGestureAdmitNegative(origin, ready) {
+  if (!ready) {
+    record('U8 gesture 准入负例', 'skip', 'm1-gesture 未交付（交付后加 --m1-gesture 跑真用例）', '自动化');
+    return;
+  }
+  const own = await call(origin, 'l2d_set_parameters', {
+    values: { RArm: 0.8 },
+    own: true,
+    durationMs: 4000,
+  });
+  if (own.status !== 200) {
+    record('U8 gesture 准入负例', false, `own 入队 HTTP ${own.status}: ${own.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  await awaitResult(origin, own.body.id);
+  const c = await call(origin, 'l2d_play_keyframes', {
+    tracks: [{ param: 'RArm', keys: [[0, 0.2], [400, 0.2]] }],
+    duration: 400,
+  });
+  if (c.status !== 200 || !c.body) {
+    record('U8 gesture 准入负例', false, `HTTP ${c.status}: ${c.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  const r8 = await awaitResult(origin, c.body.id);
+  const body8 = r8.result || {};
+  const blocked = body8.ok === false && body8.reason === 'gesture-priority-blocked';
+  record(
+    'U8 gesture 准入负例',
+    blocked,
+    blocked
+      ? 'Agent 独占期间手势整批拒（priority-blocked），独占未被释放'
+      : `预期拒绝未发生：${JSON.stringify(body8).slice(0, 160)}`,
+    '自动化',
+  );
+}
+
+/** U9 gesture 清账复播（M1-d2 调用点 3）：stop 后 Timeline 与 kf 同步清账，同参数可再准入。 */
+async function caseGestureStopReAdmit(origin, ready) {
+  if (!ready) {
+    record('U9 gesture 清账复播', 'skip', 'm1-gesture 未交付（交付后加 --m1-gesture 跑真用例）', '自动化');
+    return;
+  }
+  const c1 = await call(origin, 'l2d_play_keyframes', {
+    tracks: [{ param: 'LArm', keys: [[0, 0.3], [300, 0.3]] }],
+    duration: 300,
+  });
+  if (c1.status !== 200 || !c1.body) {
+    record('U9 gesture 清账复播', false, `首播 HTTP ${c1.status}: ${c1.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  const r1 = await awaitResult(origin, c1.body.id);
+  if (!r1.result || r1.result.ok !== true) {
+    record('U9 gesture 清账复播', false, `首播回执不符：${JSON.stringify(r1.result).slice(0, 160)}`, '自动化');
+    return;
+  }
+  const s = await call(origin, 'l2d_stop_keyframes', {});
+  if (s.status !== 200 || !s.body) {
+    record('U9 gesture 清账复播', false, `stop HTTP ${s.status}`, '自动化');
+    return;
+  }
+  await awaitResult(origin, s.body.id);
+  const c2 = await call(origin, 'l2d_play_keyframes', {
+    tracks: [{ param: 'LArm', keys: [[0, 0.5], [300, 0.5]] }],
+    duration: 300,
+  });
+  if (c2.status !== 200 || !c2.body) {
+    record('U9 gesture 清账复播', false, `复播 HTTP ${c2.status}: ${c2.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  const r2 = await awaitResult(origin, c2.body.id);
+  const body2 = r2.result || {};
+  const ok =
+    body2.ok === true &&
+    !!body2.arbitration &&
+    Array.isArray(body2.arbitration.admitted) &&
+    body2.arbitration.admitted.length > 0;
+  record(
+    'U9 gesture 清账复播',
+    ok,
+    ok ? 'stop 后同参数再准入成功（清账无残留）' : `回执不符：${JSON.stringify(body2).slice(0, 160)}`,
+    '自动化',
+  );
+  try {
+    await call(origin, 'l2d_reset', {});
+  } catch {
+    /* 收尾失败不影响结论 */
+  }
+}
+/** 从 get_state 回执里取 diag.cue 的活动 channel 列表；缺失返回 null（用于区分「没接线」）。 */
+export function cueChannelsFrom(stateBody) {
+  const cue = stateBody && stateBody.diag && stateBody.diag.cue;
+  if (!cue || typeof cue !== 'object' || !Array.isArray(cue.channels)) return null;
+  return cue.channels.map((c) => (c && typeof c.channel === 'string' ? c.channel : '')).filter(Boolean);
+}
+
+/** 从 l2d_cue 回执里取 rejected 列表（admission 优先，兼容 arbitration 兜底）。 */
+function cueRejectedOf(body) {
+  if (!body) return [];
+  if (body.admission && Array.isArray(body.admission.rejected)) return body.admission.rejected;
+  if (body.arbitration && Array.isArray(body.arbitration.rejected)) return body.arbitration.rejected;
+  return [];
+}
+
+/**
+ * U10 cue 持有/到期（M1-f 第二批）：hold 准入 → diag.cue 活体可见 → 超过 durationMs 后释放。
+ * readiness 门禁已在 main() 进场前完成（BLOCKED 直接 exit 3，不会执行到本函数）。
+ */
+async function caseCueHoldLifecycle(origin, ready) {
+  if (!ready) {
+    record('U10 cue 持有/到期', 'skip', 'm1-cue 未开启（交付后加 --m1-cue 跑真用例）', '自动化');
+    return;
+  }
+  const c = await call(origin, 'l2d_cue', {
+    cue: { channel: 'tilt', operation: 'hold', value: 0.5, durationMs: 1500 },
+  });
+  if (c.status !== 200 || !c.body || !c.body.id) {
+    record('U10 cue 持有/到期', false, `入队 HTTP ${c.status}: ${c.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  const r = await awaitResult(origin, c.body.id);
+  const body = r.result || {};
+  if (body.ok === false && body.reason === 'cue-disabled') {
+    record('U10 cue 持有/到期', 'skip', 'renderer cue flag 关（embodied.cue / embodied.timeline 未开启）——开 flag 后复跑', '自动化');
+    return;
+  }
+  if (body.ok !== true || !body.admission || body.admission.accepted !== true) {
+    record('U10 cue 持有/到期', false, `准入回执不符：${JSON.stringify(body).slice(0, 160)}`, '自动化');
+    return;
+  }
+
+  const s1 = await call(origin, 'l2d_get_state', {});
+  const r1 = s1.status === 200 && s1.body ? await awaitResult(origin, s1.body.id) : { result: null };
+  const active1 = cueChannelsFrom(r1.result);
+  if (active1 === null) {
+    record('U10 cue 持有/到期', false, 'get_state 缺 diag.cue（overlay/renderer 未接线）', '自动化');
+    return;
+  }
+  if (!active1.includes('tilt')) {
+    record('U10 cue 持有/到期', false, `持有期 diag.cue 未含 tilt：${JSON.stringify(active1)}`, '自动化');
+    return;
+  }
+
+  await sleep(2000);
+  const s2 = await call(origin, 'l2d_get_state', {});
+  const r2 = s2.status === 200 && s2.body ? await awaitResult(origin, s2.body.id) : { result: null };
+  const active2 = cueChannelsFrom(r2.result);
+  const ok = active2 !== null && !active2.includes('tilt');
+  record(
+    'U10 cue 持有/到期',
+    ok,
+    ok ? '持有期可见 tilt，到期后释放（2s > durationMs=1500）' : `到期后仍持有：${JSON.stringify(active2)}`,
+    '自动化',
+  );
+  try {
+    await call(origin, 'l2d_cue_stop', { selector: { all: true } });
+  } catch {
+    /* 收尾失败不影响结论 */
+  }
+}
+
+/** U11 cue 拒绝语义：未知 channel / interruptible:false → 明确 rejected，零写值。 */
+async function caseCueRejections(origin, ready) {
+  if (!ready) {
+    record('U11 cue 拒绝语义', 'skip', 'm1-cue 未开启（交付后加 --m1-cue 跑真用例）', '自动化');
+    return;
+  }
+  const c1 = await call(origin, 'l2d_cue', {
+    cue: { channel: 'not-a-channel', operation: 'hold', value: 1 },
+  });
+  if (c1.status !== 200 || !c1.body || !c1.body.id) {
+    record('U11 cue 拒绝语义', false, `未知通道入队 HTTP ${c1.status}: ${c1.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  const r1 = await awaitResult(origin, c1.body.id);
+  const b1 = r1.result || {};
+  if (b1.ok === false && b1.reason === 'cue-disabled') {
+    record('U11 cue 拒绝语义', 'skip', 'renderer cue flag 关（embodied.cue / embodied.timeline 未开启）——开 flag 后复跑', '自动化');
+    return;
+  }
+  const rejected1 = cueRejectedOf(b1);
+  const unknownRejected =
+    b1.ok === false && rejected1.some((x) => x && x.reason === 'unknown-channel');
+
+  const c2 = await call(origin, 'l2d_cue', {
+    cue: { channel: 'tilt', operation: 'hold', value: 0.5, interruptible: false },
+  });
+  if (c2.status !== 200 || !c2.body || !c2.body.id) {
+    record('U11 cue 拒绝语义', false, `不可打断入队 HTTP ${c2.status}: ${c2.text.slice(0, 120)}`, '自动化');
+    return;
+  }
+  const r2 = await awaitResult(origin, c2.body.id);
+  const b2 = r2.result || {};
+  const rejected2 = cueRejectedOf(b2);
+  const notInterruptible =
+    b2.ok === false && rejected2.some((x) => x && x.reason === 'not-interruptible');
+  const zeroWrites =
+    !b2.admission || !b2.admission.writes || Object.keys(b2.admission.writes).length === 0;
+
+  const ok = unknownRejected && notInterruptible && zeroWrites;
+  record(
+    'U11 cue 拒绝语义',
+    ok,
+    ok
+      ? '未知 channel → unknown-channel；interruptible:false → not-interruptible；零写值'
+      : `回执不符：unknown=${JSON.stringify(rejected1).slice(0, 80)} notInterruptible=${JSON.stringify(rejected2).slice(0, 80)}`,
+    '自动化',
+  );
+  try {
+    await call(origin, 'l2d_cue_stop', { selector: { all: true } });
+  } catch {
+    /* 收尾失败不影响结论 */
+  }
+}
+
 /**
  * 全流程：baseline → flag 解析 → M1 组（或整组 SKIP）→ 人工项列出。
  * 可独立调用（selftest 对 mock 宿主多轮执行）。
  *
  * @param {{origin:string, allowWrite?:boolean, m1Flag?:'on'|'off'|'auto',
- *           hipReady?:boolean, gestureReady?:boolean, holdMs?:number}} opts
+ *           hipReady?:boolean, gestureReady?:boolean, cueReady?:boolean, holdMs?:number}} opts
  */
 export async function runCases(opts) {
   const origin = String(opts.origin || '').replace(/\/+$/, '');
   const allowWrite = opts.allowWrite === true;
   const hipReady = opts.hipReady === true;
   const gestureReady = opts.gestureReady === true;
+  const cueReady = opts.cueReady === true;
   const holdMs = Number.isFinite(Number(opts.holdMs)) ? Number(opts.holdMs) : HOLD_MS;
   const holdSaved = HOLD_MS_REF.v;
   HOLD_MS_REF.v = holdMs;
@@ -512,6 +865,14 @@ export async function runCases(opts) {
       await caseUnknownGroup(origin);
       await caseHipPre(origin, hipReady);
       await caseGestureArbitration(origin, gestureReady);
+      // [M1-d2] 手势准入真用例（flag on 宿主；flag 关回归由整组 SKIP + 基线组结构覆盖）
+      await caseGestureAdmitPositive(origin, gestureReady);
+      await caseGestureAdmitNegative(origin, gestureReady);
+      await caseGestureStopReAdmit(origin, gestureReady);
+      // [M1-f 第二批] cue 闭环真用例（需 --m1-cue；renderer 需 embodied.cue+timeline flag 开）。
+      // readiness 门禁在 main() 进场前已完成，BLOCKED 不会执行到这里。
+      await caseCueHoldLifecycle(origin, cueReady);
+      await caseCueRejections(origin, cueReady);
     }
 
     // 人工项：永远列出，SKIP 不拉低 verdict
@@ -542,14 +903,22 @@ async function main() {
   }
   console.log(
     `\n[m1-smoke] origin=${CLI_ORIGIN}  m1-flag=${M1_FLAG}  allow-write=${ALLOW_WRITE}` +
-      `${HIP_READY ? '  m1-hip=ready' : ''}${GESTURE_READY ? '  m1-gesture=ready' : ''}\n`,
+      `${HIP_READY ? '  m1-hip=ready' : ''}${GESTURE_READY ? '  m1-gesture=ready' : ''}` +
+      `${CUE_READY ? '  m1-cue=ready' : ''}` +
+      `${READINESS_WAIT ? `  readiness-wait=${READINESS_WAIT}ms` : ''}\n`,
   );
+  // 就绪门禁：仅在显式开启时生效（--readiness-wait 0 = 现行为，不等直接进场）。
+  if (READINESS_WAIT > 0) {
+    const gate = await runReadinessGate({ origin: CLI_ORIGIN, maxWaitMs: READINESS_WAIT });
+    if (!gate.ok) process.exit(EXIT_BLOCKED);
+  }
   const summary = await runCases({
     origin: CLI_ORIGIN,
     allowWrite: ALLOW_WRITE,
     m1Flag: M1_FLAG,
     hipReady: HIP_READY,
     gestureReady: GESTURE_READY,
+    cueReady: CUE_READY,
   });
   console.log(
     `\n[m1-smoke] ${summary.passed} PASS · ${summary.skipped} SKIP · ${summary.failed} FAIL` +

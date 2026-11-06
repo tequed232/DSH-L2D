@@ -119,6 +119,8 @@ export interface LimbAcquireOptions {
   phase?: 'pre' | 'post';
   /** 占用时长（毫秒，<=0 长期持有）；超时只是最后保险，主路径是显式 release。 */
   durationMs?: number;
+  /** 原子批量模式：true 时整批预检、全有或全无（缺省 false = 逐 id 判定）。与 core 同形状同语义。 */
+  atomic?: boolean;
 }
 
 /**
@@ -152,11 +154,28 @@ export interface EmbodiedFlags {
    * flag 先行注册保证回滚开关面完整。
    */
   'embodied.m1e'?: boolean;
+  /**
+   * [M1-d2] 手势时间线动作面（admitGesture 准入 / kfTick 到期旁挂 / playKeyframes
+   * armed 纵深防御 / admitAct 打断钩子）。默认 false = 现行为逐字节不变；
+   * 回滚 = 把 DEFAULT_EMBODIED_FLAGS['embodied.timeline'] 改回 false，无需回退代码。
+   */
+  'embodied.timeline'?: boolean;
+  /**
+   * [M1-f 第二批] EmbodiedCue 行为闭环（admitCue 接线：编译 → 时间线准入 → 账本 →
+   * 每帧写值 / 表情开关）。默认 false = 现行为逐字节不变；依赖 embodied.timeline
+   * 作为 hold/transition 的准入闸（timeline 关 → cue 整体 disabled）。
+   * 回滚 = 把 DEFAULT_EMBODIED_FLAGS['embodied.cue'] 改回 false，无需回退代码。
+   */
+  'embodied.cue'?: boolean;
 }
 
-export const DEFAULT_EMBODIED_FLAGS: Readonly<Required<Pick<EmbodiedFlags, 'embodied.m1' | 'embodied.m1e'>>> = {
+export const DEFAULT_EMBODIED_FLAGS: Readonly<
+  Required<Pick<EmbodiedFlags, 'embodied.m1' | 'embodied.m1e' | 'embodied.timeline' | 'embodied.cue'>>
+> = {
   'embodied.m1': false,
   'embodied.m1e': false,
+  'embodied.timeline': false,
+  'embodied.cue': false,
 };
 
 /**

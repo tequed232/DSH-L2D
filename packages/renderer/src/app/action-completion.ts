@@ -18,7 +18,13 @@ export interface ActionCompletionEvent {
   executionId: string;
   /** motion 组名；keyframes 为空串 */
   group: string;
-  phase: 'end';
+  /**
+   * 三态生命周期（PR-A）：end = 自然播完；interrupted = 被显式停止/抢占；
+   * failed = 执行失败（如 start-rejected）。不得统一当作 completed。
+   */
+  phase: 'end' | 'interrupted' | 'failed';
+  /** 失败/中断根因（failed/interrupted 时尽量携带，如 'start-rejected' / 'stop-called'） */
+  reason?: string;
   /** 完成时刻仍被 Agent 认领的物理输出（ownership 出口核对用） */
   owned: string[];
 }

@@ -583,7 +583,7 @@ await test('动作还占着状态机时新动作被吞，结束回执带 start-r
   await settle();
   flushTimers(3000);
   await settle();
-  const end = events.find((event) => event.phase === 'end' && event.runId === result.runId);
+  const end = events.find((event) => event.phase === 'failed' && event.runId === result.runId);
   assert.ok(end);
   assert.equal(end.reason, 'start-rejected');
   assert.equal(bubbleText(), '这个动作先让位');

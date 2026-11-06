@@ -20,7 +20,14 @@ export const ACT_PRIORITY_RANK: Record<ActPriority, number> = {
 };
 
 export type ActPhaseName = 'listening' | 'thinking' | 'speaking' | 'settle';
-export type ActEventPhase = 'start' | 'end' | 'interrupted';
+/**
+ * 链终态三分类（PR-A 三态生命周期）：
+ *   end         = 自然播完；
+ *   interrupted = 被抢占/主动撤下（release）；
+ *   failed      = 链内动作执行失败（noteMotion fail 后 finish）。
+ * 三者不得统一当作 completed（用户作业书 PR-A 新增要求）。
+ */
+export type ActEventPhase = 'start' | 'end' | 'interrupted' | 'failed';
 
 export interface ActStep {
   kind: 'expression' | 'motion' | 'pose' | 'look';
@@ -361,9 +368,12 @@ export class ActGate {
     if (!this.active || this.active.runId !== runId) return null;
     const reason = this.motionFail && this.motionFail.runId === runId ? this.motionFail.reason : undefined;
     const notes = this.motionSkips && this.motionSkips.runId === runId ? this.motionSkips.notes : undefined;
+    const failed = !!(this.motionFail && this.motionFail.runId === runId);
     this.motionFail = null;
     this.motionSkips = null;
-    const event = doneEvent(this.active, 'end', reason, notes);
+    // 三态生命周期：链内动作失败收尾 → phase='failed'（不再冒充 completed）；
+    // reason 保留失败根因（start-rejected 等），调用方可区分处理。
+    const event = doneEvent(this.active, failed ? 'failed' : 'end', reason, notes);
     this.active = null;
     return event;
   }

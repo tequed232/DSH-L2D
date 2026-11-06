@@ -35,6 +35,19 @@
   function versioned(p) { return __bootTag ? p + (p.indexOf('?') >= 0 ? '&' : '?') + 'v=' + __bootTag : p; }
   window.__DSH_L2D_OVERLAY__ = true;
 
+  // 消费者租约（M1-d3）：页面自生成身份，同版本双页靠它区分（__bootTag 不可区分）。
+  // 页面刷新/重开生成新 id → 服务端自然走接管流程，无遗留状态。
+  var __aiConsumerId = (function () {
+    try {
+      return 'c-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2));
+    } catch (e) {
+      return 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+    }
+  })();
+  // /ai/poll 响应下发的租约凭证：result 提交必须附带，接管后旧 token 即刻作废
+  var __aiLeaseToken = '';
+  var __aiLeaseEpoch = 0;
+
   // 说明：App 壳（dsh-app://）注入时 readyState 已是 complete，bootOverlay 会走
   // setTimeout 宏任务；但 ensureMounted / startAiPoll 等还有同步调用路径。agentLink 若
   // 只在 IIFE 后段声明，会以 var 提升的 undefined 被读到，startAgentPoll 抛
@@ -1576,6 +1589,29 @@
     if (!st || !st.runId || !st.expected) return;
     if (!ev || String(ev.executionId || '') !== String(st.callId)) return;
     if (!actStillCurrent(st.runId)) return; // 已被打断/超时收尾，预估路径已归位
+    // PR-A 三态生命周期：interrupted / failed 不等期望数凑齐，立即终态收尾，
+    // 不冒充 completed（end 才走 seen 计数路径）。
+    if (ev && (ev.phase === 'interrupted' || ev.phase === 'failed')) {
+      var apiT = window.DSH_L2D;
+      var e2t = null;
+      if (ev.phase === 'failed' && apiT && apiT.noteActMotion) {
+        apiT.noteActMotion(st.runId, ev.reason || 'runtime-failed', 'fail');
+        e2t = apiT.finishAct ? apiT.finishAct(st.runId) : null; // → phase:'failed'
+      } else {
+        e2t = apiT && apiT.releaseAct ? apiT.releaseAct(st.runId, ev.reason || ev.phase) : null; // → phase:'interrupted'
+      }
+      actCompletionState = { runId: 0, callId: null, expected: 0, seen: 0, owned: [] };
+      if (!e2t) return; // 预估兜底先到：终态已发过，不重复
+      e2t.completionSource = 'runtime-event';
+      if (ev.owned) e2t.ownedParams = ev.owned.slice();
+      postActEvent(e2t);
+      if (actingTimer) {
+        clearTimeout(actingTimer);
+        actingTimer = 0;
+      }
+      if (apiT && apiT.setStageBusy) apiT.setStageBusy({ acting: false });
+      return;
+    }
     st.seen++;
     if (ev.owned) st.owned = ev.owned;
     if (st.seen < st.expected) return;
@@ -1607,7 +1643,8 @@
     fetch('/dsh-l2d/ai/result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: event.callId, event: event }),
+      // token/epoch 随租约下发（flag 关时服务端忽略这两个字段）
+      body: JSON.stringify({ id: event.callId, event: event, token: __aiLeaseToken, epoch: __aiLeaseEpoch }),
     }).catch(function () { /* 回执丢了，调用方会停在 pending */ });
   }
 
@@ -1711,6 +1748,66 @@
       .filter(function (id) { return SAFE_MOTION_PARAM.test(id); })
       .slice(0, 48);
     return { expressions: expressions, motions: motions, safeParams: safeParams };
+  }
+
+  // ---------------------------------------------------------------- M1-d2 手势时间线接线
+
+  /**
+   * [M1-d2] 轨道时间上界（ms）：与 renderer playKeyframes 内部 kfDuration 同口径
+   * （max(16, min(KF_MAX_MS=10000, duration || maxT))），供手势段 durationMs 映射。
+   */
+  function gestureTracksMaxT(tracks) {
+    var maxT = 0;
+    (Array.isArray(tracks) ? tracks : []).forEach(function (tr) {
+      (Array.isArray(tr && tr.keys) ? tr.keys : []).forEach(function (k) {
+        maxT = Math.max(maxT, Number(k && k[0]) || 0);
+      });
+    });
+    return maxT;
+  }
+
+  /**
+   * [M1-d2] l2d_play_keyframes 轨道 → GestureSegmentInput 映射（蓝图 §1.3 表）：
+   * 段 id 'kf:'+param（确定性、可重放，天然去重同参数轨道）；group 'kf'（同批 keyframes
+   * 同桶，整组超时/打断原子）；params 值只构成冲突域（同通道替换判定），不写模型。
+   * durationMs <= 0（loop 长播）缺省 = 长期持有，到期清理不影响 kfTick 续期（R5）。
+   */
+  function gestureSegmentsFromTracks(tracks, durationMs) {
+    var segs = [];
+    (Array.isArray(tracks) ? tracks : []).forEach(function (tr) {
+      if (!tr || typeof tr.param !== 'string' || !tr.param) return;
+      var domain = {};
+      domain[tr.param] = 0;
+      var seg = { id: 'kf:' + tr.param, group: 'kf', params: domain };
+      if (durationMs > 0) seg.durationMs = durationMs;
+      segs.push(seg);
+    });
+    return segs;
+  }
+
+  /**
+   * [M1-d2] 回执 arbitration 字段格式（l2d_act 与 l2d_play_keyframes 共用）。
+   * 只增不改：既有消费者看不到该字段时行为不变（向后兼容增列，§6 回滚表）。
+   */
+  function arbReceipt(ga) {
+    if (!ga) return undefined;
+    return {
+      entryId: ga.entryId,
+      admitted: ga.admittedIds,
+      rejected: ga.rejected,
+      interrupted: ga.interrupted,
+      releasedAgentParams: ga.releasedAgentParams,
+      flagEnabled: ga.flagEnabled,
+    };
+  }
+
+  /**
+   * [M1-d2] 老包/flag 关直通判定：只有「明确拒绝且 flag 开」才短路（ga.admitted === false
+   * 且 ga.flagEnabled === true）。renderer 缺 admitGesture（老包）或 flag 关
+   * （flagEnabled:false）一律走原路径——新 overlay × 老 renderer 不误拒（§6 风险 1）。
+   */
+  function gestureBlocked(ga) {
+    return !!(ga && ga.admitted === false && ga.flagEnabled === true);
   }
 
   function randomOf(list) {
@@ -1871,6 +1968,30 @@
         scheduleCloseMotion(step.closeMotion, step.closeAfterMs || 6000, runId);
       }
     } else if (step.kind === 'keyframes' && L.playKeyframes) {
+      // [M1-d2] 链已过 admitAct（P1），此处只做 Timeline 记账：登记段让 kfTick 到期记账
+      // 生效、后续手势能按参数域与链内 keyframes 冲突。被拒 → 记 notes（skip），不当失败，
+      // 链其余步骤照常（R4）。
+      if (L.admitGesture) {
+        var kCur = L.currentAct ? L.currentAct() : null;
+        var kChainPri = kCur && kCur.runId === runId && (kCur.priority === 10 || kCur.priority === 50 || kCur.priority === 90)
+          ? kCur.priority
+          : undefined;
+        var kDur = step.loop === true
+          ? 0
+          : Math.max(16, Math.min(10000, Number(step.duration) || gestureTracksMaxT(step.tracks)));
+        var kSegs = gestureSegmentsFromTracks(step.tracks, kDur).map(function (seg) {
+          if (kChainPri !== undefined) seg.priority = kChainPri;
+          return seg;
+        });
+        var kga = L.admitGesture(kSegs, { entryId: 'act:' + runId });
+        if (gestureBlocked(kga)) {
+          if (L.noteActMotion) {
+            var kReason = kga.rejected && kga.rejected[0] && kga.rejected[0].reason ? kga.rejected[0].reason : 'unknown';
+            L.noteActMotion(runId, 'gesture-blocked:' + kReason, 'skip');
+          }
+          return;
+        }
+      }
       L.playKeyframes(step.tracks || [], {
         duration: step.duration,
         loop: step.loop === true,
@@ -4300,18 +4421,44 @@
   var aiPollTimer = 0;
   // /ai/poll 搭车下发的反向桥快照（模型→宿主事件最近记录），供 l2d_get_state 查询
   var aiReverseState = null;
+  // 消费者租约（M1-d3）：租约被他人持有时跳过的 tick 数（4×400ms≈1.6s，降频等接管）
+  var aiPollHoldTicks = 0;
+
+  // result 提交统一走这里：附带 poll 时下发的租约凭证（flag 关时服务端忽略）。
+  // 409 fenced 不重试——重试必然再被 fence，仅告警留痕。
+  function postAiResult(payload) {
+    payload.token = __aiLeaseToken;
+    payload.epoch = __aiLeaseEpoch;
+    return fetch('/dsh-l2d/ai/result', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(function (r) {
+      if (!r.ok) console.warn('[dsh-l2d] AI 回执被拒 id=' + payload.id + ' status=' + r.status);
+      return r;
+    });
+  }
 
   function startAiPoll() {
     if (aiPollTimer) return;
     aiPollTimer = setInterval(function () {
+      if (aiPollHoldTicks > 0) { aiPollHoldTicks--; return; } // 租约被他人持有：降频轮询
       if (!window.DSH_L2D_AI) return;
-      fetch('/dsh-l2d/ai/poll', { cache: 'no-store' })
+      fetch('/dsh-l2d/ai/poll?consumer=' + encodeURIComponent(__aiConsumerId) + '&version=' + encodeURIComponent(__bootTag || ''), { cache: 'no-store' })
         .then(function (r) {
           return r.ok ? r.json() : null;
         })
         .then(function (d) {
           // 先消费搭车的反向桥快照（必须在无指令提前 return 之前，否则没指令时永远不更新）
           if (d && d.reverse) aiReverseState = d.reverse;
+          if (d && d.lease) {
+            if (d.lease.token) {
+              __aiLeaseToken = d.lease.token; // 接管/续期发放的新凭证（含接管后 token 轮换）
+              __aiLeaseEpoch = d.lease.epoch || 0;
+            } else if (d.lease.status === 'held') {
+              aiPollHoldTicks = 4; // 他人持租约：拉长下次 poll 间隔
+            }
+          }
           if (!d || !d.calls || !d.calls.length) return;
           d.calls.forEach(function (c) {
             Promise.resolve(window.DSH_L2D_AI.exec(c.name, c.args, c.id))
@@ -4322,18 +4469,12 @@
                     console.warn('[dsh-l2d] AI 指令执行失败', c.name, res);
                   }
                 }
-                fetch('/dsh-l2d/ai/result', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id: c.id, result: res || { ok: false, reason: 'empty' } }),
-                }).catch(function () { /* 结果回写失败，MCP 会超时 */ });
+                postAiResult({ id: c.id, result: res || { ok: false, reason: 'empty' } })
+                  .catch(function () { /* 结果回写失败，MCP 会超时 */ });
               })
               .catch(function (err) {
-                fetch('/dsh-l2d/ai/result', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id: c.id, result: { ok: false, reason: String(err && err.message ? err.message : err) } }),
-                }).catch(function () { /* ignore */ });
+                postAiResult({ id: c.id, result: { ok: false, reason: String(err && err.message ? err.message : err) } })
+                  .catch(function () { /* ignore */ });
               });
           });
         })
@@ -4417,6 +4558,10 @@
                 bootTag: __bootTag || '',
                 hasPlan: typeof L.normalizeActPlan,
                 hasNote: typeof L.noteActMotion,
+                // [M1-d2 诊断] armed/timeline 活体状态（临时诊断，随 d2 验收移除或保留为观测面）
+                gesture: L.getGestureState ? L.getGestureState() : 'getGestureState-missing',
+                // [M1-f 第二批] cue 账本活体状态（enabled/active channels/overlay），与 gesture 并列
+                cue: L.getCueState ? L.getCueState() : 'missing',
                 rendererEl: (document.getElementById('dsh-l2d-renderer') || {}).src || '',
                 winHasPlan: (typeof window !== 'undefined' && window.DSH_L2D) ? typeof window.DSH_L2D.normalizeActPlan : 'no-win-api',
                 sameRef: !!(typeof window !== 'undefined' && window.DSH_L2D === L),
@@ -4483,15 +4628,85 @@
           }
           case 'l2d_play_keyframes': {
             // AI 自编动作：tracks = [{ param, keys: [[t_ms, value], ...] }]
+            // [M1-d2] 主闸：flag 开先手势准入再播放；被拒短路返回，不再触达 playKeyframes。
+            // renderer 缺 admitGesture 或 flag 关（flagEnabled:false）→ 等价直通原路径。
             var tracks = Array.isArray(a.tracks) ? a.tracks : [];
+            var ga = null;
+            if (L.admitGesture) {
+              var kDur = a.loop === true
+                ? 0
+                : Math.max(16, Math.min(10000, Number(a.duration) || gestureTracksMaxT(tracks)));
+              var ga2 = L.admitGesture(gestureSegmentsFromTracks(tracks, kDur), { priority: a.priority });
+              if (gestureBlocked(ga2)) {
+                return {
+                  ok: false,
+                  accepted: false,
+                  reason: 'gesture-priority-blocked',
+                  rejected: ga2.rejected,
+                  arbitration: arbReceipt(ga2),
+                };
+              }
+              ga = ga2;
+            }
             var n = L.playKeyframes(tracks, { duration: a.duration, loop: a.loop === true });
-            if (n <= 0) return { ok: false, error: 'no-valid-tracks' };
+            if (n <= 0) return { ok: false, error: 'no-valid-tracks', arbitration: arbReceipt(ga) };
             // keyframes 播放时按轨道时长自动认领物理输出（loop 会续期），回执列出被覆盖的参数
             var kfOwned = L.getKeyframeOwnedParameters ? L.getKeyframeOwnedParameters() : [];
-            return { ok: true, tracks: n, owned: kfOwned };
+            return { ok: true, tracks: n, owned: kfOwned, arbitration: arbReceipt(ga) };
+          }
+          case 'l2d_cue': {
+            // [M1-f 第二批] 结构化 cue 入口：编译/准入/账本全部在 renderer（admitCue），
+            // overlay 只做入参形状校验与回执组装（字段只增不改）。
+            var cueIn = (a.cue && typeof a.cue === 'object' && !Array.isArray(a.cue)) ? a.cue : null;
+            if (!cueIn) return { ok: false, reason: 'empty-cue' };
+            if (!L.admitCue) return { ok: false, reason: 'not-supported' };
+            var cueAdm = L.admitCue(cueIn, { runId: a.runId != null ? String(a.runId) : undefined });
+            // flag 关（embodied.cue/timeline 任一关闭）→ 明确回执，不静默成功。
+            if (cueAdm && cueAdm.accepted === false && cueAdm.flagEnabled === false) {
+              return { ok: false, reason: 'cue-disabled', cue: cueIn, admission: cueAdm };
+            }
+            var cueRejected = cueAdm && Array.isArray(cueAdm.rejected) ? cueAdm.rejected : [];
+            var cueOk = !!(cueAdm && cueAdm.accepted);
+            var cueRec = {
+              ok: cueOk,
+              cue: cueIn,
+              admission: cueAdm,
+              arbitration: {
+                admitted: cueOk,
+                rejected: cueRejected,
+                entryId: cueAdm ? cueAdm.entryId : undefined,
+                cueId: cueIn.channel ? 'cue:' + String(cueIn.channel) : undefined,
+              },
+            };
+            if (!cueOk) cueRec.reason = cueRejected[0] ? cueRejected[0].reason : 'cue-rejected';
+            return cueRec;
+          }
+          case 'l2d_cue_stop': {
+            // [M1-f 第二批] 显式释放 cue：selector {channel?, target?, all?} →
+            // core CueReleaseSelector {channel?, overlay?, runId?}（target 对应 overlay）。
+            if (!L.stopCue) return { ok: false, reason: 'not-supported' };
+            var cueState = L.getCueState ? L.getCueState() : null;
+            if (cueState && cueState.enabled === false) return { ok: false, reason: 'cue-disabled' };
+            var selIn = (a.selector && typeof a.selector === 'object' && !Array.isArray(a.selector)) ? a.selector : null;
+            var selCore;
+            if (!selIn || selIn.all === true) {
+              selCore = undefined;
+            } else {
+              selCore = {};
+              if (selIn.channel != null) selCore.channel = String(selIn.channel);
+              if (selIn.target != null) selCore.overlay = String(selIn.target);
+              if (selIn.runId != null) selCore.runId = String(selIn.runId);
+              if (selCore.channel === undefined && selCore.overlay === undefined && selCore.runId === undefined) {
+                selCore = undefined;
+              }
+            }
+            var cueStopped = L.stopCue(selCore);
+            return { ok: true, selector: selIn || null, stopped: cueStopped };
           }
           case 'l2d_stop_keyframes': {
             L.stopKeyframes();
+            // [M1-d2] Timeline 同步清账：armed/段与 kf 状态一致（老包无 stopGesture 时跳过）。
+            if (L.stopGesture) L.stopGesture();
             return { ok: true };
           }
           case 'l2d_reset_pose': {

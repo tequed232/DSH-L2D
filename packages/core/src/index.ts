@@ -239,3 +239,49 @@ export type {
   ContinuousSubmitResult,
   ContinuousTickResult,
 } from './continuous-action.ts';
+
+// ---------------------------------------------------------------- M1-f Embodied Cue 编译层
+// 结构化 EmbodiedCue → 既有四入口的编译（segments → enqueueGesture、sharedUses →
+// arbitrateShared、stops → stopGesture、overlays → renderer 表情开关）。同通道替换/
+// 跨通道并存语义交给 gesture-timeline 既有冲突判定，本层不重复实现；channel → 原生
+// 参数域映射全部来自 CueChannelBinding 数据（种子词表随本层提供，已按模型真实参数核实）。
+// fail-closed：未知 channel/operation、非有限值、interruptible:false → 全进 rejected 零产出。
+// feature flag：M1F_DEFAULT_ENABLED=false = 编译层不接线，渲染层现行为零变化（回滚要求）。
+export {
+  M1F_DEFAULT_ENABLED,
+  CUE_SEED_BINDINGS,
+  compileEmbodiedCue,
+} from './embodied-cue.ts';
+export type {
+  CueChannelBinding,
+  CueChannelParamBinding,
+  EmbodiedCue,
+  EmbodiedCueCompileOptions,
+  EmbodiedCueCompileResult,
+} from './embodied-cue.ts';
+
+// ---------------------------------------------------------------- M1-f 第二批 Cue Loop
+// 编译层之上的组合账本与生命周期（F2-1/3/4）：同 channel 后到替换（Body.cs:198 同语义）、
+// 跨 channel 并存、durationMs 到期释放（INV-5/S-05 同型）、clear 显式释放、overlay 单槽。
+// 不做跨通道求和（INV-1 唯一 winner）；准入/冲突判定仍由 enqueueGesture 单点负责。
+export {
+  CUE_DEFAULT_PRIORITY,
+  commitCue,
+  cueSnapshot,
+  cueWrites,
+  emptyCueLoop,
+  releaseCue,
+  tickCue,
+} from './cue-loop.ts';
+export type {
+  CueChannelState,
+  CueCommitOptions,
+  CueCommitResult,
+  CueLoopState,
+  CueOverlayState,
+  CueReleaseResult,
+  CueReleaseSelector,
+  CueSnapshot,
+  CueTickResult,
+  CueWritesResult,
+} from './cue-loop.ts';

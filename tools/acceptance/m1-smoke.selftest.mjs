@@ -10,12 +10,14 @@
  *   4) flag on 但未 allow-write：M1 组 SKIP（对其他分支实例只 GET 的安全形态）
  *   5) hip / gesture 占位：未交付时 SKIP 不拉低 verdict
  *   6) 坏画像 mock：T1 必 FAIL（验证 FAIL 路径没有被 SKIP 语义吞掉）
+ *   7) 就绪门禁 NO-CONSUMER：页面不 poll → BLOCKED / exit 3，有上限轮询不死等
+ *   8) 就绪门禁 MODEL-LOADING：等待中转 READY 放行（转正后用例照跑）；上限内不转正 → BLOCKED
  *
  * 全部断言通过返回 true（进程退出码 0）。
  */
 import http from 'node:http';
 import assert from 'node:assert/strict';
-import { runCases, parsePv, parsePw, driftedFromHold, resolveM1Flag } from './m1-smoke.mjs';
+import { runCases, runReadinessGate, parsePv, parsePw, driftedFromHold, resolveM1Flag } from './m1-smoke.mjs';
 
 const TITLES = ['显示与布局', '角色与模型', '情绪与行为', '动画与性能', '开发者工具'];
 
@@ -43,6 +45,8 @@ const MOCK_CONTROLS = [
 
 /**
  * 起 mock 宿主。profile.broken = 坏画像（controls=20、设置页缺标题），用于验证 FAIL 路径。
+ * profile.noConsumer = 收下调用但从不回执（模拟页面没 poll AI 队列）；
+ * profile.modelLoadingRounds = 前 N 次 get_state 返回 ready=false（模拟模型异步挂载）。
  * 返回 { origin, close }。
  */
 export function startMockHost(profile = {}) {
@@ -51,9 +55,13 @@ export function startMockHost(profile = {}) {
     holdValue: 0.8,
     hipUntil: 0,
     hipValue: 0.5,
+    agentUntil: 0,
+    agentIds: [],
+    cue: null,
     pwPre: 2,
     pwPost: 5,
     ticks: 0,
+    getStateCalls: 0,
     nextId: 1,
     calls: new Map(),
   };
@@ -100,12 +108,19 @@ export function startMockHost(profile = {}) {
         state.ticks++;
         const finish = (result) => {
           const id = String(state.nextId++);
-          state.calls.set(id, { result, events: result && result.__events ? result.__events : [] });
+          // noConsumer：只给 id 不落结果，等价于「没人 poll 队列」——回执永远等不到
+          if (!profile.noConsumer) state.calls.set(id, { result, events: result && result.__events ? result.__events : [] });
           if (result) delete result.__events;
           send(200, { id });
         };
         if (name === 'l2d_get_state') {
+          state.getStateCalls++;
+          const cueLive = state.cue && state.cue.until > Date.now() ? state.cue : null;
+          const loadingRounds = Number.isFinite(Number(profile.modelLoadingRounds)) ? Number(profile.modelLoadingRounds) : 0;
           return finish({
+            ok: true,
+            // 就绪门禁 L2 信号：前 loadingRounds 次为 false（模型挂载中），之后转 true
+            ready: state.getStateCalls > loadingRounds,
             info: {
               fpsCap: 60,
               vsyncHz: 60.0,
@@ -114,9 +129,19 @@ export function startMockHost(profile = {}) {
               frames: 1000 + state.ticks * 10,
               utime: 12.34,
             },
-            diag: { bootTag: 1793684582683 },
+            diag: {
+              bootTag: 1793684582683,
+              cue: {
+                enabled: true,
+                channels: cueLive
+                  ? [{ channel: cueLive.channel, operation: 'hold', value: cueLive.value, priority: 50, startedAt: cueLive.startedAt, endsAt: cueLive.until, runId: null, params: [] }]
+                  : [],
+                overlay: null,
+              },
+            },
           });
         }
+
         if (name === 'l2d_posture') {
           const values = a.values || {};
           // M1-d1：torso.hip 语义通道 → Hip* pre 让位（mock PhysicsGate：pw pre 上涨、
@@ -154,13 +179,91 @@ export function startMockHost(profile = {}) {
           if (a.values && a.values.ParamMouthOpenY !== undefined) {
             return send(400, { error: 'reserved-param: ParamMouthOpenY（口型禁区）' });
           }
-          return finish({ ok: true });
+          // M1-d2 mock：own 登记 Agent 独占（U8 负例前置），到期自动失效
+          if (a.own === true) {
+            state.agentIds = Object.keys(a.values || {});
+            state.agentUntil = Date.now() + Math.max(0, Number(a.durationMs) || 1200);
+          }
+          return finish({ ok: true, applied: Object.keys(a.values || {}) });
+        }
+        if (name === 'l2d_cue') {
+          // M1-f 第二批 mock renderer：最小 admitCue 语义（未知 channel / interruptible 拒绝，
+          // hold 记账到 until 供 U10 的 diag.cue 观察）。
+          const cue = a.cue || {};
+          const op = String(cue.operation || '');
+          const rej = (reason) => ({
+            ok: false,
+            reason,
+            cue,
+            admission: { accepted: false, flagEnabled: true, channel: String(cue.channel || ''), operation: op, writes: {}, rejected: [{ channel: String(cue.channel || '*'), operation: op, reason }] },
+            arbitration: { admitted: false, rejected: [{ channel: String(cue.channel || '*'), operation: op, reason }], entryId: undefined, cueId: 'cue:' + String(cue.channel || '') },
+          });
+          if (!['tilt', 'pitch', 'yaw', 'lean', 'gaze'].includes(String(cue.channel || ''))) return finish(rej('unknown-channel'));
+          if (cue.interruptible === false) return finish(rej('not-interruptible'));
+          const dur = Number(cue.durationMs);
+          const now = Date.now();
+          state.cue = {
+            channel: String(cue.channel),
+            value: Number(cue.value) || 0,
+            startedAt: now,
+            until: Number.isFinite(dur) && dur > 0 ? now + dur : now + 86400000,
+          };
+          return finish({
+            ok: true,
+            cue,
+            admission: { accepted: true, flagEnabled: true, channel: String(cue.channel), operation: op, writes: {}, rejected: [] },
+            arbitration: { admitted: true, rejected: [], entryId: 'cue:' + String(cue.channel), cueId: 'cue:' + String(cue.channel) },
+          });
+        }
+        if (name === 'l2d_cue_stop') {
+          const channel = state.cue ? state.cue.channel : null;
+          state.cue = null;
+          return finish({ ok: true, stopped: { releasedChannels: channel ? [channel] : [], releasedOverlay: null } });
         }
         if (name === 'l2d_play_keyframes') {
           const tracks = Array.isArray(a.tracks) ? a.tracks : [];
           if (tracks.some((t) => t.param === 'ParamMouthOpenY')) {
             return send(400, { error: 'reserved-param: ParamMouthOpenY（口型禁区）' });
           }
+          // M1-d2 mock renderer：模拟 admitGesture 双查 + armed 纵深防御。
+          // Agent 独占窗口内的同参数轨道 → 整批拒（gesture-priority-blocked，flag 开）。
+          const held = tracks.some(
+            (t) => state.agentUntil > Date.now() && (state.agentIds || []).includes(t.param),
+          );
+          const entryId = 'kf:' + tracks.map((t) => t && t.param).filter(Boolean).sort().join('+');
+          if (held) {
+            const rejected = tracks.map((t) => ({ id: 'kf:' + t.param, reason: 'priority-blocked' }));
+            return finish({
+              ok: false,
+              accepted: false,
+              reason: 'gesture-priority-blocked',
+              rejected,
+              arbitration: {
+                entryId,
+                admitted: [],
+                rejected,
+                interrupted: [],
+                releasedAgentParams: [],
+                flagEnabled: true,
+              },
+            });
+          }
+          return finish({
+            ok: true,
+            tracks: tracks.length,
+            owned: tracks.map((t) => t.param),
+            arbitration: {
+              entryId,
+              admitted: tracks.map((t) => 'kf:' + t.param),
+              rejected: [],
+              interrupted: [],
+              releasedAgentParams: [],
+              flagEnabled: true,
+            },
+          });
+        }
+        if (name === 'l2d_stop_keyframes') {
+          // M1-d2 mock：stop 同步清账（U9 复播即再准入）
           return finish({ ok: true });
         }
         if (name === 'l2d_play_motion') {
@@ -174,7 +277,11 @@ export function startMockHost(profile = {}) {
           // mock m1-gesture：回执带仲裁标记
           return finish({ ok: true, runId: 'mock-run-1', notes: ['gesture-timeline-arbitrated'] });
         }
-        if (name === 'l2d_reset') return finish({ ok: true });
+        if (name === 'l2d_reset') {
+          state.agentUntil = 0;
+          state.agentIds = [];
+          return finish({ ok: true });
+        }
         return send(400, { error: 'unknown tool: ' + name });
       });
       return;
@@ -234,12 +341,13 @@ export async function selftest() {  const fails = [];
       m1Flag: 'on',
       hipReady: true,
       gestureReady: true,
+      cueReady: true,
       holdMs: 1500,
     });
     selftestStop();
     check('0 FAIL', s2.failed === 0);
     check('基线 T0..T3 全 PASS', s2.results.filter((r) => r.name.startsWith('T')).every((r) => r.verdict === true));
-    const expectPass = ['U1 acquire→post 覆盖', 'U2 release 回物理', 'U3 口型红线（任何通道 400）', 'U4 未索引组拒绝', 'U5 Hip pre 让位', 'U6 gesture 仲裁'];
+    const expectPass = ['U1 acquire→post 覆盖', 'U2 release 回物理', 'U3 口型红线（任何通道 400）', 'U4 未索引组拒绝', 'U5 Hip pre 让位', 'U6 gesture 仲裁', 'U7 gesture 准入正例', 'U8 gesture 准入负例', 'U9 gesture 清账复播', 'U10 cue 持有/到期', 'U11 cue 拒绝语义'];
     for (const name of expectPass) {
       const r = s2.results.find((x) => x.name === name);
       check(`${name} PASS`, !!r && r.verdict === true);
@@ -289,6 +397,7 @@ export async function selftest() {  const fails = [];
     check('0 FAIL', s5.failed === 0);
     check('U5 SKIP 占位', s5.results.find((r) => r.name === 'U5 Hip pre 让位')?.verdict === 'skip');
     check('U6 SKIP 占位', s5.results.find((r) => r.name === 'U6 gesture 仲裁')?.verdict === 'skip');
+    check('U10/U11 SKIP（--m1-cue 未开启）', s5.results.find((r) => r.name === 'U10 cue 持有/到期')?.verdict === 'skip' && s5.results.find((r) => r.name === 'U11 cue 拒绝语义')?.verdict === 'skip');
     check('其余 M1 用例照常判定', s5.results.find((r) => r.name === 'U1 acquire→post 覆盖')?.verdict === true);
   } finally {
     m5.close();
@@ -306,6 +415,56 @@ export async function selftest() {  const fails = [];
     check('failed 计数 > 0（exit 1 路径）', s6.failed >= 2);
   } finally {
     m6.close();
+  }
+
+  // ---- 7) 就绪门禁 · NO-CONSUMER：页面没在 poll → BLOCKED（exit 3），不进场 ----
+  origLog('\n[selftest] 7) 就绪门禁 · NO-CONSUMER（AI 队列无人消费 → BLOCKED）');
+  const m7 = await startMockHost({ noConsumer: true });
+  try {
+    selftestStart();
+    const g7 = await runReadinessGate({ origin: m7.origin, maxWaitMs: 700, intervalMs: 200, consumerTimeoutMs: 250 });
+    const log7 = out;
+    selftestStop();
+    check('门禁 BLOCKED（未 READY）', g7.ok === false);
+    check('分类 NO-CONSUMER', g7.state === 'NO-CONSUMER');
+    check('BLOCKED 退出码 = 3', g7.exitCode === 3);
+    check('三层齐全且 L0 READY', Array.isArray(g7.layers) && g7.layers.length === 3 && g7.layers[0].state === 'READY');
+    check('L1 NO-CONSUMER / L2 SKIP', g7.layers[1].state === 'NO-CONSUMER' && g7.layers[2].state === 'SKIP');
+    check(
+      '分层状态行 + BLOCKED 收尾',
+      log7.includes('L0 服务连通') && log7.includes('L1 消费者在线') && log7.includes('L2 模型就绪') && log7.includes('exit 3'),
+    );
+    check('有上限轮询（不无限等）', g7.rounds >= 1 && g7.waitedMs <= 1200);
+  } finally {
+    m7.close();
+  }
+
+  // ---- 8) 就绪门禁 · MODEL-LOADING：等待中转正 → 放行；上限内不转正 → BLOCKED ----
+  origLog('\n[selftest] 8) 就绪门禁 · MODEL-LOADING（转正放行 / 超时 BLOCKED）');
+  const m8a = await startMockHost({ modelLoadingRounds: 2 });
+  try {
+    selftestStart();
+    const g8a = await runReadinessGate({ origin: m8a.origin, maxWaitMs: 2000, intervalMs: 150, consumerTimeoutMs: 250 });
+    selftestStop();
+    check('中途 MODEL-LOADING 后转 READY', g8a.ok === true && g8a.rounds >= 2);
+    check('放行退出码 = 0', g8a.exitCode === 0);
+    selftestStart();
+    const s8 = await runCases({ origin: m8a.origin, allowWrite: false, m1Flag: 'off' });
+    selftestStop();
+    check('放行后用例照跑（0 FAIL）', s8.failed === 0 && s8.results.filter((r) => r.name.startsWith('T')).every((r) => r.verdict === true));
+  } finally {
+    m8a.close();
+  }
+  const m8b = await startMockHost({ modelLoadingRounds: 999 });
+  try {
+    selftestStart();
+    const g8b = await runReadinessGate({ origin: m8b.origin, maxWaitMs: 400, intervalMs: 150, consumerTimeoutMs: 200 });
+    selftestStop();
+    check('始终未就绪 → BLOCKED', g8b.ok === false && g8b.exitCode === 3);
+    check('分类 MODEL-LOADING', g8b.state === 'MODEL-LOADING');
+    check('L2 保持 MODEL-LOADING', g8b.layers[2].state === 'MODEL-LOADING');
+  } finally {
+    m8b.close();
   }
 
   origLog(

@@ -2,7 +2,8 @@
  * LimbController 骨架（docs/Embodied-Behavior.md §6 / docs/Ownership-Invariants.md §4 状态层）。
  *
  * 职责：四肢参数的「physics-owned ↔ limb-owned」状态机——默认 physics 驱动，
- * acquire 后 limb 独占（叶子四肢 post；Hip* pre 属 M1-b，经 acquire 选项显式给相位），
+ * acquire 后 limb 独占（相位按参数族自动推导：Hip* 等 PRE_ONLY 根输入 pre、
+ * 叶子四肢 post；也可显式传入，与参数族冲突即 wrong-phase 拒绝），
  * release / 打断 / 超时后回 physics。本层不直接写模型参数；
  * 两个出口：
  *   - `resolve(now)`：每帧 limb 写值（Map<id, value>）——对齐渲染侧 LimbControlLike
@@ -12,12 +13,15 @@
  * 能力驱动铁律：四肢参数 id 由构造函数传入（来自模型画像/W3 注册表），本文件零参数名；
  * R10b：acquire 只登记物理输出——`isOwnable` 谓词由调用方注入（renderer 接
  * MotionAdapter.canOwn / physics3 输出表），非物理 id 返回 ignored（不算错误）。
+ * fail-closed：谓词未注入时一律视为不可 own（rejected 'not-ownable'）——
+ * 构造函数的四肢名单本身不构成「当前模型物理输出」的证明。
  *
  * feature flag：`enabled` 缺省取 `M1_DEFAULT_ENABLED`（false = 现行为，
  * 行为变化必须由调用方显式启用；关闭时 acquire 全部拒绝、resolve 恒空表）。
  */
 import { M1_DEFAULT_ENABLED } from './write-plan.ts';
 import type { OwnershipEntry } from './write-plan.ts';
+import { defaultPhaseForParam } from './motion-intent.ts';
 import type { WritePhase } from './motion-contract.ts';
 
 export interface LimbControllerOptions {
@@ -28,8 +32,9 @@ export interface LimbControllerOptions {
   /** acquire 未传 durationMs 时的缺省持有时长；缺省 undefined = 长期持有（须显式 release）。 */
   defaultDurationMs?: number;
   /**
-   * R10b canOwn 谓词：id 是否为当前物理输出（renderer 注入 MotionAdapter.canOwn /
-   * physics3 输出表，不硬编码）。缺省恒 true——此时以构造函数传入的四肢名单为唯一门槛。
+   * R10b canOwn 谓词：id 是否为当前模型物理输出（renderer 注入 MotionAdapter.canOwn /
+   * physics3 输出表，不硬编码）。fail-closed：缺省不注入 = 一律不可 own
+   * （acquire rejected 'not-ownable'）；四肢名单必须经运行时能力画像核验后才可注入。
    */
   isOwnable?: (id: string) => boolean;
   /**
@@ -45,13 +50,31 @@ export interface LimbAcquireOptions {
   priority?: number;
   /** 执行轮次绑定；打断/完成/超时按 runId 释放（R7/R12）。缺省自动生成。 */
   runId?: string;
-  /** 叶子四肢固定 post；Hip* 固定 pre（M1-b）。与参数族默认冲突时按 wrong-phase 处理。 */
+  /**
+   * 执行相位。缺省按参数族推导（复用 `defaultPhaseForParam` / PRE_ONLY 唯一名单：
+   * Hip* 等物理根输入 → pre，叶子四肢 → post）。显式传入与参数族冲突的 phase
+   * （Hip* 传 post、叶子传 pre）→ 该 id rejected('wrong-phase')，不产生 ownership。
+   */
   phase?: WritePhase;
   /** 占用时长（毫秒，<=0 长期持有）；超时只是最后保险，主路径是显式 release。 */
   durationMs?: number;
+  /**
+   * 原子批量模式（P2）：true 时先对整批做预检（unknown-id / not-ownable /
+   * wrong-phase / priority-blocked），全部通过才统一写 ownership；任一失败整批拒绝
+   * （预检通过的 id 回执 'atomic-aborted'），不产生任何新 ownership，也不误释放
+   * 其他 runId 已有的 ownership。缺省 false = 逐 id 独立判定、先到先得（部分成功
+   * 语义，保持兼容）。
+   */
+  atomic?: boolean;
 }
 
-export type AcquireRejectReason = 'disabled' | 'unknown-id' | 'not-ownable' | 'priority-blocked';
+export type AcquireRejectReason =
+  | 'disabled'
+  | 'unknown-id'
+  | 'not-ownable'
+  | 'priority-blocked'
+  | 'wrong-phase'    // 显式 phase 与参数族默认冲突（INV-7，acquire 时前置拒绝）
+  | 'atomic-aborted'; // atomic 批量中该 id 预检本可通过，因批内其他 id 失败而连带拒绝
 
 /** 详细回执（`acquireDetailed`；`acquire` 只返回成功列表，对齐 LimbControlLike）。 */
 export interface AcquireResult {
@@ -93,7 +116,8 @@ export class LimbController {
   private readonly enabled: boolean;
   private readonly nowFn: () => number;
   private readonly defaultDurationMs: number | undefined;
-  private readonly isOwnable: (id: string) => boolean;
+  /** fail-closed：null = 未注入能力检查，所有 id 一律 not-ownable（P3 安全边界）。 */
+  private readonly isOwnableFn: ((id: string) => boolean) | null;
   private readonly clampFn: (id: string, value: number) => number;
   private readonly held = new Map<string, HeldEntry>();
 
@@ -105,7 +129,7 @@ export class LimbController {
     this.enabled = options.enabled ?? M1_DEFAULT_ENABLED;
     this.nowFn = options.now ?? Date.now;
     this.defaultDurationMs = options.defaultDurationMs;
-    this.isOwnable = options.isOwnable ?? (() => true);
+    this.isOwnableFn = options.isOwnable ?? null;
     this.clampFn = options.clamp ?? ((_, value) => value);
   }
 
@@ -123,17 +147,28 @@ export class LimbController {
    * 逐 id 判定：
    * - 未启用 → rejected('disabled')（flag 默认关 = 现行为）；
    * - 不在构造时给的四肢名单里 → rejected('unknown-id')（limb 只写四肢参数，CASE-04）；
-   * - `isOwnable` 谓词不通过（非物理输出）→ rejected('not-ownable')（R10b：忽略，不算错误）；
+   * - `isOwnable` 未注入或不通过（非物理输出）→ rejected('not-ownable')
+   *   （R10b：忽略，不算错误；fail-closed，见 LimbControllerOptions.isOwnable）；
+   * - 显式 phase 与参数族默认冲突（Hip* 非 pre、叶子非 post）→ rejected('wrong-phase')；
    * - 已被其它 runId 持有：新 priority < 持有 priority → rejected('priority-blocked')
    *   （低不打断高）；同级或更高 → 抢占，旧 runId 在该参数上的持有被释放（S-04）；
    * - 同 runId → 刷新 durationMs/priority。
-   * 详细回执（含拒绝原因）用 `acquireDetailed`。
+   * 详细回执（含拒绝原因）用 `acquireDetailed`；整批全有或全无用 `atomic: true`。
    */
   acquire(ids: readonly string[], options: LimbAcquireOptions = {}): string[] {
     return this.acquireDetailed(ids, options).acquired;
   }
 
-  /** 同 `acquire`，返回完整回执（诊断/对账用）。 */
+  /**
+   * 同 `acquire`，返回完整回执（诊断/对账用）。
+   *
+   * 实现分两段，保证拒绝路径零副作用：
+   * 1. 预检：逐 id 判定并做批内模拟登记（`pending`，重复 id 按出现序后者刷新前者），
+   *    全程不触碰 `this.held`；相位缺省按参数族推导（`defaultPhaseForParam` 唯一名单）。
+   * 2. 落账：`atomic: true` 时整批预检全通过才统一写 ownership（任一失败整批拒绝，
+   *    预检通过的 id 标 'atomic-aborted'，其他 runId 的 ownership 完全不变）；
+   *    缺省 false = 逐 id 落账、先到先得（部分成功语义，保持兼容）。
+   */
   acquireDetailed(ids: readonly string[], options: LimbAcquireOptions = {}): AcquireResult {
     const runId = options.runId ?? 'limb-run-' + (++runIdSeq);
     const acquired: string[] = [];
@@ -144,33 +179,54 @@ export class LimbController {
     }
     const priority = options.priority ?? 50;
     const now = this.nowFn();
+    const durationMs = options.durationMs ?? this.defaultDurationMs;
+    const expiresAt =
+      typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs > 0 ? now + durationMs : undefined;
+
+    // 1) 预检（无副作用）。
+    interface Decision { id: string; ok: boolean; reason?: AcquireRejectReason; entry?: HeldEntry }
+    const decisions: Decision[] = [];
+    const pending = new Map<string, HeldEntry>();
     for (const id of ids) {
       if (!this.limbIds.has(id)) {
-        rejected.push({ id, reason: 'unknown-id' });
+        decisions.push({ id, ok: false, reason: 'unknown-id' });
         continue;
       }
-      if (!this.isOwnable(id)) {
-        rejected.push({ id, reason: 'not-ownable' }); // R10b：非物理输出只登记为 ignored
+      if (this.isOwnableFn === null || !this.isOwnableFn(id)) {
+        decisions.push({ id, ok: false, reason: 'not-ownable' }); // R10b：非物理输出只登记为 ignored
         continue;
       }
-      const existing = this.held.get(id);
+      // 相位：缺省按参数族推导（Hip* pre / 叶子 post）；显式冲突 = wrong-phase（INV-7）。
+      const familyPhase = defaultPhaseForParam(id);
+      const phase = options.phase ?? familyPhase;
+      if (phase !== familyPhase) {
+        decisions.push({ id, ok: false, reason: 'wrong-phase' });
+        continue;
+      }
+      const existing = pending.get(id) ?? this.held.get(id);
       if (existing && existing.runId !== runId && priority < existing.priority) {
-        rejected.push({ id, reason: 'priority-blocked' });
+        decisions.push({ id, ok: false, reason: 'priority-blocked' });
         continue;
       }
-      this.held.delete(id); // 同 runId 刷新或抢占旧 runId
-      const entry: HeldEntry = {
-        owner: 'limb',
-        runId,
-        phase: options.phase ?? 'post',
-        priority,
-      };
-      const durationMs = options.durationMs ?? this.defaultDurationMs;
-      if (typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs > 0) {
-        entry.expiresAt = now + durationMs;
+      const entry: HeldEntry = { owner: 'limb', runId, phase, priority };
+      if (expiresAt !== undefined) entry.expiresAt = expiresAt;
+      pending.set(id, entry);
+      decisions.push({ id, ok: true, entry });
+    }
+
+    // 2) 落账。
+    if (options.atomic === true && decisions.some((d) => !d.ok)) {
+      // 整批拒绝：有自身失败原因的 id 带原因，预检通过的 id 连带标 atomic-aborted。
+      for (const d of decisions) rejected.push({ id: d.id, reason: d.ok ? 'atomic-aborted' : d.reason! });
+      return { runId, acquired, rejected };
+    }
+    for (const d of decisions) {
+      if (!d.ok) {
+        rejected.push({ id: d.id, reason: d.reason! });
+        continue;
       }
-      this.held.set(id, entry);
-      acquired.push(id);
+      this.held.set(d.id, d.entry!); // 同 runId 刷新或抢占旧 runId（S-04）
+      acquired.push(d.id);
     }
     return { runId, acquired, rejected };
   }

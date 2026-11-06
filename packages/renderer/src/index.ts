@@ -24,6 +24,16 @@ import { normalizeActChain } from '../../core/src/chain-normalize.ts';
 import { admitKeyframeTrack } from './app/keyframe-admission.ts';
 import { createCompletionBus, type ActionCompletionEvent } from './app/action-completion.ts';
 import {
+  createGestureBridge,
+  type GestureAdmitOptions,
+  type GestureBridgeSnapshot,
+  type GestureSegmentInput,
+} from './app/gesture-bridge';
+import { createCueBridge, type CueBridgeSnapshot, type CueStopOutcome } from './app/cue-bridge';
+import type { EmbodiedCue } from '../../core/src/embodied-cue.ts';
+import type { CueReleaseSelector } from '../../core/src/cue-loop.ts';
+import type { StopSelector } from '../../core/src/gesture-timeline.ts';
+import {
   ActGate,
   closeMotionsOnPreempt,
   countRealCompletions,
@@ -340,6 +350,10 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
   });
   model.setPostLateUpdateHook((core, deltaTimeSeconds) => {
     phaseDiag.post++;
+    // [M1-d2] 手势时间线到期清理旁挂（kfTick 前一行，只插一步纯函数状态清理）：
+    // flag 开时 armed 批次全部段到期 → 软解除（releaseKfOwnership 兜底）；flag 关 = 不插，
+    // 任何既有相对顺序不变。
+    if (TIMELINE_ENABLED) gestureBridge.resolve(performance.now());
     kfTick(performance.now());
     // PR-D：收割非 Loop 动作的真实终点（onFinishedMotionHandler 在 updateMotion 中途只能置标记）
     motionCompletionTick();
@@ -349,6 +363,9 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
     applyAmbientFace(core);
     injector.apply(core, 'post');
     applyGazeEyes(core);
+    // [M1-f 第二批] cue 写值必须晚于 applyGazeEyes：gaze 通道写的就是 ParamEyeBallX/Y，
+    // 先写会被注视收招覆盖；cue 持有期间以持有值为准（clear/到期后立即交还）。
+    if (CUE_ENABLED) applyCueFrame(core);
   });
 
   // 从模型自己的 physics3.json 读取输出表，禁止把无效写入误报为成功。
@@ -488,8 +505,111 @@ export function injectEmotionIntent(intent: EmotionIntent): boolean {
  */
 const actGate = new ActGate();
 
+/**
+ * [M1-d2] 手势时间线动作面（flag `embodied.timeline`，默认关 = 现行为逐字节不变）。
+ * bridge 持有 timeline 与 armed 批次（纯逻辑在 gesture-bridge.ts，可 node 单测）；
+ * renderer 只负责把 ActGate / injector / keyframes 播放器作为 deps 注入。
+ * 回滚 = 把 DEFAULT_EMBODIED_FLAGS['embodied.timeline'] 保持/改回 false。
+ */
+const TIMELINE_ENABLED = DEFAULT_EMBODIED_FLAGS['embodied.timeline'] === true;
+const gestureBridge = createGestureBridge({
+  enabled: TIMELINE_ENABLED,
+  currentAct: () => actGate.current(),
+  getAgentOwned: () => injector.getAgentOwned(),
+  releaseOwned: (ids) => injector.release(ids),
+  stopKeyframes: () => stopKeyframes(),
+  releaseKfOwnership: () => releaseKfOwnership(),
+});
+
+/**
+ * [M1-f 第二批] EmbodiedCue 行为闭环（flag `embodied.cue`，默认关）。
+ * 前置依赖 embodied.timeline 作为 hold/transition 的准入闸：timeline 关 → cue 整体 disabled
+ * （不编译、不入队、不写值，回滚 = 两个 flag 任一置 false）。
+ * 纯逻辑在 cue-bridge.ts（可 node 单测），这里只注入运行面（时间线/表情/时钟）。
+ */
+const CUE_ENABLED =
+  DEFAULT_EMBODIED_FLAGS['embodied.cue'] === true && TIMELINE_ENABLED;
+/** 本帧模型引用（cue 写值端口在帧钩子里取；模块级同 model/canvasEl 的既有装配方式）。 */
+let cueFrameCore: CoreModel | null = null;
+const CUE_MOUTH_PARAMS = new Set<string>(LIPSYNC_PARAMS);
+const cueBridge = createCueBridge({
+  enabled: CUE_ENABLED,
+  admitGesture: (segments, opts) =>
+    gestureBridge.admit(segments as GestureSegmentInput[], { entryId: opts?.entryId }),
+  stopGesture: (selector) => gestureBridge.stop(selector),
+  setExpression: (name) => setExpression(name),
+  clearExpression: () => clearExpression(),
+  knownOverlays: () =>
+    modelSetting?.FileReferences?.Expressions?.map((e) => e?.Name ?? '').filter((n) => !!n),
+  // 唯一写通道：ParamInjector（口型/物理未授权/真实下标/钳制/计数全部复用其守卫）。
+  writeParam: (id, value) => {
+    if (!cueFrameCore) return false;
+    return injector.applyNow(cueFrameCore, [{ id, value }], { mode: 'set' }).applied.length === 1;
+  },
+  isMouthParam: (id) => CUE_MOUTH_PARAMS.has(id),
+  isPhysicsOutput: (id) => injector.isPhysicsOutput(id),
+  ownParams: (ids, durationMs, phase) => injector.own(ids, durationMs, phase),
+  releaseOwned: (ids) => injector.release(ids),
+});
+
+/**
+ * [M1-d2] 手势准入（overlay l2d_act / l2d_play_keyframes 前置调用）。
+ * flag 关时恒 rejected('disabled') 且 flagEnabled:false —— overlay 以
+ * `ga.admitted === false && ga.flagEnabled` 判定拒绝，否则等价直通原路径（兼容矩阵 §6）。
+ */
+export function admitGesture(
+  segments: GestureSegmentInput[],
+  opts: GestureAdmitOptions = {},
+) {
+  const admission = gestureBridge.admit(segments, opts);
+  if (admission.admitted) markActive();
+  return admission;
+}
+
+/** [M1-d2] 显式释放手势；selector 缺省 = 全停（透传 core stopGesture 语义）。 */
+export function stopGesture(selector?: StopSelector) {
+  return gestureBridge.stop(selector);
+}
+
+/** [M1-d2] 诊断只读面。 */
+export function getGestureState(): GestureBridgeSnapshot {
+  return gestureBridge.snapshot();
+}
+
+/**
+ * [M1-f 第二批] EmbodiedCue 准入（hold/transition/overlay/clear）。
+ *
+ * 判定顺序：flag 查 → compileEmbodiedCue fail-closed 校验 → 表情清单校验 →
+ * 时间线准入（同通道替换/跨通道并存/低不打断高，沿用 enqueueGesture）→ 落账。
+ * 返回 accepted=false 且 flagEnabled=true 表示被拒（与 admitGesture 同口径）。
+ */
+export function admitCue(cue: EmbodiedCue, opts: { runId?: string; entryId?: string } = {}) {
+  const admission = cueBridge.admit(cue, opts);
+  if (admission.accepted) markActive();
+  return admission;
+}
+
+/** [M1-f 第二批] 显式释放 cue（selector 缺省 = 全清；按 channel/runId/overlay 收窄）。 */
+export function stopCue(selector?: CueReleaseSelector): CueStopOutcome {
+  return cueBridge.stop(selector);
+}
+
+/** [M1-f 第二批] 诊断只读面。 */
+export function getCueState(): CueBridgeSnapshot {
+  return cueBridge.snapshot();
+}
+
 export function admitAct(input: ActAdmitInput = {}) {
-  return actGate.admit(input);
+  const result = actGate.admit(input);
+  // [M1-d2] Agent 打断手势：flag 开且链占上槽时全清时间线 + 停旧手势逐帧写值
+  // （FORCE 戳一戳同样能打断手势——Agent/交互动作占用身体时手势让位）。
+  // flag 关 = 与基线完全一致（admitGesture/armed 均不可达）。
+  if (TIMELINE_ENABLED && result.accepted) {
+    gestureBridge.stop();
+    // [M1-f 第二批] Agent 动作占用身体时 cue 一并让位（同 admitGesture 的打断语义）。
+    if (CUE_ENABLED) cueBridge.stop();
+  }
+  return result;
 }
 
 export function finishAct(runId: number) {
@@ -528,10 +648,20 @@ const actionCompletionBus = createCompletionBus();
 export const onActionCompletion = (cb: (event: ActionCompletionEvent) => void): (() => void) =>
   actionCompletionBus.subscribe(cb);
 
-/** 派发真实完成事件；executionId 缺失时不产事件（无消费者可关联，纯噪音）。 */
-function emitActionCompletion(kind: 'motion' | 'keyframes', executionId: string, group: string, owned: string[]): void {
+/** 派发真实完成事件；executionId 缺失时不产事件（无消费者可关联，纯噪音）。
+ *  三态生命周期（PR-A）：phase 必须区分 end/interrupted/failed，不得统一当作 completed。 */
+function emitActionCompletion(
+  kind: 'motion' | 'keyframes',
+  executionId: string,
+  group: string,
+  owned: string[],
+  phase: 'end' | 'interrupted' | 'failed' = 'end',
+  reason?: string,
+): void {
   if (!executionId) return;
-  actionCompletionBus.emit({ kind, executionId, group, phase: 'end', owned });
+  const event: ActionCompletionEvent = { kind, executionId, group, phase, owned };
+  if (reason) event.reason = reason;
+  actionCompletionBus.emit(event);
 }
 
 export { closeMotionsOnPreempt, preemptedYandere, motionsShareArm, motionResultKind };
@@ -800,6 +930,13 @@ export function playKeyframes(tracks: KeyframeTrack[], opts: KeyframesOptions = 
 
   for (const tr of (tracks || []).slice(0, KF_MAX_TRACKS)) {
     if (!tr || !tr.param || !Array.isArray(tr.keys) || tr.keys.length < 2) continue;
+    // [M1-d2] 纵深防御 #3：flag 开时，写物理输出的轨道必须有 armed 批次背书
+    // （admitGesture/l2d_act keyframes 步登记）。没有 armed 批次的物理轨道写不进去 =
+    // 即使未来新增直连调用方也踩不掉 Agent 持有的手臂。flag 关时 TIMELINE_ENABLED
+    // 为编译期常量 false，本分支不可达，playKeyframes 逐行为等价基线。
+    if (TIMELINE_ENABLED && injector.isPhysicsOutput(tr.param) && !gestureBridge.armedHas(tr.param)) {
+      continue;
+    }
     try {
       const handle = CubismFramework.getIdManager().getId(tr.param);
       const idx = core.getParameterIndex(handle);
@@ -868,6 +1005,12 @@ export function getKeyframeOwnedParameters(): string[] {
 }
 
 export function stopKeyframes(): void {
+  // PR-A 三态：飞行中的被追踪执行被显式停止 → interrupted（非 completed）。
+  // owned 必须在释放前快照，与自然收敛同一份出口核对语义。
+  if (kfActive && kfExecutionId) {
+    const owned = kfOwnedForTracks.slice();
+    emitActionCompletion('keyframes', kfExecutionId, '', owned, 'interrupted', 'stop-called');
+  }
   kfActive = false;
   kfTracks = [];
   kfExecutionId = '';
@@ -1425,6 +1568,9 @@ export async function playMotionAsync(
     motionCompletionDone = true; // start 失败无终点可言，防御看门狗/事件残留
     poseOwnedByMotion = false;
     if (finishResolve) finishResolve();
+    // PR-A 三态：start 被拒是 failed（非 completed）——同步回执之外的异步消费者
+    // （事件订阅链）也必须拿到明确失败，不再静默无事件。
+    emitActionCompletion('motion', executionId, target, injector.getAgentOwned(), 'failed', 'start-rejected');
     return { status: 'failed', reason: 'start-rejected', group: target };
   }
   motionDirector.commit(target);
@@ -1556,6 +1702,23 @@ function writeParam(core: CoreModel, id: string, value: number, add = false): vo
     core.setParameterValueById(handle, v, 1);
   } catch {
     paramWriteFail++;
+  }
+}
+
+/**
+ * [M1-f 第二批] 每帧 cue 推进：先到期清理（停租约/释放认领/关表情），再经
+ * ParamInjector.applyNow 写当前持有值。
+ *
+ * 为什么必须晚于 applyGazeEyes：gaze 通道写 ParamEyeBallX/Y，先写会被注视收招覆盖。
+ * 为什么走 applyNow 而不是 set + apply：sticky 里 AngleZ/LeanInput 等是 add 语义，
+ * 二次 apply 会累加；applyNow 复用 set 的全部守卫并按 set 语义单条立即写入。
+ */
+function applyCueFrame(core: CoreModel): void {
+  cueFrameCore = core;
+  try {
+    cueBridge.tick(performance.now());
+  } finally {
+    cueFrameCore = null;
   }
 }
 
@@ -1769,6 +1932,8 @@ export function setZoom(zoom: number): void {
 export function resetPose(): number {
   const core = model?.getModel();
   if (!core) return 0;
+  if (TIMELINE_ENABLED) gestureBridge.stop(); // [M1-d2] 清空手势时间线与 armed，与 stopKeyframes 同步清账
+  if (CUE_ENABLED) cueBridge.stop(); // [M1-f 第二批] 清 cue 账本（channel/overlay），停在手写值
   stopKeyframes();
   stopAmbient();
   zeroAngleBus();
@@ -1953,6 +2118,9 @@ export async function destroy(): Promise<void> {
   injector.clear();
   injector.unlock();
   injector.resetStats();
+  physicsGate.dispose(); // [M1-b] 清掉让位登记表，避免残留状态影响下一次 mount
+  if (TIMELINE_ENABLED) gestureBridge.stop(); // [M1-d2] 清手势时间线与 armed
+  if (CUE_ENABLED) cueBridge.stop(); // [M1-f 第二批] 清 cue 账本（destroy 后不残留持有值）
   motionDirector.reset();
   poseOwnedByMotion = false;
   poseController.resetToRest();
@@ -2300,6 +2468,14 @@ const api = {
   motionsShareArm,
   motionResultKind,
   noteActMotion,
+  // [M1-d2] 手势时间线动作面（embodied.timeline flag，默认关）
+  admitGesture,
+  stopGesture,
+  getGestureState,
+  // [M1-f 第二批] EmbodiedCue 行为闭环（embodied.cue flag，默认关）
+  admitCue,
+  stopCue,
+  getCueState,
   getCapabilities,
   // 生命周期
   destroy,

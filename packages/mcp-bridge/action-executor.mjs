@@ -118,17 +118,26 @@ export class HttpActionExecutor {
     this.log(`execute ${request.requestId} → callId=${callId}`);
 
     // 终态事件收集器：订阅与轮询共用一套判定语义。
-    const ctx = { terminal: null, completionInfo: null };
+    // PR-A 三态：end/interrupted = 完成终态；failed = 失败终态（ok:false，不冱充 completed）。
+    const ctx = { terminal: null, completionInfo: null, failed: null };
     const onEvent = (e) => {
       if (!e || e.type !== 'action-done') return;
       if (e.phase === 'end' || e.phase === 'interrupted') ctx.terminal = e;
+      else if (e.phase === 'failed' && !ctx.failed) ctx.failed = e;
       if (e.completionSource === 'runtime-event') ctx.completionInfo = e;
     };
+    const failResult = () => ({
+      ok: false,
+      executionId: callId,
+      reason: (ctx.failed && (ctx.failed.reason || ctx.failed.error)) || 'failed',
+      phase: 'failed',
+    });
 
     // ---- 事件订阅优先 ----
     if (this.subscribeEvents) {
       try {
         const sub = await this.subscribeEvents(callId, onEvent);
+        if (ctx.failed) return failResult();
         const phase = sub && (sub.phase || (ctx.terminal && ctx.terminal.phase));
         if (phase === 'end' || phase === 'interrupted') {
           return this._finalize(request, callId, phase, ctx, ownedScope);
@@ -136,6 +145,7 @@ export class HttpActionExecutor {
         // 订阅返回但无终态：订阅链路没交付，落轮询；已见终态直接采信（事件已被 read 排空）
       } catch (error) {
         this.log(`subscribe ${request.requestId} unavailable → polling fallback（${String(error && error.message || error)}）`);
+        if (ctx.failed) return failResult();
         if (ctx.terminal) return this._finalize(request, callId, ctx.terminal.phase, ctx, ownedScope);
       }
     }
@@ -150,9 +160,10 @@ export class HttpActionExecutor {
       if (body.ready && body.result && body.result.ok === false) {
         return { ok: false, executionId: callId, reason: body.result.reason || body.result.error || 'rejected' };
       }
-      // 完成：event 通道 end / interrupted（act 的完成回执只走 event，见核查 A）
+      // 完成：event 通道 end / interrupted；失败：event 通道 failed（PR-A 三态，act 的完成回执只走 event，见核查 A）
       const events = Array.isArray(body.events) ? body.events : [];
       for (const e of events) onEvent(e);
+      if (ctx.failed) return failResult();
       if (ctx.terminal) {
         return this._finalize(request, callId, ctx.terminal.phase, ctx, ownedScope);
       }
