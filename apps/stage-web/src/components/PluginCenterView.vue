@@ -231,6 +231,11 @@ onMounted(async () => {
 }
 
 .chip {
+  /* 类型标签（如 motion-loop）不得折行：单行省略，与 card-title 同策略（验收 PR#24 遗留） */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 0 var(--dsh-space-2);
   border-radius: var(--dsh-radius-full);
   background: var(--dsh-surface-sunken);
