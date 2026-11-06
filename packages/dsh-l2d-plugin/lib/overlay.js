@@ -1556,6 +1556,43 @@
   // 抢占时按同一只手决定补不补播，判断来自 motion-director，不在这里写死左右手。
   var pendingCloses = [];
 
+  // ------------------------------------------------------ 真实完成事件（PR-D）
+  // 渲染包在 motion / keyframes 真实终点发事件（executionId = /ai/call 的 callId）。
+  // overlay 按当前 act 关联：seen 达到 countRealCompletions 期望时提前 finishAct，
+  // 结束回执带 completionSource:'runtime-event' + ownedParams（ownership 出口核对数据）。
+  // 差额（Loop 动作 / 动作被拒 / 事件链路缺失）→ 永远等不齐 → 沿用 armActEnd 预估兜底，
+  // fail-closed：预估从不冒充真实信号，只是迟到时的可用性兜底。
+  var completionBound = false;
+  var actCompletionState = { runId: 0, callId: null, expected: 0, seen: 0, owned: [] };
+
+  function bindActCompletion(runId, callId, chain) {
+    var L = window.DSH_L2D;
+    var expected = L && L.countRealCompletions ? L.countRealCompletions(chain) : 0;
+    actCompletionState = { runId: runId || 0, callId: callId == null ? null : callId, expected: expected, seen: 0, owned: [] };
+  }
+
+  function onRuntimeCompletion(ev) {
+    var st = actCompletionState;
+    if (!st || !st.runId || !st.expected) return;
+    if (!ev || String(ev.executionId || '') !== String(st.callId)) return;
+    if (!actStillCurrent(st.runId)) return; // 已被打断/超时收尾，预估路径已归位
+    st.seen++;
+    if (ev.owned) st.owned = ev.owned;
+    if (st.seen < st.expected) return;
+    var api = window.DSH_L2D;
+    var e2 = api && api.finishAct ? api.finishAct(st.runId) : null; // runId 不匹配时幂等返回 null
+    actCompletionState = { runId: 0, callId: null, expected: 0, seen: 0, owned: [] };
+    if (!e2) return; // 预估兜底先到：end 已发过，不再重复
+    e2.completionSource = 'runtime-event';
+    e2.ownedParams = (st.owned || []).slice();
+    postActEvent(e2);
+    if (actingTimer) {
+      clearTimeout(actingTimer);
+      actingTimer = 0;
+    }
+    if (api && api.setStageBusy) api.setStageBusy({ acting: false });
+  }
+
   function cancelActTimers() {
     for (var i = 0; i < pokeTimers.length; i++) clearTimeout(pokeTimers[i]);
     pokeTimers = [];
@@ -1818,14 +1855,18 @@
     }, delayMs || 6000));
   }
 
-  function runActStep(step, runId, source, skipMotions) {
+  function runActStep(step, runId, source, skipMotions, executionId) {
     var L = window.DSH_L2D;
     if (!L || !step || !actStillCurrent(runId)) return;
     if (step.kind === 'expression') {
       if (step.clear && L.clearExpression) L.clearExpression();
       else if (step.name && L.setExpression) L.setExpression(step.name);
     } else if (step.kind === 'motion' && step.name) {
-      if (!skipMotions && L.playMotionAsync) watchMotion(runId, L.playMotionAsync(step.name), source, true);
+      if (!skipMotions && L.playMotionAsync) {
+        watchMotion(runId, L.playMotionAsync(step.name, {
+          executionId: executionId == null ? undefined : executionId,
+        }), source, true);
+      }
       if (step.closeMotion) {
         scheduleCloseMotion(step.closeMotion, step.closeAfterMs || 6000, runId);
       }
@@ -1833,6 +1874,7 @@
       L.playKeyframes(step.tracks || [], {
         duration: step.duration,
         loop: step.loop === true,
+        executionId: executionId == null ? undefined : executionId,
       });
     } else if (step.kind === 'pose' && step.pose && L.setPose) {
       L.setPose(step.pose);
@@ -1855,7 +1897,7 @@
   // 按执行计划投放：桶内每步按自己的 atMs 投放（降级成串行后 atMs 已被拉开），
   // 不能整桶同一 tick 连发——那样降级只是改了记账，观感上仍是并行。
   // 计划由渲染包的 normalizeActPlan 生成（core/src/chain-normalize.ts），老包没有时退回串行。
-  function playActPlan(plan, runId, source, skipMotions) {
+  function playActPlan(plan, runId, source, skipMotions, executionId) {
     var buckets = (plan && plan.buckets) || [];
     for (var b = 0; b < buckets.length; b++) {
       (function (bucket) {
@@ -1863,10 +1905,10 @@
           (function (node) {
             var at = Math.max(0, Number(node.atMs) || 0);
             if (at <= 0) {
-              runActStep(node.step, runId, source, skipMotions);
+              runActStep(node.step, runId, source, skipMotions, executionId);
             } else {
               pokeTimers.push(setTimeout(function () {
-                runActStep(node.step, runId, source, skipMotions);
+                runActStep(node.step, runId, source, skipMotions, executionId);
               }, at));
             }
           })(bucket.steps[i]);
@@ -1880,7 +1922,7 @@
     }
   }
 
-  function playActSteps(chain, runId, source, skipMotions, plan) {
+  function playActSteps(chain, runId, source, skipMotions, plan, executionId) {
     var L = window.DSH_L2D;
     // 计划由调用方一次算好并传进来（同一份对象既算寿命又记 notes），
     // 老调用方没传时才就地补算，保证「寿命」与「降级事实」永远来自同一份计划。
@@ -1897,7 +1939,7 @@
       if (usePlan.notes && L.noteActMotion) {
         for (var n = 0; n < usePlan.notes.length; n++) L.noteActMotion(runId, usePlan.notes[n], 'skip');
       }
-      playActPlan(usePlan, runId, source, skipMotions);
+      playActPlan(usePlan, runId, source, skipMotions, executionId);
       return;
     }
     var elapsed = 0;
@@ -1906,11 +1948,11 @@
       var delay = Math.max(0, Number(step.delayMs) || 0);
       elapsed += delay;
       if (elapsed <= 0) {
-        runActStep(step, runId, source, skipMotions);
+        runActStep(step, runId, source, skipMotions, executionId);
       } else {
         (function (pending, at) {
           pokeTimers.push(setTimeout(function () {
-            runActStep(pending, runId, source, skipMotions);
+            runActStep(pending, runId, source, skipMotions, executionId);
           }, at));
         })(step, elapsed);
       }
@@ -1945,7 +1987,7 @@
     return ev;
   }
 
-  function playbackAct(chain, runId, source, holdOnly, plan) {
+  function playbackAct(chain, runId, source, holdOnly, plan, executionId) {
     var flush = closesToFlush(chain);
     var motions = chainMotionPlan(chain);
     pendingCloses = [];
@@ -1954,11 +1996,11 @@
     // 另一只手的关闭不能和新动作同时发，否则状态机把后一个吞掉。先播新动作，等它返回再收。
     if (flush.length && motions.length) {
       playSerial(motions, flush, runId, source);
-      playActSteps(chain, runId, source, true, plan);
+      playActSteps(chain, runId, source, true, plan, executionId);
       return;
     }
     if (flush.length) playSerial([], flush, runId, source);
-    playActSteps(chain, runId, source, false, plan);
+    playActSteps(chain, runId, source, false, plan, executionId);
   }
 
   function executePokeAction(action) {
@@ -2016,9 +2058,17 @@
     });
     if (!admission || !admission.accepted) return blockedAct(admission);
     preemptYandereIfNeeded(admission);
-    playbackAct(chain, admission.runId, source, !!action.holdOnly, planForLife);
+    // PR-D：真实完成事件关联（executionId = callId）。老渲染包没有订阅口时 expected=0，
+    // 完成回执仍走 armActEnd 预估兜底。
+    if (!completionBound && L.onActionCompletion) {
+      completionBound = true;
+      L.onActionCompletion(onRuntimeCompletion);
+    }
+    bindActCompletion(admission.runId, action.callId, chain);
+    playbackAct(chain, admission.runId, source, !!action.holdOnly, planForLife, action.callId);
     emitActEvents(admission.events);
     // 先挂上结束回执，避免步骤里抛错后槽位一直占着。
+    // PR-D：真实完成先到时 finishAct 幂等（runId 不匹配返回 null），本定时器成空转。
     armActEnd(admission.runId, life);
     if (action.bubble) say(action.bubble, 3200);
     else if (!action.silent) say('戳戳~', 2200);

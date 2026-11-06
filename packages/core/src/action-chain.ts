@@ -115,6 +115,27 @@ export function chainHasMotion(chain: readonly { kind?: string }[] | null | unde
   return chain.some((step) => !!step && step.kind === 'motion');
 }
 
+/**
+ * PR-D（PRD-RUNTIME-EVENT）：一条链里「会自然收敛、可产出真实完成事件」的步骤数。
+ *
+ * motion 步骤计 1 —— 但 Loop 动作不产出完成事件（Cubism onFinishedMotionHandler
+ * 对 Loop 不触发），期望永远差额 → overlay 等不到真实完成 → 落回预估兜底，fail-closed。
+ * keyframes 仅非 loop 计 1（loop 无终点）；expression / pose / look 即时收敛不计。
+ * overlay 侧语义：seen >= expected 时提前 finishAct（真实完成），否则沿用预估兜底。
+ */
+export function countRealCompletions(
+  chain: readonly { kind?: string; loop?: boolean }[] | null | undefined,
+): number {
+  if (!chain) return 0;
+  let count = 0;
+  for (const step of chain) {
+    if (!step) continue;
+    if (step.kind === 'motion') count++;
+    else if (step.kind === 'keyframes' && step.loop !== true) count++;
+  }
+  return count;
+}
+
 export type MotionResultKind = 'ok' | 'skip' | 'fail';
 
 /**
