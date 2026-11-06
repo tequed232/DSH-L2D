@@ -139,3 +139,102 @@ export type {
   SafeSample,
   TrajectorySample,
 } from './motion-trajectory.ts';
+
+// ---------------------------------------------------------------- M1 所有权仲裁（WS-1）
+// resolveWritePlan 纯函数：docs/Ownership-Invariants.md §1 契约 / §2 INV 不变量；
+// LimbController：physics-owned ↔ limb-owned 状态机（叶子四肢 id 由调用方传入）。
+// feature flag：M1_DEFAULT_ENABLED=false = 现行为，行为变化必须由调用方显式启用。
+export {
+  M1_DEFAULT_ENABLED,
+  LIMB_BONE_PARAMS,
+  LIPSYNC_PARAM_SET,
+  WRITE_SOURCE_RANK,
+  resolveWritePlan,
+} from './write-plan.ts';
+export type {
+  OwnershipEntry,
+  OwnershipWriteIntent,
+  RejectReason,
+  RejectedWrite,
+  ResolveInput,
+  ResolveResult,
+  WriteEntry,
+  WriteSource,
+} from './write-plan.ts';
+export { LimbController } from './limb-controller.ts';
+export type {
+  AcquireRejectReason,
+  AcquireResult,
+  LimbAcquireOptions,
+  LimbControllerOptions,
+  LimbOwnershipEntry,
+  LimbOwnershipSnapshot,
+  LimbSetResult,
+} from './limb-controller.ts';
+
+// ---------------------------------------------------------------- M1-c 手势时间线与共享仲裁
+// Gesture Timeline：手势/动作段时间线编排纯函数（group/delayMs/timeoutMs 分组语义
+// 与 chain-normalize 同源；可打断规则与 LimbController/ActGate 同一份；到期清理
+// INV-5/S-05 同语义）。feature flag：enabled 缺省 M1_DEFAULT_ENABLED（false = 现行为）。
+export {
+  DEFAULT_GESTURE_PRIORITY,
+  emptyTimeline,
+  enqueueGesture,
+  resolveTimeline,
+  stopGesture,
+} from './gesture-timeline.ts';
+export type {
+  EnqueueOptions,
+  GestureEnqueueResult,
+  GestureRejectReason,
+  GestureSegment,
+  GestureTimelineState,
+  ScheduledSegment,
+  StopSelector,
+  TimelineResolution,
+  TimelineStopResult,
+} from './gesture-timeline.ts';
+// 共享通道仲裁：LeanInput/gaze、表情族互斥全部读画像 conflicts 数据（零通道名），
+// 输出 accept/yield/reject/queue（ActGate/LimbController 同一份优先级语义）。
+export { arbitrateShared, DEFAULT_SHARED_PRIORITY } from './shared-arbitration.ts';
+export type {
+  SharedArbitration,
+  SharedChannelUse,
+  SharedConflict,
+  SharedDecision,
+  SharedRejectReason,
+} from './shared-arbitration.ts';
+
+// ---------------------------------------------------------------- M1-e 连续动作 Mixer
+// Idle/Ambient/Media 三类连续动作统一收敛：lane 秩仲裁、agent hold 挂起/恢复、
+// 抖动幂等（refresh/update 不重启）、冷却窗口、到期清理（INV-5 同语义）。
+// 输出的写声明由消费方降级为 source 'continuous'/'ambient'（INV-6 秩 1）的 WriteIntent
+// 喂 resolveWritePlan——连续层永不直接写模型参数，也不触碰 PhysicsGate 让位表。
+// feature flag：enabled 缺省 M1E_DEFAULT_ENABLED（false = M1-b 集成后基线，回滚要求）。
+export {
+  M1E_DEFAULT_ENABLED,
+  M1E_MAX_RELEASED_TRACKED,
+  CONTINUOUS_LANES,
+  CONTINUOUS_PRIORITY,
+  CONTINUOUS_LANE_RANK,
+  emptyContinuous,
+  submitContinuous,
+  setContinuousAgentHold,
+  tickContinuous,
+  releaseContinuous,
+  resolveContinuous,
+} from './continuous-action.ts';
+export type {
+  ContinuousAgentHold,
+  ContinuousDecision,
+  ContinuousEntry,
+  ContinuousLane,
+  ContinuousReleaseResult,
+  ContinuousReleaseSelector,
+  ContinuousRejectReason,
+  ContinuousResolution,
+  ContinuousState,
+  ContinuousSubmitRequest,
+  ContinuousSubmitResult,
+  ContinuousTickResult,
+} from './continuous-action.ts';

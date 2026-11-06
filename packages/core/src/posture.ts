@@ -3,7 +3,8 @@
  *
  * 职责边界：
  *   1. 归一化工具输入（values 夹取、durationMs 缺省与限幅）；
- *   2. 基于 planSemanticPosture 产出可执行计划：分相位（direct → pre / requires-own → post）、
+ *   2. 基于 planSemanticPosture 产出可执行计划：按 write.phase 分批（direct → pre、
+ *      requires-own + PRE_ONLY 参数族 → pre、requires-own 其余 → post）、
  *      收集 owns、显式 skipped、标 degraded（approximate 通道）；
  *   3. 把执行结果拼装成统一回执 {ok, applied, failed, owned, skipped, degraded, durationMs}。
  *
@@ -51,9 +52,9 @@ export interface PostureExecutionPlan {
   input: NormalizedPostureInput;
   /** planSemanticPosture 的原始产出 */
   plan: PosturePlan;
-  /** direct 通道写入：physics 之前（输入层） */
+  /** phase='pre' 的写入：physics 之前（输入层；含 Hip 类 requires-own 通道） */
   pre: SemanticWrite[];
-  /** requires-own 通道写入：physics 之后（姿态骨/眼球），参数必须先 own */
+  /** phase='post' 的写入：physics 之后（姿态骨/眼球），参数必须先 own */
   post: SemanticWrite[];
   /** 需要先 own 的参数 id（去重）；input.own === true 时含全部写入参数 */
   owns: string[];
@@ -90,8 +91,10 @@ export function planPostureExecution(
 ): PostureExecutionPlan {
   const normalized = normalizePostureInput(input);
   const plan = planSemanticPosture(profile, normalized.values);
-  const pre = plan.writes.filter((w) => w.ownership === 'direct');
-  const post = plan.writes.filter((w) => w.ownership === 'requires-own');
+  // M1-d1：分相位跟随 write.phase（ownership + PRE_ONLY 参数族判定，见 semantic-binding），
+  // Hip 类 requires-own 通道判为 pre 后随 pre 批执行，让 PhysicsGate 让位（INV-7）。
+  const pre = plan.writes.filter((w) => w.phase === 'pre');
+  const post = plan.writes.filter((w) => w.phase === 'post');
   const owns = [...plan.owns];
   if (normalized.own) {
     for (const write of plan.writes) {

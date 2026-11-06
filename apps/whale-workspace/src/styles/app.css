@@ -1,0 +1,170 @@
+/* Whale Workspace 专属外观：在 ui-tokens 之上只补鲸鱼娘蓝紫气质，不新增组件库。 */
+
+:root {
+  --ww-violet: #8b7dff;
+  --ww-violet-deep: #4b3fd6;
+  --ww-cyan: #6fd6ff;
+  --ww-panel: color-mix(in srgb, var(--dsh-surface) 86%, transparent);
+  --ww-panel-strong: color-mix(in srgb, var(--dsh-surface-raised) 92%, transparent);
+  --ww-line: color-mix(in srgb, var(--ww-violet) 26%, var(--dsh-line));
+  --ww-glow: 0 0 0 1px color-mix(in srgb, var(--ww-violet) 30%, transparent),
+    0 18px 48px rgb(38 24 92 / 0.55);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font: var(--dsh-text-md);
+  color: var(--dsh-ink);
+  background: #0b0c12;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ww-violet);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--dsh-ink) 22%, transparent);
+  border-radius: var(--dsh-radius-full);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ww-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--dsh-control-sm);
+  padding: 0 12px;
+  border-radius: var(--dsh-radius-full);
+  font: var(--dsh-text-label);
+  border: 1px solid var(--dsh-line);
+  color: var(--dsh-ink);
+  background: color-mix(in srgb, var(--dsh-surface-raised) 70%, transparent);
+  transition: background var(--dsh-dur-fast) var(--dsh-ease), border-color var(--dsh-dur-fast) var(--dsh-ease);
+  white-space: nowrap;
+}
+.ww-btn:hover {
+  background: color-mix(in srgb, var(--ww-violet) 16%, var(--dsh-surface-raised));
+  border-color: var(--ww-line);
+}
+.ww-btn:disabled {
+  opacity: var(--dsh-disabled-opacity);
+  cursor: not-allowed;
+}
+.ww-btn.primary {
+  background: linear-gradient(135deg, var(--ww-violet-deep), var(--ww-violet));
+  border-color: transparent;
+  color: #fff;
+}
+.ww-btn.ghost {
+  background: transparent;
+}
+.ww-btn.icon {
+  width: var(--dsh-control-sm);
+  padding: 0;
+}
+
+.ww-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--dsh-radius-full);
+  font: var(--dsh-text-xs);
+  border: 1px solid var(--ww-line);
+  color: var(--dsh-ink-muted);
+  background: color-mix(in srgb, var(--ww-violet) 12%, transparent);
+}
+.ww-badge.mock {
+  color: var(--dsh-warn);
+  border-color: color-mix(in srgb, var(--dsh-warn) 40%, transparent);
+  background: color-mix(in srgb, var(--dsh-warn) 12%, transparent);
+}
+
+.ww-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsh-ok);
+}
+
+.ww-unread {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--dsh-radius-full);
+  background: var(--ww-violet);
+  color: #fff;
+  font: var(--dsh-text-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.typing {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+.typing i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: ww-typing 1.1s infinite ease-in-out;
+}
+.typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes ww-typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typing i {
+    animation: none;
+    opacity: 0.7;
+  }
+}

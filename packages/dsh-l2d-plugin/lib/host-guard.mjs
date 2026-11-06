@@ -3,8 +3,10 @@
  *
  * 渲染端仍按 ownership 表最终裁定，这里只做**静态可判定**的拒绝：
  *   - 未知工具名（避免 /ai/call 变成任意函数调用面）
- *   - 口型参数（任何通道永拒；静态名单，不依赖模型文件）
- *   - 物理输出未 `own:true`（仅 `l2d_set_parameters`；keyframes 由渲染端按轨道时长自动认领）
+ *   - 口型参数（任何通道永拒；静态名单，不依赖模型文件；含 l2d_posture 的 values）
+ *   - 物理输出未 `own:true`（`l2d_set_parameters` / `l2d_posture` 的 values 直写；
+ *     keyframes 由渲染端按轨道时长自动认领，posture 的 post 相 acquire 语义由渲染端终审）
+ *   - `own:true` 只登记物理输出（R10b）：非物理 id 忽略不算错误，`ignored` 清单随回执带出
  *   - 未索引表情 / 未索引动作组（静态名单 ∪ 运行时 model3 索引；Idle 明确拒绝）
  *
  * 失败语义（重要）：
@@ -60,15 +62,20 @@ export const HOST_ALLOWED_TOOLS = Object.freeze([
 
 const ALLOWED_SET = new Set(HOST_ALLOWED_TOOLS);
 
-/** 入参里可能以参数名为键的工具：先做口型递归扫描。 */
-const PARAM_KEYED_TOOLS = new Set(['l2d_set_parameters', 'l2d_play_keyframes']);
+/**
+ * 入参里可能以参数名为键的工具：先做口型递归扫描。
+ * `l2d_posture` 的 values 也是参数名键（语义姿态直写参数 id），口型红线同样适用。
+ */
+const PARAM_KEYED_TOOLS = new Set(['l2d_set_parameters', 'l2d_play_keyframes', 'l2d_posture']);
 
 /**
  * 物理输出必须显式 `own:true` 的工具。
  * `l2d_play_keyframes` 故意不在内：渲染端 playKeyframes 会按轨道时长自动认领物理输出
  * （c9be149），若 host 再要求 own 会直接把这条合法通道堵死。
+ * `l2d_posture` 的 values 直写与 set_parameters 同语义；post 相的 acquire/release
+ * 语义由渲染端 LimbController 终审，宿主只拦 values 直写物理输出且未 own。
  */
-const OWN_REQUIRED_TOOLS = new Set(['l2d_set_parameters']);
+const OWN_REQUIRED_TOOLS = new Set(['l2d_set_parameters', 'l2d_posture']);
 
 const STATIC_EXPRESSIONS = new Set(MODEL_EXPRESSIONS);
 const STATIC_MOTION_GROUPS = new Set(MODEL_MOTION_GROUPS);
@@ -180,11 +187,11 @@ export function createModelIndexCache(modelDir, options = {}) {
 
 /**
  * 从工具入参里抽"会被写到的参数名"。
- * 只认渲染端实际读取的字段：`values`（对象）/ `tracks[].param`。
+ * 只认渲染端实际读取的字段：`values`（对象，l2d_set_parameters / l2d_posture）/ `tracks[].param`。
  */
 export function extractParamIds(name, args) {
   const a = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
-  if (name === 'l2d_set_parameters') {
+  if (name === 'l2d_set_parameters' || name === 'l2d_posture') {
     const values = a.values && typeof a.values === 'object' && !Array.isArray(a.values) ? a.values : {};
     return Object.keys(values);
   }
@@ -284,7 +291,7 @@ function motionGroupSet(index) {
  *
  * @param {{name?:string, args?:object}} request
  * @param {{index?: ReturnType<typeof loadModelIndex>|null}} [options]
- * @returns {{ok:true, warnings:string[]} |
+ * @returns {{ok:true, warnings:string[], ignored:string[]} |
  *           {ok:false, status:400, reason:string, detail:string, message:string}}
  */
 export function guardAiCall(request = {}, options = {}) {
@@ -294,6 +301,8 @@ export function guardAiCall(request = {}, options = {}) {
   const args = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const index = options.index && typeof options.index === 'object' ? options.index : null;
   const warnings = [];
+  // R10b：own:true 请求里非物理输出的 id（只登记物理输出，其余忽略且回执可见）。
+  const ignored = [];
 
   if (!ALLOWED_SET.has(name)) return deny('unknown-tool', name, 'unknown tool: ' + name);
 
@@ -329,6 +338,12 @@ export function guardAiCall(request = {}, options = {}) {
         { physicsOutputs: physics },
       );
       if (!checked.ok) return deny(checked.reason, checked.params.join(','));
+      // R10b：own 只登记物理输出；非物理 id 忽略不算错误。
+      // ignored 同时进 warnings（index.js 会随回执带出给调用方）与结果字段。
+      if (Array.isArray(checked.ignored) && checked.ignored.length) {
+        ignored.push(...checked.ignored);
+        warnings.push('own-ignored-non-physical:' + checked.ignored.join(','));
+      }
     }
   }
 
@@ -338,5 +353,5 @@ export function guardAiCall(request = {}, options = {}) {
     if (!chainCheck.ok) return deny('invalid-chain', chainCheck.errors.join('; '));
   }
 
-  return { ok: true, warnings };
+  return { ok: true, warnings, ignored };
 }

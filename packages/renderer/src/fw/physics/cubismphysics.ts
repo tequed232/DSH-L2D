@@ -20,6 +20,7 @@ import {
   CubismPhysicsTargetType
 } from './cubismphysicsinternal';
 import { CubismPhysicsJson } from './cubismphysicsjson';
+import { physicsYield } from './physics-yield';
 
 // physics types tags.
 const PhysicsTypeTagX = 'X';
@@ -657,6 +658,18 @@ export class CubismPhysics {
 
           const destinationParameterIndex: number =
             currentOutputs[i].destinationParameterIndex;
+
+          // [M1-b PhysicsGate 让位] 登记表内的参数（limb-owned 的 Hip* pre 通道）本帧
+          // 不回写 _parameterCaches：同帧 chained 消费者（裙摆/腿链设置）读到的
+          // 是 tick 起点向 parameterValues（Agent pre 值）收敛的缓存 → 次级链随动。
+          // 振子结果照常记入 _currentRigOutputs（保温），release 后物理平滑接管。
+          if (
+            physicsYield.ids.size > 0 &&
+            physicsYield.ids.has(currentOutputs[i].destination.id.getString())
+          ) {
+            continue;
+          }
+
           const outParameterCaches: Float32Array =
             !Float32Array.prototype.slice &&
             'subarray' in Float32Array.prototype
@@ -720,6 +733,16 @@ export class CubismPhysics {
       // Load input parameters.
       for (let i = 0; i < currentSetting.outputCount; ++i) {
         if (currentOutputs[i].destinationParameterIndex == -1) {
+          continue;
+        }
+
+        // [M1-b PhysicsGate 让位] 登记表内的参数不落写 parameterValues：
+        // Agent 的 pre 值（injector.apply('pre') 已写入）保持到 model.update()，
+        // 不被物理插值覆盖。跳过时振子状态不受影响，release 后自然回物理（R8）。
+        if (
+          physicsYield.ids.size > 0 &&
+          physicsYield.ids.has(currentOutputs[i].destination.id.getString())
+        ) {
           continue;
         }
 

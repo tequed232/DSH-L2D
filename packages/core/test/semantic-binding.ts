@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { planSemanticPosture, canExpress } from '../src/semantic-binding.ts';
-import type { ModelMotionProfile } from '../src/motion-contract.ts';
+import { MOTION_CONTRACT_VERSION, type ModelMotionProfile } from '../src/motion-contract.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..', '..');
@@ -23,7 +23,7 @@ const test = (name: string, fn: () => void) => {
 };
 
 const fixture: ModelMotionProfile = {
-  contractVersion: 3,
+  contractVersion: MOTION_CONTRACT_VERSION,
   modelId: 'fixture',
   adapterId: 'cubism',
   profileRevision: 'r-test',
@@ -31,6 +31,10 @@ const fixture: ModelMotionProfile = {
     { id: 'head.yaw', status: 'supported', min: -1, max: 1, neutral: 0, confidence: 0.95, sourceId: 'AngleX', ownership: 'direct' },
     { id: 'arm.left.raise', status: 'supported', min: -1, max: 1, neutral: 0, confidence: 0.8, sourceId: 'LArm', ownership: 'requires-own' },
     { id: 'torso.contraction', status: 'approximate', min: -1, max: 1, neutral: 0, confidence: 0.6, sourceId: 'ShoulderX+ShoulderZ', ownership: 'requires-own' },
+    // M1-d1：Hip 族（INV-7 pre-only 参数族）——requires-own 但相位判 pre
+    { id: 'torso.hip', status: 'supported', min: -1, max: 1, neutral: 0, confidence: 0.8, sourceId: 'HipAngleZ', ownership: 'requires-own' },
+    { id: 'torso.hip.forward', status: 'supported', min: -1, max: 1, neutral: 0, confidence: 0.8, sourceId: 'HipAngleY', ownership: 'requires-own' },
+    { id: 'torso.hip.twist', status: 'supported', min: -1, max: 1, neutral: 0, confidence: 0.8, sourceId: 'HipAngleX', ownership: 'requires-own' },
     { id: 'leg.left.bend', status: 'unsupported', min: -1, max: 1, neutral: 0, confidence: 0, reason: '模型无膝关节参数' },
     { id: 'gaze.x', status: 'unknown', min: -1, max: 1, neutral: 0, confidence: 0, reason: '尚未探测' },
   ],
@@ -52,6 +56,28 @@ test('物理输出通道：post 相位且要求 own', () => {
   const plan = planSemanticPosture(fixture, { 'arm.left.raise': 0.8 });
   assert.equal(plan.writes[0].phase, 'post');
   assert.deepEqual(plan.owns, ['LArm']);
+});
+
+test('M1-d1 Hip 族：requires-own + PRE_ONLY 参数族 → pre 相位，既有通道不变', () => {
+  const plan = planSemanticPosture(fixture, { 'torso.hip.twist': 0.5, 'arm.left.raise': 0.3 });
+  const hip = plan.writes.find((w) => w.channel === 'torso.hip.twist')!;
+  assert.equal(hip.ownership, 'requires-own', 'Hip 是物理输出，仍要求 own');
+  assert.equal(hip.phase, 'pre', 'HipAngleX ∈ PRE_ONLY_PARAMS（INV-7），相位必须判 pre');
+  assert.deepEqual(hip.params, [{ id: 'HipAngleX', value: 0.5 }]);
+  assert.deepEqual(plan.owns, ['HipAngleX', 'LArm']);
+  // 非 pre-only 族的 requires-own 通道保持 post（既有通道零漂移）
+  assert.equal(plan.writes.find((w) => w.channel === 'arm.left.raise')!.phase, 'post');
+});
+
+test('M1-d1 Hip 三轴全部判 pre（Z 左右倾 / Y 前后 / X 扭转）', () => {
+  const plan = planSemanticPosture(fixture, { 'torso.hip': 0.4, 'torso.hip.forward': -0.3, 'torso.hip.twist': 0.2 });
+  const byChannel = new Map(plan.writes.map((w) => [w.channel, w]));
+  assert.deepEqual([...byChannel.keys()].sort(), ['torso.hip', 'torso.hip.forward', 'torso.hip.twist']);
+  for (const w of byChannel.values()) {
+    assert.equal(w.phase, 'pre');
+    assert.equal(w.ownership, 'requires-own');
+  }
+  assert.deepEqual(plan.owns.slice().sort(), ['HipAngleX', 'HipAngleY', 'HipAngleZ']);
 });
 
 test('组合通道：拆成多个参数，标 approximate', () => {
@@ -123,6 +149,54 @@ test('真实模型：害羞姿态能拆成可执行 + 明确降级两部分', ()
   // 物理输出必须进 owns，否则写进去会被物理覆盖
   assert.ok(plan.owns.length > 0, '至少手臂是物理输出');
   for (const id of plan.owns) assert.ok(profile.controls.some((c) => String(c.sourceId || '').split('+').includes(id)));
+});
+
+// ---------------------------------------------------------------------------
+// W3 语义约束进 canExpress（docs/W3-Motion-Capability-Registry.md §语义约束）
+// 约束数据来自画像 conflicts/kind 字段，这里用真实画像验证裁决行为。
+// ---------------------------------------------------------------------------
+test('真实画像：W3 语义约束（配对动作/眼睛族/gaze↔前倾/姿势前置）', () => {
+  const dir = path.join(ROOT, 'tools', 'capability-scan');
+  const files = fs.readdirSync(dir).filter((f) => /^profile\..+\.json$/.test(f));
+  if (!files.length) {
+    console.log('  ..  跳过：还没有生成画像（跑 node tools/capability-scan/scan.mjs）');
+    return;
+  }
+  const profile = JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf8')) as ModelMotionProfile;
+
+  // 无上下文时 W3 通道可表达；bare id 与 ext. id 查询等价
+  assert.equal(canExpress(profile, 'gesture.right_finger'), true);
+  assert.equal(canExpress(profile, 'ext.gesture.right_finger'), true);
+
+  // 成对动作不能同时 open：右臂两动作互斥（双向），左臂 chest 可与右臂共存
+  assert.equal(canExpress(profile, 'ext.gesture.right_finger', { active: ['ext.gesture.grass'] }), false);
+  assert.equal(canExpress(profile, 'ext.gesture.grass', { active: ['gesture.right_finger'] }), false, 'active 的 bare id 也要能匹配');
+  assert.equal(canExpress(profile, 'ext.gesture.right_finger', { active: ['ext.gesture.chest'] }), true);
+  assert.equal(canExpress(profile, 'ext.gesture.chest', { active: ['ext.gesture.right_finger', 'ext.gesture.grass'] }), true);
+
+  // 表情眼睛族 key3-6 同一时刻只允许一个；跨族表情不受影响
+  assert.equal(canExpress(profile, 'ext.expression.圈圈眼', { active: ['ext.expression.屑'] }), false);
+  assert.equal(canExpress(profile, 'ext.expression.爱心眼', { active: ['ext.expression.＞＜'] }), false);
+  assert.equal(canExpress(profile, 'ext.expression.圈圈眼', { active: ['ext.expression.脸红'] }), true);
+  assert.equal(canExpress(profile, 'ext.expression.流泪', { active: ['ext.expression.圈圈眼'] }), true);
+
+  // gaze 与前倾同写 LeanInput，双向互斥；与 gaze 方向无关的通道共存
+  assert.equal(canExpress(profile, 'ext.gaze.look_up', { active: ['ext.body.lean_forward'] }), false);
+  assert.equal(canExpress(profile, 'ext.body.lean_forward', { active: ['ext.gaze.look_left'] }), false);
+  assert.equal(canExpress(profile, 'ext.gaze.look_up', { active: ['ext.gaze.look_left'] }), true);
+
+  // 姿势类要求「动作未播放」（setPose 在 motion-playing 时返回 false）
+  assert.equal(canExpress(profile, 'ext.pose.finger', { motionPlaying: true }), false);
+  assert.equal(canExpress(profile, 'ext.pose.finger', { motionPlaying: false }), true);
+  assert.equal(canExpress(profile, 'ext.pose.chest'), true);
+  // 非姿势通道不受 motionPlaying 影响
+  assert.equal(canExpress(profile, 'ext.gesture.grass', { motionPlaying: true }), true);
+
+  // 未登记通道（W3 排除表 + 从未有过的 id）一律 false
+  assert.equal(canExpress(profile, 'ext.gesture.wave'), false);
+  assert.equal(canExpress(profile, 'gesture.wave'), false);
+  assert.equal(canExpress(profile, 'ext.gesture.open_hands'), false);
+  assert.equal(canExpress(profile, 'no.such.channel'), false);
 });
 
 if (process.exitCode) console.error('\n语义绑定测试失败\n');

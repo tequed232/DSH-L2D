@@ -8,6 +8,8 @@
  *   - 表情：model3 → exp3（记录每个表情写到哪些参数）
  *   - 动作：model3 → motion3（记录曲线目标参数与时长）
  *   - 眨眼/口型组：model3.Groups
+ *   - W3 清单（tools/w3-registry/registry.json）：动作组/Idle/姿势/视线/身体/表情
+ *     逐条对照模型核实后登记为 `ext.` 语义通道；排除表条目不产出任何通道/资产。
  *
  * 不做的事：不猜参数范围（cdi3 不含 Min/Max，运行时可查，静态不编造）；
  * 匹配不到的通道一律 unsupported / unknown，不默认 supported。
@@ -20,6 +22,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { resolveControls } from './bindings.mjs';
+import { resolveW3Controls, excludedChannelIds } from './w3-controls.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
@@ -53,6 +56,13 @@ function contractVersion() {
   const m = src.match(/MOTION_CONTRACT_VERSION\s*=\s*(\d+)/);
   if (!m) throw new Error('读不到 MOTION_CONTRACT_VERSION');
   return Number(m[1]);
+}
+
+/** W3 清单（tools/w3-registry/registry.json）：登记/排除/未引用资产的唯一数据源。 */
+function readW3Registry() {
+  const file = path.join(ROOT, 'tools', 'w3-registry', 'registry.json');
+  if (!fs.existsSync(file)) return null;
+  return readJson(file);
 }
 
 function readPhysicsOutputs(dir, model3) {
@@ -143,17 +153,21 @@ function buildInventory(dir, model3Path) {
   };
 }
 
-function revisionOf(inv) {
+function revisionOf(inv, w3Controls) {
   const h = crypto.createHash('sha1');
   h.update(String(inv.modelId));
   h.update(String(inv.params.length));
   h.update(String(inv.physicsOutputs.length));
   for (const e of inv.expressions) h.update(e.name + e.params.join(','));
   for (const m of inv.motions) h.update(m.group + m.file + (m.durationMs || 0));
+  // W3 通道参与画像指纹：登记内容变了 revision 必须变（AIRI §3.3 缓存失效语义）
+  for (const c of w3Controls) h.update(c.id + c.status + (c.sourceId || '') + (c.conflicts || []).join('|'));
   return 'r' + h.digest('hex').slice(0, 12);
 }
 
-function buildAssets(inv) {
+function buildAssets(inv, w3) {
+  // W3 排除表里的能力（挥手/托腮/交叉手/双手张开）不得以任何形式出现在产物里
+  const banned = w3 ? excludedChannelIds(w3) : new Set();
   const assets = [];
   for (const m of inv.motions) {
     if (!m.exists) continue;
@@ -178,10 +192,10 @@ function buildAssets(inv) {
       loopable: false,
     });
   }
-  return assets;
+  return banned.size ? assets.filter((a) => !banned.has(a.id)) : assets;
 }
 
-function buildMarkdown(inv, profile) {
+function buildMarkdown(inv, profile, w3) {
   const byStatus = profile.controls.reduce((acc, c) => ({ ...acc, [c.status]: (acc[c.status] || 0) + 1 }), {});
   const conflicts = [];
   for (const c of profile.controls) {
@@ -198,6 +212,10 @@ function buildMarkdown(inv, profile) {
     .join('\n');
 
   const unsupported = profile.controls.filter((c) => c.status === 'unsupported' || c.status === 'unknown');
+  const exclusionRows = ((w3 && profile.exclusions) || [])
+    .map((x) => `- \`${x.id}\`（${x.label || ''}）：${x.reason}`)
+    .join('\n');
+  const unregistered = w3 ? profile.unregisteredAssets : null;
 
   return `# 模型能力画像 · ${inv.modelId}
 
@@ -228,6 +246,14 @@ ${unsupported.length ? unsupported.map((c) => `- \`${c.id}\`（${c.status}）：
 
 ${conflicts.length ? conflicts.map((c) => `- \`${c.channel}\` → ${c.params.join(', ')}`).join('\n') : '（无）'}
 
+## 明确不登记（W3 排除表）
+
+${exclusionRows || '（无）'}
+
+## 未引用资产（不允许被当作可用能力）
+
+${unregistered ? [...(unregistered.motion3 || []), ...(unregistered.exp3 || [])].map((p) => `- ${p}`).join('\n') : '（无）'}
+
 ## 资产
 
 - 动作：${profile.assets.filter((a) => a.kind === 'motion').length} 个（含循环 ${profile.assets.filter((a) => a.loopable).length} 个）
@@ -255,13 +281,25 @@ function main() {
   const inv = buildInventory(MODEL_DIR, model3Path);
   const { controls, unresolved } = resolveControls(inv);
 
+  // W3 清单：36 条登记（动作组/Idle/姿势/视线/身体/表情）+ 排除表 + 未引用资产。
+  // registry 缺失时保持旧行为（只有标准语义通道），不猜任何通道。
+  const w3 = readW3Registry();
+  const w3Resolved = w3 ? resolveW3Controls(w3, inv) : { controls: [], exclusions: [], unregisteredAssets: { motion3: [], exp3: [] } };
+  const allControls = [...controls, ...w3Resolved.controls];
+
   const profile = {
     contractVersion: contractVersion(),
     modelId: inv.modelId,
     adapterId: 'cubism',
-    profileRevision: revisionOf(inv),
-    controls,
-    assets: buildAssets(inv),
+    profileRevision: revisionOf(inv, w3Resolved.controls),
+    controls: allControls,
+    assets: buildAssets(inv, w3),
+    ...(w3 ? {
+      // 新增字段（schema 只加不改）：W3 排除表与未引用资产随画像走，
+      // 消费端（guard/planner）据此对未登记通道 fail-closed。
+      exclusions: w3Resolved.exclusions,
+      unregisteredAssets: w3Resolved.unregisteredAssets,
+    } : {}),
     metadata: {
       scannedAt: new Date().toISOString(),
       modelFile: inv.modelFile,
@@ -270,6 +308,11 @@ function main() {
       physicsOutputCount: inv.physicsOutputs.length,
       motionCount: inv.motions.length,
       expressionCount: inv.expressions.length,
+      ...(w3 ? {
+        w3RegistryCommit: String(w3.sourceCommit || ''),
+        w3EntryCount: w3Resolved.controls.length,
+        w3ExcludedCount: w3Resolved.exclusions.length,
+      } : {}),
     },
   };
 
@@ -279,11 +322,12 @@ function main() {
   fs.writeFileSync(jsonPath, JSON.stringify(profile, null, 2) + '\n');
 
   const docPath = path.join(ROOT, 'docs', `Capability-Profile-${inv.modelId}.md`);
-  fs.writeFileSync(docPath, buildMarkdown(inv, profile));
+  fs.writeFileSync(docPath, buildMarkdown(inv, profile, w3));
 
-  const byStatus = controls.reduce((acc, c) => ({ ...acc, [c.status]: (acc[c.status] || 0) + 1 }), {});
+  const byStatus = allControls.reduce((acc, c) => ({ ...acc, [c.status]: (acc[c.status] || 0) + 1 }), {});
   console.log(`[scan] model=${inv.modelId} 参数=${inv.params.length} 物理输出=${inv.physicsOutputs.length}`);
-  console.log(`[scan] 通道 ${controls.length}：${Object.entries(byStatus).map(([k, v]) => `${k}=${v}`).join(' ')}`);
+  console.log(`[scan] 通道 ${allControls.length}（标准 ${controls.length} + W3 ${w3Resolved.controls.length}）：${Object.entries(byStatus).map(([k, v]) => `${k}=${v}`).join(' ')}`);
+  if (w3) console.log(`[scan] W3 排除 ${w3Resolved.exclusions.length} 条：${w3Resolved.exclusions.map((x) => x.id).join(', ')}`);
   if (unresolved.length) console.log(`[scan] 未绑定通道：${unresolved.join(', ')}`);
   console.log(`[scan] 写出 ${path.relative(ROOT, jsonPath)} 与 ${path.relative(ROOT, docPath)}`);
 }

@@ -32,6 +32,13 @@ export const CHANNEL_BINDINGS = {
   'torso.sway': DIRECT([/^ParamBodyAngleX$/]),
   'torso.contraction': COMPOSE(['ShoulderX', 'ShoulderZ'], '靠双肩内收近似「缩肩」，无独立躯干收缩参数'),
 
+  // M1-d1：盆骨三轴（语义通道，参数 id 只含规范名——HipAngleX2/HipAngleYUP 等变体参数
+  // 是物理次级输出，绝不进 sourceId）。三条都是物理输出 → requires-own；
+  // 相位由 core/semantic-binding 按 PRE_ONLY_PARAMS 参数族判为 pre（INV-7 物理根输入）。
+  'torso.hip': DIRECT([/^HipAngleZ$/]), // 左右倾
+  'torso.hip.forward': DIRECT([/^HipAngleY$/]), // 前后
+  'torso.hip.twist': DIRECT([/^HipAngleX$/]), // 水平扭转
+
   'gaze.x': DIRECT([/^ParamEyeBallX$/]),
   'gaze.y': DIRECT([/^ParamEyeBallY$/]),
 

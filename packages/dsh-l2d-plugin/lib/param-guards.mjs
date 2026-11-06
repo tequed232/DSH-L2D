@@ -61,22 +61,27 @@ export function collectReservedParams(value, options = {}) {
 /**
  * 统一参数写入校验（host / MCP / 未来工具共用）：
  * - 口型参数：任何通道、任何 owner 都拒绝；
- * - 物理输出：仅 `own === true` 放行（渲染层再按 ownership 表最终裁定，本函数是前置闸）。
+ * - 物理输出：仅 `own === true` 放行（渲染层再按 ownership 表最终裁定，本函数是前置闸）；
+ * - R10b：`own:true` 只登记物理输出，非物理 id 进 `ignored`（不算错误，回执可见）。
  *
  * @param {{paramIds?: string[], own?: boolean}} request
  * @param {{physicsOutputs?: Iterable<string>}} [context]
- * @returns {{ok:true, params:string[]} | {ok:false, reason:string, params:string[]}}
+ * @returns {{ok:true, params:string[], ignored:string[]} |
+ *           {ok:false, reason:string, params:string[]}}
  */
 export function checkParameterWrite(request = {}, context = {}) {
   const ids = [...new Set((Array.isArray(request.paramIds) ? request.paramIds : []).map((id) => String(id)).filter(Boolean))];
   const reserved = ids.filter((id) => RESERVED.has(id));
   if (reserved.length) return { ok: false, reason: 'reserved-param', params: reserved };
+  const outputs = context.physicsOutputs instanceof Set
+    ? context.physicsOutputs
+    : new Set(context.physicsOutputs || []);
   if (request.own !== true) {
-    const outputs = context.physicsOutputs instanceof Set
-      ? context.physicsOutputs
-      : new Set(context.physicsOutputs || []);
     const blocked = ids.filter((id) => outputs.has(id));
     if (blocked.length) return { ok: false, reason: 'physics-output-requires-own', params: blocked };
+    // 未请求 own：不涉及登记，无 ignored。
+    return { ok: true, params: ids, ignored: [] };
   }
-  return { ok: true, params: ids };
+  // R10b：own 只登记物理输出；非物理 id 忽略（调用方决定是否在回执里带出）。
+  return { ok: true, params: ids, ignored: ids.filter((id) => !outputs.has(id)) };
 }

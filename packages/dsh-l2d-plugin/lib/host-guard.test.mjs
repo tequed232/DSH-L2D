@@ -292,5 +292,57 @@ cache.invalidate();
 assert.notEqual(cache.get(), second);
 
 // ---------------------------------------------------------------------------
+// 9) M1-d：l2d_posture 口型红线 / posture 物理输出 requires-own / R10b ignored
+// ---------------------------------------------------------------------------
+// 9a) posture 的 values 出现口型参数 → 400 reserved-param（与 set_parameters 同一名单，不重写）
+const postureMouth = guarded('l2d_posture', { values: { ParamMouthOpenY: 0.6, AngleX: 1 } }, fullIndex);
+assert.equal(postureMouth.ok, false);
+assert.equal(postureMouth.status, 400);
+assert.equal(postureMouth.reason, 'reserved-param');
+assert.equal(postureMouth.detail, 'ParamMouthOpenY');
+// 嵌套形式也拦（递归扫描），且 own:true 不开口子
+assert.equal(guarded('l2d_posture', { values: { nested: { ParamMouthForm: 1 } } }, fullIndex).reason, 'reserved-param');
+assert.equal(guarded('l2d_posture', { values: { ParamMouthOpen: 1 }, own: true }, fullIndex).reason, 'reserved-param');
+// 干净 posture 入参不受影响
+assert.equal(guarded('l2d_posture', { values: { AngleX: 1, ParamMouthFree: 1 } }, fullIndex).ok, true);
+
+// 9b) posture values 直写物理输出且未 own:true → 400（与 set_parameters 同语义）
+const postureNoOwn = guarded('l2d_posture', { values: { HipAngleX: 1 } }, fullIndex);
+assert.equal(postureNoOwn.ok, false);
+assert.equal(postureNoOwn.status, 400);
+assert.equal(postureNoOwn.reason, 'physics-output-requires-own');
+assert.equal(postureNoOwn.detail, 'HipAngleX');
+// own:true 放行；非物理参数不需要 own
+assert.equal(guarded('l2d_posture', { values: { HipAngleX: 1 }, own: true }, fullIndex).ok, true);
+assert.equal(guarded('l2d_posture', { values: { AngleX: 1 } }, fullIndex).ok, true);
+// 物理表不可用 → fail-open + warning，不 500
+const postureFailOpen = guarded('l2d_posture', { values: { HipAngleX: 1 } }, null);
+assert.equal(postureFailOpen.ok, true);
+assert.deepEqual(postureFailOpen.warnings, ['physics-table-unavailable']);
+
+// 9c) R10b：own:true 只登记物理输出，非物理 id → ignored（不算错误，回执可见）
+const ownMixed = guarded('l2d_set_parameters', { values: { HipAngleX: 1, AngleX: 0.5 }, own: true }, fullIndex);
+assert.equal(ownMixed.ok, true);
+assert.deepEqual(ownMixed.ignored, ['AngleX']);
+assert.ok(ownMixed.warnings.includes('own-ignored-non-physical:AngleX'), 'ignored 应进 warnings 随回执带出');
+const postureOwnMixed = guarded('l2d_posture', { values: { HipAngleX: 1, AngleX: 2 }, own: true }, fullIndex);
+assert.equal(postureOwnMixed.ok, true);
+assert.deepEqual(postureOwnMixed.ignored, ['AngleX']);
+assert.ok(postureOwnMixed.warnings.includes('own-ignored-non-physical:AngleX'));
+// 全物理输出 → 无 ignored；未带 own → 也不产生 ignored
+assert.deepEqual(guarded('l2d_set_parameters', { values: { HipAngleX: 1 }, own: true }, fullIndex).ignored, []);
+assert.deepEqual(guarded('l2d_set_parameters', { values: { AngleX: 1 } }, fullIndex).ignored, []);
+// 物理表不可用时 own 请求照旧 fail-open，不产生 ignored
+assert.deepEqual(guarded('l2d_set_parameters', { values: { AngleX: 1 }, own: true }, null).ignored, []);
+
+// 9d) extractParamIds 认识 l2d_posture 的 values
+assert.deepEqual(
+  extractParamIds('l2d_posture', { values: { HipAngleX: 1, AngleX: 2 } }),
+  ['HipAngleX', 'AngleX'],
+);
+assert.deepEqual(extractParamIds('l2d_posture', {}), []);
+assert.deepEqual(extractParamIds('l2d_posture', { values: [1, 2] }), []);
+
+// ---------------------------------------------------------------------------
 for (const dir of tmpDirs) fs.rmSync(dir, { recursive: true, force: true });
 console.log('host-guard ok');

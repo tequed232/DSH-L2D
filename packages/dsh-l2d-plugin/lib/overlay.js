@@ -4461,7 +4461,25 @@
               return { ok: true, applied: [], failed: [], owned: [], skipped: pExec.skipped, degraded: pExec.degraded, durationMs: pExec.input.durationMs };
             }
             var pDuration = pExec.input.durationMs;
-            var pOwned = (pExec.owns.length && L.ownParameters) ? L.ownParameters(pExec.owns, pDuration) : [];
+            // M1-d1：own 必须按相位分组登记（批量、不逐参数循环）——Hip 类 pre-only 参数
+            // 走 ownParameters(ids, d, 'pre') 让 PhysicsGate 让位，其余仍走缺省 post。
+            // 极端情况下同参数同时出现在两相位写入时按 pre 优先去重（保证同参数只有一条登记路径）。
+            var pPreOwns = [], pPostOwns = [];
+            pExec.pre.forEach(function (w) {
+              w.params.forEach(function (p) {
+                if (pExec.owns.indexOf(p.id) >= 0 && pPreOwns.indexOf(p.id) < 0 && pPostOwns.indexOf(p.id) < 0) pPreOwns.push(p.id);
+              });
+            });
+            pExec.post.forEach(function (w) {
+              w.params.forEach(function (p) {
+                if (pExec.owns.indexOf(p.id) >= 0 && pPostOwns.indexOf(p.id) < 0 && pPreOwns.indexOf(p.id) < 0) pPostOwns.push(p.id);
+              });
+            });
+            var pOwned = [];
+            if (L.ownParameters) {
+              if (pPreOwns.length) pOwned = pOwned.concat(L.ownParameters(pPreOwns, pDuration, 'pre'));
+              if (pPostOwns.length) pOwned = pOwned.concat(L.ownParameters(pPostOwns, pDuration, 'post'));
+            }
             var pApplied = [], pFailed = [];
             var pBatch = function (writes) {
               var batch = {};

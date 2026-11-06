@@ -1,8 +1,8 @@
 {
-  "contractVersion": 3,
+  "contractVersion": 4,
   "modelId": "大肥鱼.dsl2d.2048",
   "adapterId": "cubism",
-  "profileRevision": "r88b84822fb2e",
+  "profileRevision": "r096ba86d2954",
   "controls": [
     {
       "id": "head.yaw",
@@ -70,6 +70,42 @@
       "reason": "靠双肩内收近似「缩肩」，无独立躯干收缩参数",
       "sourceId": "ShoulderX+ShoulderZ",
       "ownership": "requires-own"
+    },
+    {
+      "id": "torso.hip",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.8,
+      "sourceId": "HipAngleZ",
+      "resourceGroup": "ParamGroup8",
+      "ownership": "requires-own",
+      "reason": "该参数是物理输出，必须 own 后才能写"
+    },
+    {
+      "id": "torso.hip.forward",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.8,
+      "sourceId": "HipAngleY",
+      "resourceGroup": "ParamGroup8",
+      "ownership": "requires-own",
+      "reason": "该参数是物理输出，必须 own 后才能写"
+    },
+    {
+      "id": "torso.hip.twist",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.8,
+      "sourceId": "HipAngleX",
+      "resourceGroup": "ParamGroup8",
+      "ownership": "requires-own",
+      "reason": "该参数是物理输出，必须 own 后才能写"
     },
     {
       "id": "gaze.x",
@@ -220,6 +256,472 @@
       "confidence": 0.95,
       "sourceId": "ParamBreath",
       "ownership": "direct"
+    },
+    {
+      "id": "ext.gesture.right_finger",
+      "kind": "motion-pair",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Movement1+Movement3+Param56+Param57+Param40+Param36+Param39+Param41+Param42+Param43",
+      "ownership": "direct",
+      "conflicts": [
+        "ext.gesture.grass"
+      ]
+    },
+    {
+      "id": "ext.gesture.grass",
+      "kind": "motion-pair",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Movement1+Movement3+Param56+Param57+Param36+Param39+Param41+Param42+Param43",
+      "ownership": "direct",
+      "conflicts": [
+        "ext.gesture.right_finger"
+      ]
+    },
+    {
+      "id": "ext.gesture.chest",
+      "kind": "motion-pair",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Movement2+Param56+Param57+Param62+Param59+Param60+Param61",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.idle.background",
+      "kind": "motion-loop",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.8,
+      "sourceId": "ShockR+ShockL+Param11+SweatBurst1+SweatBurst2+SweatBurst3+SweatBurst4+Divider22+Param31+Param32+Param27+Param28+RCry+Param29+Param30+LCry+Startwinkle+Param55+Param56+Param58+Param57",
+      "ownership": "requires-own",
+      "conflicts": [],
+      "reason": "含物理输出参数，写入前必须 own"
+    },
+    {
+      "id": "ext.pose.rest",
+      "kind": "pose",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Param36+Param39+Param40+Param41+Param42+Param43+Param59+Param60+Param61+Param62",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.pose.finger",
+      "kind": "pose",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Param36+Param39+Param40+Param41+Param42+Param43",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.pose.grass",
+      "kind": "pose",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Param36+Param39+Param41+Param42+Param43",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.pose.chest",
+      "kind": "pose",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Param59+Param60+Param61+Param62",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.gaze.look_up",
+      "kind": "gaze",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "AngleX+AngleY+ParamEyeBallX+ParamEyeBallY+PositionX+LeanInput",
+      "ownership": "direct",
+      "conflicts": [
+        "ext.body.lean_forward"
+      ]
+    },
+    {
+      "id": "ext.gaze.look_down",
+      "kind": "gaze",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "AngleX+AngleY+ParamEyeBallX+ParamEyeBallY+PositionX+LeanInput",
+      "ownership": "direct",
+      "conflicts": [
+        "ext.body.lean_forward"
+      ]
+    },
+    {
+      "id": "ext.gaze.look_left",
+      "kind": "gaze",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "AngleX+AngleY+ParamEyeBallX+ParamEyeBallY+PositionX+LeanInput",
+      "ownership": "direct",
+      "conflicts": [
+        "ext.body.lean_forward"
+      ]
+    },
+    {
+      "id": "ext.gaze.look_right",
+      "kind": "gaze",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "AngleX+AngleY+ParamEyeBallX+ParamEyeBallY+PositionX+LeanInput",
+      "ownership": "direct",
+      "conflicts": [
+        "ext.body.lean_forward"
+      ]
+    },
+    {
+      "id": "ext.body.lean_forward",
+      "kind": "body",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "LeanInput",
+      "ownership": "direct",
+      "conflicts": [
+        "ext.gaze.look_up",
+        "ext.gaze.look_down",
+        "ext.gaze.look_left",
+        "ext.gaze.look_right"
+      ]
+    },
+    {
+      "id": "ext.body.straighten",
+      "kind": "body",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Param36+Param39+Param40+Param41+Param42+Param43+Param59+Param60+Param61+Param62+AngleX+AngleY+AngleZ+PositionX+PositionY",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.body.relax",
+      "kind": "body",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Param36+Param39+Param40+Param41+Param42+Param43+Param59+Param60+Param61+Param62",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.兔牙",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "key9",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.加载",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "key8",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.单片眼镜",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "key12",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.圈圈眼",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "key3+key4+key5+key6",
+      "ownership": "direct",
+      "conflicts": [
+        "ext.expression.屑",
+        "ext.expression.爱心眼",
+        "ext.expression.＞＜"
+      ]
+    },
+    {
+      "id": "ext.expression.屑",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "key3+key5+key6",
+      "ownership": "direct",
+      "conflicts": [
+        "ext.expression.圈圈眼",
+        "ext.expression.爱心眼",
+        "ext.expression.＞＜"
+      ]
+    },
+    {
+      "id": "ext.expression.流泪",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "key2",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.爱心眼",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "key4",
+      "ownership": "direct",
+      "conflicts": [
+        "ext.expression.圈圈眼",
+        "ext.expression.屑",
+        "ext.expression.＞＜"
+      ]
+    },
+    {
+      "id": "ext.expression.脱鞋",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Clothes4",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.脸红",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "key7",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.钢盆",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "key10",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.裙长切换",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Clothes1",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.黑框眼镜",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "key11",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.黑脸",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "key1",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.＞＜",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "key3+key4+key5+key6",
+      "ownership": "direct",
+      "conflicts": [
+        "ext.expression.圈圈眼",
+        "ext.expression.屑",
+        "ext.expression.爱心眼"
+      ]
+    },
+    {
+      "id": "ext.expression.体型1",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Clothes2",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.体型2",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Clothes2",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.默认体型",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Clothes2",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.前倾",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "LeanInput",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.尾巴开关",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Clothes5",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.流冷汗",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "key13",
+      "ownership": "direct",
+      "conflicts": []
+    },
+    {
+      "id": "ext.expression.胸口衣服",
+      "kind": "expression",
+      "status": "supported",
+      "min": -1,
+      "max": 1,
+      "neutral": 0,
+      "confidence": 0.9,
+      "sourceId": "Clothes3",
+      "ownership": "direct",
+      "conflicts": []
     }
   ],
   "assets": [
@@ -511,13 +1013,48 @@
       "loopable": false
     }
   ],
+  "exclusions": [
+    {
+      "id": "gesture.wave",
+      "label": "挥手（right_wave / left_wave）",
+      "reason": "无 authored motion3 资产；现有 7 个动作组里没有挥手曲线（Animation/*.motion3.json 全部解析，无手部挥动约束）"
+    },
+    {
+      "id": "gesture.hand_to_chin",
+      "label": "托腮（hand_to_chin）",
+      "reason": "无 authored 资产；Exp3 只有嘴/眼/道具开关，无托腮表情"
+    },
+    {
+      "id": "gesture.arms_crossed",
+      "label": "交叉手（arms_crossed）",
+      "reason": "无 authored 资产，且左右臂参数由两套独立姿势层控制，交叉需要同时驱动双臂且无混合规则"
+    },
+    {
+      "id": "gesture.open_hands",
+      "label": "双手张开（open_hands）",
+      "reason": "无 authored 资产；手指无独立参数（W0 审计），无法用参数近似"
+    }
+  ],
+  "unregisteredAssets": {
+    "motion3": [
+      "model/Animation/脱捕.motion3.json"
+    ],
+    "exp3": [
+      "model/Exp3/竖食指关.exp3.json",
+      "model/Exp3/竖食指开.exp3.json"
+    ],
+    "note": "存在但 model3 未引用；不允许在 W3/W4 被当作可用能力（除非先验证并登记）"
+  },
   "metadata": {
-    "scannedAt": "2026-11-03T06:35:07.237Z",
+    "scannedAt": "2026-11-03T17:56:27.744Z",
     "modelFile": "大肥鱼.dsl2d.2048.model3.json",
     "cdiFile": "大肥鱼.cdi3.json",
     "paramCount": 509,
     "physicsOutputCount": 292,
     "motionCount": 7,
-    "expressionCount": 21
+    "expressionCount": 21,
+    "w3RegistryCommit": "96069c926fc0db9eec9c43a83787461d17bef1f3",
+    "w3EntryCount": 36,
+    "w3ExcludedCount": 4
   }
 }
