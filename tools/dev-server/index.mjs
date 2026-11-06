@@ -292,7 +292,11 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, MIME['.js'], buf);
   }
 
-  // 模型（含贴图 / moc3 / model3.json）
+  // 模型（含贴图 / moc3 / model3.json）。
+  // MODEL-404-ROOTCAUSE 实证：/dsh-l2d/model 前缀已在上方剥离（:222-225），
+  // overlay.js:2357 的 MODEL_URL（/dsh-l2d/model/…编码文件名）经剥前缀 +
+  // resolveInside 内部 decodeURIComponent 后正确命中本路由——dev-server 与真机
+  // 插件路由（lib/index.js:1322）行为一致，合成页 404 是无静态服务的环境假象。
   if (urlPath.startsWith('/model/')) {
     const full = resolveInside(MODEL_DIR, urlPath.slice('/model/'.length));
     if (!full) return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad path'));
