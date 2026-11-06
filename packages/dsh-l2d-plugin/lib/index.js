@@ -55,6 +55,8 @@ import {
 import { StatusReporter } from '../../mcp-bridge/status-reporter.mjs';
 import { HttpActionExecutor } from '../../mcp-bridge/action-executor.mjs';
 import { ModelActionQueue } from '../../mcp-bridge/action-queue.mjs';
+import { registerLive2DTools } from '../../mcp-bridge/mcp-tools.mjs';
+import { createGallerySource } from '../../mcp-bridge/gallery-source.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OVERLAY_FILE = path.join(PKG_ROOT, 'lib', 'overlay.js');
@@ -1765,6 +1767,39 @@ export function apply(root, config = {}) {
             getMemoryRevision: async () => 0,
           });
           mcpStatusReporter.start();
+
+          // ④ l2d_* 工具注册（BRIDGE-MOUNT 第二步）：makeActionToolDeps 提供
+          //    enqueue/status/cancel/workspace，validateAction 为语义动作合法性闸门
+          //    （validated + compatible=1，与 /api/actions 同口径）；gallery 注入
+          //    GallerySource（GALLERY-BRIDGE §4.3：图库目录读图 + 2MB/魔数护栏），
+          //    注册后 l2d_gallery_top 可用（未就绪前不注册，不伪报可用）。
+          //    registry 为宿主进程内注册表：MCP 薄壳（packages/dsh-l2d-mcp）经
+          //    l2d-service.json discover 到宿主后消费同一工具面。
+          try {
+            const toolRegistry = new Map();
+            const validateAction = (action) => {
+              try {
+                const row = bridgeDb
+                  .prepare(
+                    "SELECT m.id FROM motion_definitions m JOIN motion_model_bindings b ON b.motion_id = m.id " +
+                    "WHERE m.semantic_key = ? AND m.status = 'validated' AND b.compatible = 1",
+                  )
+                  .get(String(action || ''));
+                return { ok: !!row, reason: row ? 'validated+compatible' : 'not-registered-or-not-validated' };
+              } catch (e) {
+                return { ok: false, reason: String(e && e.message ? e.message : e) };
+              }
+            };
+            const galleryDir = process.env.DSH_L2D_GALLERY_DIR || 'D:/Temp/l2d-gallery-extract';
+            const gallery = createGallerySource({ db: bridgeDb, galleryDir });
+            registerLive2DTools(
+              { registerTool: (name, handler) => toolRegistry.set(name, handler) },
+              { ...mcpBridge.makeActionToolDeps(validateAction), gallery },
+            );
+            diag(`l2d tools registered: ${[...toolRegistry.keys()].join(', ')}`);
+          } catch (err) {
+            diag('l2d tools 注册失败（fail-open，动作通道仍经 bridge.enqueueAction 可用）: ' + String(err && err.message ? err.message : err));
+          }
         })
         .catch((err) => diag('mcp bridge 初始化失败（fail-open，不影响宿主）: ' + String(err && err.message ? err.message : err)));
       try {
