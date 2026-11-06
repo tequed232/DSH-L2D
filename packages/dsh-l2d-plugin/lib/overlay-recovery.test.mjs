@@ -75,6 +75,20 @@ test('overlay 内嵌：模组禁用持久化 + 刷新恢复', () => {
   assert.match(overlaySrc, /dispatchEvent\(new CustomEvent\('dsh:l2d:state'/);
 });
 
+test('overlay 内嵌：错误处理走画中画（Document PiP）+ 48×48 徽标入口', () => {
+  // PiP 优先：requestWindow + 自包含样式注入（PiP 是独立 document）
+  assert.match(overlaySrc, /documentPictureInPicture/);
+  assert.match(overlaySrc, /pip\.requestWindow\(\{ width: 360, height: 340 \}\)/);
+  assert.match(overlaySrc, /style\.textContent = ERROR_DIALOG_CSS/);
+  // 统一入口：PiP 失败降级页内卡片
+  assert.match(overlaySrc, /function openL2DErrorUi\(/);
+  assert.match(overlaySrc, /openPipErrorDialog\(error\)\.catch/);
+  // failed 态 48×48 徽标：页内唯一保留元素，点击可再开（user gesture → activation 成立）
+  assert.match(overlaySrc, /l2d-mini-badge/);
+  assert.match(overlaySrc, /width:48px !important;height:48px !important/);
+  assert.match(overlaySrc, /root\.style\.width = '48px'/);
+});
+
 test('overlay 内嵌：initRenderer 带 generation 防旧代竞态 + 超时竞速', () => {
   assert.match(overlaySrc, /var gen = \+\+L2D_RECOVERY\.generation/);
   assert.match(overlaySrc, /Promise\.race\(\[loading, timeout\]\)/);

@@ -459,7 +459,57 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(state), 'utf8'));
   }
 
+  // 诊断端点：区分 dev-server 与真机 bridge（谁在端口上一探便知）。
+  // 真机宿主实现同名端点时返回自己的标识；无此端点的旧版宿主，任意应答也足以证明端口被占。
+  if (urlPath === '/__dsh_l2d_health') {
+    const body = {
+      ok: true,
+      server: 'dev-server',
+      port: PORT,
+      pid: process.pid,
+      uptimeSec: Math.round(process.uptime()),
+    };
+    return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(body), 'utf8'));
+  }
+
   send(res, 404, 'text/plain; charset=utf-8', Buffer.from('404 ' + urlPath));
+});
+
+// ---- 端口纪律（防抢占真机 bridge）----
+// 5300 是全链路唯一约定端口：插件 client fallback（lib/index.js）、MCP 侧
+// HttpActionExecutor baseUrl、dsh-l2d-mcp discover 全部打它。2026-11-06 事故：
+// dev-server 长期驻留 5300 → 真机宿主 bridge 绑定失败/插件打到假宿主 → 模型加载
+// 全链路失败。防线：启动前先探测，端口上有任何服务应答一律拒绝启动（--force 显式越过）。
+function probeOccupied(port, host) {
+  return new Promise((resolve) => {
+    const req = http.request(
+      { host, port, path: '/__dsh_l2d_health', method: 'GET', timeout: 800 },
+      (res) => {
+        res.resume();
+        resolve(true); // 任意 HTTP 应答 = 端口已被占用（不管对方是不是 DSH）
+      },
+    );
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+    req.on('error', () => resolve(false)); // ECONNREFUSED = 端口空闲
+    req.end();
+  });
+}
+
+const FORCE = process.argv.includes('--force');
+const occupied = await probeOccupied(PORT, HOST);
+if (occupied && !FORCE) {
+  console.error('[dev-server] 拒绝启动：端口 ' + PORT + ' 已有服务在监听（疑似真机 DSH bridge）。');
+  console.error('  抢占它会断掉插件 ↔ MCP 的整条动作链路。可选：');
+  console.error('  1) 不起 dev-server，直接用真机实例；  2) --port 换端口；  3) --force 确认覆盖。');
+  process.exit(1);
+}
+
+server.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE') {
+    console.error('[dev-server] 端口 ' + PORT + ' 被占用（EADDRINUSE）：真机 bridge 可能在运行，本进程退出，不抢占。');
+    process.exit(1);
+  }
+  throw err;
 });
 
 server.listen(PORT, HOST, () => {

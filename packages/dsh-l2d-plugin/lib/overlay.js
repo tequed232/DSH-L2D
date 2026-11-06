@@ -191,41 +191,32 @@
     'opacity:0;transition:opacity .7s;}',
     '.l2d-yandere-fx.on{opacity:1;}',
     // ---- P0 修复（模型加载失败）：故障恢复状态机样式 ----
-    // 失败/加载中容器收缩到 300×300（用户验收硬指标：失败态最大操作范围），
-    // data-l2d-state 由 setL2DState 写在 root 上。加载中允许看到内容（静态图），
-    // failed 彻底隐藏渲染层/静态图/chip/齿轮，只保留一个不拦截事件的空容器。
+    // loading/retry_wait：300×300 收缩（用户验收硬指标）；failed：进一步收缩为
+    // 48×48 迷你徽标——报错处理整体迁入浏览器画中画（Document PiP）独立窗口，
+    // 页面空间完全让出（用户 2026-11-06 裁决：桌宠占位不得继续压在页面上）。
     '#' + ROOT_ID + '[data-l2d-state="loading"],' +
-    '#' + ROOT_ID + '[data-l2d-state="retry_wait"],' +
-    '#' + ROOT_ID + '[data-l2d-state="failed"]{' +
+    '#' + ROOT_ID + '[data-l2d-state="retry_wait"]{' +
     'width:300px !important;height:300px !important;max-width:300px !important;max-height:300px !important;overflow:hidden;}',
+    '#' + ROOT_ID + '[data-l2d-state="failed"]{' +
+    'width:48px !important;height:48px !important;max-width:48px !important;max-height:48px !important;overflow:visible;pointer-events:none;}',
     '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-canvas,' +
     '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-body img,' +
     '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-placeholder,' +
     '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-chip,' +
     '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-gear,' +
     '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-bubble,' +
-    '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-price{display:none !important;}',
-    '#' + ROOT_ID + '[data-l2d-state="failed"]{pointer-events:none;}',
+    '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-price,' +
+    '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-body{display:none !important;}',
+    // 迷你徽标：failed 态唯一保留的页内元素（48×48，不透明、可点击）。
+    // 点击 = user gesture → Document PiP requestWindow 必有 transient activation。
+    '#' + ROOT_ID + ' .l2d-mini-badge{display:none;width:48px;height:48px;box-sizing:border-box;' +
+    'border-radius:50%;border:1px solid #b45309;background:#431407;color:#fbbf24;' +
+    'font-size:22px;line-height:46px;text-align:center;cursor:pointer;pointer-events:auto;padding:0;}' +
+    '#' + ROOT_ID + ' .l2d-mini-badge:hover{background:#5c1d09;}' +
+    '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-mini-badge{display:block;}',
     '#' + ROOT_ID + '[data-l2d-state="model_disabled"] .l2d-canvas,' +
     '#' + ROOT_ID + '[data-l2d-state="model_disabled"] .l2d-body img,' +
     '#' + ROOT_ID + '[data-l2d-state="model_disabled"] .l2d-placeholder{display:none !important;}',
-    // 错误对话框：独立挂 document.body（不在角色容器内），最高层级。
-    // 内容一律 createElement/textContent，不用 innerHTML 拼错误串（防注入）。
-    '#dsh-l2d-error-dialog{position:fixed;inset:0;z-index:2147483647;display:flex;',
-    'justify-content:center;align-items:center;padding:16px;box-sizing:border-box;',
-    'background:rgba(0,0,0,.48);backdrop-filter:blur(8px);pointer-events:auto;',
-    'font-family:var(--dsh-font-sans),system-ui,sans-serif;}',
-    '#dsh-l2d-error-dialog .l2d-error-card{width:min(420px,100%);max-height:min(600px,90vh);',
-    'overflow:auto;padding:24px;box-sizing:border-box;border:1px solid #444;border-radius:16px;',
-    'background:#171717;color:#f5f5f5;box-shadow:0 20px 80px rgba(0,0,0,.4);}',
-    '#dsh-l2d-error-dialog .l2d-error-title{font-size:16px;font-weight:600;margin:0 0 12px;}',
-    '#dsh-l2d-error-dialog .l2d-error-message{font-size:13px;line-height:1.6;color:#a3a3a3;',
-    'word-break:break-all;margin:0 0 18px;}',
-    '#dsh-l2d-error-dialog button{display:block;width:100%;margin-top:10px;padding:12px;',
-    'border:1px solid #444;border-radius:9px;background:#262626;color:inherit;cursor:pointer;',
-    'font-size:14px;text-align:left;}',
-    '#dsh-l2d-error-dialog button:hover{background:#333;}',
-    '#dsh-l2d-error-dialog button[data-action="retry"]{border-color:#6d9eff;background:#1c2b4a;}',
     '#' + ROOT_ID + '.away .l2d-body{filter:grayscale(.55) brightness(.72);opacity:.8;}',
     '#' + ROOT_ID + '.conversation .l2d-chip{background:var(--dsh-accent);color:var(--dsh-on-accent);',
     'border-color:transparent;}',
@@ -315,6 +306,27 @@
     '#dsh-l2d-root :focus-visible,.l2d-menu :focus-visible,.l2d-panel :focus-visible{outline:2px solid var(--dsh-accent);outline-offset:2px;}'
   ].join('');
 
+  // ---- P0-PiP：错误处理对话框样式（自包含常量）----
+  // 页内降级卡片与画中画窗口共用同一份 CSS。刻意不依赖 --dsh-* 变量：
+  // Document PiP 是独立 document，主文档的 token 样式表不会生效。
+  // 页内形态：右下角小卡片（不再全屏遮罩糊脸，页面照常可操作）。
+  var ERROR_DIALOG_CSS = [
+    '#dsh-l2d-error-dialog{position:fixed;right:16px;bottom:16px;z-index:2147483647;',
+    'pointer-events:auto;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;}',
+    '#dsh-l2d-error-dialog .l2d-error-card{width:min(340px,calc(100vw - 32px));',
+    'max-height:min(480px,80vh);overflow:auto;padding:18px;box-sizing:border-box;',
+    'border:1px solid #444;border-radius:14px;background:#171717;color:#f5f5f5;',
+    'box-shadow:0 16px 56px rgba(0,0,0,.45);}',
+    '#dsh-l2d-error-dialog .l2d-error-title{font-size:15px;font-weight:600;margin:0 0 10px;}',
+    '#dsh-l2d-error-dialog .l2d-error-message{font-size:12px;line-height:1.6;color:#a3a3a3;',
+    'word-break:break-all;margin:0 0 14px;}',
+    '#dsh-l2d-error-dialog button{display:block;width:100%;margin-top:8px;padding:10px;',
+    'border:1px solid #444;border-radius:8px;background:#262626;color:#f5f5f5;cursor:pointer;',
+    'font-size:13px;text-align:left;}',
+    '#dsh-l2d-error-dialog button:hover{background:#333;}',
+    '#dsh-l2d-error-dialog button[data-action="retry"]{border-color:#6d9eff;background:#1c2b4a;}'
+  ].join('');
+
   var root = null;
   var imgEl = null;
   var bubbleEl = null;
@@ -351,7 +363,7 @@
 
     var style = document.createElement('style');
     style.setAttribute('data-dsh-l2d', 'style');
-    style.textContent = readTokenCss() + STYLE_TEXT;
+    style.textContent = readTokenCss() + STYLE_TEXT + ERROR_DIALOG_CSS;
     document.head.appendChild(style);
 
     root = document.createElement('div');
@@ -394,6 +406,18 @@
       togglePanel();
     });
 
+    // P0-PiP：failed 态唯一页内元素（48×48 徽标）。点击 = user gesture，
+    // 保证 Document PiP requestWindow 的 transient activation 成立。
+    var miniBadge = document.createElement('button');
+    miniBadge.className = 'l2d-mini-badge';
+    miniBadge.type = 'button';
+    miniBadge.title = 'Live2D 加载失败 · 点击打开恢复窗口';
+    miniBadge.textContent = '\u26a0';
+    miniBadge.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openL2DErrorUi(L2D_RECOVERY.lastError);
+    });
+
     panelEl = document.createElement('div');
     panelEl.className = 'l2d-panel';
 
@@ -409,6 +433,7 @@
     root.appendChild(chipEl);
     root.appendChild(gear);
     root.appendChild(priceEl);
+    root.appendChild(miniBadge);
     document.body.appendChild(root);
     document.body.appendChild(menuEl);
     document.body.appendChild(panelEl);
@@ -2584,6 +2609,14 @@
     if (error) L2D_RECOVERY.lastError = error;
     if (root) {
       try { root.dataset.l2dState = state; } catch (err) { /* ignore */ }
+      // failed 态收缩为 48×48 迷你徽标（页内只留这个可点击入口，
+      // 完整报错处理在画中画窗口里；48 是用户「桌宠不压页面」裁决的落地）。
+      try {
+        if (state === 'failed') {
+          root.style.width = '48px';
+          root.style.height = '48px';
+        }
+      } catch (err) { /* ignore */ }
     }
     try {
       window.dispatchEvent(new CustomEvent('dsh:l2d:state', {
@@ -2629,7 +2662,7 @@
       rendererFailed = true;
       fallbackToImage(L2D_RECOVERY.lastError); // 300×300 内保留静态立绘兜底
       setL2DState('failed');
-      showL2DErrorDialog(L2D_RECOVERY.lastError);
+      openL2DErrorUi(L2D_RECOVERY.lastError); // PiP 优先，无 activation 降级页内小卡片
       return;
     }
 
@@ -2672,72 +2705,129 @@
     initRenderer();
   }
 
-  /**
-   * 高优先级错误对话框：独立挂 document.body（不在角色容器内），z-index 2147483647。
-   * 四个用户出口：重新加载 Plugin / 禁用当前模型 / 禁用整个模组 / 刷新页面。
-   * 内容全部 createElement + textContent，不把错误字符串拼进 innerHTML（防注入）。
-   */
-  function showL2DErrorDialog(error) {
-    var old = document.getElementById('dsh-l2d-error-dialog');
-    if (old && old.parentNode) old.parentNode.removeChild(old);
+  // ---- P0-PiP：错误处理入口（浏览器画中画优先） ----
+  // 统一入口 openL2DErrorUi：
+  //   1. Document PiP 可用（Chromium 116+）→ 独立小窗承载完整四出口对话框；
+  //   2. 不可用/被拒（如自动弹出时无 transient user activation）→ 页内右下角小卡片降级。
+  // 自动弹出（重试耗尽）通常没有 user activation，PiP 会拒绝——此时页面里只留
+  // 48×48 徽标 + 右下角小卡片；用户点徽标（user gesture）必能开 PiP 窗口。
+  var ERROR_ACTIONS = [
+    { action: 'retry', label: '重新加载 Plugin（重置重试计数）' },
+    { action: 'model', label: '禁用当前模型（保留 DSH 其余功能）' },
+    { action: 'module', label: '禁用整个 DSH-Live2D 模组（刷新后仍生效）' },
+    { action: 'refresh', label: '刷新页面并重新初始化' }
+  ];
 
-    var dialog = document.createElement('div');
-    dialog.id = 'dsh-l2d-error-dialog';
+  /** 四出口共用裁决（页内卡片与 PiP 窗口共用）；close() 负责关闭各自的宿主 UI。 */
+  function handleL2DErrorAction(action, close) {
+    if (action === 'retry') {
+      close();
+      retryL2DRenderer(true);
+    } else if (action === 'model') {
+      L2D_RECOVERY.modelDisabled = true;
+      clearL2DRetryTimer();
+      collapseL2DContainer();
+      setL2DState('model_disabled');
+      close();
+    } else if (action === 'module') {
+      L2D_RECOVERY.moduleDisabled = true;
+      clearL2DRetryTimer();
+      try { localStorage.setItem('dsh-l2d.disabled', 'true'); } catch (err) { /* ignore */ }
+      try { window.dispatchEvent(new CustomEvent('dsh:l2d:disable-module')); } catch (err) { /* ignore */ }
+      if (root && root.parentNode) root.parentNode.removeChild(root);
+      close();
+    } else if (action === 'refresh') {
+      // 前端刷新：bootOverlay 重新注入 → 检查禁用标志 → 重新走完整初始化链
+      location.reload();
+    }
+  }
 
-    var card = document.createElement('div');
+  /** 构建错误卡片（doc 参数：主 document 或 PiP document）；纯 createElement/textContent 防注入。 */
+  function buildL2DErrorCard(doc, error) {
+    var card = doc.createElement('div');
     card.className = 'l2d-error-card';
 
-    var title = document.createElement('div');
+    var title = doc.createElement('div');
     title.className = 'l2d-error-title';
     title.textContent = 'Live2D 模型加载失败';
     card.appendChild(title);
 
-    var message = document.createElement('div');
+    var message = doc.createElement('div');
     message.className = 'l2d-error-message';
     message.textContent = String(error || '未知错误') + '（已自动重试 3 次，模型为可选组件，DSH 其余功能不受影响）';
     card.appendChild(message);
 
-    var actions = [
-      { action: 'retry', label: '重新加载 Plugin（重置重试计数）' },
-      { action: 'model', label: '禁用当前模型（保留 DSH 其余功能）' },
-      { action: 'module', label: '禁用整个 DSH-Live2D 模组（刷新后仍生效）' },
-      { action: 'refresh', label: '刷新页面并重新初始化' }
-    ];
-    actions.forEach(function (item) {
-      var btn = document.createElement('button');
+    ERROR_ACTIONS.forEach(function (item) {
+      var btn = doc.createElement('button');
       btn.type = 'button';
       btn.dataset.action = item.action;
       btn.textContent = item.label;
       card.appendChild(btn);
     });
+    return card;
+  }
 
-    dialog.appendChild(card);
+  function removeInlineErrorDialog() {
+    var old = document.getElementById('dsh-l2d-error-dialog');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+  }
+
+  /**
+   * 页内降级：右下角小卡片（无全屏遮罩，页面可继续操作）。
+   * 独立挂 document.body（不在角色容器内），z-index 2147483647。
+   */
+  function showL2DErrorDialog(error) {
+    removeInlineErrorDialog();
+    var dialog = document.createElement('div');
+    dialog.id = 'dsh-l2d-error-dialog';
+    dialog.appendChild(buildL2DErrorCard(document, error));
     document.body.appendChild(dialog);
-
     dialog.addEventListener('click', function (event) {
       var action = event.target && event.target.dataset ? event.target.dataset.action : null;
       if (!action) return;
-      if (action === 'retry') {
-        if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
-        retryL2DRenderer(true);
-      } else if (action === 'model') {
-        L2D_RECOVERY.modelDisabled = true;
-        clearL2DRetryTimer();
-        collapseL2DContainer();
-        setL2DState('model_disabled');
-        if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
-      } else if (action === 'module') {
-        L2D_RECOVERY.moduleDisabled = true;
-        clearL2DRetryTimer();
-        try { localStorage.setItem('dsh-l2d.disabled', 'true'); } catch (err) { /* ignore */ }
-        try { window.dispatchEvent(new CustomEvent('dsh:l2d:disable-module')); } catch (err) { /* ignore */ }
-        if (root && root.parentNode) root.parentNode.removeChild(root);
-        if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
-      } else if (action === 'refresh') {
-        // 前端刷新：bootOverlay 重新注入 → 检查禁用标志 → 重新走完整初始化链
-        location.reload();
-      }
+      handleL2DErrorAction(action, removeInlineErrorDialog);
     });
+  }
+
+  /**
+   * 浏览器画中画窗口（Document Picture-in-Picture，Chromium 116+）：
+   * 独立小窗、系统级置顶，承载完整错误处理 UI；页内零占用。
+   * requestWindow 需要 transient user activation——自动弹出被拒时由
+   * openL2DErrorUi 降级页内卡片，用户点 48×48 徽标后必能开窗。
+   * PiP 是独立 document：主文档样式表不生效，须注入自包含 ERROR_DIALOG_CSS。
+   */
+  function openPipErrorDialog(error) {
+    var pip = window.documentPictureInPicture;
+    if (!pip || typeof pip.requestWindow !== 'function') {
+      return Promise.reject(new Error('pip-unsupported'));
+    }
+    return pip.requestWindow({ width: 360, height: 340 }).then(function (pipWin) {
+      var doc = pipWin.document;
+      try { doc.title = 'Live2D 恢复'; } catch (err) { /* ignore */ }
+      try {
+        var style = doc.createElement('style');
+        style.textContent = ERROR_DIALOG_CSS;
+        doc.head.appendChild(style);
+      } catch (err) { /* ignore */ }
+      removeInlineErrorDialog(); // PiP 开成功 → 页内卡片不再需要
+      var card = buildL2DErrorCard(doc, error);
+      doc.body.appendChild(card);
+      card.addEventListener('click', function (event) {
+        var action = event.target && event.target.dataset ? event.target.dataset.action : null;
+        if (!action) return;
+        handleL2DErrorAction(action, function () {
+          try { pipWin.close(); } catch (err) { /* ignore */ }
+        });
+      });
+      // 用户手动关窗：页内 48×48 徽标仍在，可再次点击打开
+      pipWin.addEventListener('pagehide', function () { /* no-op：徽标即入口 */ });
+      return pipWin;
+    });
+  }
+
+  /** 错误处理统一入口：PiP 优先，失败降级页内右下角卡片。 */
+  function openL2DErrorUi(error) {
+    openPipErrorDialog(error).catch(function () { showL2DErrorDialog(error); });
   }
   // 性能：挂件显示尺寸 593×741，4096 贴图（5×64MiB=320MiB 显存）纯属浪费；
   // 2048 档肉眼无差，显存降到 80MiB、采样带宽降到 1/4。
