@@ -190,6 +190,33 @@
     'background:radial-gradient(ellipse at center,rgba(0,0,0,0) 38%,rgba(45,0,14,.6) 100%);',
     'opacity:0;transition:opacity .7s;}',
     '.l2d-yandere-fx.on{opacity:1;}',
+    // ---- P0 修复（模型加载失败）：故障恢复状态机样式 ----
+    // loading/retry_wait：300×300 收缩（用户验收硬指标）；failed：进一步收缩为
+    // 48×48 迷你徽标——报错处理整体迁入浏览器画中画（Document PiP）独立窗口，
+    // 页面空间完全让出（用户 2026-11-06 裁决：桌宠占位不得继续压在页面上）。
+    '#' + ROOT_ID + '[data-l2d-state="loading"],' +
+    '#' + ROOT_ID + '[data-l2d-state="retry_wait"]{' +
+    'width:300px !important;height:300px !important;max-width:300px !important;max-height:300px !important;overflow:hidden;}',
+    '#' + ROOT_ID + '[data-l2d-state="failed"]{' +
+    'width:48px !important;height:48px !important;max-width:48px !important;max-height:48px !important;overflow:visible;pointer-events:none;}',
+    '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-canvas,' +
+    '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-body img,' +
+    '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-placeholder,' +
+    '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-chip,' +
+    '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-gear,' +
+    '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-bubble,' +
+    '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-price,' +
+    '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-body{display:none !important;}',
+    // 迷你徽标：failed 态唯一保留的页内元素（48×48，不透明、可点击）。
+    // 点击 = user gesture → Document PiP requestWindow 必有 transient activation。
+    '#' + ROOT_ID + ' .l2d-mini-badge{display:none;width:48px;height:48px;box-sizing:border-box;' +
+    'border-radius:50%;border:1px solid #b45309;background:#431407;color:#fbbf24;' +
+    'font-size:22px;line-height:46px;text-align:center;cursor:pointer;pointer-events:auto;padding:0;}' +
+    '#' + ROOT_ID + ' .l2d-mini-badge:hover{background:#5c1d09;}' +
+    '#' + ROOT_ID + '[data-l2d-state="failed"] .l2d-mini-badge{display:block;}',
+    '#' + ROOT_ID + '[data-l2d-state="model_disabled"] .l2d-canvas,' +
+    '#' + ROOT_ID + '[data-l2d-state="model_disabled"] .l2d-body img,' +
+    '#' + ROOT_ID + '[data-l2d-state="model_disabled"] .l2d-placeholder{display:none !important;}',
     '#' + ROOT_ID + '.away .l2d-body{filter:grayscale(.55) brightness(.72);opacity:.8;}',
     '#' + ROOT_ID + '.conversation .l2d-chip{background:var(--dsh-accent);color:var(--dsh-on-accent);',
     'border-color:transparent;}',
@@ -279,6 +306,27 @@
     '#dsh-l2d-root :focus-visible,.l2d-menu :focus-visible,.l2d-panel :focus-visible{outline:2px solid var(--dsh-accent);outline-offset:2px;}'
   ].join('');
 
+  // ---- P0-PiP：错误处理对话框样式（自包含常量）----
+  // 页内降级卡片与画中画窗口共用同一份 CSS。刻意不依赖 --dsh-* 变量：
+  // Document PiP 是独立 document，主文档的 token 样式表不会生效。
+  // 页内形态：右下角小卡片（不再全屏遮罩糊脸，页面照常可操作）。
+  var ERROR_DIALOG_CSS = [
+    '#dsh-l2d-error-dialog{position:fixed;right:16px;bottom:16px;z-index:2147483647;',
+    'pointer-events:auto;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;}',
+    '#dsh-l2d-error-dialog .l2d-error-card{width:min(340px,calc(100vw - 32px));',
+    'max-height:min(480px,80vh);overflow:auto;padding:18px;box-sizing:border-box;',
+    'border:1px solid #444;border-radius:14px;background:#171717;color:#f5f5f5;',
+    'box-shadow:0 16px 56px rgba(0,0,0,.45);}',
+    '#dsh-l2d-error-dialog .l2d-error-title{font-size:15px;font-weight:600;margin:0 0 10px;}',
+    '#dsh-l2d-error-dialog .l2d-error-message{font-size:12px;line-height:1.6;color:#a3a3a3;',
+    'word-break:break-all;margin:0 0 14px;}',
+    '#dsh-l2d-error-dialog button{display:block;width:100%;margin-top:8px;padding:10px;',
+    'border:1px solid #444;border-radius:8px;background:#262626;color:#f5f5f5;cursor:pointer;',
+    'font-size:13px;text-align:left;}',
+    '#dsh-l2d-error-dialog button:hover{background:#333;}',
+    '#dsh-l2d-error-dialog button[data-action="retry"]{border-color:#6d9eff;background:#1c2b4a;}'
+  ].join('');
+
   var root = null;
   var imgEl = null;
   var bubbleEl = null;
@@ -315,11 +363,13 @@
 
     var style = document.createElement('style');
     style.setAttribute('data-dsh-l2d', 'style');
-    style.textContent = readTokenCss() + STYLE_TEXT;
+    style.textContent = readTokenCss() + STYLE_TEXT + ERROR_DIALOG_CSS;
     document.head.appendChild(style);
 
     root = document.createElement('div');
     root.id = ROOT_ID;
+    // P0 修复：初始故障状态写进 dataset，失败态 CSS（300×300 收缩）从第一帧就生效
+    try { root.dataset.l2dState = L2D_RECOVERY.state || 'initializing'; } catch (err) { /* ignore */ }
 
     bubbleEl = document.createElement('div');
     bubbleEl.className = 'l2d-bubble';
@@ -356,6 +406,18 @@
       togglePanel();
     });
 
+    // P0-PiP：failed 态唯一页内元素（48×48 徽标）。点击 = user gesture，
+    // 保证 Document PiP requestWindow 的 transient activation 成立。
+    var miniBadge = document.createElement('button');
+    miniBadge.className = 'l2d-mini-badge';
+    miniBadge.type = 'button';
+    miniBadge.title = 'Live2D 加载失败 · 点击打开恢复窗口';
+    miniBadge.textContent = '\u26a0';
+    miniBadge.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openL2DErrorUi(L2D_RECOVERY.lastError);
+    });
+
     panelEl = document.createElement('div');
     panelEl.className = 'l2d-panel';
 
@@ -371,6 +433,7 @@
     root.appendChild(chipEl);
     root.appendChild(gear);
     root.appendChild(priceEl);
+    root.appendChild(miniBadge);
     document.body.appendChild(root);
     document.body.appendChild(menuEl);
     document.body.appendChild(panelEl);
@@ -2522,6 +2585,250 @@
   var canvasEl = null;
   var rendererReady = false;
   var rendererFailed = false;
+
+  // ---------------------------------------------------------------- P0 修复：故障恢复状态机
+  // 规格源：lib/l2d-recovery.mjs（纯函数模块，node 测试直接驱动）。overlay 是
+  // classic script 无法 import，这里内嵌同语义实现；l2d-recovery.test.mjs 同时
+  // 对本段做静态钩子断言，防止内嵌实现被后续重构悄悄删除。
+  // 核心原则：模型是可选组件，DSH 是核心宿主——模型失败 ≠ 插件失败 ≠ DSH 失败。
+  var L2D_RECOVERY = {
+    state: 'initializing',
+    attempts: 0,          // 本轮已自动重试次数
+    maxRetries: 3,        // 每轮自动重试上限（用户验收参数）
+    retryTimers: [1000, 3000, 8000], // 重试间隔 1s/3s/8s
+    loadTimeoutMs: 15000, // 单次加载超时
+    timer: null,
+    generation: 0,        // 加载代数：旧代异步完成不得覆盖新代状态
+    lastError: null,
+    modelDisabled: false, // 用户裁决：禁用当前模型（模组其余功能可用）
+    moduleDisabled: false // 用户裁决：禁用整个模组（localStorage 持久化）
+  };
+
+  function setL2DState(state, error) {
+    L2D_RECOVERY.state = state;
+    if (error) L2D_RECOVERY.lastError = error;
+    if (root) {
+      try { root.dataset.l2dState = state; } catch (err) { /* ignore */ }
+      // failed 态收缩为 48×48 迷你徽标（页内只留这个可点击入口，
+      // 完整报错处理在画中画窗口里；48 是用户「桌宠不压页面」裁决的落地）。
+      try {
+        if (state === 'failed') {
+          root.style.width = '48px';
+          root.style.height = '48px';
+        }
+      } catch (err) { /* ignore */ }
+    }
+    try {
+      window.dispatchEvent(new CustomEvent('dsh:l2d:state', {
+        detail: { state: state, error: L2D_RECOVERY.lastError, attempts: L2D_RECOVERY.attempts }
+      }));
+    } catch (err) { /* ignore */ }
+  }
+
+  /** 失败/加载中收缩容器：隐藏渲染层与静态图，释放交互区域（透明 canvas 不再挡 DSH 按钮）。 */
+  function collapseL2DContainer() {
+    if (!root) return;
+    root.style.width = '300px';
+    root.style.height = '300px';
+    if (canvasEl) canvasEl.style.display = 'none';
+    if (imgEl) imgEl.style.display = 'none';
+  }
+
+  /** 模型就绪：恢复宿主缩放对应的容器尺寸，显示画布。 */
+  function restoreL2DContainer() {
+    if (!root) return;
+    root.style.width = '';
+    root.style.height = '';
+    if (canvasEl) canvasEl.style.display = 'block';
+  }
+
+  function clearL2DRetryTimer() {
+    if (L2D_RECOVERY.timer != null) {
+      clearTimeout(L2D_RECOVERY.timer);
+      L2D_RECOVERY.timer = null;
+    }
+  }
+
+  /**
+   * 自动重试调度：1s/3s/8s ×3，耗尽后停止自动重试（等待用户操作）并弹错误对话框。
+   * @param gen 本轮加载代数；不匹配说明已有新代接管，本轮失败作废（防旧代竞态覆盖）。
+   */
+  function scheduleL2DRetry(gen, error) {
+    if (gen !== L2D_RECOVERY.generation) return; // stale generation：忽略
+    if (L2D_RECOVERY.moduleDisabled || L2D_RECOVERY.modelDisabled) return;
+    L2D_RECOVERY.lastError = error || L2D_RECOVERY.lastError;
+
+    if (L2D_RECOVERY.attempts >= L2D_RECOVERY.maxRetries) {
+      rendererFailed = true;
+      fallbackToImage(L2D_RECOVERY.lastError); // 300×300 内保留静态立绘兜底
+      setL2DState('failed');
+      openL2DErrorUi(L2D_RECOVERY.lastError); // PiP 优先，无 activation 降级页内小卡片
+      return;
+    }
+
+    var delay = L2D_RECOVERY.retryTimers[Math.min(L2D_RECOVERY.attempts, L2D_RECOVERY.retryTimers.length - 1)];
+    L2D_RECOVERY.attempts += 1;
+    setL2DState('retry_wait');
+    clearL2DRetryTimer();
+    L2D_RECOVERY.timer = setTimeout(function () {
+      L2D_RECOVERY.timer = null;
+      retryL2DRenderer(false);
+    }, delay);
+  }
+
+  /**
+   * 重试一轮加载。manual=true（用户点对话框）时计数清零，不限次数。
+   * 重试前销毁旧渲染实例并移除旧 <script>，防止重复 Canvas / 双 RAF / 双实例。
+   */
+  function retryL2DRenderer(manual) {
+    if (L2D_RECOVERY.moduleDisabled) return;
+    if (manual) {
+      L2D_RECOVERY.attempts = 0;
+      L2D_RECOVERY.modelDisabled = false;
+    } else if (L2D_RECOVERY.modelDisabled) {
+      return;
+    }
+    clearL2DRetryTimer();
+    // 旧实例销毁（WebGL/纹理/事件监听由渲染包 destroy 统一释放）
+    var L = window.DSH_L2D;
+    if (L && L.destroy) { try { L.destroy(); } catch (err) { /* ignore */ } }
+    // 旧渲染包 <script> 移除：loadScriptOnce 见到同 id 会短路，拿到的是旧 bundle
+    try {
+      var stale = document.getElementById('dsh-l2d-renderer');
+      if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+    } catch (err) { /* ignore */ }
+    rendererReady = false;
+    rendererFailed = false;
+    if (canvasEl) { canvasEl.style.display = ''; canvasEl.classList.remove('dragging'); }
+    if (imgEl) { imgEl.style.display = 'none'; imgEl.removeAttribute('src'); }
+    collapseL2DContainer();
+    initRenderer();
+  }
+
+  // ---- P0-PiP：错误处理入口（浏览器画中画优先） ----
+  // 统一入口 openL2DErrorUi：
+  //   1. Document PiP 可用（Chromium 116+）→ 独立小窗承载完整四出口对话框；
+  //   2. 不可用/被拒（如自动弹出时无 transient user activation）→ 页内右下角小卡片降级。
+  // 自动弹出（重试耗尽）通常没有 user activation，PiP 会拒绝——此时页面里只留
+  // 48×48 徽标 + 右下角小卡片；用户点徽标（user gesture）必能开 PiP 窗口。
+  var ERROR_ACTIONS = [
+    { action: 'retry', label: '重新加载 Plugin（重置重试计数）' },
+    { action: 'model', label: '禁用当前模型（保留 DSH 其余功能）' },
+    { action: 'module', label: '禁用整个 DSH-Live2D 模组（刷新后仍生效）' },
+    { action: 'refresh', label: '刷新页面并重新初始化' }
+  ];
+
+  /** 四出口共用裁决（页内卡片与 PiP 窗口共用）；close() 负责关闭各自的宿主 UI。 */
+  function handleL2DErrorAction(action, close) {
+    if (action === 'retry') {
+      close();
+      retryL2DRenderer(true);
+    } else if (action === 'model') {
+      L2D_RECOVERY.modelDisabled = true;
+      clearL2DRetryTimer();
+      collapseL2DContainer();
+      setL2DState('model_disabled');
+      close();
+    } else if (action === 'module') {
+      L2D_RECOVERY.moduleDisabled = true;
+      clearL2DRetryTimer();
+      try { localStorage.setItem('dsh-l2d.disabled', 'true'); } catch (err) { /* ignore */ }
+      try { window.dispatchEvent(new CustomEvent('dsh:l2d:disable-module')); } catch (err) { /* ignore */ }
+      if (root && root.parentNode) root.parentNode.removeChild(root);
+      close();
+    } else if (action === 'refresh') {
+      // 前端刷新：bootOverlay 重新注入 → 检查禁用标志 → 重新走完整初始化链
+      location.reload();
+    }
+  }
+
+  /** 构建错误卡片（doc 参数：主 document 或 PiP document）；纯 createElement/textContent 防注入。 */
+  function buildL2DErrorCard(doc, error) {
+    var card = doc.createElement('div');
+    card.className = 'l2d-error-card';
+
+    var title = doc.createElement('div');
+    title.className = 'l2d-error-title';
+    title.textContent = 'Live2D 模型加载失败';
+    card.appendChild(title);
+
+    var message = doc.createElement('div');
+    message.className = 'l2d-error-message';
+    message.textContent = String(error || '未知错误') + '（已自动重试 3 次，模型为可选组件，DSH 其余功能不受影响）';
+    card.appendChild(message);
+
+    ERROR_ACTIONS.forEach(function (item) {
+      var btn = doc.createElement('button');
+      btn.type = 'button';
+      btn.dataset.action = item.action;
+      btn.textContent = item.label;
+      card.appendChild(btn);
+    });
+    return card;
+  }
+
+  function removeInlineErrorDialog() {
+    var old = document.getElementById('dsh-l2d-error-dialog');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+  }
+
+  /**
+   * 页内降级：右下角小卡片（无全屏遮罩，页面可继续操作）。
+   * 独立挂 document.body（不在角色容器内），z-index 2147483647。
+   */
+  function showL2DErrorDialog(error) {
+    removeInlineErrorDialog();
+    var dialog = document.createElement('div');
+    dialog.id = 'dsh-l2d-error-dialog';
+    dialog.appendChild(buildL2DErrorCard(document, error));
+    document.body.appendChild(dialog);
+    dialog.addEventListener('click', function (event) {
+      var action = event.target && event.target.dataset ? event.target.dataset.action : null;
+      if (!action) return;
+      handleL2DErrorAction(action, removeInlineErrorDialog);
+    });
+  }
+
+  /**
+   * 浏览器画中画窗口（Document Picture-in-Picture，Chromium 116+）：
+   * 独立小窗、系统级置顶，承载完整错误处理 UI；页内零占用。
+   * requestWindow 需要 transient user activation——自动弹出被拒时由
+   * openL2DErrorUi 降级页内卡片，用户点 48×48 徽标后必能开窗。
+   * PiP 是独立 document：主文档样式表不生效，须注入自包含 ERROR_DIALOG_CSS。
+   */
+  function openPipErrorDialog(error) {
+    var pip = window.documentPictureInPicture;
+    if (!pip || typeof pip.requestWindow !== 'function') {
+      return Promise.reject(new Error('pip-unsupported'));
+    }
+    return pip.requestWindow({ width: 360, height: 340 }).then(function (pipWin) {
+      var doc = pipWin.document;
+      try { doc.title = 'Live2D 恢复'; } catch (err) { /* ignore */ }
+      try {
+        var style = doc.createElement('style');
+        style.textContent = ERROR_DIALOG_CSS;
+        doc.head.appendChild(style);
+      } catch (err) { /* ignore */ }
+      removeInlineErrorDialog(); // PiP 开成功 → 页内卡片不再需要
+      var card = buildL2DErrorCard(doc, error);
+      doc.body.appendChild(card);
+      card.addEventListener('click', function (event) {
+        var action = event.target && event.target.dataset ? event.target.dataset.action : null;
+        if (!action) return;
+        handleL2DErrorAction(action, function () {
+          try { pipWin.close(); } catch (err) { /* ignore */ }
+        });
+      });
+      // 用户手动关窗：页内 48×48 徽标仍在，可再次点击打开
+      pipWin.addEventListener('pagehide', function () { /* no-op：徽标即入口 */ });
+      return pipWin;
+    });
+  }
+
+  /** 错误处理统一入口：PiP 优先，失败降级页内右下角卡片。 */
+  function openL2DErrorUi(error) {
+    openPipErrorDialog(error).catch(function () { showL2DErrorDialog(error); });
+  }
   // 性能：挂件显示尺寸 593×741，4096 贴图（5×64MiB=320MiB 显存）纯属浪费；
   // 2048 档肉眼无差，显存降到 80MiB、采样带宽降到 1/4。
   // 回到高清只要把下面文件名换回 '大肥鱼.dsl2d.model3.json'。
@@ -2651,8 +2958,24 @@
   }
 
   function initRenderer() {
-    if (rendererReady || rendererFailed) return;
-    loadScriptOnce('dsh-l2d-core', versioned('/dsh-l2d/core.js'))
+    if (rendererReady) return;
+    if (L2D_RECOVERY.moduleDisabled || L2D_RECOVERY.modelDisabled) return;
+    // P0 修复：rendererFailed 不再永久锁死——重试路径先重置它（retryL2DRenderer）。
+    // 首启兜底：如果带着 failed 状态被直接调进来（旧宿主时序），也允许重试一轮。
+    setL2DState('loading');
+
+    // generation：本轮加载的代数 id。旧代（超时后才完成的）mount 结果作废，
+    // 防止旧挂载完成时覆盖新一轮状态、产生双渲染实例。
+    var gen = ++L2D_RECOVERY.generation;
+
+    // 15s 单次加载超时：挂起/卡死不再无限等待
+    var timeout = new Promise(function (_, reject) {
+      setTimeout(function () {
+        reject(new Error('Live2D 初始化超时(' + L2D_RECOVERY.loadTimeoutMs / 1000 + 's)'));
+      }, L2D_RECOVERY.loadTimeoutMs);
+    });
+
+    var loading = loadScriptOnce('dsh-l2d-core', versioned('/dsh-l2d/core.js'))
       .then(function () {
         if (!window.Live2DCubismCore) throw new Error('Core 未挂载');
         return loadScriptOnce('dsh-l2d-renderer', versioned('/dsh-l2d/renderer.js'));
@@ -2670,19 +2993,34 @@
           zoom: 1,
           dpr: renderScale()
         });
-      })
+      });
+
+    Promise.race([loading, timeout])
       .then(function () {
+        // 旧代结果作废：新一轮重试已经在跑，旧 mount 完成不覆盖新代状态
+        if (gen !== L2D_RECOVERY.generation) return;
         rendererReady = true;
+        rendererFailed = false;
+        L2D_RECOVERY.attempts = 0;
+        L2D_RECOVERY.lastError = null;
+        restoreL2DContainer();
         if (imgEl) imgEl.style.display = 'none';
+        setL2DState('ready');
+        var dialog = document.getElementById('dsh-l2d-error-dialog');
+        if (dialog && dialog.parentNode) dialog.parentNode.removeChild(dialog);
         watchResize();
         watchDpr(); // 跨屏/缩放变化时按新 DPI 重排
         watchFocusScale(); // 焦点/可见性变化时切换超采样倍率
         bindPhysics(); // 渲染就绪后立刻挂上每帧物理钩子
       })
       .catch(function (err) {
+        // 旧代失败作废：新一轮已经在跑，不能把重试轮打断
+        if (gen !== L2D_RECOVERY.generation) return;
+        rendererReady = false;
         var reason = err && err.message ? err.message : String(err);
-        fallbackToImage(reason);
-        say('渲染失败，已切回静态图', 3000);
+        collapseL2DContainer();
+        console.error('[dsh-l2d] Renderer failure:', reason);
+        scheduleL2DRetry(gen, reason);
       });
   }
 
@@ -2839,6 +3177,10 @@
       imgEl.removeAttribute('src');
     }
     // 3) 重挂（initRenderer 里会重新走 Core/渲染包加载与 mount）
+    // P0 修复：同步重置恢复状态机计数，清掉未到期的重试定时器
+    L2D_RECOVERY.attempts = 0;
+    L2D_RECOVERY.modelDisabled = false;
+    clearL2DRetryTimer();
     initRenderer();
     say('已强制刷新', 1800);
   }
@@ -3403,6 +3745,12 @@
   // catch 里做两件事：① 把原因送回宿主（error 在反向桥白名单内，落 reverse/state.json，
   // 以后不用 F12 也能查）；② 补挂 AI 轮询，保证 MCP 指令通道活着。
   function bootOverlay() {
+    // P0 修复：用户裁决「禁用整个模组」后 localStorage 持久化——刷新页面/重启宿主
+    // 都不再注入角色，但 DSH 主界面、聊天、Agent、MCP 等核心功能全部照常。
+    // 恢复方式：控制台 localStorage.removeItem('dsh-l2d.disabled') 后刷新。
+    try {
+      if (localStorage.getItem('dsh-l2d.disabled') === 'true') return;
+    } catch (err) { /* localStorage 不可用（隐私模式等）按未禁用处理 */ }
     try {
       ensureMounted();
       loadDbActions(); // UI-FLOAT ⑤：动作池读库（失败静默降级）

@@ -7,6 +7,8 @@
 
 import { CubismDefaultParameterId } from '@framework/cubismdefaultparameterid';
 import { CubismModelSettingJson } from '@framework/cubismmodelsettingjson';
+// P0 修复（模型加载失败）：统一资源请求（response.ok / 空体 / 超时检查）
+import { fetchModelAsset } from './model-fetch';
 import {
   BreathParameterData,
   CubismBreath
@@ -104,12 +106,16 @@ export class LAppModel extends CubismUserModel {
   public loadAssets(dir: string, fileName: string): void {
     this._modelHomeDir = dir;
 
-    fetch(`${this._modelHomeDir}${fileName}`)
-      .then(response => response.arrayBuffer())
-      .then(arrayBuffer => {
+    // P0 修复（模型加载失败）：旧实现不检查 response.ok、无超时、catch 只写日志——
+    // 404/挂起/损坏全都静默，上层 waitForModel 只能等 15s 超时且拿不到根因。
+    // 现在：① fetchModelAsset 统一检查；② 失败走 failLoad：复位状态 + 派发
+    // 'dsh:l2d:model-error'（mount 的 waitForModel 监听后立即 reject，overlay
+    // 恢复状态机随即进入重试/对话框路径，模型加载失败不再静默）。
+    fetchModelAsset(`${this._modelHomeDir}${fileName}`)
+      .then(({ buffer }) => {
         const setting: ICubismModelSetting = new CubismModelSettingJson(
-          arrayBuffer,
-          arrayBuffer.byteLength
+          buffer,
+          buffer.byteLength
         );
 
         // ステートを更新
@@ -119,9 +125,31 @@ export class LAppModel extends CubismUserModel {
         this.setupModel(setting);
       })
       .catch(error => {
-        // model3.json読み込みでエラーが発生した時点で描画は不可能なので、setupせずエラーをcatchして何もしない
-        CubismLogError(`Failed to load file ${this._modelHomeDir}${fileName}`);
+        this.failLoad(error, fileName);
       });
+  }
+
+  /**
+   * P0 修复：模型加载失败的统一出口。
+   * 复位加载状态（不再停在 Loading/Updating），记录日志并向外派发错误事件。
+   * 上层（renderer mount 的 waitForModel / overlay 恢复状态机）据此快速失败。
+   */
+  private failLoad(error: unknown, fileName: string): void {
+    this._updating = false;
+    this._initialized = false;
+
+    const message = error instanceof Error ? error.message : String(error);
+    CubismLogError(`[DSH-L2D] Model loading failed: ${this._modelHomeDir}${fileName} — ${message}`);
+
+    try {
+      window.dispatchEvent(
+        new CustomEvent('dsh:l2d:model-error', {
+          detail: { message, file: `${this._modelHomeDir}${fileName}` },
+        })
+      );
+    } catch {
+      /* 非 DOM 环境忽略 */
+    }
   }
 
   /**
