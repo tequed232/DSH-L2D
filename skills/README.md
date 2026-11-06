@@ -1,0 +1,40 @@
+# DSH-L2D Agent Skills
+
+This directory contains the complete Agent Skills suite for the DSH-L2D plugin. Keep all skill definitions, prompts, contracts, and implementation guidance under this single `skills/` directory.
+
+## Skill topology
+
+| Skill | Role | Workspace |
+|---|---|---|
+| `dsh-l2d-workspace-orchestrator` | Bootstrap, audit, dispatch, lifecycle, and model-load gate | Coordinator / main conversation |
+| `l2d-structure-inspector` | Package ingestion, MOC3 inspection, hierarchy and parameter facts | Workspace 1 — Structure |
+| `l2d-semantic-behavior` | Texture/UV semantics, motion/physics analysis, parameter probing | Workspace 2 — Semantics & Behavior |
+| `l2d-runtime-integration` | Runtime mapping, action chains, ownership arbitration, regression QA | Workspace 3 — Runtime & QA |\n| `apple-google-minimal-design` | Cross-platform UI/UX design using Apple HIG, Material 3, and Swiss compositional discipline | On-demand design skill |
+
+The suite consists of one coordinator Skill, three specialist Skills, and one on-demand cross-platform design Skill. Cross-cutting domain rules are maintained in these role-specific Skills and the shared contracts; there is no separate model-intelligence Skill or nested model-intelligence directory.
+
+The three worker conversations are persistent workspaces, not three independent model sessions that may silently drift. The orchestrator owns their creation, naming, prompt injection, dispatch, and health checks.
+
+## Required lifecycle
+
+1. **Install:** register all skills and their versions; validate required files, frontmatter, prompt templates, tool adapters, and dependency declarations. Do not load the target model yet.
+2. **Bootstrap:** create or reconcile the three worker workspaces; assign stable IDs; set the exact titles and role prompts; verify each prompt was accepted and persisted.
+3. **Startup:** run a read-only audit of skills, prompts, workspace bindings, MCP servers, SDKs, services, and toolchain registry. Repair only safe, project-local drift automatically.
+4. **Load gate:** load the Live2D model only after the preflight report is PASS or PASS_WITH_WARNINGS with no blocking failures.
+5. **Dispatch:** send each task to the owning workspace with a shared task envelope and immutable model/source identifiers.
+6. **Reconcile:** collect structured results, resolve conflicts, require evidence and independent QA, then publish the final status.
+
+## Important capability boundary
+
+A Skill file cannot itself create ChatGPT/WorkBuddy conversations, inject prompts into an external UI, install a plugin, or load a model. The plugin/runtime must implement the adapter operations specified in the orchestrator skill. If the host exposes no conversation-management API, report the missing capability and use its supported workspace/session mechanism; never pretend that a chat was created or a prompt was injected.
+
+## Versioning
+
+- Each skill has independent semver.
+- `skills/manifest.yaml` is the source of truth for required skills, versions, roles, workspace IDs/titles, prompt paths, dependencies, and compatibility.
+- Skill changes that affect interfaces must update the manifest and contract docs in the same PR.
+- Never silently replace a user's customized worker prompt. Compare hashes and offer a migration/diff; preserve custom sections.
+
+## Review policy
+
+This PR introduces the skill specifications and contracts. The plugin-side workspace adapter, installer, startup auditor, and model-load gate are implementation work for the coding agent and should be proposed in follow-up code PRs after repository inspection and host API verification.

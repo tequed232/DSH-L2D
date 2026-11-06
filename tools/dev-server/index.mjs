@@ -22,7 +22,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
 
 const PORT = Number(argOf('--port') || process.env.PORT || 5300);
-const HOST = '127.0.0.1';
+// 默认仅回环；公网/局域网部署用 DSH_HOST=0.0.0.0 显式放开
+const HOST = process.env.DSH_HOST || '127.0.0.1';
 
 const MODEL_DIR =
   process.env.DSH_L2D_MODEL_DIR || path.join(ROOT, 'DeepSeek免费公皮', 'DeepSeek');
@@ -51,14 +52,85 @@ function argOf(flag) {
   return i >= 0 ? process.argv[i + 1] : null;
 }
 
-function send(res, status, type, buf) {
-  res.writeHead(status, {
+/**
+ * 动作库只读查询（DEV-ACTION-API）。validated + compatible=1 + 当前模型锚定，
+ * 供 overlay 用真实动作库替代「只读 model3.json Motion 组」的随机池。
+ * 动态 import node:sqlite：宿主 Node <22.5 或 sqlite 不可用时降级空集，不影响服务器启动。
+ */
+const ACTIONS_DB_FILE = path.join(ROOT, 'data', 'bootstrap-state.sqlite');
+const ACTIONS_MODEL_ID = process.env.DSH_L2D_ACTIONS_MODEL_ID || '大肥鱼.dsl2d';
+async function queryValidatedActions() {
+  try {
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync(ACTIONS_DB_FILE, { readOnly: true });
+    try {
+      return db
+        .prepare(
+          `SELECT c.id AS chainId, d.id AS motionId, d.semantic_key AS semanticKey,
+                  d.emotion AS emotion, c.chain_json AS chainJson, b.adapter_json AS adapterJson
+           FROM action_chains c
+           JOIN motion_definitions d ON d.id = c.motion_id
+           JOIN motion_model_bindings b ON b.motion_id = d.id
+           WHERE d.status = 'validated' AND b.compatible = 1 AND b.model_id = ?
+           ORDER BY d.semantic_key`
+        )
+        .all(ACTIONS_MODEL_ID);
+    } finally {
+      db.close();
+    }
+  } catch {
+    return []; // 库缺失/损坏/无 sqlite → 空集（预期：当前 2 条 validated；tail-sway-happy 为 draft 会被过滤）
+  }
+}
+
+function send(res, status, type, buf, cors = true) {
+  const headers = {
     'Content-Type': type,
     'Content-Length': buf.length,
     'Cache-Control': 'no-store',
-    'Access-Control-Allow-Origin': '*',
-  });
+  };
+  // 写路由不带 CORS 头：跨站 JS 写完也读不到响应，配合 writeGuard 的 Origin 校验。
+  if (cors) headers['Access-Control-Allow-Origin'] = '*';
+  res.writeHead(status, headers);
   res.end(buf);
+}
+
+// 写方法防护：浏览器发起的跨站写会带 Origin 头，非同源一律 403。
+// 非浏览器客户端（curl/Agent）无 Origin 不受影响；部署到非回环 host 时用实际 host 比对，同样兼容。
+function writeGuard(req, res) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  let same = false;
+  try { same = new URL(String(origin)).host === String(req.headers.host || ''); } catch { same = false; }
+  if (!same) {
+    send(res, 403, 'text/plain; charset=utf-8', Buffer.from('cross-origin write blocked'), false);
+    return false;
+  }
+  return true;
+}
+
+// JSON body 读取：统一 16KB 上限（超限直接断开），所有 POST/PUT 路由必须走这里。
+const BODY_LIMIT = 16 * 1024;
+function readJsonBody(req, res, onBody) {
+  const chunks = [];
+  let total = 0;
+  req.on('data', (c) => {
+    total += c.length;
+    if (total > BODY_LIMIT) {
+      req.destroy();
+      return;
+    }
+    chunks.push(c);
+  });
+  req.on('end', () => {
+    let body = {};
+    try {
+      body = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
+    } catch {
+      return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'), false);
+    }
+    onBody(body);
+  });
 }
 
 function readIfExists(p) {
@@ -122,6 +194,8 @@ const memSettings = {
   autoAct: true,
   petMode: true,
 };
+// 可通过 /settings.json 修改的键（白名单，防原型污染/任意键注入）
+const SETTING_KEYS = new Set(Object.keys(memSettings));
 
 function settingsView() {
   return {
@@ -143,7 +217,7 @@ function settingsView() {
   };
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   let urlPath = String(req.url || '/').split('?')[0];
 
   // 让 overlay.js 可以被原样加载：它请求的是 /dsh-l2d/* 前缀，
@@ -157,6 +231,39 @@ const server = http.createServer((req, res) => {
     const buf = readIfExists(path.join(PUBLIC_DIR, 'index.html'));
     if (!buf) return send(res, 500, 'text/plain; charset=utf-8', Buffer.from('public/index.html 缺失'));
     return send(res, 200, MIME['.html'], buf);
+  }
+
+  // Companion Workspace（stage-web 构建产物，UIUX 改造后入口）
+  if (urlPath === '/workspace' || urlPath === '/workspace.html') {
+    const buf = readIfExists(
+      path.join(HERE, '..', '..', 'apps', 'stage-web', 'dist', 'index.html'),
+    );
+    if (!buf) {
+      return send(
+        res,
+        404,
+        'text/plain; charset=utf-8',
+        Buffer.from('workspace 未构建：pnpm -F @dsh/stage-web build'),
+      );
+    }
+    // dist 内资源引用是根绝对路径 /assets/...，改写到 /workspace-assets/ 下
+    return send(
+      res,
+      200,
+      MIME['.html'],
+      Buffer.from(buf.toString('utf8').replaceAll('/assets/', '/workspace-assets/')),
+    );
+  }
+  if (urlPath.startsWith('/workspace-assets/')) {
+    const full = resolveInside(
+      path.join(HERE, '..', '..', 'apps', 'stage-web', 'dist', 'assets'),
+      urlPath.slice('/workspace-assets/'.length),
+    );
+    if (!full) return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad path'));
+    const buf = readIfExists(full);
+    if (!buf) return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('not found'));
+    const ext = path.extname(full).toLowerCase();
+    return send(res, 200, MIME[ext] || 'application/octet-stream', buf);
   }
 
   // Cubism Core
@@ -187,7 +294,11 @@ const server = http.createServer((req, res) => {
     return send(res, 200, MIME['.js'], buf);
   }
 
-  // 模型（含贴图 / moc3 / model3.json）
+  // 模型（含贴图 / moc3 / model3.json）。
+  // MODEL-404-ROOTCAUSE 实证：/dsh-l2d/model 前缀已在上方剥离（:222-225），
+  // overlay.js:2357 的 MODEL_URL（/dsh-l2d/model/…编码文件名）经剥前缀 +
+  // resolveInside 内部 decodeURIComponent 后正确命中本路由——dev-server 与真机
+  // 插件路由（lib/index.js:1322）行为一致，合成页 404 是无静态服务的环境假象。
   if (urlPath.startsWith('/model/')) {
     const full = resolveInside(MODEL_DIR, urlPath.slice('/model/'.length));
     if (!full) return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad path'));
@@ -202,22 +313,18 @@ const server = http.createServer((req, res) => {
   // ---- overlay.js 依赖的宿主接口（本地版，语义与插件一致）
   if (urlPath === '/settings.json') {
     if (req.method === 'PUT' || req.method === 'POST') {
-      const chunks = [];
-      req.on('data', (c) => chunks.push(c));
-      req.on('end', () => {
-        let patch = {};
-        try {
-          patch = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
-        } catch {
-          return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
-        }
+      if (!writeGuard(req, res)) return;
+      return readJsonBody(req, res, (body) => {
+        const patch = { ...body };
         if (patch.clearApiKey === true) patch.apiKey = '';
         if (patch.apiKey === '') delete patch.apiKey;
         delete patch.clearApiKey;
-        Object.assign(memSettings, patch);
+        // 白名单拷贝：直接 Object.assign 会连 "__proto__" / "constructor" 一起吃下（原型污染）。
+        for (const key of Object.keys(patch)) {
+          if (SETTING_KEYS.has(key)) memSettings[key] = patch[key];
+        }
         return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(settingsView()), 'utf8'));
       });
-      return;
     }
     return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(settingsView()), 'utf8'));
   }
@@ -242,6 +349,7 @@ const server = http.createServer((req, res) => {
   // 本地不真正调用 DeepSeek：让前端走随机动作兜底
   if (urlPath === '/ai-action.json') {
     if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+    if (!writeGuard(req, res)) return;
     const body = { ok: false, reason: 'no-key' };
     return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(body), 'utf8'));
   }
@@ -266,18 +374,8 @@ const server = http.createServer((req, res) => {
     if (req.method !== 'POST') {
       return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
     }
-    const chunks = [];
-    req.on('data', (c) => {
-      chunks.push(c);
-      if (chunks.reduce((n, b) => n + b.length, 0) > 16 * 1024) req.destroy();
-    });
-    req.on('end', () => {
-      let body = {};
-      try {
-        body = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
-      } catch {
-        return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
-      }
+    if (!writeGuard(req, res)) return;
+    return readJsonBody(req, res, (body) => {
       const name = String(body.name || '').trim();
       if (!AI_ALLOWED.has(name)) {
         return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('unknown tool: ' + name));
@@ -285,7 +383,6 @@ const server = http.createServer((req, res) => {
       const queued = aiInbox.call(name, body.args || {});
       return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(queued), 'utf8'));
     });
-    return;
   }
 
   if (urlPath === '/ai/poll') {
@@ -298,28 +395,27 @@ const server = http.createServer((req, res) => {
       return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(aiInbox.read(id)), 'utf8'));
     }
     if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
-    const chunks = [];
-    req.on('data', (c) => chunks.push(c));
-    req.on('end', () => {
-      let body = {};
-      try {
-        body = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
-      } catch {
-        return send(res, 400, 'text/plain; charset=utf-8', Buffer.from('bad json'));
-      }
+    if (!writeGuard(req, res)) return;
+    return readJsonBody(req, res, (body) => {
       const saved = aiInbox.post(body);
       if (!saved.ok) {
-        return send(res, 400, 'text/plain; charset=utf-8', Buffer.from(saved.reason || 'id required'));
+        return send(res, 400, 'text/plain; charset=utf-8', Buffer.from(saved.reason || 'id required'), false);
       }
       return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true }), 'utf8'));
     });
-    return;
   }
 
   // 界面令牌。/dsh-l2d/ui-tokens.css 也会走到这里（上面已剥前缀）。
   if (urlPath === '/ui-tokens.css') {
     const buf = readIfExists(path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'assets', 'ui-tokens.css'));
     if (!buf) return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('ui-tokens.css missing'));
+    return send(res, 200, MIME['.css'], buf);
+  }
+
+  // 悬浮层结构样式。/dsh-l2d/overlay.css 同样会走到这里（上面已剥前缀）。
+  if (urlPath === '/overlay.css') {
+    const buf = readIfExists(path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'assets', 'overlay.css'));
+    if (!buf) return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('overlay.css missing'));
     return send(res, 200, MIME['.css'], buf);
   }
 
@@ -343,6 +439,24 @@ const server = http.createServer((req, res) => {
     }
     const body = Buffer.from(JSON.stringify({ dir: MODEL_DIR, models: list }), 'utf8');
     return send(res, 200, MIME['.json'], body);
+  }
+
+  // 动作库只读 API（DEV-ACTION-API）：overlay 前端消费 validated 动作链。
+  // 只读纪律：DatabaseSync readOnly:true、仅 GET、每请求独立连接（写方是插件/导入进程，
+  // WAL 下并发读安全）；库缺失/损坏/0 条一律 {ok:true, actions:[]}，前端静默降级不 500。
+  if (urlPath === '/api/actions') {
+    if (req.method !== 'GET') {
+      return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+    }
+    const actions = await queryValidatedActions();
+    return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, actions }), 'utf8'));
+  }
+
+  // 桥动作队列状态（宿主经 globalThis.__DSH_ACTION_QUEUE__ 挂载 getState；未挂载如实上报 enabled:false）
+  if (urlPath === '/action/queue') {
+    const q = globalThis.__DSH_ACTION_QUEUE__;
+    const state = q && typeof q.getState === 'function' ? { enabled: true, ...q.getState() } : { enabled: false };
+    return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(state), 'utf8'));
   }
 
   send(res, 404, 'text/plain; charset=utf-8', Buffer.from('404 ' + urlPath));

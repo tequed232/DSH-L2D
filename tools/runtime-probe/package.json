@@ -1,0 +1,14 @@
+{
+  "name": "@dsh/runtime-probe",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Phase 3 Runtime Probe: real Live2D render host evidence (Playwright + Edge + @dsh/renderer). No mocks.",
+  "scripts": {
+    "smoke": "node run-probe.mjs --mode smoke",
+    "baseline": "node run-probe.mjs --mode baseline"
+  },
+  "dependencies": {
+    "playwright-core": "^1.49.0"
+  }
+}

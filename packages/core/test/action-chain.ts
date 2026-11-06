@@ -9,6 +9,7 @@ import {
   actTemplateWritesMouth,
   canInterruptAct,
   closeMotionsOnPreempt,
+  countRealCompletions,
   getActPhaseTemplate,
   motionResultKind,
   parseActPriority,
@@ -239,6 +240,32 @@ test('只有邪神自己那条槽被抢走时才要收视觉层', () => {
   assert.equal(preemptedYandere({ source: 'poke', runId: 9 }, held), false);
   assert.equal(preemptedYandere({ source: 'yandere', runId: 4 }, { on: false, runId: 4 }), false);
   assert.equal(preemptedYandere(null, held), false);
+});
+
+// ---- PR-D：countRealCompletions（真实完成事件期望数，PRD-RUNTIME-EVENT）----
+
+test('countRealCompletions：motion 计 1，keyframes 仅非 loop 计 1', () => {
+  assert.equal(countRealCompletions([
+    { kind: 'look', x: 0, y: 0 },
+    { kind: 'expression', name: '兔牙', delayMs: 180 },
+    { kind: 'motion', name: '竖手指打开' },
+    { kind: 'keyframes', tracks: [{ param: 'ParamAngleZ', keys: [[0, 0], [600, 20]] }], loop: false },
+  ]), 2);
+});
+
+test('countRealCompletions：loop keyframes 与即时收敛步骤不计', () => {
+  assert.equal(countRealCompletions([
+    { kind: 'keyframes', tracks: [], loop: true },
+    { kind: 'pose', pose: { right: 'rest' } },
+    { kind: 'look', x: 0, y: 0 },
+  ]), 0);
+});
+
+test('countRealCompletions：空链与畸形输入安全归零', () => {
+  assert.equal(countRealCompletions([]), 0);
+  assert.equal(countRealCompletions(null), 0);
+  assert.equal(countRealCompletions(undefined), 0);
+  assert.equal(countRealCompletions([null, { kind: 'motion' }] as unknown as { kind?: string }[]), 1);
 });
 
 if (process.exitCode) {

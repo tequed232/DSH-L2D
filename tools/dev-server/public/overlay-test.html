@@ -84,6 +84,35 @@
         left: auto;
         max-width: 420px;
       }
+      /* 换装/配饰开关（Clothes1/2/4）：与状态面板同一套观感令牌 */
+      .ctl-row {
+        display: flex;
+        align-items: center;
+        gap: var(--dsh-space-2);
+        margin: var(--dsh-space-1) 0;
+      }
+      .ctl-row .lbl {
+        min-width: 72px;
+        color: var(--dsh-ink);
+      }
+      .ctl-row .val {
+        font-family: var(--dsh-font-mono);
+        color: var(--dsh-ink-muted);
+      }
+      .ctl-btn {
+        height: var(--dsh-control-sm);
+        padding: 0 var(--dsh-space-3);
+        border: 1px solid var(--dsh-line);
+        border-radius: var(--dsh-radius-md);
+        background: var(--dsh-surface-raised);
+        color: var(--dsh-ink);
+        font: var(--dsh-text-xs);
+        cursor: pointer;
+      }
+      .ctl-btn.on {
+        border-color: color-mix(in srgb, var(--dsh-accent) 55%, transparent);
+        color: var(--dsh-accent);
+      }
     </style>
   </head>
   <body>
@@ -100,6 +129,7 @@
     <div id="log" class="probe">等待 overlay 启动…</div>
     <div id="params" class="probe probe-ok">参数探测中…</div>
     <div id="phys" class="probe probe-accent">物理状态：等待拖动…</div>
+    <div id="clothes" class="probe probe-accent">换装/配饰开关：等待渲染就绪…</div>
     <div id="s1" class="probe probe-warn">S1：带上 ?s1=1 自动验收</div>
     <div id="s2" class="probe probe-accent">S2：带上 ?s2=1 自动验收</div>
     <div id="s4" class="probe probe-danger">S4：带上 ?s4=1 自动验收</div>
@@ -152,6 +182,101 @@
             '驱动参数: ' + p.angleZParam + ' ' + p.angleZRange + '\n' +
             '          ' + p.posParam + ' ' + p.posRange;
         }, 200);
+
+        // 换装/配饰开关（Clothes1 裙摆 / Clothes2 体型 / Clothes4 鞋子）：
+        // 与 overlay 内 setSwitch 同通道策略——优先 setParametersRuntime（runtime 通道，
+        // 不受 Node Ownership 托管白名单管辖，白名单管 Agent 控制权）；
+        // 旧渲染包无 runtime 入口时回退 agent 通道（setParameter）。
+        // Clothes1 档位按实测校准：0=及踝长裙（实测证实）、1=围裙裙（实测证实）。
+        // moc3 实测（Cubism Core 6.0.1 getParameterMinimum/MaximumValues）：
+        // Clothes1 真实范围 [0,1]（default=1），无负值档；此前「-1=短裙」档
+        // 写入会被注入器钳到 min=0（param-injector 按参数真实 min/max 钳制），
+        // 表现为「点短裙显示 0.00、外观仍长裙」，已移除。
+        // 竞态修法：面板立即渲染、开关在 DSH_L2D.isReady() 前禁用并如实显示「渲染未就绪」。
+        (function () {
+          var clothesEl = document.getElementById('clothes');
+          var channel = '—';
+          var lastResult = '—';
+          var lastHtml = '';
+          var CLOTHES = [
+            { id: 'Clothes1', label: '裙摆', options: [{ text: '长裙', value: 0 }, { text: '围裙', value: 1 }] },
+            { id: 'Clothes2', label: '体型', options: [{ text: '默认', value: 0 }, { text: '体型1', value: 0.4 }, { text: '体型2', value: 1 }] },
+            { id: 'Clothes4', label: '鞋子', options: [{ text: '穿鞋', value: 1 }, { text: '脱鞋', value: 0 }] },
+          ];
+
+          function isReady() {
+            var L = window.DSH_L2D;
+            return !!(L && L.isReady && L.isReady() && L.readParameters);
+          }
+
+          function setSwitch(id, value) {
+            if (!isReady()) return '渲染未就绪，未写入';
+            var L = window.DSH_L2D;
+            var one = {};
+            one[id] = value;
+            if (L.setParametersRuntime) {
+              channel = 'runtime';
+              var rep = L.setParametersRuntime(one, 1) || {};
+              if (rep.failed && rep.failed.length) return 'failed: ' + rep.failed.join(',');
+              return 'ok';
+            }
+            if (L.setParameter) {
+              channel = 'agent（旧渲染包回退）';
+              return L.setParameter(id, value, 1) ? 'ok' : 'rejected';
+            }
+            channel = '—';
+            return 'no-channel';
+          }
+
+          function render() {
+            var ready = isReady();
+            var L = window.DSH_L2D;
+            var ids = CLOTHES.map(function (c) { return c.id; });
+            var vals = ready ? L.readParameters(ids) || {} : {};
+            var html = '换装/配饰开关（runtime 通道，白名单不管辖）· 通道: ' + channel + ' · 上次写入: ' + lastResult +
+              (ready ? '' : ' · 渲染未就绪（开关禁用，写入不会执行）');
+            for (var i = 0; i < CLOTHES.length; i++) {
+              var c = CLOTHES[i];
+              var v = vals[c.id];
+              html += '<div class="ctl-row"><span class="lbl">' + c.label + ' ' + c.id + '</span>';
+              if (!ready || !Number.isFinite(Number(v))) {
+                html += '<span class="val">' + (ready ? '参数不存在（readParameters 无返回）' : '等待渲染就绪…') + '</span>';
+              } else {
+                html += '<span class="val">=' + Number(v).toFixed(2) + '</span>';
+                for (var j = 0; j < c.options.length; j++) {
+                  var o = c.options[j];
+                  var on = Math.abs(Number(v) - o.value) < 0.01;
+                  html += '<button type="button" class="ctl-btn' + (on ? ' on' : '') + '" data-id="' + c.id + '" data-value="' + o.value + '"' + (ready ? '' : ' disabled') + '>' + o.text + '</button>';
+                }
+              }
+              html += '</div>';
+            }
+            // 仅在内容变化时替换 DOM，避免轮询重绘打断点击
+            if (html !== lastHtml) {
+              lastHtml = html;
+              clothesEl.innerHTML = html;
+            }
+          }
+
+          clothesEl.addEventListener('click', function (e) {
+            var target = e.target;
+            while (target && target !== clothesEl && !(target.classList && target.classList.contains('ctl-btn'))) {
+              target = target.parentElement;
+            }
+            if (!target || target === clothesEl) return;
+            if (target.disabled || !isReady()) {
+              lastResult = '渲染未就绪，未写入';
+              render();
+              return;
+            }
+            lastResult = setSwitch(target.getAttribute('data-id'), Number(target.getAttribute('data-value')));
+            render();
+          });
+
+          // 立即渲染未就绪态（开关禁用），轮询至就绪后解锁并显示实值
+          render();
+          setInterval(render, 400);
+        })();
 
         // S1 自动验收：真实模型 + 真实帧循环，不靠静态推断。
         if (new URLSearchParams(location.search).get('s1') === '1') {

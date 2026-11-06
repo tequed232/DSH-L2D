@@ -1,0 +1,11 @@
+{
+  "name": "@dsh/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DSH-L2D 统一注册表（SQLite / node:sqlite）：bootstrap（skill/workspace/toolchain/startup/task）+ 模型智能域",
+  "main": "src/index.mjs",
+  "engines": {
+    "node": ">=22.5"
+  }
+}

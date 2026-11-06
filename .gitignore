@@ -6,7 +6,10 @@ DeepSeek免费公皮/
 **/*.2048/
 
 # Cubism Core / 官方 SDK 不入库，由使用者自行下载
+# 例外：tools/motion-gif/vendor 是刻意 vendored 的 MIT 第三方代码（omggif，带 sha256 锁定与许可证副本），必须入库
 vendor/
+!tools/motion-gif/vendor/
+!tools/motion-gif/vendor/**
 **/live2dcubismcore.min.js
 **/live2dcubismcore.js
 
@@ -34,3 +37,9 @@ last-run.json
 
 # W3 registry 校验产物（每次跑 validate.test.mjs 重写）
 tools/w3-registry/test-result.json
+
+# 运行时注册表（SQLite，含本机绝对路径，不入库）
+data/
+# 例外：stage-web 内自包含的注册表副本（Plugin Center 构建期导入）
+!apps/stage-web/src/data/
+!apps/stage-web/src/data/**

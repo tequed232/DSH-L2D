@@ -190,4 +190,49 @@ assert.equal(noSince.fire, false);
 assert.equal(noSince.reason, 'dwell');
 assert.ok(noSince.retryAfterMs > 0);
 
+// 17. CODE-REVIEW-1 #11 回归：FORCE 状态豁免 same-state / dwell / min-gap，
+//     仍受 cooldown 与 rate 约束（防连续对话刷屏）。
+{
+  const baseInput = {
+    state: 'user-direct',
+    previousState: 'user-direct', // same-state
+    stateSince: t0 - 100, // dwell 不足（minDwellMs=0 其实无碍，换 working 态验证 dwell 豁免对照）
+    now: t0,
+    lastFireAtByState: { 'user-direct': 0 },
+    lastAnyFireAt: t0 - 100, // 全局 min-gap 1500ms 内
+    firesByState: {},
+    flips: [],
+  };
+  const forceFire = decide(baseInput);
+  assert.equal(forceFire.fire, true, 'FORCE 同状态 + min-gap 内仍应触发');
+  // 对照：BACKGROUND 状态（idle，dwell 已满足）在 min-gap 内被拦
+  const bg = decide({ ...baseInput, state: 'idle', previousState: 'working', stateSince: t0 - 9000 });
+  assert.equal(bg.fire, false);
+  assert.equal(bg.reason, 'min-gap');
+  // FORCE 保留 cooldown：2s 内连发被拦
+  const cd = decide({ ...baseInput, lastFireAtByState: { 'user-direct': t0 - 500 } });
+  assert.equal(cd.fire, false);
+  assert.equal(cd.reason, 'cooldown');
+  // FORCE 保留 rate：60s 窗口 6 次封顶
+  const sixFires = [1, 2, 3, 4, 5, 6].map((i) => t0 - i * 100);
+  const rate = decide({ ...baseInput, firesByState: { 'user-direct': sixFires } });
+  assert.equal(rate.fire, false);
+  assert.equal(rate.reason, 'rate');
+}
+
+// 18. CODE-REVIEW-1 #10 回归：口型禁区检查必须按键名精确匹配，
+//     label/trigger 文案里出现参数名子串不得误杀。
+{
+  const tampered = JSON.parse(JSON.stringify(CHOREOGRAPHY));
+  tampered.thinking = { ...tampered.thinking, label: '思考（ParamMouthOpenY 观察态）' };
+  const r = validateChoreography(tampered);
+  assert.equal(r.ok, true, '文案含口型参数名子串不应判死：' + r.errors.join('; '));
+  // 键名精确命中仍要拦：给某个 step 塞一个口型参数键
+  const injected = JSON.parse(JSON.stringify(CHOREOGRAPHY));
+  injected.thinking.chain[0].ParamMouthOpenY = 0.5;
+  const r2 = validateChoreography(injected);
+  assert.equal(r2.ok, false, '口型参数键必须判死');
+  assert.ok(r2.errors.some((e) => e.includes('ParamMouthOpenY')));
+}
+
 console.log('choreography: ok');

@@ -150,9 +150,7 @@
     'transition:transform var(--dsh-dur) var(--dsh-ease);will-change:transform;pointer-events:none;}',
     '#' + ROOT_ID + ' .l2d-body:hover img{margin-bottom:var(--dsh-space-1);}',
     '#' + ROOT_ID + ' .l2d-placeholder{width:64%;height:64%;margin-bottom:var(--dsh-space-6);',
-    'border-radius:46% 46% 42% 42%;',
-    'background:linear-gradient(160deg,var(--dsh-accent),var(--dsh-accent-muted));',
-    'box-shadow:var(--dsh-shadow-2);}',
+    'border-radius:46% 46% 42% 42%;background:var(--dsh-accent-soft);}',
     '#' + ROOT_ID + ' .l2d-chip{position:absolute;left:50%;bottom:auto;transform:translateX(-50%);',
     'top:calc(-1 * var(--dsh-control-sm) - var(--dsh-space-1));',
     'pointer-events:auto;cursor:pointer;padding:var(--dsh-space-1) var(--dsh-space-3);border-radius:var(--dsh-radius-full);',
@@ -162,7 +160,7 @@
     '#' + ROOT_ID + ' .l2d-chip:hover{background:var(--dsh-surface-raised);color:var(--dsh-ink);}',
     '#' + ROOT_ID + ' .l2d-bubble{position:absolute;right:0;bottom:calc(100% + var(--dsh-space-2));max-width:200px;',
     'padding:var(--dsh-space-2) var(--dsh-space-3);',
-    'border-radius:var(--dsh-radius-lg) var(--dsh-radius-lg) var(--dsh-radius-sm) var(--dsh-radius-lg);',
+    'border-radius:var(--dsh-radius-lg);',
     'font:var(--dsh-text-sm);',
     'background:var(--dsh-bubble-bg);color:var(--dsh-bubble-ink);box-shadow:var(--dsh-shadow-2);',
     'opacity:0;transform:translateY(var(--dsh-space-2));transform-origin:bottom right;',
@@ -182,7 +180,7 @@
     '#' + ROOT_ID + ' .l2d-price .price-sub{display:block;font:var(--dsh-text-xs);color:var(--dsh-ink-muted);}',
     '.l2d-menu{position:fixed;z-index:var(--dsh-z-menu,2147483100);min-width:176px;padding:var(--dsh-space-1);',
     'border-radius:var(--dsh-radius-lg);background:var(--dsh-surface);color:var(--dsh-ink);pointer-events:auto;',
-    'box-shadow:var(--dsh-shadow-3);border:1px solid var(--dsh-line);display:none;flex-direction:column;}',
+    'box-shadow:var(--dsh-shadow-2);border:1px solid var(--dsh-line);display:none;flex-direction:column;}',
     '.l2d-menu.open{display:flex;}',
     '.l2d-menu button{border:none;background:transparent;color:var(--dsh-ink);text-align:left;',
     'padding:var(--dsh-space-2) var(--dsh-space-3);border-radius:var(--dsh-radius-md);font:var(--dsh-text-sm);cursor:pointer;}',
@@ -204,15 +202,62 @@
     'transition:opacity var(--dsh-dur-fast) var(--dsh-ease),background var(--dsh-dur-fast) var(--dsh-ease);}',
     '#' + ROOT_ID + ':hover .l2d-gear{opacity:1;}',
     '#' + ROOT_ID + ' .l2d-gear:hover{background:var(--dsh-surface-raised);}',
-    '.l2d-panel{position:fixed;right:var(--dsh-space-5);top:var(--dsh-space-5);width:304px;',
-    'max-height:min(760px,calc(100vh - var(--dsh-space-8)));',
-    'overflow:auto;padding:var(--dsh-space-4);border-radius:var(--dsh-radius-xl);',
+    // 设置面板＝响应式浮动窗口：标题栏拖拽、八向缩放、最大化/边缘吸附、四档断点、
+    // 几何记忆（{maximized, geometry, previousGeometry, collapsed}）。层级靠位置与字重表达，
+    // 仅一层统一高度 shadow-2；禁 transform:scale 整体缩放，断点用 matchMedia + 容器查询。
+    '.l2d-panel{position:fixed;left:0;top:0;width:340px;height:auto;box-sizing:border-box;',
+    'container-type:inline-size;',
+    'border-radius:var(--dsh-radius-lg);',
     'background:var(--dsh-surface);color:var(--dsh-ink);pointer-events:auto;',
-    'box-shadow:var(--dsh-shadow-3);border:1px solid var(--dsh-line);',
-    'font:var(--dsh-text-sm);display:none;flex-direction:column;gap:var(--dsh-space-3);',
+    'box-shadow:var(--dsh-shadow-2);border:1px solid var(--dsh-line);',
+    'font:var(--dsh-text-sm);display:none;flex-direction:column;',
     'z-index:var(--dsh-z-panel,2147483200);}',
     '.l2d-panel.open{display:flex;}',
-    '.l2d-panel h4{margin:0;font:var(--dsh-text-label);color:var(--dsh-ink);}',
+    '.l2d-panel.collapsed{height:auto !important;}',
+    '.l2d-panel.maximized{border-radius:0;}',
+    '.l2d-panel.fullscreen{left:0 !important;top:0 !important;width:100% !important;height:100% !important;',
+    'max-width:none !important;border-radius:0;}',
+    '.l2d-panel.fullscreen .l2d-panel-head{cursor:default;}',
+    '.l2d-panel-head{display:flex;align-items:center;gap:var(--dsh-space-1);flex:none;',
+    'padding:var(--dsh-space-2) var(--dsh-space-2) var(--dsh-space-2) var(--dsh-space-4);',
+    'border-bottom:1px solid var(--dsh-line);cursor:grab;touch-action:none;',
+    'user-select:none;-webkit-user-select:none;}',
+    '.l2d-panel-head:active{cursor:grabbing;}',
+    '.l2d-panel-head h4{margin:0;font:var(--dsh-text-label);flex:1;cursor:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
+    '.l2d-panel-btn{flex:none;width:26px;height:26px;display:grid;place-items:center;',
+    'border:none;border-radius:var(--dsh-radius-md);background:transparent;',
+    'color:var(--dsh-ink-muted);font:var(--dsh-text-sm);line-height:1;cursor:pointer;',
+    'transition:background var(--dsh-dur-fast) var(--dsh-ease),color var(--dsh-dur-fast) var(--dsh-ease);}',
+    '.l2d-panel-btn:hover{background:var(--dsh-hover);color:var(--dsh-ink);}',
+    '.l2d-panel-body{overflow:auto;min-height:0;',
+    'padding:var(--dsh-space-4);display:flex;flex-direction:column;gap:var(--dsh-space-3);}',
+    '.l2d-panel.collapsed .l2d-panel-body,.l2d-panel.collapsed .l2d-ph{display:none;}',
+    // 八向缩放手柄：四边条 + 四角块（角为触屏大热区），最大化/全屏态隐藏
+    '.l2d-ph{position:absolute;z-index:2;touch-action:none;}',
+    '.l2d-ph[data-dir="n"]{top:-4px;left:12px;right:12px;height:9px;cursor:ns-resize;}',
+    '.l2d-ph[data-dir="s"]{bottom:-4px;left:12px;right:12px;height:9px;cursor:ns-resize;}',
+    '.l2d-ph[data-dir="e"]{right:-4px;top:12px;bottom:12px;width:9px;cursor:ew-resize;}',
+    '.l2d-ph[data-dir="w"]{left:-4px;top:12px;bottom:12px;width:9px;cursor:ew-resize;}',
+    '.l2d-ph[data-dir="ne"]{top:-5px;right:-5px;width:20px;height:20px;cursor:nesw-resize;}',
+    '.l2d-ph[data-dir="nw"]{top:-5px;left:-5px;width:20px;height:20px;cursor:nwse-resize;}',
+    '.l2d-ph[data-dir="se"]{bottom:-5px;right:-5px;width:20px;height:20px;cursor:nwse-resize;}',
+    '.l2d-ph[data-dir="sw"]{bottom:-5px;left:-5px;width:20px;height:20px;cursor:nesw-resize;}',
+    '.l2d-ph[data-dir="se"]::after{content:\'\';position:absolute;right:6px;bottom:6px;width:7px;height:7px;',
+    'border-right:2px solid var(--dsh-line-strong);border-bottom:2px solid var(--dsh-line-strong);}',
+    '.l2d-panel.maximized .l2d-ph,.l2d-panel.fullscreen .l2d-ph{display:none;}',
+    // 边缘吸附预览
+    '.l2d-snap-ghost{position:fixed;left:0;top:0;z-index:2147483190;',
+    'background:var(--dsh-accent-soft);border:1px solid var(--dsh-accent);',
+    'border-radius:var(--dsh-radius-lg);opacity:0;pointer-events:none;',
+    'transition:opacity var(--dsh-dur-fast) var(--dsh-ease);}',
+    '.l2d-snap-ghost.on{opacity:0.55;}',
+    // 容器查询：>600px 双列表单，≤600px 单列紧凑（折叠侧栏语义：窄容器只留主列）
+    '@container (min-width:601px){',
+    '.l2d-panel-body{display:grid;grid-template-columns:1fr 1fr;align-items:start;}',
+    '.l2d-panel .l2d-hint,.l2d-panel .l2d-actions{grid-column:1/-1;}}',
+    '@container (max-width:600px){',
+    '.l2d-panel-body{padding:var(--dsh-space-3);gap:var(--dsh-space-2);}}',
+    'body.l2d-panel-interacting,body.l2d-panel-interacting *{user-select:none !important;-webkit-user-select:none !important;cursor:default;}',
     '.l2d-panel .l2d-row{display:flex;flex-direction:column;gap:var(--dsh-space-2);}',
     '.l2d-panel .l2d-row label{font:var(--dsh-text-xs);color:var(--dsh-ink-muted);}',
     '.l2d-panel .l2d-row input[type=password],.l2d-panel .l2d-row input[type=number],.l2d-panel .l2d-row select',
@@ -229,7 +274,8 @@
     'cursor:pointer;background:transparent;color:var(--dsh-ink);}',
     '.l2d-panel .l2d-actions button.primary{background:var(--dsh-accent);color:var(--dsh-on-accent);border-color:transparent;}',
     '.l2d-panel .l2d-hint{font:var(--dsh-text-xs);color:var(--dsh-ink-muted);}',
-    '#' + ROOT_ID + '.conversation .l2d-bubble{border-bottom-right-radius:var(--dsh-radius-sm);}',
+    '.l2d-row label{transition:color var(--dsh-dur-fast) var(--dsh-ease);}',
+    '.l2d-row.l2d-group-flash label{color:var(--dsh-accent);}',
     '#dsh-l2d-root :focus-visible,.l2d-menu :focus-visible,.l2d-panel :focus-visible{outline:2px solid var(--dsh-accent);outline-offset:2px;}'
   ].join('');
 
@@ -350,8 +396,13 @@
     if (!bodyEl || bodyEl.querySelector('.l2d-placeholder')) return;
     var ph = document.createElement('div');
     ph.className = 'l2d-placeholder';
+    // 用户反馈：渲染失败时右下角的占位色块被当成「调试窗口」。这里明示用途，
+    // 悬停有 tooltip，出现时气泡说明一次（say 内部有节流，不刷屏）。
+    ph.title = '立绘渲染占位：模型/静态图未加载成功时显示（重启宿主可重试）';
+    ph.setAttribute('aria-hidden', 'true');
     if (imgEl) imgEl.style.display = 'none';
     bodyEl.appendChild(ph);
+    say('立绘没加载出来，先用占位图形顶着（重启宿主可重试）', 4200);
   }
 
   // 角色左上角：pos 是逻辑目标（拖拽/持久化），spring 是渲染位置。
@@ -675,8 +726,16 @@
 
   function setSwitch(id, value) {
     var L = window.DSH_L2D;
-    if (!L || !L.setParameter) return;
-    L.setParameter(id, value, 1);
+    if (!L) return;
+    // UI 本地交互（换装/配饰开关）走 runtime 通道：不受 Node Ownership 托管白名单
+    // 约束（白名单管 Agent 控制权）；旧渲染包无 runtime 入口时回退 agent 通道。
+    if (L.setParametersRuntime) {
+      var one = {};
+      one[id] = value;
+      L.setParametersRuntime(one, 1);
+    } else if (L.setParameter) {
+      L.setParameter(id, value, 1);
+    }
     if (L.markActive) L.markActive();
   }
 
@@ -1106,6 +1165,24 @@
   }
 
   // 调试/自动化测试钩子：不进 AI 工具白名单
+  // 设置窗口管理钩子：供全局设置入口（lib/settings-entry.js）的
+  // SettingsWindowManager 调用。单实例语义：已开则聚焦+锚到分组，不重复创建。
+  function focusPanelWindow() {
+    if (!panelEl || !panelOpen) return;
+    var head = panelEl.querySelector('.l2d-panel-head');
+    if (head && head.focus) head.focus({ preventScroll: true });
+  }
+  function focusPanelGroup(group) {
+    if (!panelEl || !panelOpen || !group) return;
+    var target = panelEl.querySelector('.l2d-row[data-group="' + String(group).replace(/"/g, '') + '"]');
+    if (!target) return;
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    target.classList.remove('l2d-group-flash');
+    // 触发重绘以重放高亮
+    void target.offsetWidth;
+    target.classList.add('l2d-group-flash');
+    setTimeout(function () { target.classList.remove('l2d-group-flash'); }, 1400);
+  }
   window.DSH_L2D_UI = {
     chatActionForReply: chatActionForReply,
     executePokeAction: executePokeAction,
@@ -1114,6 +1191,39 @@
     setBodyType: setBodyType,
     cycleBodyType: cycleBodyType,
     zoneAt: zoneAt,
+    settings: {
+      open: function (group) {
+        if (!panelOpen) openPanel();
+        if (group) focusPanelGroup(group);
+        else focusPanelWindow();
+      },
+      close: function () { closePanel(); },
+      focus: function () { if (panelOpen) focusPanelWindow(); },
+      isOpen: function () { return panelOpen; },
+    },
+    // 动作池读库（UI-FLOAT ⑤）调试/自动化钩子：不进 AI 工具白名单
+    pokeRandom: pokeRandom,
+    dbActions: function () {
+      if (dbActionRaw.length && !dbActionPoolBuilt) buildDbPool();
+      return { raw: dbActionRaw.length, pool: dbActionPool.length };
+    },
+    dbChainPreview: function (index) {
+      if (dbActionRaw.length && !dbActionPoolBuilt) buildDbPool();
+      var item = dbActionPool[Number(index) || 0];
+      return item ? JSON.parse(JSON.stringify(item.chain)) : null;
+    },
+    pokeDbAction: function (index) {
+      if (dbActionRaw.length && !dbActionPoolBuilt) buildDbPool();
+      var item = dbActionPool[Number(index) || 0];
+      if (!item) return { ok: false, accepted: false, reason: 'no-db-chain' };
+      return executePokeAction({
+        priority: 'FORCE',
+        source: 'poke-db',
+        callId: item.chainId,
+        silent: true,
+        chain: item.chain,
+      });
+    },
     actState: function () {
       var L = window.DSH_L2D;
       return L && L.currentAct ? L.currentAct() : null;
@@ -1236,7 +1346,10 @@
     if (physParams.angleZ) vals[physParams.angleZ.id] = normToValue(physParams.angleZ, physics.leanZ);
     if (physParams.posX) vals[physParams.posX.id] = normToValue(physParams.posX, physics.posX);
     if (physParams.posY) vals[physParams.posY.id] = normToValue(physParams.posY, physics.posY);
-    L.setParameters(vals);
+    // UI 本地拖拽走 runtime 通道：不受 Node Ownership 托管白名单约束（白名单管
+    // Agent 控制权）；旧渲染包无 runtime 入口时回退 agent 通道。
+    if (L.setParametersRuntime) L.setParametersRuntime(vals);
+    else L.setParameters(vals);
     // 头部朝向已交给 gaze（眼神/躯体跟随）统一处理，这里不再双写 AngleX/Y
   }
 
@@ -1455,6 +1568,43 @@
   // 已经开播、关闭定时器还没跑的 closeMotion。
   // 抢占时按同一只手决定补不补播，判断来自 motion-director，不在这里写死左右手。
   var pendingCloses = [];
+
+  // ------------------------------------------------------ 真实完成事件（PR-D）
+  // 渲染包在 motion / keyframes 真实终点发事件（executionId = /ai/call 的 callId）。
+  // overlay 按当前 act 关联：seen 达到 countRealCompletions 期望时提前 finishAct，
+  // 结束回执带 completionSource:'runtime-event' + ownedParams（ownership 出口核对数据）。
+  // 差额（Loop 动作 / 动作被拒 / 事件链路缺失）→ 永远等不齐 → 沿用 armActEnd 预估兜底，
+  // fail-closed：预估从不冒充真实信号，只是迟到时的可用性兜底。
+  var completionBound = false;
+  var actCompletionState = { runId: 0, callId: null, expected: 0, seen: 0, owned: [] };
+
+  function bindActCompletion(runId, callId, chain) {
+    var L = window.DSH_L2D;
+    var expected = L && L.countRealCompletions ? L.countRealCompletions(chain) : 0;
+    actCompletionState = { runId: runId || 0, callId: callId == null ? null : callId, expected: expected, seen: 0, owned: [] };
+  }
+
+  function onRuntimeCompletion(ev) {
+    var st = actCompletionState;
+    if (!st || !st.runId || !st.expected) return;
+    if (!ev || String(ev.executionId || '') !== String(st.callId)) return;
+    if (!actStillCurrent(st.runId)) return; // 已被打断/超时收尾，预估路径已归位
+    st.seen++;
+    if (ev.owned) st.owned = ev.owned;
+    if (st.seen < st.expected) return;
+    var api = window.DSH_L2D;
+    var e2 = api && api.finishAct ? api.finishAct(st.runId) : null; // runId 不匹配时幂等返回 null
+    actCompletionState = { runId: 0, callId: null, expected: 0, seen: 0, owned: [] };
+    if (!e2) return; // 预估兜底先到：end 已发过，不再重复
+    e2.completionSource = 'runtime-event';
+    e2.ownedParams = (st.owned || []).slice();
+    postActEvent(e2);
+    if (actingTimer) {
+      clearTimeout(actingTimer);
+      actingTimer = 0;
+    }
+    if (api && api.setStageBusy) api.setStageBusy({ acting: false });
+  }
 
   function cancelActTimers() {
     for (var i = 0; i < pokeTimers.length; i++) clearTimeout(pokeTimers[i]);
@@ -1779,14 +1929,18 @@
     }, delayMs || 6000));
   }
 
-  function runActStep(step, runId, source, skipMotions) {
+  function runActStep(step, runId, source, skipMotions, executionId) {
     var L = window.DSH_L2D;
     if (!L || !step || !actStillCurrent(runId)) return;
     if (step.kind === 'expression') {
       if (step.clear && L.clearExpression) L.clearExpression();
       else if (step.name && L.setExpression) L.setExpression(step.name);
     } else if (step.kind === 'motion' && step.name) {
-      if (!skipMotions && L.playMotionAsync) watchMotion(runId, L.playMotionAsync(step.name), source, true);
+      if (!skipMotions && L.playMotionAsync) {
+        watchMotion(runId, L.playMotionAsync(step.name, {
+          executionId: executionId == null ? undefined : executionId,
+        }), source, true);
+      }
       if (step.closeMotion) {
         scheduleCloseMotion(step.closeMotion, step.closeAfterMs || 6000, runId);
       }
@@ -1818,6 +1972,7 @@
       L.playKeyframes(step.tracks || [], {
         duration: step.duration,
         loop: step.loop === true,
+        executionId: executionId == null ? undefined : executionId,
       });
     } else if (step.kind === 'pose' && step.pose && L.setPose) {
       L.setPose(step.pose);
@@ -1840,7 +1995,7 @@
   // 按执行计划投放：桶内每步按自己的 atMs 投放（降级成串行后 atMs 已被拉开），
   // 不能整桶同一 tick 连发——那样降级只是改了记账，观感上仍是并行。
   // 计划由渲染包的 normalizeActPlan 生成（core/src/chain-normalize.ts），老包没有时退回串行。
-  function playActPlan(plan, runId, source, skipMotions) {
+  function playActPlan(plan, runId, source, skipMotions, executionId) {
     var buckets = (plan && plan.buckets) || [];
     for (var b = 0; b < buckets.length; b++) {
       (function (bucket) {
@@ -1848,10 +2003,10 @@
           (function (node) {
             var at = Math.max(0, Number(node.atMs) || 0);
             if (at <= 0) {
-              runActStep(node.step, runId, source, skipMotions);
+              runActStep(node.step, runId, source, skipMotions, executionId);
             } else {
               pokeTimers.push(setTimeout(function () {
-                runActStep(node.step, runId, source, skipMotions);
+                runActStep(node.step, runId, source, skipMotions, executionId);
               }, at));
             }
           })(bucket.steps[i]);
@@ -1865,7 +2020,7 @@
     }
   }
 
-  function playActSteps(chain, runId, source, skipMotions, plan) {
+  function playActSteps(chain, runId, source, skipMotions, plan, executionId) {
     var L = window.DSH_L2D;
     // 计划由调用方一次算好并传进来（同一份对象既算寿命又记 notes），
     // 老调用方没传时才就地补算，保证「寿命」与「降级事实」永远来自同一份计划。
@@ -1882,7 +2037,7 @@
       if (usePlan.notes && L.noteActMotion) {
         for (var n = 0; n < usePlan.notes.length; n++) L.noteActMotion(runId, usePlan.notes[n], 'skip');
       }
-      playActPlan(usePlan, runId, source, skipMotions);
+      playActPlan(usePlan, runId, source, skipMotions, executionId);
       return;
     }
     var elapsed = 0;
@@ -1891,11 +2046,11 @@
       var delay = Math.max(0, Number(step.delayMs) || 0);
       elapsed += delay;
       if (elapsed <= 0) {
-        runActStep(step, runId, source, skipMotions);
+        runActStep(step, runId, source, skipMotions, executionId);
       } else {
         (function (pending, at) {
           pokeTimers.push(setTimeout(function () {
-            runActStep(pending, runId, source, skipMotions);
+            runActStep(pending, runId, source, skipMotions, executionId);
           }, at));
         })(step, elapsed);
       }
@@ -1930,7 +2085,7 @@
     return ev;
   }
 
-  function playbackAct(chain, runId, source, holdOnly, plan) {
+  function playbackAct(chain, runId, source, holdOnly, plan, executionId) {
     var flush = closesToFlush(chain);
     var motions = chainMotionPlan(chain);
     pendingCloses = [];
@@ -1939,11 +2094,11 @@
     // 另一只手的关闭不能和新动作同时发，否则状态机把后一个吞掉。先播新动作，等它返回再收。
     if (flush.length && motions.length) {
       playSerial(motions, flush, runId, source);
-      playActSteps(chain, runId, source, true, plan);
+      playActSteps(chain, runId, source, true, plan, executionId);
       return;
     }
     if (flush.length) playSerial([], flush, runId, source);
-    playActSteps(chain, runId, source, false, plan);
+    playActSteps(chain, runId, source, false, plan, executionId);
   }
 
   function executePokeAction(action) {
@@ -2001,9 +2156,17 @@
     });
     if (!admission || !admission.accepted) return blockedAct(admission);
     preemptYandereIfNeeded(admission);
-    playbackAct(chain, admission.runId, source, !!action.holdOnly, planForLife);
+    // PR-D：真实完成事件关联（executionId = callId）。老渲染包没有订阅口时 expected=0，
+    // 完成回执仍走 armActEnd 预估兜底。
+    if (!completionBound && L.onActionCompletion) {
+      completionBound = true;
+      L.onActionCompletion(onRuntimeCompletion);
+    }
+    bindActCompletion(admission.runId, action.callId, chain);
+    playbackAct(chain, admission.runId, source, !!action.holdOnly, planForLife, action.callId);
     emitActEvents(admission.events);
     // 先挂上结束回执，避免步骤里抛错后槽位一直占着。
+    // PR-D：真实完成先到时 finishAct 幂等（runId 不匹配返回 null），本定时器成空转。
     armActEnd(admission.runId, life);
     if (action.bubble) say(action.bubble, 3200);
     else if (!action.silent) say('戳戳~', 2200);
@@ -2019,9 +2182,11 @@
     var cap = pokeCapabilities();
     var expressions = cap.expressions;
     var motions = cap.motions.filter(function (name) { return name.endsWith('打开'); });
+    if (dbActionRaw.length && !dbActionPoolBuilt) buildDbPool();
     var roll = Math.random();
 
     try {
+      // 概率分段：表情 0-0.36 / 动作 0.36-0.76 / DB 动作链 0.76-0.92 / 姿势兑底
       if (roll < 0.36 && expressions.length) {
         var expression = randomOf(expressions);
         executePokeAction({
@@ -2052,6 +2217,19 @@
         return;
       }
 
+      if (roll < 0.92 && dbActionPool.length) {
+        // UI-FLOAT ⑤：SQLite 动作链入池，经 executePokeAction 走统一状态机
+        var dbItem = randomOf(dbActionPool);
+        executePokeAction({
+          priority: 'FORCE',
+          source: 'poke-db',
+          callId: dbItem.chainId,
+          bubble: '看这个~',
+          chain: dbItem.chain,
+        });
+        return;
+      }
+
       var poses = ['finger', 'grass', 'chest'];
       var poseName = randomOf(poses);
       var pose = poseName === 'chest'
@@ -2067,6 +2245,131 @@
       console.warn('[dsh-l2d] random poke failed', err);
       say('今天不太想动…', 2200);
     }
+  }
+
+  // ------------------------------------------------ 动作池读库接线（UI-FLOAT ⑤）
+  // 启动时经 GET /api/actions 拉取动作链（validated+compatible 由服务端过滤），
+  // 失败静默降级（现有随机池照常）。链展开与参数白名单防线保持在此（写路径上游），
+  // executePokeAction 的状态机语义不动。
+  var dbActionRaw = [];     // /api/actions 原始行
+  var dbActionPool = [];    // 展开并校验后的可执行链
+  var dbActionPoolBuilt = false;
+  var dbAllowedParams = {}; // 从 DB adapter 动态放行的 ParamId（不硬编码）
+
+  function dbParamAllowed(id) {
+    return SAFE_MOTION_PARAM.test(id) || dbAllowedParams[id] === true;
+  }
+
+  function parseMaybeJson(v) {
+    if (v && typeof v === 'object') return v;
+    if (typeof v !== 'string' || !v) return null;
+    try { return JSON.parse(v); } catch (err) { return null; }
+  }
+
+  function dbChannelKeys(name) {
+    // chainJson 的 track 名是 camelCase（earLeft），adapter channels 是 snake_case（ear_left）
+    var k = String(name || '');
+    return [k, k.replace(/([A-Z])/g, '_$1').toLowerCase()];
+  }
+
+  function expandDbChain(rawChain, adapter, capIds) {
+    var steps = rawChain && Array.isArray(rawChain.steps) ? rawChain.steps : [];
+    var channels = (adapter && adapter.channels) || {};
+    var out = [];
+    for (var i = 0; i < steps.length; i++) {
+      var step = steps[i];
+      if (!step || !step.kind) continue;
+      if (step.kind === 'expression') {
+        var name = step.name || step.expression;
+        if (name) out.push({ kind: 'expression', name: String(name) });
+        continue;
+      }
+      if (step.kind !== 'keyframes') continue;
+      var params = step.params || step.track || null;
+      if (!params || !params.track || !Array.isArray(params.keys)) continue;
+      var keys0 = dbChannelKeys(params.track);
+      var mapped = [];
+      for (var c = 0; c < keys0.length && !mapped.length; c++) mapped = channels[keys0[c]] || [];
+      var sw = Number(step.weight == null ? 1 : step.weight) || 1;
+      var tracks = [];
+      for (var j = 0; j < mapped.length; j++) {
+        var ch = mapped[j];
+        if (!ch || !ch.paramId) continue;
+        // 防线（写路径上游）：白名单（SAFE_MOTION_PARAM ∪ DB adapter 动态登记）+ 模型实有参数
+        if (!dbParamAllowed(ch.paramId)) continue;
+        if (capIds && !capIds[ch.paramId]) continue;
+        var cw = Number(ch.weight == null ? 1 : ch.weight) || 1;
+        var w = sw * cw;
+        var keys = [];
+        for (var k = 0; k < params.keys.length; k++) {
+          var p = params.keys[k];
+          keys.push([Number(p.t) || 0, (Number(p.value) || 0) * w]);
+        }
+        tracks.push({ param: String(ch.paramId), keys: keys });
+      }
+      if (!tracks.length) continue;
+      out.push({ kind: 'keyframes', duration: Number(step.durationMs) || undefined, tracks: tracks });
+    }
+    return out;
+  }
+
+  function buildDbPool() {
+    var L = window.DSH_L2D;
+    var cap = L && L.getCapabilities ? L.getCapabilities() : null;
+    var capParams = (cap && cap.params) || [];
+    if (!capParams.length) {
+      // 能力清单未就绪：不锁空池，等下次触发（pokeRandom/dbActions）再建
+      dbActionPoolBuilt = false;
+      return;
+    }
+    var capIds = {};
+    for (var i = 0; i < capParams.length; i++) {
+      if (capParams[i] && capParams[i].id) capIds[capParams[i].id] = true;
+    }
+    // 第一遍：收集所有 adapter 登记的 paramId，动态扩白名单
+    for (var r = 0; r < dbActionRaw.length; r++) {
+      var adapter0 = parseMaybeJson(dbActionRaw[r] && dbActionRaw[r].adapterJson);
+      var chans = (adapter0 && adapter0.channels) || {};
+      var ks = Object.keys(chans);
+      for (var m = 0; m < ks.length; m++) {
+        var entries = chans[ks[m]] || [];
+        for (var n = 0; n < entries.length; n++) {
+          if (entries[n] && entries[n].paramId) dbAllowedParams[String(entries[n].paramId)] = true;
+        }
+      }
+    }
+    // 第二遍：展开 + 校验
+    var pool = [];
+    for (var a = 0; a < dbActionRaw.length; a++) {
+      var rowA = dbActionRaw[a];
+      try {
+        var raw = parseMaybeJson(rowA && rowA.chainJson);
+        var adapter = parseMaybeJson(rowA && rowA.adapterJson);
+        var chain = expandDbChain(raw, adapter, capIds);
+        if (chain.length) {
+          pool.push({
+            chainId: String(rowA.chainId || rowA.semanticKey || ('db-' + a)),
+            semanticKey: String(rowA.semanticKey || ''),
+            emotion: String(rowA.emotion || ''),
+            chain: chain,
+          });
+        }
+      } catch (err) { /* 单链解析失败不影响其它 */ }
+    }
+    dbActionPool = pool;
+    dbActionPoolBuilt = true;
+  }
+
+  function loadDbActions() {
+    fetch('/api/actions', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || data.ok !== true || !Array.isArray(data.actions)) return;
+        dbActionRaw = data.actions;
+        dbActionPoolBuilt = false;
+        if (window.DSH_L2D && window.DSH_L2D.isReady && window.DSH_L2D.isReady()) buildDbPool();
+      })
+      .catch(function () { /* 静默降级：现有随机池照常 */ });
   }
 
   function pokeByApi(silent) {
@@ -2481,9 +2784,10 @@
   }
 
   /**
-   * 强制刷新状态（调试用）：重新拉宿主设置 + 销毁并重新挂载渲染包，
+   * 强制刷新状态（调试钩子）：重新拉宿主设置 + 销毁并重新挂载渲染包，
    * 不重载整个 DSH 页面。修改设置后状态没生效、渲染卡住、或改了 overlay.js
-   * 想当场复位时用它。也挂在 window.__DSH_L2D_FORCE_REFRESH__ 上，控制台可直接调。
+   * 想当场复位时用。仅控制台可达：window.__DSH_L2D_FORCE_REFRESH__()。
+   * UI 入口（设置面板里的按钮）已按降噪需求移除。
    */
   function forceRefreshState() {
     say('正在强制刷新…', 1200);
@@ -2526,6 +2830,7 @@
   function openPanel() {
     if (!panelEl) return;
     panelOpen = true;
+    applyPanelPrefs(); // 打开时恢复/夹取位置尺寸（视口可能已变）
     panelEl.classList.add('open');
   }
 
@@ -2534,9 +2839,320 @@
     else openPanel();
   }
 
-  function row(labelText, control) {
+  // ------------------------------------------------ 浮动窗口（响应式升级版）
+  // 几何偏好存 localStorage（非设置数据，不进宿主 settings.json），300ms 防抖写入。
+  // 结构：{ maximized, geometry:{x,y,w,h}, previousGeometry, collapsed }
+  // 四档断点：≥1200 桌面浮动 / 768-1199 紧凑 / 480-767 窄窗 / ≤479 全屏（去小窗形态）。
+  // 拖拽全程 clamp 视口内；最大化/吸附前的几何独立存 previousGeometry，还原时按
+  // 当前视口重新 clamp，绝不把旧坐标直接还原进已缩小的视口。
+  var PANEL_PREFS_KEY = 'dsh-l2d-panel-prefs';
+  var PANEL_MIN_W = 480;
+  var PANEL_MIN_H = 360;
+  var PANEL_DEFAULT_W = 860;
+  var PANEL_DEFAULT_H = 620;
+  var PANEL_SNAP_EDGE = 16;
+  var panelPrefsSaveTimer = 0;
+  var panelGeom = null;      // 当前几何（border-box px），单一事实源
+  var panelPrevGeom = null;  // 最大化/吸附前几何
+  var panelSnapped = null;   // 运行时吸附态：'left'|'right'|null（不入盘）
+  var panelLastTap = 0;      // 标题栏双击判定
+  var snapGhostEl = null;
+
+  function panelMode() {
+    var vw = window.innerWidth;
+    if (vw <= 479) return 'fullscreen';
+    if (vw <= 767) return 'narrow';
+    if (vw <= 1199) return 'compact';
+    return 'desktop';
+  }
+
+  function validBox(b) {
+    if (!b || typeof b !== 'object') return null;
+    var x = Number(b.x), y = Number(b.y), w = Number(b.w), h = Number(b.h);
+    if (!isFinite(x) || !isFinite(y) || !isFinite(w) || !isFinite(h)) return null;
+    return { x: x, y: y, w: w, h: h };
+  }
+
+  function readPanelPrefs() {
+    try {
+      var p = JSON.parse(localStorage.getItem(PANEL_PREFS_KEY) || 'null');
+      if (!p || typeof p !== 'object') return null;
+      // 旧结构 {x,y,w,h,collapsed} → 新结构迁移
+      if (!p.geometry && p.x != null) {
+        p = { maximized: false, geometry: { x: p.x, y: p.y, w: p.w, h: p.h }, previousGeometry: null, collapsed: p.collapsed === true };
+      }
+      return {
+        maximized: p.maximized === true,
+        geometry: validBox(p.geometry),
+        previousGeometry: validBox(p.previousGeometry),
+        collapsed: p.collapsed === true
+      };
+    } catch (err) { return null; }
+  }
+
+  function savePanelPrefs() {
+    if (!panelEl) return;
+    var prefs = {
+      maximized: panelEl.classList.contains('maximized'),
+      geometry: panelGeom || undefined,
+      previousGeometry: panelPrevGeom || undefined,
+      collapsed: panelEl.classList.contains('collapsed')
+    };
+    try { localStorage.setItem(PANEL_PREFS_KEY, JSON.stringify(prefs)); } catch (err) { /* 隐私模式等 */ }
+  }
+
+  function savePanelPrefsSoon() {
+    if (panelPrefsSaveTimer) clearTimeout(panelPrefsSaveTimer);
+    panelPrefsSaveTimer = setTimeout(function () {
+      panelPrefsSaveTimer = 0;
+      savePanelPrefs();
+    }, 300);
+  }
+
+  function clampBox(g) {
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var w = Math.min(g.w, vw);
+    var h = Math.min(g.h, vh);
+    return {
+      w: w, h: h,
+      x: Math.min(Math.max(g.x, 0), Math.max(0, vw - w)),
+      y: Math.min(Math.max(g.y, 0), Math.max(0, vh - h))
+    };
+  }
+
+  function defaultGeom() {
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var w = Math.min(PANEL_DEFAULT_W, vw - 24);
+    var h = Math.min(PANEL_DEFAULT_H, vh - 48);
+    return { x: Math.max(12, Math.round((vw - w) / 2)), y: Math.max(12, Math.round((vh - h) / 2)), w: w, h: h };
+  }
+
+  function setGeom(g) {
+    panelGeom = { x: Math.round(g.x), y: Math.round(g.y), w: Math.round(g.w), h: Math.round(g.h) };
+    panelEl.style.left = panelGeom.x + 'px';
+    panelEl.style.top = panelGeom.y + 'px';
+    panelEl.style.width = panelGeom.w + 'px';
+    panelEl.style.height = panelGeom.h + 'px';
+  }
+
+  function applyPanelPrefs() {
+    if (!panelEl) return;
+    var p = readPanelPrefs();
+    if (panelMode() === 'fullscreen') {
+      panelEl.classList.add('fullscreen');
+      panelEl.classList.remove('maximized');
+      panelGeom = null;
+      panelPrevGeom = p && p.previousGeometry ? p.previousGeometry : null;
+      panelEl.style.left = panelEl.style.top = panelEl.style.width = panelEl.style.height = '';
+      panelEl.classList.toggle('collapsed', !!(p && p.collapsed));
+      return;
+    }
+    panelEl.classList.remove('fullscreen');
+    panelPrevGeom = p && p.previousGeometry ? p.previousGeometry : null;
+    panelSnapped = null;
+    if (p && p.maximized) {
+      panelEl.classList.add('maximized');
+      setGeom(clampBox({ x: 0, y: 0, w: window.innerWidth, h: window.innerHeight }));
+    } else {
+      panelEl.classList.remove('maximized');
+      setGeom(clampBox(p && p.geometry ? p.geometry : defaultGeom()));
+    }
+    panelEl.classList.toggle('collapsed', !!(p && p.collapsed));
+  }
+
+  function toggleMaximize() {
+    if (!panelEl || !panelOpen || panelMode() === 'fullscreen') return;
+    if (panelEl.classList.contains('maximized')) {
+      panelEl.classList.remove('maximized');
+      var g = panelPrevGeom || defaultGeom();
+      panelPrevGeom = null;
+      setGeom(clampBox(g)); // 按当前视口重新 clamp 后还原
+    } else {
+      panelPrevGeom = panelGeom || defaultGeom();
+      panelEl.classList.add('maximized');
+      setGeom({ x: 0, y: 0, w: window.innerWidth, h: window.innerHeight });
+    }
+    savePanelPrefsSoon();
+  }
+
+  function showSnapGhost(zone) {
+    if (!zone) {
+      if (snapGhostEl) snapGhostEl.classList.remove('on');
+      return;
+    }
+    if (!snapGhostEl) {
+      snapGhostEl = document.createElement('div');
+      snapGhostEl.className = 'l2d-snap-ghost';
+      document.body.appendChild(snapGhostEl);
+    }
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var r = zone === 'top' ? { x: 0, y: 0, w: vw, h: vh }
+      : zone === 'left' ? { x: 0, y: 0, w: Math.round(vw / 2), h: vh }
+        : { x: Math.round(vw / 2), y: 0, w: Math.round(vw / 2), h: vh };
+    snapGhostEl.style.left = r.x + 'px';
+    snapGhostEl.style.top = r.y + 'px';
+    snapGhostEl.style.width = r.w + 'px';
+    snapGhostEl.style.height = r.h + 'px';
+    snapGhostEl.classList.add('on');
+  }
+
+  function applySnap(zone) {
+    if (!panelEl || !panelOpen) return;
+    if (zone === 'top') { toggleMaximize(); return; }
+    if (!panelEl.classList.contains('maximized')) panelPrevGeom = panelGeom;
+    panelEl.classList.remove('maximized');
+    panelSnapped = zone;
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    setGeom(zone === 'left' ? { x: 0, y: 0, w: Math.round(vw / 2), h: vh } : { x: Math.round(vw / 2), y: 0, w: Math.round(vw / 2), h: vh });
+    savePanelPrefsSoon();
+  }
+
+  function bindPanelWindow() {
+    if (!panelEl) return;
+    var head = panelEl.querySelector('.l2d-panel-head');
+    var closeBtn = panelEl.querySelector('.l2d-panel-close');
+    var maxBtn = panelEl.querySelector('.l2d-panel-max');
+    var collapseBtn = panelEl.querySelector('.l2d-panel-collapse');
+
+    if (closeBtn) closeBtn.addEventListener('click', function () { closePanel(); });
+    if (maxBtn) maxBtn.addEventListener('click', toggleMaximize);
+    if (collapseBtn) {
+      collapseBtn.addEventListener('click', function () {
+        panelEl.classList.toggle('collapsed');
+        savePanelPrefsSoon();
+      });
+    }
+
+    // 八向缩放：委托 handler 按 data-dir 计算，对边固定；最大化/全屏态隐藏手柄
+    panelEl.addEventListener('pointerdown', function (e) {
+      var grip = e.target.closest ? e.target.closest('.l2d-ph') : null;
+      if (!grip || e.button !== 0) return;
+      if (panelEl.classList.contains('maximized') || panelEl.classList.contains('fullscreen')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var dir = grip.getAttribute('data-dir');
+      var box0 = panelEl.getBoundingClientRect();
+      var startX = e.clientX;
+      var startY = e.clientY;
+      function onMove(ev) {
+        var g = { x: box0.left, y: box0.top, w: box0.width, h: box0.height };
+        var dx = ev.clientX - startX;
+        var dy = ev.clientY - startY;
+        if (dir.indexOf('e') >= 0) g.w = Math.min(window.innerWidth - g.x, Math.max(PANEL_MIN_W, box0.width + dx));
+        if (dir.indexOf('s') >= 0) g.h = Math.min(window.innerHeight - g.y, Math.max(PANEL_MIN_H, box0.height + dy));
+        if (dir.indexOf('w') >= 0) {
+          var right = box0.left + box0.width;
+          g.w = Math.min(right, Math.max(PANEL_MIN_W, box0.width - dx));
+          g.x = right - g.w;
+        }
+        if (dir.indexOf('n') >= 0) {
+          var bottom = box0.top + box0.height;
+          g.h = Math.min(bottom, Math.max(PANEL_MIN_H, box0.height - dy));
+          g.y = bottom - g.h;
+        }
+        setGeom(g);
+      }
+      function onUp() {
+        document.removeEventListener('pointermove', onMove, true);
+        document.removeEventListener('pointerup', onUp, true);
+        document.body.classList.remove('l2d-panel-interacting');
+        savePanelPrefsSoon();
+      }
+      document.addEventListener('pointermove', onMove, true);
+      document.addEventListener('pointerup', onUp, true);
+      document.body.classList.add('l2d-panel-interacting');
+    });
+
+    if (head) {
+      head.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        if (e.target.closest && e.target.closest('.l2d-panel-btn')) return;
+        if (panelMode() === 'fullscreen') return; // 全屏态：头部仅作标题，不拖拽
+        // 双击标题栏最大化/还原：pointerdown 计时判定，不依赖浏览器 dblclick 兼容链
+        var now = Date.now();
+        if (now - panelLastTap < 350) {
+          panelLastTap = 0;
+          toggleMaximize();
+          return;
+        }
+        panelLastTap = now;
+        // 最大化/吸附态：单击先布防，只有出现真实位移才还原并转拖拽
+        // （否则双击还原会被第一次 down 的「拖拽即还原」抢走，第二次 down 又 toggle 回去）。
+        var box0 = panelEl.getBoundingClientRect();
+        var offX = e.clientX - box0.left;
+        var offY = e.clientY - box0.top;
+        var snapZone = null;
+        var restored = !panelEl.classList.contains('maximized') && !panelSnapped;
+        function ensureRestore(curX, curY) {
+          if (restored) return box0;
+          var prev = panelPrevGeom || defaultGeom();
+          panelEl.classList.remove('maximized');
+          panelSnapped = null;
+          setGeom(clampBox({ x: curX - prev.w / 2, y: curY - 18, w: prev.w, h: prev.h }));
+          restored = true;
+          return panelEl.getBoundingClientRect();
+        }
+        function onMove(ev) {
+          if (!restored) {
+            if (Math.abs(ev.clientX - e.clientX) < 4 && Math.abs(ev.clientY - e.clientY) < 4) return;
+            box0 = ensureRestore(ev.clientX, ev.clientY);
+            offX = Math.min(box0.width - 40, Math.max(40, ev.clientX - box0.left));
+            offY = 18;
+          }
+          setGeom(clampBox({ x: ev.clientX - offX, y: ev.clientY - offY, w: box0.width, h: box0.height }));
+          var z = null;
+          if (ev.clientY <= PANEL_SNAP_EDGE) z = 'top';
+          else if (ev.clientX <= PANEL_SNAP_EDGE) z = 'left';
+          else if (ev.clientX >= window.innerWidth - PANEL_SNAP_EDGE) z = 'right';
+          if (z !== snapZone) { snapZone = z; showSnapGhost(z); }
+        }
+        function onUp() {
+          document.removeEventListener('pointermove', onMove, true);
+          document.removeEventListener('pointerup', onUp, true);
+          document.body.classList.remove('l2d-panel-interacting');
+          showSnapGhost(null);
+          if (snapZone) applySnap(snapZone);
+          else if (restored) savePanelPrefsSoon();
+        }
+        document.addEventListener('pointermove', onMove, true);
+        document.addEventListener('pointerup', onUp, true);
+        document.body.classList.add('l2d-panel-interacting');
+      });
+    }
+  }
+
+  // Esc 关闭（键盘可达）；视口/断点变化时重排（ResizeObserver + matchMedia，
+  // 不依赖固定分辨率；跨断点时浮动↔全屏形态切换）
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && panelOpen) closePanel();
+  });
+  function panelViewportChanged() {
+    if (!panelOpen || !panelEl) return;
+    var wasFullscreen = panelEl.classList.contains('fullscreen');
+    if (panelMode() === 'fullscreen' || wasFullscreen) {
+      applyPanelPrefs(); // 跨断点：形态重算
+      return;
+    }
+    if (panelEl.classList.contains('maximized')) {
+      setGeom(clampBox({ x: 0, y: 0, w: window.innerWidth, h: window.innerHeight }));
+    } else if (panelGeom) {
+      setGeom(clampBox(panelGeom));
+    }
+    savePanelPrefsSoon();
+  }
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(panelViewportChanged).observe(document.documentElement);
+  }
+  window.addEventListener('resize', panelViewportChanged);
+
+  function row(labelText, control, group) {
     var wrap = document.createElement('div');
     wrap.className = 'l2d-row';
+    if (group) wrap.setAttribute('data-group', group); // 设置入口二级菜单锚点
     var lab = document.createElement('label');
     lab.textContent = labelText;
     wrap.appendChild(lab);
@@ -2547,16 +3163,46 @@
   function buildPanel() {
     if (!panelEl) return;
     panelEl.innerHTML = '';
+    panelEl.classList.remove('collapsed');
 
+    // 标题栏：拖拽把手 + 折叠/最大化/关闭。内容全部收进 .l2d-panel-body，由滚动条兜底。
+    var head = document.createElement('div');
+    head.className = 'l2d-panel-head';
+    head.setAttribute('tabindex', '-1'); // SettingsWindowManager 焦点落点
     var title = document.createElement('h4');
     title.textContent = 'DSH-L2D 设置';
-    panelEl.appendChild(title);
+    var collapseBtn = document.createElement('button');
+    collapseBtn.type = 'button';
+    collapseBtn.className = 'l2d-panel-btn l2d-panel-collapse';
+    collapseBtn.textContent = '\u2013';
+    collapseBtn.setAttribute('aria-label', '折叠设置面板');
+    collapseBtn.title = '折叠';
+    var maxBtn = document.createElement('button');
+    maxBtn.type = 'button';
+    maxBtn.className = 'l2d-panel-btn l2d-panel-max';
+    maxBtn.textContent = '\u25a1';
+    maxBtn.setAttribute('aria-label', '最大化/还原');
+    maxBtn.title = '最大化 / 还原（双击标题栏同效）';
+    var closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'l2d-panel-btn l2d-panel-close';
+    closeBtn.textContent = '\u00d7';
+    closeBtn.setAttribute('aria-label', '关闭设置');
+    closeBtn.title = '关闭';
+    head.appendChild(title);
+    head.appendChild(collapseBtn);
+    head.appendChild(maxBtn);
+    head.appendChild(closeBtn);
+    panelEl.appendChild(head);
+
+    var body = document.createElement('div');
+    body.className = 'l2d-panel-body';
 
     var keyInput = document.createElement('input');
     keyInput.type = 'password';
     keyInput.placeholder = settings.hasApiKey ? '已保存，留空则不修改' : 'sk-...';
     keyInput.autocomplete = 'off';
-    panelEl.appendChild(row('DeepSeek API Key（仅用于查询余额）', keyInput));
+    body.appendChild(row('DeepSeek API Key（仅用于查询余额）', keyInput, 'account'));
 
     var soundWrap = document.createElement('div');
     soundWrap.className = 'l2d-inline';
@@ -2571,7 +3217,7 @@
     soundVol.value = String(settings.soundVolume);
     soundWrap.appendChild(soundToggle);
     soundWrap.appendChild(soundVol);
-    panelEl.appendChild(row('音效开关 / 音量', soundWrap));
+    body.appendChild(row('音效开关 / 音量', soundWrap, 'behavior'));
 
     var scaleInput = document.createElement('input');
     scaleInput.type = 'range';
@@ -2582,37 +3228,37 @@
     scaleInput.addEventListener('input', function () {
       applyScale(scaleInput.value);
     });
-    panelEl.appendChild(row('角色缩放', scaleInput));
+    body.appendChild(row('角色缩放', scaleInput, 'appearance'));
 
     var refreshInput = document.createElement('input');
     refreshInput.type = 'number';
     refreshInput.min = '15';
     refreshInput.max = '3600';
     refreshInput.value = String(settings.refreshSeconds);
-    panelEl.appendChild(row('余额刷新间隔（秒）', refreshInput));
+    body.appendChild(row('余额刷新间隔（秒）', refreshInput, 'account'));
 
     var agentToggle = document.createElement('input');
     agentToggle.type = 'checkbox';
     agentToggle.checked = settings.agentLink !== false;
-    panelEl.appendChild(row('工作区联动', agentToggle));
+    body.appendChild(row('工作区联动', agentToggle, 'behavior'));
     var sysToggle = document.createElement('input');
     sysToggle.type = 'checkbox';
     sysToggle.checked = settings.systemSensor === true;
-    panelEl.appendChild(row('系统联动（CPU/内存/电量/断网）', sysToggle));
+    body.appendChild(row('系统联动（CPU/内存/电量/断网）', sysToggle, 'behavior'));
     var mediaToggle = document.createElement('input');
     mediaToggle.type = 'checkbox';
     mediaToggle.checked = settings.mediaSensor === true;
-    panelEl.appendChild(row('媒体律动（音乐播放时轻摆）', mediaToggle));
+    body.appendChild(row('媒体律动（音乐播放时轻摆）', mediaToggle, 'behavior'));
 
     var petToggle = document.createElement('input');
     petToggle.type = 'checkbox';
     petToggle.checked = settings.petMode !== false; // 默认开（桌宠模式为正式行为）
-    panelEl.appendChild(row('桌宠模式（悬停零触发 · 点击只摸头）', petToggle));
+    body.appendChild(row('桌宠模式（悬停零触发 · 点击只摸头）', petToggle, 'behavior'));
 
     var eyeFollowToggle = document.createElement('input');
     eyeFollowToggle.type = 'checkbox';
     eyeFollowToggle.checked = settings.eyeFollow !== false; // 默认开（与宿主默认值/存量迁移一致）
-    panelEl.appendChild(row('眼神跟随（鼠标驱动视线/头/身体）', eyeFollowToggle));
+    body.appendChild(row('眼神跟随（鼠标驱动视线/头/身体）', eyeFollowToggle, 'appearance'));
 
     var clickMode = document.createElement('select');
     var modeRandom = document.createElement('option');
@@ -2624,17 +3270,17 @@
     clickMode.appendChild(modeRandom);
     clickMode.appendChild(modeApi);
     clickMode.value = settings.clickMode === 'api' ? 'api' : 'random';
-    panelEl.appendChild(row('戳一戳动作', clickMode));
+    body.appendChild(row('戳一戳动作', clickMode, 'behavior'));
 
     var spontaneousChat = document.createElement('input');
     spontaneousChat.type = 'checkbox';
     spontaneousChat.checked = settings.spontaneousChat !== false;
-    panelEl.appendChild(row('自发聊天', spontaneousChat));
+    body.appendChild(row('自发聊天', spontaneousChat, 'behavior'));
 
     var memeToggle = document.createElement('input');
     memeToggle.type = 'checkbox';
     memeToggle.checked = settings.memeStyle !== false;
-    panelEl.appendChild(row('梗味人设', memeToggle));
+    body.appendChild(row('梗味人设', memeToggle, 'behavior'));
 
     var memeLevel = document.createElement('input');
     memeLevel.type = 'range';
@@ -2642,28 +3288,17 @@
     memeLevel.max = '100';
     memeLevel.step = '5';
     memeLevel.value = String(settings.memeLevel);
-    panelEl.appendChild(row('玩梗程度', memeLevel));
+    body.appendChild(row('玩梗程度', memeLevel, 'behavior'));
 
     var autoAct = document.createElement('input');
     autoAct.type = 'checkbox';
     autoAct.checked = settings.autoAct !== false;
-    panelEl.appendChild(row('API 自主动作', autoAct));
+    body.appendChild(row('API 自主动作', autoAct, 'behavior'));
 
     var hint = document.createElement('div');
     hint.className = 'l2d-hint';
     hint.textContent = '单击角色播放动作；悬停显示余额与当前峰/谷价。开启自发聊天后，完成状态会回流最新回复，空闲时偶尔说话。';
-    panelEl.appendChild(hint);
-
-    // 调试：强制刷新状态（不重载页面，重拉宿主设置 + 重挂渲染包）
-    var forceBtn = document.createElement('button');
-    forceBtn.type = 'button';
-    forceBtn.textContent = '↻ 强制刷新状态';
-    forceBtn.title = '重新拉取宿主设置并销毁/重挂渲染包（调试用，不重载页面）';
-    forceBtn.addEventListener('click', function () {
-      closePanel();
-      forceRefreshState();
-    });
-    panelEl.appendChild(forceBtn);
+    body.appendChild(hint);
 
     var actions = document.createElement('div');
     actions.className = 'l2d-actions';
@@ -2724,7 +3359,20 @@
 
     actions.appendChild(cancel);
     actions.appendChild(save);
-    panelEl.appendChild(actions);
+    body.appendChild(actions);
+    panelEl.appendChild(body);
+
+    // 八向缩放手柄（N/S/E/W + 四角，方向光标由 CSS 决定）
+    var DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+    for (var di = 0; di < DIRS.length; di++) {
+      var grip = document.createElement('div');
+      grip.className = 'l2d-ph';
+      grip.setAttribute('data-dir', DIRS[di]);
+      grip.setAttribute('aria-hidden', 'true');
+      panelEl.appendChild(grip);
+    }
+
+    bindPanelWindow();
   }
 
   // 启动：初始化链任何一步抛错都不能让整个 IIFE 死掉——否则后面的 DSH_L2D_AI
@@ -2734,6 +3382,7 @@
   function bootOverlay() {
     try {
       ensureMounted();
+      loadDbActions(); // UI-FLOAT ⑤：动作池读库（失败静默降级）
     } catch (err) {
       try {
         fetch('/dsh-l2d/reverse/event', {

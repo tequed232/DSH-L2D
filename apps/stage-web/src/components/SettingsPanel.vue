@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import M3Segmented from './M3Segmented.vue';
 import type { SegmentOption } from './M3Segmented.vue';
 import M3Slider from './M3Slider.vue';
 import M3Switch from './M3Switch.vue';
 import M3Button from './M3Button.vue';
 import M3Icon from './M3Icon.vue';
+import DshTextInput from './DshTextInput.vue';
+import DshSelect from './DshSelect.vue';
+import type { SelectOption } from './DshSelect.vue';
 import { resetSettings, useSettings } from '../composables/useSettings.ts';
 import type { ContextState, ThemeMode } from '../composables/useSettings.ts';
 
@@ -34,6 +37,52 @@ const contextModel = computed<string>({
 });
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
+
+// ---- 运行时（自 settings.html sec-model 吸收，读真实 status.json，取不到显示「—」）----
+interface RuntimeStatus {
+  model: string | null;
+  renderer: boolean;
+  core: boolean;
+  avatarFound: boolean;
+}
+const runtime = ref<Partial<RuntimeStatus> | null>(null);
+const runtimeError = ref(false);
+let runtimeTimer = 0;
+
+async function pollRuntime() {
+  try {
+    const res = await fetch('/dsh-l2d/status.json', { cache: 'no-store' });
+    runtime.value = res.ok ? ((await res.json()) as RuntimeStatus) : null;
+    runtimeError.value = !res.ok;
+  } catch {
+    runtime.value = null;
+    runtimeError.value = true;
+  }
+}
+
+pollRuntime();
+runtimeTimer = window.setInterval(pollRuntime, 15000);
+onBeforeUnmount(() => window.clearInterval(runtimeTimer));
+
+const yesNo = (v: boolean | undefined) => (v === undefined ? '—' : v ? '已就位' : '缺失');
+
+// ---- 连接（界面先行：持久化到本地，运行时写入通道 TODO，未接通前不宣称生效）----
+const transportOptions: SelectOption[] = [
+  { value: 'plugin', label: 'DSH 插件通道（/dsh-l2d/）' },
+  { value: 'dev', label: '调试服通道（dev-server）' },
+];
+const CONNECT_KEY = 'dsh-l2d.stage.connect.v1';
+const connect = ref<{ endpoint: string; transport: string }>({ endpoint: '/dsh-l2d/', transport: 'plugin' });
+try {
+  const saved = JSON.parse(localStorage.getItem(CONNECT_KEY) || '{}');
+  if (typeof saved.endpoint === 'string') connect.value.endpoint = saved.endpoint;
+  if (typeof saved.transport === 'string') connect.value.transport = saved.transport;
+} catch { /* 隐私模式忽略 */ }
+function persistConnect() {
+  try {
+    localStorage.setItem(CONNECT_KEY, JSON.stringify(connect.value));
+  } catch { /* ignore */ }
+}
 </script>
 
 <template>
@@ -156,6 +205,46 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
     </section>
 
     <section class="group">
+      <h3>运行时</h3>
+      <!-- 自 settings.html「角色与模型」区吸收；数据来自 /dsh-l2d/status.json，取不到显示「—」 -->
+      <div class="about">
+        <div class="about-row"><span>当前模型</span><code>{{ runtime?.model || '—' }}</code></div>
+        <div class="about-row"><span>渲染包</span><code>{{ yesNo(runtime?.renderer) }}</code></div>
+        <div class="about-row"><span>Cubism Core</span><code>{{ yesNo(runtime?.core) }}</code></div>
+        <div class="about-row"><span>静态立绘</span><code>{{ yesNo(runtime?.avatarFound) }}</code></div>
+      </div>
+      <p v-if="runtimeError" class="runtime-hint">status.json 不可达（独立设置页 /dsh-l2d/settings.html 仍可直读运行时）。</p>
+    </section>
+
+    <section class="group">
+      <h3>连接</h3>
+
+      <div class="row col">
+        <div class="text">
+          <span class="k">运行时接口地址</span>
+          <span class="d">角色运行时服务前缀</span>
+        </div>
+        <DshTextInput v-model="connect.endpoint" placeholder="/dsh-l2d/" @update:model-value="persistConnect" />
+      </div>
+
+      <div class="row col">
+        <div class="text">
+          <span class="k">传输通道</span>
+          <span class="d">插件注入页走 /dsh-l2d/，调试页走 dev-server</span>
+        </div>
+        <DshSelect v-model="connect.transport" :options="transportOptions" @update:model-value="persistConnect" />
+      </div>
+
+      <div class="note">
+        <M3Icon name="info" :size="16" />
+        <p>
+          连接项当前仅保存在本机（TODO：运行时写入通道未接通，settings.json 的读写仍由
+          独立设置页承担，接通后此面板成为唯一设置面）。
+        </p>
+      </div>
+    </section>
+
+    <section class="group">
       <h3>关于</h3>
       <div class="about">
         <div class="about-row"><span>版本</span><code>0.1.0 · P0</code></div>
@@ -273,5 +362,11 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
   display: flex;
   justify-content: flex-end;
   margin-top: var(--dsh-space-4);
+}
+
+.runtime-hint {
+  margin: var(--dsh-space-2) 0 0;
+  font: var(--dsh-text-xs);
+  color: var(--dsh-ink-muted);
 }
 </style>

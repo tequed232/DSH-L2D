@@ -12,7 +12,7 @@ import { LAppSubdelegate } from './app/lappsubdelegate';
 import { LAppPal } from './app/lapppal';
 import type { LAppModel } from './app/lappmodel';
 import { ParamInjector, parameterIndexOf } from './app/param-injector';
-import { createPhysicsGate, DEFAULT_EMBODIED_FLAGS } from './app/motion-adapter';
+import { isHostable } from './app/param-host-policy';
 import { EmotionRouter, EmotionIntent, EmotionSignal } from './app/emotion-router';
 import { MotionDirector, motionsShareArm } from './app/motion-director';
 import { PoseController, POSE_IDS } from './app/pose-controller';
@@ -22,6 +22,7 @@ import { sampleAmbient, type AmbientKind } from '../../core/src/ambient.ts';
 import { LIPSYNC_PARAMS } from '../../core/src/index.ts';
 import { normalizeActChain } from '../../core/src/chain-normalize.ts';
 import { admitKeyframeTrack } from './app/keyframe-admission.ts';
+import { createCompletionBus, type ActionCompletionEvent } from './app/action-completion.ts';
 import {
   createGestureBridge,
   type GestureAdmitOptions,
@@ -35,6 +36,7 @@ import type { StopSelector } from '../../core/src/gesture-timeline.ts';
 import {
   ActGate,
   closeMotionsOnPreempt,
+  countRealCompletions,
   getActPhaseTemplate,
   motionResultKind,
   preemptedYandere,
@@ -65,19 +67,6 @@ let currentZoom = 1;
 const injector = new ParamInjector();
 const motionDirector = new MotionDirector();
 const poseController = new PoseController();
-
-/**
- * [M1-b] PhysicsGate：Hip* pre 让位（生产者跳过输出）+ limb post 覆盖的帧内挂接点。
- * `embodied.m1` 默认 false（DEFAULT_EMBODIED_FLAGS）= pre/post 均为空操作，现行为逐字节不变；
- * 集成日把 flag 翻 true 即启用（settings/overlay 的开关管线由后续批次承接）。
- * pre 让位数据源是 injector 的 ownership（pre 相位独占，实际只有 HipAngleX/Y/Z）；
- * limb 控制器实例未接线（M1-c/Mixer 批次提供），post 通道在提供前为空操作。
- */
-const physicsGate = createPhysicsGate(DEFAULT_EMBODIED_FLAGS, {
-  preOwnedIds: () => injector.getPreOwnedIds(),
-  stagePostWrite: (core, id, value) =>
-    injector.set(core as Parameters<typeof injector.set>[0], id, value, 1),
-});
 
 /** 页面里加载 Cubism Core（幂等） */
 export function loadCore(url: string): Promise<void> {
@@ -358,10 +347,6 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
     applyGazeBody(core);
     flushAngleBus(core);
     injector.apply(core, 'pre');
-    // [M1-b PhysicsGate·物理前] flag 开启时把本帧 pre 相位独占的 Hip* 写进让位登记表：
-    // Physics600 对这些输出跳过缓存回写与落写（chained 裙摆/腿链随 Agent 值），
-    // 振子状态保温，release 后物理平滑接管。flag 关（默认）= 空操作，现行为不变。
-    physicsGate.pre(core);
   });
   model.setPostLateUpdateHook((core, deltaTimeSeconds) => {
     phaseDiag.post++;
@@ -370,14 +355,12 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
     // 任何既有相对顺序不变。
     if (TIMELINE_ENABLED) gestureBridge.resolve(performance.now());
     kfTick(performance.now());
+    // PR-D：收割非 Loop 动作的真实终点（onFinishedMotionHandler 在 updateMotion 中途只能置标记）
+    motionCompletionTick();
     if (!poseOwnedByMotion) {
       poseController.update(core, deltaTimeSeconds, injector);
     }
     applyAmbientFace(core);
-    // [M1-b PhysicsGate·物理后] flag 开启时按 LimbControlLike.resolve 覆盖叶子四肢：
-    // resolve 非空则逐项经 stagePostWrite（injector.set）登记，由下一行 injector.apply('post')
-    // 后写胜出（M1-a post 语义）。flag 关（默认）= 空操作，现行为不变。
-    physicsGate.post(core);
     injector.apply(core, 'post');
     applyGazeEyes(core);
     // [M1-f 第二批] cue 写值必须晚于 applyGazeEyes：gaze 通道写的就是 ParamEyeBallX/Y，
@@ -650,12 +633,48 @@ export function noteActMotion(runId: number, reason: string, kind?: 'fail' | 'sk
   actGate.noteMotion(runId, reason, kind === 'skip' ? 'skip' : 'fail');
 }
 
+export { countRealCompletions };
+
+// ---------------------------------------------------------------- 真实完成事件（PR-D）
+//
+// 裁决书「不得预估时长」：完成信号只来自运行时真实终点——
+//   motion    : Cubism onFinishedMotionHandler（非 Loop 自然收敛；Loop 无终点不产事件）
+//   keyframes : kfTick 的 elapsed >= kfDuration 收敛（非 loop）
+// overlay 订阅后按 executionId（=/ai/call 的 callId）转发 ai-inbox 事件通道；
+// HttpActionExecutor 消费真实事件并做 ownership 出口核对（详见 action-executor.mjs）。
+const actionCompletionBus = createCompletionBus();
+
+/** 订阅真实完成事件；返回退订函数。监听方异常不反噬渲染。 */
+export const onActionCompletion = (cb: (event: ActionCompletionEvent) => void): (() => void) =>
+  actionCompletionBus.subscribe(cb);
+
+/** 派发真实完成事件；executionId 缺失时不产事件（无消费者可关联，纯噪音）。 */
+function emitActionCompletion(kind: 'motion' | 'keyframes', executionId: string, group: string, owned: string[]): void {
+  if (!executionId) return;
+  actionCompletionBus.emit({ kind, executionId, group, phase: 'end', owned });
+}
+
 export { closeMotionsOnPreempt, preemptedYandere, motionsShareArm, motionResultKind };
 
 /** 动作诊断，不参与渲染决策。 */
 let motionDiag = { group: 'none', startedAt: 0, playing: false };
 /** playMotionAsync 的收招定时器（Loop 动作回卷前收养终态姿势）；reset 必须能撤掉它。 */
 let motionStopTimer = 0;
+/**
+ * PR-D：非 Loop 动作的真实终点待处理标记。onFinishedMotionHandler 在 updateMotion
+ * 中途触发，不能就地改动作队列/姿势层；置为待处理闭包，由 postLateUpdate 钩子在
+ * 同帧 update 结束后统一收割（motionCompletionTick）。
+ */
+let motionFinishPending: (() => void) | null = null;
+/** 本次动作的完成是否已收割（自然收敛与看门狗兜底双路径，防双发完成事件）。 */
+let motionCompletionDone = false;
+/** PR-D：postLateUpdate 相位收割待处理的真实终点（不能在 updateMotion 中途改队列/姿势）。 */
+function motionCompletionTick(): void {
+  const harvest = motionFinishPending;
+  if (!harvest) return;
+  motionFinishPending = null;
+  harvest();
+}
 /**
  * 动作纪元：reset 递增。旧动作的收招定时器看到纪元变化即自行作废，
  * 避免 reset 之后 adoptAfterMotion 又把终态姿势（如 finger）收养回来。
@@ -832,6 +851,8 @@ export interface KeyframesOptions {
   /** 总时长 ms；缺省取所有轨道最大时间 */
   duration?: number;
   loop?: boolean;
+  /** PR-D：完成事件关联键（=/ai/call 的 callId）。缺省不产出完成事件。 */
+  executionId?: string | number;
 }
 
 interface KfTrackRuntime {
@@ -851,6 +872,8 @@ let kfAutoOwned: string[] = [];
 /** 本次 keyframes 涉及的、已被 ownership 覆盖的物理输出（回执用，含调用方原本就 own 的） */
 let kfOwnedForTracks: string[] = [];
 let kfRenewAt = 0;
+/** PR-D：本次 keyframes 的完成事件关联键（executionId 关联） */
+let kfExecutionId = '';
 
 function releaseKfOwnership(): void {
   if (!kfAutoOwned.length) return;
@@ -956,6 +979,7 @@ export function playKeyframes(tracks: KeyframeTrack[], opts: KeyframesOptions = 
   kfTracks = accepted;
   kfDuration = Math.max(16, Math.min(KF_MAX_MS, Number(opts.duration) || maxT));
   kfLoop = !!opts.loop;
+  kfExecutionId = opts.executionId == null ? '' : String(opts.executionId);
   kfStart = performance.now();
   kfActive = true;
   kfAutoOwned = ownedNow;
@@ -973,6 +997,7 @@ export function getKeyframeOwnedParameters(): string[] {
 export function stopKeyframes(): void {
   kfActive = false;
   kfTracks = [];
+  kfExecutionId = '';
   releaseKfOwnership();
 }
 
@@ -999,7 +1024,12 @@ function kfTick(now: number): void {
 
   if (!kfLoop && elapsed >= kfDuration) {
     kfActive = false;
+    // PR-D：真实完成事件。owned 必须在释放前快照（releaseKfOwnership 会清空清单），
+    // 出口核对语义：完成时刻仍被认领的物理输出，理想应为空（本次 auto-owned 已释放）。
+    const owned = kfOwnedForTracks.slice();
     releaseKfOwnership();
+    emitActionCompletion('keyframes', kfExecutionId, '', owned);
+    kfExecutionId = '';
     return;
   }
   // loop 长时间播放：到期前续期，避免后半段被 injector 拒写
@@ -1031,7 +1061,9 @@ const clamp = (v: number): number => (v < -1 ? -1 : v > 1 ? 1 : v);
  * body：拖拽或 setParameters；ambient：待机微动作；media：媒体律动。
  * 优先级 body > ambient > media，超出幅度从低优先级往下砍。
  */
-const ANGLE_BUS_CAP = { AngleZ: 15, PositionX: 10, PositionY: 10 } as const;
+// AngleZ 上限对齐模型输入范围 ±30（S1-RACE：验收契约 setParameter('AngleZ',20)
+// 要求原值生效，15 的旧上限会把 agent 直写削成 15）。混控保护语义不变。
+const ANGLE_BUS_CAP = { AngleZ: 30, PositionX: 10, PositionY: 10 } as const;
 type BusParam = keyof typeof ANGLE_BUS_CAP;
 type BusChannel = 'body' | 'gaze' | 'ambient' | 'media';
 const angleBus: Record<BusParam, Record<BusChannel, number>> = {
@@ -1209,11 +1241,14 @@ function applyAmbientFace(core: CoreModel): void {
  * 修复前两者都在 applied；修复后都进 failed 且 reason=not-exist
  * （本模型真实手臂参数是 Param36/39/40/41/42/43 与 59~62）。
  */
-function setParameterChecked(id: string, value: number, weight = 1): string | null {
+function setParameterChecked(id: string, value: number, weight = 1, channel: 'agent' | 'runtime' = 'agent'): string | null {
   const core = model?.getModel();
   if (!core) return 'not-ready';
   const num = Number(value);
   if (!Number.isFinite(num)) return 'invalid-value';
+  // Node Ownership：外部（agent）通道只允许写托管白名单内的参数；
+  // runtime 通道（UI 本地交互）不受白名单约束，口型红线仍由 injector 更早优先拒绝。
+  if (channel === 'agent' && !isHostable(id)) return 'not_hostable';
   // AngleZ / PositionX / PositionY 可能被拖拽、微动作、媒体同时写，先记账再统一注入
   if (id === 'AngleZ' || id === 'PositionX' || id === 'PositionY') {
     if (!paramExists(core, id)) return 'not-exist';
@@ -1223,7 +1258,7 @@ function setParameterChecked(id: string, value: number, weight = 1): string | nu
   }
   // 入口校验：不存在 → not-exist；物理输出未独占 → physics-output（与 injector.set 同判）
   if (!paramExists(core, id)) return 'not-exist';
-  return injector.set(core, id, num, weight) ? null : 'rejected';
+  return injector.set(core, id, num, weight, { channel }) ? null : 'rejected';
 }
 
 export function setParameter(id: string, value: number, weight = 1): boolean {
@@ -1232,7 +1267,7 @@ export function setParameter(id: string, value: number, weight = 1): boolean {
 
 export interface ApplyReport {
   ok: string[];
-  /** 失败项：`参数名:reason`（not-exist / physics-output / mouth-locked / invalid-value / not-ready / rejected） */
+  /** 失败项：`参数名:reason`（not-exist / not_hostable / physics-output / mouth-locked / invalid-value / not-ready / rejected） */
   failed: string[];
 }
 
@@ -1242,7 +1277,24 @@ export function setParameters(values: Record<string, number>, weight = 1): Apply
   const failed: string[] = [];
   const src = values || {};
   for (const key of Object.keys(src)) {
-    const reason = setParameterChecked(key, src[key], weight);
+    const reason = setParameterChecked(key, src[key], weight, 'agent');
+    if (reason === null) ok.push(key);
+    else failed.push(key + ':' + reason);
+  }
+  return { ok, failed };
+}
+
+/**
+ * runtime 通道批量写：UI 本地交互（拖拽倾斜/位移、换装/配饰开关等）专用。
+ * 不受 Node Ownership 托管白名单约束（白名单管 Agent/AI 控制权，UI 交互属
+ * runtime 域）；口型红线与物理输出保护依然生效。
+ */
+export function setParametersRuntime(values: Record<string, number>, weight = 1): ApplyReport {
+  const ok: string[] = [];
+  const failed: string[] = [];
+  const src = values || {};
+  for (const key of Object.keys(src)) {
+    const reason = setParameterChecked(key, src[key], weight, 'runtime');
     if (reason === null) ok.push(key);
     else failed.push(key + ':' + reason);
   }
@@ -1262,7 +1314,8 @@ export function setParameters(values: Record<string, number>, weight = 1): Apply
 export function ownParameters(ids: string[], durationMs = 1200, phase: 'pre' | 'post' = 'post'): string[] {
   if (!model?.getModel()) return [];
   markActive();
-  return injector.own(ids, durationMs, phase);
+  // agent 通道：只允许认领托管白名单内的参数（defaultOwnership='none'）
+  return injector.own(ids, durationMs, phase, { channel: 'agent' });
 }
 
 /** 主动释放 Agent 独占；下一帧物理自然接管，不需要恢复逻辑。 */
@@ -1342,6 +1395,8 @@ export interface PlayMotionOptions {
   priority?: number;
   interrupt?: boolean;
   awaitFinish?: boolean;
+  /** PR-D：完成事件关联键（=/ai/call 的 callId）。缺省不产出完成事件。 */
+  executionId?: string | number;
 }
 
 export interface PlayMotionResult {
@@ -1403,6 +1458,18 @@ export async function playMotionAsync(
   const no = Math.max(0, Math.min(list.length - 1, Math.floor(Number(opts.index) || 0)));
   const priority = opts.interrupt || opts.priority === 3 ? 3 : opts.priority || 2;
 
+  // S2-ADMIT：冷启动边界 waitForAllMotions 会被个别 404 动作饿死（_motionCount 永不
+  // 齐平 → 状态机停在 WaitLoadMotion），目标动作预载缓存缺失时 LAppModel.startMotion
+  // 会拿 undefined 同步返回 -1（start-rejected），异步 loadMotion 落位后重试才成功。
+  // 这里对目标动作做有界（≤3s）预载等待，把「首击必败」收敛为一次成功调用；
+  // 确实不存在的动作等满 3s 后放行，由 startMotion 自行报错（语义不变）。
+  {
+    const preloadT0 = performance.now();
+    while (!model.getMotionDuration(target, no) && performance.now() - preloadT0 < 3000) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+
   markActive();
   const core = model.getModel();
   if (!core) return { status: 'failed', reason: 'not-ready' };
@@ -1419,14 +1486,23 @@ export async function playMotionAsync(
     });
   }
   const epoch = motionEpoch;
-  const adoptAfterMotion = (): void => {
-    motionStopTimer = 0;
+  const executionId = opts.executionId == null ? '' : String(opts.executionId);
+  motionCompletionDone = false;
+  motionFinishPending = null;
+  const completeMotion = (natural: boolean): void => {
+    if (motionStopTimer) {
+      window.clearTimeout(motionStopTimer);
+      motionStopTimer = 0;
+    }
     if (epoch !== motionEpoch) {
       // reset 已发生：收养作废（停动作/姿势收养都归 reset 负责），只放行 awaitFinish 等待者，
-      // 否则 playMotionAsync 的 finished promise 会永久挂起
+      // 否则 playMotionAsync 的 finished promise 会永久挂起。不消耗 motionCompletionDone，
+      // 不产完成事件——后续动作的终点归属它自己的 completeMotion。
       if (finishResolve) finishResolve();
       return;
     }
+    if (motionCompletionDone) return; // 自然收敛已收割，看门狗只做幂等空转
+    motionCompletionDone = true;
     try {
       model.stopMotions();
     } catch {
@@ -1437,20 +1513,43 @@ export async function playMotionAsync(
     if (terminal) poseController.adoptPreset(terminal);
     else poseController.adopt(injector.snapshot(core, POSE_IDS));
     if (finishResolve) finishResolve();
+    // PR-D：真实终点只认自然收敛；看门狗/预估路径不发事件（裁决书：不得预估时长）。
+    if (natural) {
+      emitActionCompletion('motion', executionId, target, injector.getAgentOwned());
+    }
+  };
+  const adoptAfterMotion = (): void => {
+    completeMotion(false);
   };
   const motionDuration = model.getMotionDuration(target, no) || 1.25;
-  // Loop 动作会在 duration 处瞬间回到起点；必须在回卷前一点取样收养，
-  // 否则读到的是下一圈开头的默认姿势。
-  motionStopTimer = window.setTimeout(
-    adoptAfterMotion,
-    Math.max(250, motionDuration * 1000 - 120)
-  );
-  const handle = model.startMotion(target, no, priority);
+  const loopMotion = model.isMotionLoop(target, no);
+  if (loopMotion) {
+    // Loop 动作会在 duration 处瞬间回到起点；必须在回卷前一点取样收养，
+    // 否则读到的是下一圈开头的默认姿势。Loop 无自然终点，不产完成事件（保持预估兜底）。
+    motionStopTimer = window.setTimeout(
+      adoptAfterMotion,
+      Math.max(250, motionDuration * 1000 - 120)
+    );
+  } else {
+    // 非 Loop：真实终点 = onFinishedMotionHandler 自然收敛（motionFinishPending →
+    // postLateUpdate 收割）。定时器降级为 fail-closed 看门狗（真实信号丢失才收养），
+    // 时长取 duration + 2s——预估不再充当完成信号（裁决书）。
+    motionStopTimer = window.setTimeout(
+      adoptAfterMotion,
+      Math.max(250, motionDuration * 1000 + 2000)
+    );
+  }
+  const onNaturalFinish = (): void => {
+    motionFinishPending = () => completeMotion(true);
+  };
+  const handle = model.startMotion(target, no, priority, onNaturalFinish);
   if (handle === -1) {
     if (motionStopTimer) {
       window.clearTimeout(motionStopTimer);
       motionStopTimer = 0;
     }
+    motionFinishPending = null;
+    motionCompletionDone = true; // start 失败无终点可言，防御看门狗/事件残留
     poseOwnedByMotion = false;
     if (finishResolve) finishResolve();
     return { status: 'failed', reason: 'start-rejected', group: target };
@@ -1849,6 +1948,8 @@ export function resetPerformance(): { ok: boolean; params: number } {
     window.clearTimeout(motionStopTimer);
     motionStopTimer = 0;
   }
+  motionFinishPending = null;
+  motionCompletionDone = true;
   try {
     model?.stopMotions();
   } catch {
@@ -1925,6 +2026,8 @@ export interface ParamMeta {
   min: number;
   max: number;
   def: number;
+  /** Node Ownership：是否在托管白名单内（仅表示可托管，读≠控制权） */
+  hostable?: boolean;
 }
 
 export interface Capabilities {
@@ -1959,6 +2062,7 @@ export function getCapabilities(): Capabilities | null {
         min: +core.getParameterMinimumValue(i).toFixed(3),
         max: +core.getParameterMaximumValue(i).toFixed(3),
         def: +core.getParameterDefaultValue(i).toFixed(3),
+        hostable: isHostable(id.getString()),
       });
     }
   } catch {
@@ -2076,22 +2180,6 @@ export function getInfo(): Record<string, number | string> | null {
       } catch {
         parts.push(name + '=?');
       }
-    }
-    // M1-d1 观测通道：当前被 own 的参数动态并入（pre 相位锁定值可从 pv 读到，
-    // 释放后自动消失）。固定清单不含 Hip* 等 pre 相位参数，U5 类验收必须经此读取。
-    try {
-      const ownedIds = injector.getAgentOwned() as unknown as string[];
-      for (const oid of ownedIds || []) {
-        if (ids.includes(oid)) continue;
-        try {
-          const oh = idMgr.getId(oid);
-          parts.push(oid + '=' + core.getParameterValueById(oh).toFixed(3) + '*');
-        } catch {
-          parts.push(oid + '=?');
-        }
-      }
-    } catch {
-      /* owned 快照不可用时静默——固定清单照常输出 */
     }
     // 判定是否真的在动：与上次采样比较
     try {
@@ -2318,6 +2406,7 @@ const api = {
   // 控制
   setParameter,
   setParameters,
+  setParametersRuntime,
   ownParameters,
   releaseParameters,
   getOwnedParameters,

@@ -1,0 +1,122 @@
+#1 [part] whale_tail  (source_exact, conf=0.8)  dafeiyu-mature-character-sheet.png
+     evidence: {"region":"三视图-侧面/背面","note":"蓝色鲸尾鳍，背面视图全貌"}
+#2 [part] whale_fin_ears  (source_exact, conf=0.8)  dafeiyu-mature-character-sheet.png
+     evidence: {"region":"头部两侧","note":"鲸鳍状耳发翼"}
+#3 [part] maid_headdress  (source_exact, conf=0.8)  dafeiyu-mature-character-sheet.png
+     evidence: {"region":"头顶","note":"白色荷叶边头饰"}
+#4 [part] long_wavy_hair  (source_exact, conf=0.8)  dafeiyu-mature-character-sheet.png
+     evidence: {"region":"全身","note":"蓝色长卷发，背面过腰"}
+#5 [part] whale_embroidery  (source_exact, conf=0.8)  dafeiyu-mature-character-sheet.png
+     evidence: {"region":"细节窗2","note":"围裙上的鲸鱼刺绣"}
+#6 [part] blue_bow_accessories  (source_exact, conf=0.8)  dafeiyu-mature-character-sheet.png
+     evidence: {"region":"头部/胸前/背部","note":"多处蓝色蝴蝶结"}
+#7 [outfit] navy_maid_dress  (source_exact, conf=0.8)  dafeiyu-mature-character-sheet.png
+     evidence: {"region":"三视图-正面","note":"深蓝女仆装+金线纹样"}
+#8 [outfit] white_apron  (source_exact, conf=0.8)  dafeiyu-mature-character-sheet.png
+     evidence: {"region":"三视图-正面","note":"双层荷叶边围裙"}
+#9 [outfit] white_tights_black_shoes  (source_exact, conf=0.8)  dafeiyu-mature-character-sheet.png
+     evidence: {"region":"细节窗6","note":"白袜+黑玛丽珍高跟鞋"}
+#10 [pose] three_view_standing  (source_exact, conf=0.8)  dafeiyu-mature-character-sheet.png
+     evidence: {"region":"全图","note":"正/侧/背三视站姿"}
+#11 [expression] smile_open_mouth  (source_exact, conf=0.8)  dafeiyu-mature-character-sheet.png
+     evidence: {"region":"正面+细节窗1","note":"张口笑"}
+#12 [color] navy_white_blue_palette  (inferred, conf=0.9)  dafeiyu-mature-character-sheet.png
+#13 [style] anime_soft_shading  (inferred, conf=0.8)  dafeiyu-mature-character-sheet.png
+#14 [pose] three_view_chibi_standing  (source_exact, conf=1)  HTMmWmCaYAAilyN.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#15 [part] whale_tail  (inferred, conf=0.95)  HTMmWmCaYAAilyN.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#16 [part] whale_fin_ears  (inferred, conf=0.95)  HTMmWmCaYAAilyN.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#17 [part] maid_headdress  (inferred, conf=0.95)  HTMmWmCaYAAilyN.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#18 [part] whale_embroidery  (inferred, conf=0.9)  HTMmWmCaYAAilyN.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#19 [style] chibi  (inferred, conf=0.95)  HTMmWmCaYAAilyN.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#20 [expression] sleepy_half_lidded  (inferred, conf=0.85)  bili_poster-1791382745061.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#21 [expression] finger_on_lips  (inferred, conf=0.8)  bili_poster-1791382745061.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#22 [pose] lying_on_bed  (inferred, conf=0.9)  bili_poster-1791382745061.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#23 [outfit] navy_maid_dress_short_with_thighhighs  (inferred, conf=0.85)  bili_poster-1791382745061.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#24 [part] whale_tail  (inferred, conf=0.9)  bili_poster-1791382745061.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#25 [scene] bedroom  (inferred, conf=0.9)  bili_poster-1791382745061.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#26 [expression] smile_open_mouth  (inferred, conf=0.9)  heybox_1792638467783_-1242029457.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#27 [expression] blush  (inferred, conf=0.8)  heybox_1792638467783_-1242029457.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#28 [pose] hand_raised_pinch  (inferred, conf=0.85)  heybox_1792638467783_-1242029457.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#29 [outfit] dark_maid_variant_grey_apron  (inferred, conf=0.8)  heybox_1792638467783_-1242029457.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#30 [part] whale_fin_ears  (inferred, conf=0.85)  heybox_1792638467783_-1242029457.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#31 [part] blue_crystal_brooch  (inferred, conf=0.85)  heybox_1792638467783_-1242029457.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#32 [expression] sleepy_half_lidded_smile  (inferred, conf=0.9)  HUokZsIbgAAKJZJ.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#33 [expression] blush  (inferred, conf=0.85)  HUokZsIbgAAKJZJ.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#34 [pose] both_palms_raised  (inferred, conf=0.9)  HUokZsIbgAAKJZJ.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#35 [part] whale_tail  (inferred, conf=0.85)  HUokZsIbgAAKJZJ.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#36 [part] whale_embroidery  (inferred, conf=0.9)  HUokZsIbgAAKJZJ.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#37 [other] speech_bubble_text  (source_exact, conf=1)  HUokZsIbgAAKJZJ.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#38 [scene] group_shot_deepseek_cast  (inferred, conf=0.95)  HTRat8FXUAAl484.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#39 [expression] surprised_tearful  (inferred, conf=0.85)  HTRat8FXUAAl484.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#40 [outfit] navy_maid_dress  (inferred, conf=0.9)  HTRat8FXUAAl484.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#41 [part] maid_headdress  (inferred, conf=0.9)  HTRat8FXUAAl484.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#42 [pose] hugging  (inferred, conf=0.9)  HTRat8FXUAAl484.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#43 [expression] content_smile_closed_mouth  (inferred, conf=0.9)  IMG_20261007_220618_CROP.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#44 [expression] blush  (inferred, conf=0.85)  IMG_20261007_220618_CROP.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#45 [pose] hand_near_cheek  (inferred, conf=0.9)  IMG_20261007_220618_CROP.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#46 [part] flower_iris_highlight  (inferred, conf=0.9)  IMG_20261007_220618_CROP.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#47 [part] maid_headdress  (inferred, conf=0.9)  IMG_20261007_220618_CROP.jpg
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#48 [expression] gentle_smile  (inferred, conf=0.9)  ChatGPT Õø¥ÕâÅ 2026զ¦10µ£ê3µùÑ 15_49_09.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#49 [expression] blush  (inferred, conf=0.85)  ChatGPT Õø¥ÕâÅ 2026զ¦10µ£ê3µùÑ 15_49_09.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#50 [pose] hand_to_cheek  (inferred, conf=0.9)  ChatGPT Õø¥ÕâÅ 2026զ¦10µ£ê3µùÑ 15_49_09.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#51 [outfit] navy_maid_dress_detached_sleeves  (inferred, conf=0.85)  ChatGPT Õø¥ÕâÅ 2026զ¦10µ£ê3µùÑ 15_49_09.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#52 [part] blue_bow_accessories  (inferred, conf=0.9)  ChatGPT Õø¥ÕâÅ 2026զ¦10µ£ê3µùÑ 15_49_09.png
+     evidence: {"batch":"batch-1-2026-11-04","promptTemplate":"gallery-static-art-v1","promptVe
+#53 [motion_cue] chibi_dog_tail_grass_wave  (parser_derived, conf=0.85)  1790571183144.gif
+     evidence: {"batch":"batch-2-2026-11-04-gif-motion","visual":"Q版角色手持狗尾草挥动（夜空背景）","timing":{
+#54 [part] chibi_dog_tail_grass_prop  (source_exact, conf=0.9)  1790571183144.gif
+     evidence: {"batch":"batch-2-2026-11-04-gif-motion","note":"手持道具：狗尾草"}
+#55 [style] chibi  (source_exact, conf=0.95)  1790571183144.gif
+     evidence: {"batch":"batch-2-2026-11-04-gif-motion","note":"Q版二头身"}
+#56 [scene] night_sky  (source_exact, conf=0.8)  1790571183144.gif
+     evidence: {"batch":"batch-2-2026-11-04-gif-motion","note":"深蓝夜空背景带星点"}
+#57 [expression] dazed_thinking  (source_exact, conf=0.9)  27260cb26da951ab70f83962775ec1579bd0e52d8885184725abc160ec3bd31b.gif
+     evidence: {"batch":"batch-2-2026-11-04-gif-motion","note":"呆滞脸 + 口水 + 思考气泡'正在思考...'"}
+#58 [motion_cue] loading_spinner_single_shot  (parser_derived, conf=0.7)  27260cb26da951ab70f83962775ec1579bd0e52d8885184725abc160ec3bd31b.gif
+     evidence: {"batch":"batch-2-2026-11-04-gif-motion","visual":"头顶加载转圈图标","timing":{"analysis
+#59 [scene] speech_bubble_text  (source_exact, conf=0.85)  27260cb26da951ab70f83962775ec1579bd0e52d8885184725abc160ec3bd31b.gif
+     evidence: {"batch":"batch-2-2026-11-04-gif-motion","transcript":"正在思考……","note":"原文带引号摘录入册
+#60 [motion_cue] head_pat_interaction_plush  (parser_derived, conf=0.75)  1791949382162.gif
+     evidence: {"batch":"batch-2-2026-11-04-gif-motion","visual":"真实玩偶被手摸头（Q版女仆造型实体化）","timing"
+#61 [part] chibi_plush_doll  (source_exact, conf=0.9)  1791949382162.gif
+     evidence: {"batch":"batch-2-2026-11-04-gif-motion","note":"实拍玩偶：女仆装+鲸鳍耳发+蓝白配色"}
+
+61 label(s) in state 'needs_review'

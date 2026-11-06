@@ -1,0 +1,90 @@
+{
+  "batchId": "batch-1-2026-11-04",
+  "promptTemplate": "gallery-static-art-v1",
+  "promptVersion": "1.0.0",
+  "annotator": "dsv4.1f-direct-vision",
+  "note": "2026-11-04 总控直接目视标注。evidenceLevel 均为 inferred（视觉判断），图上文字引源另标 source_exact。非目标角色图按模板退回不产标签。",
+  "items": [
+    {
+      "fileName": "HTMmWmCaYAAilyN.jpg",
+      "reclassify": "character_sheet",
+      "note": "Q版三视图（正面/侧面/背面），实为第二张设定表（chibi 版），按模板回写 source_class",
+      "labels": [
+        { "field": "pose", "value": "three_view_chibi_standing", "confidence": 1.0, "evidenceLevel": "source_exact", "evidence": { "region": "全图三列并排" } },
+        { "field": "part", "value": "whale_tail", "confidence": 0.95, "evidence": { "region": "三视图均可见，背面最清晰" } },
+        { "field": "part", "value": "whale_fin_ears", "confidence": 0.95, "evidence": { "region": "头部两侧" } },
+        { "field": "part", "value": "maid_headdress", "confidence": 0.95, "evidence": { "region": "头顶白色荷叶边" } },
+        { "field": "part", "value": "whale_embroidery", "confidence": 0.9, "evidence": { "region": "围裙" } },
+        { "field": "style", "value": "chibi", "confidence": 0.95 }
+      ]
+    },
+    {
+      "fileName": "bili_poster-1791382745061.png",
+      "labels": [
+        { "field": "expression", "value": "sleepy_half_lidded", "confidence": 0.85, "evidence": { "region": "面部" } },
+        { "field": "expression", "value": "finger_on_lips", "confidence": 0.8, "evidence": { "region": "手势贴唇" } },
+        { "field": "pose", "value": "lying_on_bed", "confidence": 0.9, "evidence": { "region": "全身" } },
+        { "field": "outfit", "value": "navy_maid_dress_short_with_thighhighs", "confidence": 0.85, "note": "短裙变体+白过膝袜配蓝蝴蝶结" },
+        { "field": "part", "value": "whale_tail", "confidence": 0.9, "evidence": { "region": "画面左下，带月牙纹章" } },
+        { "field": "scene", "value": "bedroom", "confidence": 0.9 }
+      ]
+    },
+    {
+      "fileName": "Screenshot_2026-10-28-17-03-19-16_149003a2d400f6adb210d7e357a3a646.jpg",
+      "reject": true,
+      "note": "主体为白发金瞳动漫少女（B站直播截图），非目标角色——按 gallery-static-art-v1 规则退回，不产标签"
+    },
+    {
+      "fileName": "heybox_1792638467783_-1242029457.png",
+      "labels": [
+        { "field": "expression", "value": "smile_open_mouth", "confidence": 0.9 },
+        { "field": "expression", "value": "blush", "confidence": 0.8 },
+        { "field": "pose", "value": "hand_raised_pinch", "confidence": 0.85, "note": "单手抬起捏合手势近颊" },
+        { "field": "outfit", "value": "dark_maid_variant_grey_apron", "confidence": 0.8 },
+        { "field": "part", "value": "whale_fin_ears", "confidence": 0.85, "note": "深色鳍耳（深色变体）" },
+        { "field": "part", "value": "blue_crystal_brooch", "confidence": 0.85 }
+      ]
+    },
+    {
+      "fileName": "HUokZsIbgAAKJZJ.jpg",
+      "labels": [
+        { "field": "expression", "value": "sleepy_half_lidded_smile", "confidence": 0.9 },
+        { "field": "expression", "value": "blush", "confidence": 0.85 },
+        { "field": "pose", "value": "both_palms_raised", "confidence": 0.9 },
+        { "field": "part", "value": "whale_tail", "confidence": 0.85, "evidence": { "region": "画面右侧" } },
+        { "field": "part", "value": "whale_embroidery", "confidence": 0.9, "evidence": { "region": "围裙口袋（笔袋变体）" } },
+        { "field": "other", "value": "speech_bubble_text", "confidence": 1.0, "evidenceLevel": "source_exact", "evidence": { "quote": "用户，上班啦 该工作了", "region": "左上气泡" } }
+      ]
+    },
+    {
+      "fileName": "HTRat8FXUAAl484.jpg",
+      "labels": [
+        { "field": "scene", "value": "group_shot_deepseek_cast", "confidence": 0.95, "note": "DeepSeek 官方角色群像，目标角色居中偏左抱橘发角色" },
+        { "field": "expression", "value": "surprised_tearful", "confidence": 0.85 },
+        { "field": "outfit", "value": "navy_maid_dress", "confidence": 0.9 },
+        { "field": "part", "value": "maid_headdress", "confidence": 0.9 },
+        { "field": "pose", "value": "hugging", "confidence": 0.9 }
+      ]
+    },
+    {
+      "fileName": "IMG_20261007_220618_CROP.jpg",
+      "labels": [
+        { "field": "expression", "value": "content_smile_closed_mouth", "confidence": 0.9 },
+        { "field": "expression", "value": "blush", "confidence": 0.85 },
+        { "field": "pose", "value": "hand_near_cheek", "confidence": 0.9 },
+        { "field": "part", "value": "flower_iris_highlight", "confidence": 0.9, "note": "虹膜蓝色花朵高光——高辨识特征" },
+        { "field": "part", "value": "maid_headdress", "confidence": 0.9 }
+      ]
+    },
+    {
+      "fileName": "ChatGPT Õø¥ÕâÅ 2026զ¦10µ£ê3µùÑ 15_49_09.png",
+      "labels": [
+        { "field": "expression", "value": "gentle_smile", "confidence": 0.9 },
+        { "field": "expression", "value": "blush", "confidence": 0.85 },
+        { "field": "pose", "value": "hand_to_cheek", "confidence": 0.9 },
+        { "field": "outfit", "value": "navy_maid_dress_detached_sleeves", "confidence": 0.85 },
+        { "field": "part", "value": "blue_bow_accessories", "confidence": 0.9, "note": "辫子系蓝蝴蝶结多枚" }
+      ]
+    }
+  ]
+}

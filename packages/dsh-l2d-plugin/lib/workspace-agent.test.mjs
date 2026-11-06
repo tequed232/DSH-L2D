@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createWorkspaceAgentBridge } from './workspace-agent.mjs';
+import { createWorkspaceAgentBridge, decideNotification } from './workspace-agent.mjs';
 import { analyzeContext } from './context-analyzer.mjs';
 import { summarizeSession } from './session-events.mjs';
 import { buildWorkspaceContextSnapshot, renderSnapshotContext } from './workspace-snapshot.mjs';
@@ -148,4 +148,75 @@ try {
 }
 
 // W1：buildNotifyPrompt 的 snapshotText 是可选段（旧调用方不传也能工作）。
+
+// CODE-REVIEW-1 #7/#8 回归：prompt 发送失败不消耗频次预算；agent.md 内容未变不重写盘。
+{
+  const homeDir3 = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-l2d-workspace3-'));
+  const workspace3 = { id: 'workspace-live2d-3', title: 'Live2D Agent', sessionIds: [] };
+  const promptCalls3 = [];
+  let failPrompt = true;
+  const ctx3 = {
+    workspaceRegistry: { async create() { return workspace3; } },
+    sessionController: {
+      async create() {
+        workspace3.sessionIds = ['session-3'];
+        return { sessionId: 'session-3' };
+      },
+      async prompt(request) {
+        promptCalls3.push(request);
+        if (failPrompt) throw new Error('controller down');
+        return { accepted: true };
+      },
+    },
+  };
+  const bridge3 = createWorkspaceAgentBridge({
+    ctx: ctx3,
+    homeDir: homeDir3,
+    getSnapshot: async () => ({
+      ok: true,
+      generatedAt: '2026-11-02T00:00:00.000Z',
+      workspaces: [{ workspaceId: 'ws-x', title: 'X', sessions: [{ sessionId: 's-x', state: 'idle', ageMs: 999999 }] }],
+    }),
+    intervalMs: 60000,
+  });
+  try {
+    await bridge3.ensure().catch(() => {}); // bootstrap prompt 失败（failPrompt=true），ensure 上抛属预期
+    const agentMdPath = path.join(homeDir3, 'workspaces', 'live2d-agent', 'agent.md');
+    const stat1 = fs.statSync(agentMdPath);
+    // 再刷两轮：内容未变 → 不应再写盘（mtime 不变）；prompt 失败 → 不产新通知 prompt
+    await bridge3.refresh(true);
+    await bridge3.refresh(true);
+    const stat2 = fs.statSync(agentMdPath);
+    assert.equal(stat2.mtimeMs, stat1.mtimeMs, 'agent.md 内容未变不应重写');
+    assert.equal(promptCalls3.length, 1, 'prompt 失败后不应继续消耗通知');
+    failPrompt = false;
+    const afterFail = await bridge3.refresh(true);
+    assert.ok(afterFail.notify, 'refresh 返回 notify 摘要');
+  } finally {
+    bridge3.dispose();
+    fs.rmSync(homeDir3, { recursive: true, force: true });
+  }
+}
+
+// CODE-REVIEW-1 #9 回归：自定义 notifyMinIntervalMs 时 retryAfterMs 必须按调用方间隔计算。
+{
+  const now = 1_000_000;
+  const r = decideNotification({
+    state: 'idle',
+    previousState: 'working',
+    stateSince: now - 60000,
+    flips: [],
+    lastAnyFireAt: 0,
+    lastFireAtByState: {},
+    firesByState: {},
+    env: null,
+    now,
+    lastNotifyAt: now - 1000, // 1s 前刚通知过
+    notifyMinIntervalMs: 60000, // 自定义 60s
+  });
+  assert.equal(r.fire, false);
+  assert.equal(r.reason, 'notify-cooldown');
+  assert.equal(r.retryAfterMs, 59000, 'retryAfterMs 应按 60s 间隔而非默认 30s');
+}
+
 console.log('workspace-agent: ok');

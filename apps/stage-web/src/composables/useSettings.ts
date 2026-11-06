@@ -42,7 +42,12 @@ export const DEFAULT_SETTINGS: Settings = {
 function load(): Settings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS };
+    if (!raw) {
+      // 未存过设置：跟随系统深浅色（无 matchMedia 的老环境回落深色）
+      const prefersLight =
+        typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: light)').matches;
+      return { ...DEFAULT_SETTINGS, theme: prefersLight ? 'light' : 'dark' };
+    }
     const parsed = JSON.parse(raw) as Partial<Settings>;
     return { ...DEFAULT_SETTINGS, ...parsed };
   } catch {

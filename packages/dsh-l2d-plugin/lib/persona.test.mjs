@@ -111,5 +111,16 @@ assert.ok(block.includes('傲娇'));
 assert.ok(block.includes('情绪表达'));
 assert.ok(block.includes('动作偏好'));
 
+// CODE-REVIEW-1 #16 回归：空字符串数值走 fallback，不得被 Number('')===0 静默压到 0。
+{
+  const p = normalizePersona({ proactivity: '', intimacy: '  ', expression: { intensity: '' } });
+  assert.equal(p.proactivity, DEFAULT_PERSONA.proactivity, 'proactivity 空串应回默认');
+  assert.equal(p.intimacy, DEFAULT_PERSONA.intimacy, 'intimacy 纯空白应回默认');
+  assert.equal(p.expression.intensity, DEFAULT_PERSONA.expression.intensity, 'intensity 空串应回默认');
+  // 合法字符串数字仍应生效
+  const ok = normalizePersona({ proactivity: '0.9' });
+  assert.equal(ok.proactivity, 0.9);
+}
+
 fs.rmSync(home, { recursive: true, force: true });
 console.log('persona ok');

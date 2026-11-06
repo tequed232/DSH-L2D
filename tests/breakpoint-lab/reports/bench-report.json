@@ -1,0 +1,93 @@
+{
+  "generatedAt": "2026-11-05T07:11:23.574Z",
+  "subject": "createCompiledActionCache（action-cache.mjs）resolve 路径",
+  "clock": "process.hrtime.bigint（毫秒，3 位小数）",
+  "disclaimer": "本机单次实测；数字随环境波动，仅作相对参考，不构成优化证明。",
+  "env": {
+    "node": "v22.22.2",
+    "platform": "win32",
+    "arch": "x64",
+    "capacity": 128,
+    "coldN": 200,
+    "hitN": 1000,
+    "mixedN": 1000
+  },
+  "scenarios": {
+    "cold-read": {
+      "description": "首次 resolve 全链路（SQLite + compile），200 个独立键 × 独立 cache 实例",
+      "latencyMs": {
+        "n": 200,
+        "p50": 0.178,
+        "p95": 0.351,
+        "p99": 1.333,
+        "min": 0.138,
+        "max": 6.176,
+        "mean": 0.234
+      },
+      "errorRate": 0,
+      "wallMs": 48.1,
+      "heapUsedDeltaMB": 0.68
+    },
+    "cache-hit": {
+      "description": "预热后同键重复 resolve ×1000（纯内存 LRU 命中路径）",
+      "latencyMs": {
+        "n": 1000,
+        "p50": 0.015,
+        "p95": 0.036,
+        "p99": 0.052,
+        "min": 0.011,
+        "max": 2.37,
+        "mean": 0.021
+      },
+      "hitRate": 0.999,
+      "errorRate": 0,
+      "wallMs": 22.1,
+      "heapUsedDeltaMB": -0.39
+    },
+    "cache-miss": {
+      "description": "200 个键灌 128 容量（每键首读 + 淘汰压力）",
+      "latencyMs": {
+        "n": 200,
+        "p50": 0.156,
+        "p95": 0.291,
+        "p99": 0.401,
+        "min": 0.131,
+        "max": 2.83,
+        "mean": 0.188
+      },
+      "hitRate": 0,
+      "evictions": 72,
+      "errorRate": 0,
+      "heapUsedDeltaMB": 0.24
+    },
+    "mixed-1000": {
+      "description": "1000 次 resolve 轮转 99 个键（<容量，命中/未命中自然混合）",
+      "latencyMs": {
+        "n": 1000,
+        "p50": 0.012,
+        "p95": 0.156,
+        "p99": 0.239,
+        "min": 0.011,
+        "max": 0.337,
+        "mean": 0.031
+      },
+      "hitRate": 0.901,
+      "evictions": 0,
+      "errorRate": 0,
+      "heapUsedDeltaMB": 0.56
+    },
+    "concurrent": {
+      "description": "in-flight 合并：50 并发同键 + 50 并发混合键各一轮",
+      "sameKey50": {
+        "wallMs": 0.97,
+        "misses": 1,
+        "note": "同键并发应只触发 1 次 load（misses 含首次冷读 1 次）"
+      },
+      "mixedKeys50": {
+        "wallMs": 10.13,
+        "misses": 50
+      },
+      "heapUsedDeltaMB": 0.56
+    }
+  }
+}

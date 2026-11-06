@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-l2d.local/schemas/task-envelope.schema.json",
+  "title": "DSH-L2D Worker Task Envelope",
+  "type": "object",
+  "required": ["task_id", "analysis_job_id", "model_id", "source_hashes", "objective", "scope", "acceptance_criteria"],
+  "properties": {
+    "task_id": {"type": "string", "minLength": 1},
+    "analysis_job_id": {"type": "string", "minLength": 1},
+    "model_id": {"type": "string", "minLength": 1},
+    "source_hashes": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}},
+    "objective": {"type": "string", "minLength": 1},
+    "scope": {"type": "array", "items": {"type": "string"}},
+    "acceptance_criteria": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "upstream_task_ids": {"type": "array", "items": {"type": "string"}},
+    "evidence_refs": {"type": "array", "items": {"type": "string"}},
+    "artifacts": {"type": "array", "items": {"type": "string"}},
+    "priority": {"enum": ["low", "normal", "high", "critical"], "default": "normal"}
+  },
+  "additionalProperties": false
+}

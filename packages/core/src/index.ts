@@ -32,6 +32,7 @@ export {
   parseActPriority,
   canInterruptAct,
   chainHasMotion,
+  countRealCompletions,
   motionResultKind,
   closeMotionsOnPreempt,
   preemptedYandere,

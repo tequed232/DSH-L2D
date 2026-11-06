@@ -45,6 +45,20 @@ Apply:
 
 Do not copy AIRI's Vue/Pixi application structure into this repository. Adapt the ideas to the existing renderer and `cubismupdatescheduler.ts`.
 
+#### Upstream verification (2026-11-04, source-level)
+
+Verified against `moeru-ai/airi@main` (MIT, ~51k stars, actively maintained). Three findings that bound how far "reuse" can go:
+
+1. **The Live2D layer is not a published library.** `@proj-airi/stage-ui-live2d` is marked `"private": true`; its exports point at raw `src/` and it depends on Airi's own catalog/workspace packages. It is never published to npm, so upstream maintenance cannot be consumed as a dependency — any source copy becomes ours to maintain from that moment.
+2. **Airi patches the shared base library itself.** They pin `pixi-live2d-display ^0.4.0` with `@pixi/*` 6.x and maintain `patches/pixi-live2d-display.patch`. Our renderer uses `@naari3/pixi-live2d-display ^1.2.5` on pixi.js 8. The `MotionManager.update` hook point is written against their patched base and does not transfer directly. Industrial maturity here *includes* carrying base-library patches — it is not maintenance-free.
+3. **Control layer is Vue-bound; arbitration philosophy differs.** Their composables/stores assume Vue reactivity; our engine (`packages/core`) is framework-agnostic. Their plugin co-existence is convention-based (thresholds negotiated in code); ours is Mixer-enforced ownership arbitration. Copying their layer would downgrade our stronger guarantee.
+
+**Borrow list (algorithms, into our code + contract tests):**
+- Spring-damper smoothing (semi-implicit Euler; start at stiffness≈120, damping≈16, then tune) → Mixer smoothing layer.
+- `blend=add` additive overlay semantics (coexisting sources: touch + idle + manual) → closes the **M1-c** gap; `SemanticMotionPlan.blend` must be consumed by the Mixer.
+- Baseline-restore discipline: after taking over an SDK behavior (e.g. breathing), restore its static base value on release → encode as an engine invariant.
+- New reference: `packages/model-driver-magic-live2d` (driver/filter/pose, unit-tested) — its `filter.ts`/`pose.ts` are direct algorithm references for M1-c.
+
 ### Open-LLM-VTuber — semantic intent boundary
 Reference: `Open-LLM-VTuber` Live2D expression/motion integration and its backend-to-client event flow.
 
