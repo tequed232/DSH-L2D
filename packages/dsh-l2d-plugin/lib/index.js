@@ -1705,6 +1705,14 @@ export function apply(root, config = {}) {
     try {
       const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
       fs.mkdirSync(home, { recursive: true });
+      // ⚠ 修复（真机 diag 实据 'origin is not defined'）：origin 是上方独立 try 块内的
+      // const（块级作用域），挂载段不可见——曾导致 executor 构造抛 ReferenceError、
+      // bridge 从未 initialize（schema 建齐但 bridge_workspaces 0 行 / 无 status 文件）。
+      // 此处自行解析同一来源，5300 兜底对齐 HttpActionExecutor 缺省。
+      const bridgeOrigin =
+        (typeof ctx.webServer.getOrigin === 'function' ? ctx.webServer.getOrigin() : '') ||
+        (ctx.webServer.port ? `http://127.0.0.1:${ctx.webServer.port}` : '') ||
+        'http://127.0.0.1:5300';
       const bridgeDb = openDb({ path: path.join(home, 'l2d-bridge.sqlite') });
       const localAgentClient = {
         async acquireWorkspace({ pluginId }) {
@@ -1717,7 +1725,7 @@ export function apply(root, config = {}) {
       const registry = new WorkBuddyWorkspaceRegistry({ db: bridgeDb, agentClient: localAgentClient });
       const sessions = new WorkBuddySessionController({ db: bridgeDb, agentClient: localAgentClient });
       const workspaceManager = new Live2DWorkspaceManager({ registry, sessions });
-      const executor = new HttpActionExecutor({ baseUrl: origin || 'http://127.0.0.1:5300' });
+      const executor = new HttpActionExecutor({ baseUrl: bridgeOrigin });
       // queue 的 repo 门面：bridge_actions 持久化（重启恢复 B17 / 幂等 B15 / 背压 32）。
       const queueRepo = {
         insertRequest: (request) => insertBridgeRequest(bridgeDb, request),
