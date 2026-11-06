@@ -1278,6 +1278,18 @@ export async function playMotionAsync(
   const no = Math.max(0, Math.min(list.length - 1, Math.floor(Number(opts.index) || 0)));
   const priority = opts.interrupt || opts.priority === 3 ? 3 : opts.priority || 2;
 
+  // S2-ADMIT：冷启动边界 waitForAllMotions 会被个别 404 动作饿死（_motionCount 永不
+  // 齐平 → 状态机停在 WaitLoadMotion），目标动作预载缓存缺失时 LAppModel.startMotion
+  // 会拿 undefined 同步返回 -1（start-rejected），异步 loadMotion 落位后重试才成功。
+  // 这里对目标动作做有界（≤3s）预载等待，把「首击必败」收敛为一次成功调用；
+  // 确实不存在的动作等满 3s 后放行，由 startMotion 自行报错（语义不变）。
+  {
+    const preloadT0 = performance.now();
+    while (!model.getMotionDuration(target, no) && performance.now() - preloadT0 < 3000) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+
   markActive();
   const core = model.getModel();
   if (!core) return { status: 'failed', reason: 'not-ready' };
