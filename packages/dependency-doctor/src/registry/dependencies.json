@@ -1,0 +1,59 @@
+{
+  "dependencies": [
+    {
+      "id": "cubism-sdk",
+      "name": "Live2D Cubism SDK",
+      "category": "sdk",
+      "requiredVersion": ">=5.0",
+      "required": true,
+      "officialSource": "https://www.live2d.com/sdk/download/web/",
+      "licenseRequired": true,
+      "repairSupported": false,
+      "notes": "SDK 下载与使用须遵循 Live2D 官方许可；授权未确认时不得自动安装，只提供官方下载引导。"
+    },
+    {
+      "id": "cubism-runtime",
+      "name": "Cubism Web Runtime (live2dcubismcore)",
+      "category": "runtime",
+      "requiredVersion": ">=5.0",
+      "required": true,
+      "officialSource": "https://www.live2d.com/sdk/download/web/",
+      "licenseRequired": true,
+      "repairSupported": false,
+      "notes": "Core 运行时随 SDK 分发；检测 vendor/live2dcubismcore.min.js 存在性与版本标记。"
+    },
+    {
+      "id": "live2d-model",
+      "name": "Live2D Model Resources",
+      "category": "model",
+      "requiredVersion": "*",
+      "required": true,
+      "officialSource": "",
+      "licenseRequired": false,
+      "repairSupported": false,
+      "notes": "模型属用户资源，不假定统一分发；.model3.json 存在不代表完整——必须逐一校验 moc3/纹理/physics3/motion3/expression 引用。"
+    },
+    {
+      "id": "nodejs",
+      "name": "Node.js",
+      "category": "project",
+      "requiredVersion": ">=22",
+      "required": true,
+      "officialSource": "https://nodejs.org/",
+      "licenseRequired": false,
+      "repairSupported": false,
+      "notes": "pnpm monorepo 基线 Node >= 22。"
+    },
+    {
+      "id": "gpu-runtime",
+      "name": "GPU / Graphics API",
+      "category": "system",
+      "requiredVersion": "*",
+      "required": false,
+      "officialSource": "",
+      "licenseRequired": false,
+      "repairSupported": false,
+      "notes": "Node 环境无法可靠探测 WebGL 上下文；如实标注 unverified，浏览器端检测由宿主接入后补充。"
+    }
+  ]
+}
