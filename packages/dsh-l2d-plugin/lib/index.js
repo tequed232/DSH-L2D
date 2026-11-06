@@ -569,6 +569,7 @@ let workspaceBridge = null;
 // BRIDGE-MOUNT：MCP Bridge 与 StatusReporter 的模块级引用（后续路由/MCP 薄壳消费）。
 let mcpBridge = null;
 let mcpStatusReporter = null;
+let mcpHeartbeatTimer = null;
 // W1：在 webServer 注入闭包里初始化（那里才有前台采集器与路由），桥用它取最新快照。
 let runtimeSnapshotBuilder = null;
 const workspaceEventCache = new Map();
@@ -1776,6 +1777,29 @@ export function apply(root, config = {}) {
           });
           mcpStatusReporter.start();
 
+          // ⑤ 心跳（team-lead 批准，与 B06 裁决语义分离）：每 60s 无条件落盘
+          //    l2d-bridge-heartbeat.json，区分「Bridge 没跑」（文件不存在）与
+          //    「idle 静默」（文件存在 + initialized:true）。数据全部真实来源：
+          //    lastState=getAgentState、initialized=mcpBridge.initialized。
+          const bridgeStartedAt = Date.now();
+          mcpHeartbeatTimer = setInterval(() => {
+            try {
+              const data = getAgentState();
+              fs.writeFileSync(
+                path.join(home, 'l2d-bridge-heartbeat.json'),
+                JSON.stringify({
+                  workspaceId: (mcpBridge && mcpBridge.workspace && mcpBridge.workspace.id) || null,
+                  initialized: !!(mcpBridge && mcpBridge.initialized),
+                  lastState: String(data && data.state ? data.state : 'idle'),
+                  lastSampleAt: new Date().toISOString(),
+                  uptimeMs: Date.now() - bridgeStartedAt,
+                }) + '\n',
+                'utf8',
+              );
+            } catch { /* 心跳失败不影响宿主 */ }
+          }, 60_000);
+          mcpHeartbeatTimer.unref && mcpHeartbeatTimer.unref();
+
           // ④ l2d_* 工具注册（BRIDGE-MOUNT 第二步）：makeActionToolDeps 提供
           //    enqueue/status/cancel/workspace，validateAction 为语义动作合法性闸门
           //    （validated + compatible=1，与 /api/actions 同口径）；gallery 注入
@@ -1816,6 +1840,8 @@ export function apply(root, config = {}) {
           try { if (mcpBridge) void mcpBridge.dispose(); } catch { /* ignore */ }
           try { bridgeDb.close(); } catch { /* ignore */ }
           mcpStatusReporter = null;
+          try { if (mcpHeartbeatTimer) clearInterval(mcpHeartbeatTimer); } catch { /* ignore */ }
+          mcpHeartbeatTimer = null;
           mcpBridge = null;
         });
       } catch {
