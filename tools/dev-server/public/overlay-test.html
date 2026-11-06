@@ -187,19 +187,28 @@
         // 与 overlay 内 setSwitch 同通道策略——优先 setParametersRuntime（runtime 通道，
         // 不受 Node Ownership 托管白名单管辖，白名单管 Agent 控制权）；
         // 旧渲染包无 runtime 入口时回退 agent 通道（setParameter）。
+        // Clothes1 档位按实测校准：0=及踝长裙（实测证实）、1=围裙裙（实测证实）、
+        // -1=短裙（方向依据 overlay.js 裙摆拖拽通道 [-1,0] 的收短方向，未单独实测）。
+        // 竞态修法：面板立即渲染、开关在 DSH_L2D.isReady() 前禁用并如实显示「渲染未就绪」。
         (function () {
           var clothesEl = document.getElementById('clothes');
           var channel = '—';
           var lastResult = '—';
+          var lastHtml = '';
           var CLOTHES = [
-            { id: 'Clothes1', label: '裙摆', options: [{ text: '长裙', value: 0 }, { text: '短裙', value: -1 }] },
+            { id: 'Clothes1', label: '裙摆', options: [{ text: '长裙', value: 0 }, { text: '短裙', value: -1 }, { text: '围裙', value: 1 }] },
             { id: 'Clothes2', label: '体型', options: [{ text: '默认', value: 0 }, { text: '体型1', value: 0.4 }, { text: '体型2', value: 1 }] },
             { id: 'Clothes4', label: '鞋子', options: [{ text: '穿鞋', value: 1 }, { text: '脱鞋', value: 0 }] },
           ];
 
-          function setSwitch(id, value) {
+          function isReady() {
             var L = window.DSH_L2D;
-            if (!L) return 'not-ready';
+            return !!(L && L.isReady && L.isReady() && L.readParameters);
+          }
+
+          function setSwitch(id, value) {
+            if (!isReady()) return '渲染未就绪，未写入';
+            var L = window.DSH_L2D;
             var one = {};
             one[id] = value;
             if (L.setParametersRuntime) {
@@ -217,27 +226,33 @@
           }
 
           function render() {
+            var ready = isReady();
             var L = window.DSH_L2D;
             var ids = CLOTHES.map(function (c) { return c.id; });
-            var vals = (L && L.readParameters) ? L.readParameters(ids) || {} : {};
-            var html = '换装/配饰开关（runtime 通道，白名单不管辖）· 通道: ' + channel + ' · 上次写入: ' + lastResult;
+            var vals = ready ? L.readParameters(ids) || {} : {};
+            var html = '换装/配饰开关（runtime 通道，白名单不管辖）· 通道: ' + channel + ' · 上次写入: ' + lastResult +
+              (ready ? '' : ' · 渲染未就绪（开关禁用，写入不会执行）');
             for (var i = 0; i < CLOTHES.length; i++) {
               var c = CLOTHES[i];
               var v = vals[c.id];
               html += '<div class="ctl-row"><span class="lbl">' + c.label + ' ' + c.id + '</span>';
-              if (!Number.isFinite(Number(v))) {
-                html += '<span class="val">参数不存在（readParameters 无返回）</span>';
+              if (!ready || !Number.isFinite(Number(v))) {
+                html += '<span class="val">' + (ready ? '参数不存在（readParameters 无返回）' : '等待渲染就绪…') + '</span>';
               } else {
                 html += '<span class="val">=' + Number(v).toFixed(2) + '</span>';
                 for (var j = 0; j < c.options.length; j++) {
                   var o = c.options[j];
                   var on = Math.abs(Number(v) - o.value) < 0.01;
-                  html += '<button type="button" class="ctl-btn' + (on ? ' on' : '') + '" data-id="' + c.id + '" data-value="' + o.value + '">' + o.text + '</button>';
+                  html += '<button type="button" class="ctl-btn' + (on ? ' on' : '') + '" data-id="' + c.id + '" data-value="' + o.value + '"' + (ready ? '' : ' disabled') + '>' + o.text + '</button>';
                 }
               }
               html += '</div>';
             }
-            clothesEl.innerHTML = html;
+            // 仅在内容变化时替换 DOM，避免轮询重绘打断点击
+            if (html !== lastHtml) {
+              lastHtml = html;
+              clothesEl.innerHTML = html;
+            }
           }
 
           clothesEl.addEventListener('click', function (e) {
@@ -246,16 +261,18 @@
               target = target.parentElement;
             }
             if (!target || target === clothesEl) return;
+            if (target.disabled || !isReady()) {
+              lastResult = '渲染未就绪，未写入';
+              render();
+              return;
+            }
             lastResult = setSwitch(target.getAttribute('data-id'), Number(target.getAttribute('data-value')));
             render();
           });
 
-          var clothesWait = setInterval(function () {
-            var L = window.DSH_L2D;
-            if (!L || !L.isReady || !L.isReady() || !L.readParameters) return;
-            clearInterval(clothesWait);
-            render();
-          }, 400);
+          // 立即渲染未就绪态（开关禁用），轮询至就绪后解锁并显示实值
+          render();
+          setInterval(render, 400);
         })();
 
         // S1 自动验收：真实模型 + 真实帧循环，不靠静态推断。
