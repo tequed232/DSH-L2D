@@ -34,6 +34,27 @@ import { maybeRunStartupSkillsCheck } from './skills-toolchain.mjs';
 import { createForegroundProcessCollector } from './foreground-process.mjs';
 import { buildWorkspaceContextSnapshot } from './workspace-snapshot.mjs';
 import { setupPetWindow } from './pet-window.mjs';
+// BRIDGE-MOUNT（PR-A/B/C 总装接线）：三原则组件——工作区隔离 / 状态解耦 / 执行串行。
+// 依赖注入纪律：mcp-bridge 不 import 宿主，反向由宿主在此装配（agentClient 本地
+// 适配器 / db / executor baseUrl 均经构造注入）。
+import { openDb } from '../../dsh-l2d-db/src/db.mjs';
+import {
+  insertRequest as insertBridgeRequest,
+  markRunning as markBridgeRunning,
+  markTerminal as markBridgeTerminal,
+  findById as findBridgeRequest,
+  findUnfinished as findUnfinishedBridgeRequests,
+  markInterruptedAll as markInterruptedAllBridgeRequests,
+} from '../../dsh-l2d-db/src/bridge-actions-repo.mjs';
+import { Live2DMCPBridge } from '../../mcp-bridge/index.mjs';
+import {
+  Live2DWorkspaceManager,
+  WorkBuddyWorkspaceRegistry,
+  WorkBuddySessionController,
+} from '../../mcp-bridge/workspace-manager.mjs';
+import { StatusReporter } from '../../mcp-bridge/status-reporter.mjs';
+import { HttpActionExecutor } from '../../mcp-bridge/action-executor.mjs';
+import { ModelActionQueue } from '../../mcp-bridge/action-queue.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OVERLAY_FILE = path.join(PKG_ROOT, 'lib', 'overlay.js');
@@ -543,6 +564,9 @@ function getAgentState(force = false) {
 export { getAgentState };
 
 let workspaceBridge = null;
+// BRIDGE-MOUNT：MCP Bridge 与 StatusReporter 的模块级引用（后续路由/MCP 薄壳消费）。
+let mcpBridge = null;
+let mcpStatusReporter = null;
 // W1：在 webServer 注入闭包里初始化（那里才有前台采集器与路由），桥用它取最新快照。
 let runtimeSnapshotBuilder = null;
 const workspaceEventCache = new Map();
@@ -1667,6 +1691,95 @@ export function apply(root, config = {}) {
       });
     } catch {
       /* effect 不可用时忽略，进程退出时路由自然释放 */
+    }
+
+    // ③ MCP Bridge 挂载（BRIDGE-MOUNT）：Live2DMCPBridge + Live2DWorkspaceManager +
+    //    StatusReporter + ModelActionQueue。fail-open：任何失败只 diag，不影响宿主启动。
+    //    本地降级模式注明（不伪报）：DeepSeek Harness 宿主暂无 A2A 客户端
+    //    （acquireWorkspace/createSession 注入接口见 workspace-manager.mjs 头注），
+    //    装配 localAgentClient——workspace/session ID 稳定幂等落 bridge_workspaces 表；
+    //    未来接真 A2A 仅替换此对象，桥与管理器零改动。initialize 是异步的，
+    //    挂载即启动、完成时 diag，就绪前 l2d_action_* 经 enqueueAction 明确拒绝（不静默）。
+    try {
+      const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+      fs.mkdirSync(home, { recursive: true });
+      const bridgeDb = openDb({ path: path.join(home, 'l2d-bridge.sqlite') });
+      const localAgentClient = {
+        async acquireWorkspace({ pluginId }) {
+          return { workspaceId: `local-${String(pluginId || 'dsh-l2d')}` };
+        },
+        async createSession({ workspaceId, key }) {
+          return { sessionId: `${workspaceId}:${String(key || 'session')}` };
+        },
+      };
+      const registry = new WorkBuddyWorkspaceRegistry({ db: bridgeDb, agentClient: localAgentClient });
+      const sessions = new WorkBuddySessionController({ db: bridgeDb, agentClient: localAgentClient });
+      const workspaceManager = new Live2DWorkspaceManager({ registry, sessions });
+      const executor = new HttpActionExecutor({ baseUrl: origin || 'http://127.0.0.1:5300' });
+      // queue 的 repo 门面：bridge_actions 持久化（重启恢复 B17 / 幂等 B15 / 背压 32）。
+      const queueRepo = {
+        insertRequest: (request) => insertBridgeRequest(bridgeDb, request),
+        markRunning: (requestId, startedAt) => markBridgeRunning(bridgeDb, requestId, startedAt),
+        markTerminal: (requestId, state, opts) => markBridgeTerminal(bridgeDb, requestId, state, opts),
+        findById: (requestId) => findBridgeRequest(bridgeDb, requestId),
+        findUnfinished: () => findUnfinishedBridgeRequests(bridgeDb),
+        markInterruptedAll: () => markInterruptedAllBridgeRequests(bridgeDb),
+      };
+      const queue = new ModelActionQueue({ executor, repo: queueRepo });
+      mcpBridge = new Live2DMCPBridge({
+        workspaceManager,
+        pluginId: 'dsh-l2d',
+        queue,
+        executor,
+        actionsRepo: { findById: (requestId) => findBridgeRequest(bridgeDb, requestId) },
+      });
+      mcpBridge
+        .initialize()
+        .then(() => {
+          diag(`mcp bridge ready: workspace=${mcpBridge.workspace.id} control=${mcpBridge.workspace.controlSessionId}`);
+          // StatusReporter（状态解耦）：60s 合规区间；source 读真实 agent 状态
+          // （getAgentState → UiStatus 映射），sink 落 $DSH_HOME/l2d-status-report.json。
+          // revision 取 agentStateCache.ts（缓存周期内稳定、数据刷新即前进——
+          // 当前快照源无单调事件版本，这是真实语义而非伪版本）。
+          // memoryRevision 恒 0 也是真实事实：记忆通道未接（injectControlContext wired:false）。
+          mcpStatusReporter = new StatusReporter({
+            workspaceId: mcpBridge.workspace.id,
+            intervalMs: 60_000,
+            source: {
+              getLatest: async () => {
+                const data = getAgentState();
+                const state = String(data && data.state ? data.state : 'idle');
+                const status = state === 'error' ? 'crashed'
+                  : state.startsWith('waiting') ? 'waiting'
+                    : state === 'working' || state === 'thinking' ? 'running'
+                      : 'idle';
+                return { status, message: data && data.reason ? String(data.reason) : undefined, updatedAt: Date.now(), revision: agentStateCache.ts || Date.now() };
+              },
+            },
+            sink: {
+              report: async (input) => {
+                fs.writeFileSync(path.join(home, 'l2d-status-report.json'), JSON.stringify(input) + '\n', 'utf8');
+              },
+            },
+            getQueueState: () => queue.getState(),
+            getMemoryRevision: async () => 0,
+          });
+          mcpStatusReporter.start();
+        })
+        .catch((err) => diag('mcp bridge 初始化失败（fail-open，不影响宿主）: ' + String(err && err.message ? err.message : err)));
+      try {
+        ctx.effect(() => () => {
+          try { if (mcpStatusReporter) mcpStatusReporter.stop(); } catch { /* ignore */ }
+          try { if (mcpBridge) void mcpBridge.dispose(); } catch { /* ignore */ }
+          try { bridgeDb.close(); } catch { /* ignore */ }
+          mcpStatusReporter = null;
+          mcpBridge = null;
+        });
+      } catch {
+        /* effect 不可用时忽略，进程退出时资源自然释放 */
+      }
+    } catch (err) {
+      diag('mcp bridge 挂载失败（fail-open，不影响宿主）: ' + String(err && err.message ? err.message : err));
     }
 
     console.log(`[dsh-l2d] 已挂载：/dsh-l2d/overlay.js（立绘：${AVATAR_CANDIDATES[0]}）`);
