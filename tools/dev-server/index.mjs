@@ -333,6 +333,57 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(settingsView()), 'utf8'));
   }
 
+  // ---- 真机宿主同语义路由（accept E/F 的契约锚点，dev-server 对齐后可本地全绿）----
+  // GET /dsh-l2d/settings → assets/settings.html（五分区标题，accept-E）
+  if (urlPath === '/settings') {
+    const buf = readIfExists(
+      path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'assets', 'settings.html'),
+    );
+    if (!buf) return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('settings.html missing'));
+    return send(res, 200, MIME['.html'], buf);
+  }
+
+  // GET /dsh-l2d/capability.json → 能力画像（accept-F 契约：modelId + controls）
+  // 数据源 = capability-scan 产物，与真机宿主同一份，杜绝 dev-server 伪造画像。
+  const CAPABILITY_FILE = path.join(
+    ROOT,
+    'tools',
+    'capability-scan',
+    `profile.${process.env.DSH_L2D_ACTIONS_MODEL_ID || '大肥鱼.dsl2d.2048'}.json`,
+  );
+  if (urlPath === '/capability.json') {
+    const buf = readIfExists(CAPABILITY_FILE);
+    if (!buf) {
+      return send(
+        res,
+        404,
+        'text/plain; charset=utf-8',
+        Buffer.from('capability profile 缺失：先跑 pnpm scan:capability'),
+      );
+    }
+    return send(res, 200, MIME['.json'], buf);
+  }
+
+  // POST /dsh-l2d/capability/rescan → 重读画像文件（重建缓存语义，不驱动角色）。
+  // dev-server 无宿主内存画像缓存，重读 = 本地环境下等价的缓存重建；
+  // 真正的扫描重建由 pnpm scan:capability 完成（宿主侧 rescan 语义见插件宿主路由）。
+  if (urlPath === '/capability/rescan') {
+    if (req.method !== 'POST') {
+      return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+    }
+    if (!writeGuard(req, res)) return;
+    const buf = readIfExists(CAPABILITY_FILE);
+    if (!buf) {
+      return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('capability profile 缺失'));
+    }
+    const body = {
+      ok: true,
+      note: 'dev-server 画像缓存已重建（重读 capability-scan 产物）',
+      modelId: JSON.parse(buf.toString('utf8')).modelId || null,
+    };
+    return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(body), 'utf8'));
+  }
+
   if (urlPath === '/balance.json') {
     const body = { ok: false, reason: 'no-key', hint: '本地调试台未配置 API Key' };
     return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(body), 'utf8'));
@@ -366,7 +417,17 @@ const server = http.createServer(async (req, res) => {
   if (urlPath === '/overlay-test.html') {
     const buf = readIfExists(path.join(PUBLIC_DIR, 'overlay-test.html'));
     if (!buf) return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('overlay-test.html missing'));
-    return send(res, 200, MIME['.html'], buf);
+    // [accept C/D] 注入构建标记 ?v=<启动时间戳>：真机宿主以同样方式在 overlay.js
+    // 的 script src 上带 v=（overlay.js 从 document.currentScript.src 解析为
+    // diag.bootTag）。裸加载时 bootTag='' → 数字 0 < MIN_BOOT_TAG → accept 判
+    // 「旧实例，回执不可信」记 WARN。这里对齐真机注入语义，本地验收可真 PASS。
+    const html = buf
+      .toString('utf8')
+      .replace(
+        'src="/dsh-l2d/overlay.js"',
+        `src="/dsh-l2d/overlay.js?v=${Date.now()}"`,
+      );
+    return send(res, 200, MIME['.html'], Buffer.from(html, 'utf8'));
   }
 
   // AI 指令：外部 Agent 通过这里驱动角色

@@ -300,6 +300,29 @@ test('三态生命周期：completed / interrupted / failed 必须是三种不�
   assert.notEqual('interrupted', 'failed');
 });
 
+// ---- 计划内终因（README 验收契约 D 项）：整组超时 = end + reason='timeout' ----
+
+test('finish 带 endReason：计划内超时 → end + reason=timeout（不判 failed）', () => {
+  const gate = new ActGate();
+  const run = gate.admit({ priority: 'FORCE', source: 'ai', callId: 99, steps: 1 });
+  gate.noteMotion(run.runId || 0, 'timeout', 'skip');
+  const ev = gate.finish(run.runId || 0, 'timeout');
+  assert.ok(ev);
+  assert.equal(ev?.phase, 'end', '计划内超时是正常终态，不是 failed');
+  assert.equal(ev?.reason, 'timeout');
+  assert.deepEqual(ev?.notes, ['timeout'], 'skip 记账保留在 notes');
+});
+
+test('finish 带 endReason：真实失败优先于 endReason（failed 不被掩盖）', () => {
+  const gate = new ActGate();
+  const run = gate.admit({ priority: 'FORCE', source: 'ai', callId: 100, steps: 1 });
+  gate.noteMotion(run.runId || 0, 'start-rejected', 'fail');
+  const ev = gate.finish(run.runId || 0, 'timeout');
+  assert.ok(ev);
+  assert.equal(ev?.phase, 'failed', '真实失败不得被 endReason 掩盖');
+  assert.equal(ev?.reason, 'start-rejected');
+});
+
 if (process.exitCode) {
   console.error('\n动作链测试失败\n');
 } else {

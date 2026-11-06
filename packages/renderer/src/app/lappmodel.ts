@@ -153,6 +153,23 @@ export class LAppModel extends CubismUserModel {
   }
 
   /**
+   * [H3] 可选资产加载统一通道（表情/物理/姿态/动作/用户数据）：
+   * 任何失败（网络错误/404/空体/超时）降级为空 ArrayBuffer 且链路继续——
+   * 与旧 404→空缓冲语义一致，但旧代码在「网络层 reject」路径没有 .catch，
+   * 未捕获 rejection 会把 _state 永远卡在 Wait* 步骤（永不 ready → 15s 超时）。
+   * 可选资产损坏只记日志，不派发 model-error（可选组件不得升级为整模型失败）。
+   */
+  private fetchOptionalAsset(url: string, label: string): Promise<ArrayBuffer> {
+    return fetchModelAsset(url)
+      .then(fetched => fetched.buffer)
+      .catch(error => {
+        const message = error instanceof Error ? error.message : String(error);
+        CubismLogError(`[DSH-L2D] 可选资产降级(${label}): ${url} — ${message}`);
+        return new ArrayBuffer(0);
+      });
+  }
+
+  /**
    * model3.jsonからモデルを生成する。
    * model3.jsonの記述に従ってモデル生成、モーション、物理演算などのコンポーネント生成を行う。
    *
@@ -168,23 +185,19 @@ export class LAppModel extends CubismUserModel {
     if (this._modelSetting.getModelFileName() != '') {
       const modelFileName = this._modelSetting.getModelFileName();
 
-      fetch(`${this._modelHomeDir}${modelFileName}`)
-        .then(response => {
-          if (response.ok) {
-            return response.arrayBuffer();
-          } else if (response.status >= 400) {
-            CubismLogError(
-              `Failed to load file ${this._modelHomeDir}${modelFileName}`
-            );
-            return new ArrayBuffer(0);
-          }
-        })
-        .then(arrayBuffer => {
-          this.loadModel(arrayBuffer, this._mocConsistency);
+      // [H3] moc3 是致命资源：无 moc 无模型。统一走 fetchModelAsset（ok/空体/超时检查），
+      // 失败走 failLoad 快速失败（旧实现 404 时静默传空 buffer → loadModel 抛错
+      // 且无 catch → unhandled rejection，_state 卡死 WaitLoadModel）。
+      fetchModelAsset(`${this._modelHomeDir}${modelFileName}`)
+        .then(({ buffer }) => {
+          this.loadModel(buffer, this._mocConsistency);
           this._state = LoadStep.LoadExpression;
 
           // callback
           loadCubismExpression();
+        })
+        .catch(error => {
+          this.failLoad(error, modelFileName);
         });
 
       this._state = LoadStep.WaitLoadModel;
@@ -202,18 +215,10 @@ export class LAppModel extends CubismUserModel {
           const expressionFileName =
             this._modelSetting.getExpressionFileName(i);
 
-          fetch(`${this._modelHomeDir}${expressionFileName}`)
-            .then(response => {
-              if (response.ok) {
-                return response.arrayBuffer();
-              } else if (response.status >= 400) {
-                CubismLogError(
-                  `Failed to load file ${this._modelHomeDir}${expressionFileName}`
-                );
-                // ファイルが存在しなくてもresponseはnullを返却しないため、空のArrayBufferで対応する
-                return new ArrayBuffer(0);
-              }
-            })
+          this.fetchOptionalAsset(
+            `${this._modelHomeDir}${expressionFileName}`,
+            'expression'
+          )
             .then(arrayBuffer => {
               const motion: ACubismMotion = this.loadExpression(
                 arrayBuffer,
@@ -260,17 +265,7 @@ export class LAppModel extends CubismUserModel {
       if (this._modelSetting.getPhysicsFileName() != '') {
         const physicsFileName = this._modelSetting.getPhysicsFileName();
 
-        fetch(`${this._modelHomeDir}${physicsFileName}`)
-          .then(response => {
-            if (response.ok) {
-              return response.arrayBuffer();
-            } else if (response.status >= 400) {
-              CubismLogError(
-                `Failed to load file ${this._modelHomeDir}${physicsFileName}`
-              );
-              return new ArrayBuffer(0);
-            }
-          })
+        this.fetchOptionalAsset(`${this._modelHomeDir}${physicsFileName}`, 'physics')
           .then(arrayBuffer => {
             this.loadPhysics(arrayBuffer, arrayBuffer.byteLength);
 
@@ -299,17 +294,7 @@ export class LAppModel extends CubismUserModel {
       if (this._modelSetting.getPoseFileName() != '') {
         const poseFileName = this._modelSetting.getPoseFileName();
 
-        fetch(`${this._modelHomeDir}${poseFileName}`)
-          .then(response => {
-            if (response.ok) {
-              return response.arrayBuffer();
-            } else if (response.status >= 400) {
-              CubismLogError(
-                `Failed to load file ${this._modelHomeDir}${poseFileName}`
-              );
-              return new ArrayBuffer(0);
-            }
-          })
+        this.fetchOptionalAsset(`${this._modelHomeDir}${poseFileName}`, 'pose')
           .then(arrayBuffer => {
             this.loadPose(arrayBuffer, arrayBuffer.byteLength);
 
@@ -394,17 +379,7 @@ export class LAppModel extends CubismUserModel {
       if (this._modelSetting.getUserDataFile() != '') {
         const userDataFile = this._modelSetting.getUserDataFile();
 
-        fetch(`${this._modelHomeDir}${userDataFile}`)
-          .then(response => {
-            if (response.ok) {
-              return response.arrayBuffer();
-            } else if (response.status >= 400) {
-              CubismLogError(
-                `Failed to load file ${this._modelHomeDir}${userDataFile}`
-              );
-              return new ArrayBuffer(0);
-            }
-          })
+        this.fetchOptionalAsset(`${this._modelHomeDir}${userDataFile}`, 'userdata')
           .then(arrayBuffer => {
             this.loadUserData(arrayBuffer, arrayBuffer.byteLength);
 
@@ -738,17 +713,7 @@ export class LAppModel extends CubismUserModel {
     let autoDelete = false;
 
     if (motion == null) {
-      fetch(`${this._modelHomeDir}${motionFileName}`)
-        .then(response => {
-          if (response.ok) {
-            return response.arrayBuffer();
-          } else if (response.status >= 400) {
-            CubismLogError(
-              `Failed to load file ${this._modelHomeDir}${motionFileName}`
-            );
-            return new ArrayBuffer(0);
-          }
-        })
+      this.fetchOptionalAsset(`${this._modelHomeDir}${motionFileName}`, 'motion')
         .then(arrayBuffer => {
           motion = this.loadMotion(
             arrayBuffer,
@@ -927,17 +892,7 @@ export class LAppModel extends CubismUserModel {
         );
       }
 
-      fetch(`${this._modelHomeDir}${motionFileName}`)
-        .then(response => {
-          if (response.ok) {
-            return response.arrayBuffer();
-          } else if (response.status >= 400) {
-            CubismLogError(
-              `Failed to load file ${this._modelHomeDir}${motionFileName}`
-            );
-            return new ArrayBuffer(0);
-          }
-        })
+      this.fetchOptionalAsset(`${this._modelHomeDir}${motionFileName}`, 'motion')
         .then(arrayBuffer => {
           const tmpMotion: CubismMotion = this.loadMotion(
             arrayBuffer,

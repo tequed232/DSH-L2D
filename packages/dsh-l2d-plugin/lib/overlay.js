@@ -2067,13 +2067,18 @@
     }
   }
 
-  // 整组超时：到点取消整组并让结束回执带上 reason:'timeout'。
+  // 整组超时：到点取消整组，结束回执 phase='end' + reason:'timeout'。
+  // [README 契约修正] 超时是计划内终态（accept-D 断言 end.reason='timeout'），
+  // 不是执行失败——旧实现 noteActMotion('timeout','fail') 会把终态判成
+  // 'failed'，与「failed=链内动作真实失败（start-rejected 等）」的三态语义冲突。
   function timeoutActGroup(runId) {
     var L = window.DSH_L2D;
     if (!L || !actStillCurrent(runId)) return;
-    if (L.noteActMotion) L.noteActMotion(runId, 'timeout', 'fail');
+    if (L.noteActMotion) L.noteActMotion(runId, 'timeout', 'skip');
     cancelActTimers();
-    var ev = L.finishAct ? L.finishAct(runId) : null;
+    var ev = L.finishAct
+      ? L.finishAct(runId, 'timeout') // 新渲染包：end + reason='timeout'
+      : null;
     if (ev) postActEvent(ev);
     if (L.setStageBusy) L.setStageBusy({ acting: false });
   }

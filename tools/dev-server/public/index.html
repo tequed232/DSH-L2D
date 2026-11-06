@@ -617,14 +617,27 @@
               var L = window.DSH_L2D;
               d.calls.forEach(function (c) {
                 var a = c.args || {};
+                var res;
                 try {
-                  if (c.name === 'l2d_set_expression') L.setExpression(a.name);
-                  else if (c.name === 'l2d_play_motion') L.playMotion(a.group, a.index || 0);
-                  else if (c.name === 'l2d_look_at') L.lookAt(a.x || 0, a.y || 0);
-                  else if (c.name === 'l2d_set_parameters') L.setParameters(a.values || {});
-                  else if (c.name === 'l2d_reset_pose') L.resetPose();
+                  if (c.name === 'l2d_set_expression') res = { ok: L.setExpression(a.name) };
+                  else if (c.name === 'l2d_play_motion') res = { ok: L.playMotion(a.group, a.index || 0) };
+                  else if (c.name === 'l2d_look_at') { L.lookAt(a.x || 0, a.y || 0); res = { ok: true }; }
+                  else if (c.name === 'l2d_set_parameters') res = { ok: L.setParameters(a.values || {}) };
+                  else if (c.name === 'l2d_reset_pose') res = { ok: L.resetPose() };
+                  // 回执契约：get_state 必须带 info（fpsCap/vsyncHz 等），accept-A 依赖
+                  else if (c.name === 'l2d_get_state') res = L.getInfo();
+                  else res = { ok: false, reason: 'unsupported-on-debug-page:' + c.name };
                 } catch (e) {
-                  /* 单条失败不影响其它 */
+                  res = { ok: false, error: String((e && e.message) || e) };
+                }
+                // 回执半环（README 回执契约）：执行完必须 POST /ai/result，
+                // 否则调用方（mcp-bridge executor / accept）永远等不到终态。
+                if (c.id != null) {
+                  fetch('/ai/result', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: c.id, result: res })
+                  }).catch(function () { /* 回执失败不影响下一轮 */ });
                 }
               });
             })
