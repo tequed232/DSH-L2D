@@ -187,8 +187,11 @@
         // 与 overlay 内 setSwitch 同通道策略——优先 setParametersRuntime（runtime 通道，
         // 不受 Node Ownership 托管白名单管辖，白名单管 Agent 控制权）；
         // 旧渲染包无 runtime 入口时回退 agent 通道（setParameter）。
-        // Clothes1 档位按实测校准：0=及踝长裙（实测证实）、1=围裙裙（实测证实）、
-        // -1=短裙（方向依据 overlay.js 裙摆拖拽通道 [-1,0] 的收短方向，未单独实测）。
+        // Clothes1 档位按实测校准：0=及踝长裙（实测证实）、1=围裙裙（实测证实）。
+        // moc3 实测（Cubism Core 6.0.1 getParameterMinimum/MaximumValues）：
+        // Clothes1 真实范围 [0,1]（default=1），无负值档；此前「-1=短裙」档
+        // 写入会被注入器钳到 min=0（param-injector 按参数真实 min/max 钳制），
+        // 表现为「点短裙显示 0.00、外观仍长裙」，已移除。
         // 竞态修法：面板立即渲染、开关在 DSH_L2D.isReady() 前禁用并如实显示「渲染未就绪」。
         (function () {
           var clothesEl = document.getElementById('clothes');
@@ -196,7 +199,7 @@
           var lastResult = '—';
           var lastHtml = '';
           var CLOTHES = [
-            { id: 'Clothes1', label: '裙摆', options: [{ text: '长裙', value: 0 }, { text: '短裙', value: -1 }, { text: '围裙', value: 1 }] },
+            { id: 'Clothes1', label: '裙摆', options: [{ text: '长裙', value: 0 }, { text: '围裙', value: 1 }] },
             { id: 'Clothes2', label: '体型', options: [{ text: '默认', value: 0 }, { text: '体型1', value: 0.4 }, { text: '体型2', value: 1 }] },
             { id: 'Clothes4', label: '鞋子', options: [{ text: '穿鞋', value: 1 }, { text: '脱鞋', value: 0 }] },
           ];
