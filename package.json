@@ -1,6 +1,6 @@
 {
   "name": "dsh-l2d",
-  "version": "0.2.0-alpha.1",
+  "version": "0.5.0-Plugin-Stable",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.5.1",
