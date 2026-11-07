@@ -11,7 +11,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { resolveBase } from './discover.mjs';
-import { actSettled, mergeActEvents, shapeActReceipt } from './act-result.mjs';
+import { forwardCall } from './forward.mjs';
 import { executeActionSequence, validateActionSequence } from './action-sequence.mjs';
 import { CHOREOGRAPHY } from '../../dsh-l2d-plugin/lib/choreography.mjs';
 import { findReservedParams, validateActChain, validateExpressionName, validateMotionGroup } from './validate.mjs';
@@ -25,83 +25,17 @@ async function baseUrl() {
   return cachedBase;
 }
 
-function normalize(result) {
-  if (!result || typeof result !== 'object') return { ok: false, reason: 'empty' };
-  if (result.ok === false && !result.reason && result.error) {
-    return { ...result, reason: String(result.error) };
-  }
-  return result;
-}
-
 async function forward(name, args, timeoutMs, mode) {
   const base = await baseUrl();
   if (!base) {
     return { ok: false, reason: 'plugin-offline' };
   }
-  let queued;
-  try {
-    const res = await fetch(base + '/dsh-l2d/ai/call', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, args: args || {} }),
-    });
-    // 守卫拒绝的 4xx 是 text/plain（如 "reserved-param: ParamMouthOpenY"），
-    // 先 res.json() 会抛 SyntaxError 掉进 catch，被误报成 unreachable 并清掉缓存地址。
-    // 正确顺序：先读文本 → 尽力解析 → 再看状态码。
-    const text = await res.text();
-    try {
-      queued = text ? JSON.parse(text) : null;
-    } catch {
-      queued = { ok: false, reason: text.slice(0, 200) || 'call-rejected' };
-    }
-    if (!res.ok) {
-      return {
-        ok: false,
-        reason: (queued && (queued.reason || queued.error)) || 'call-rejected',
-        status: res.status,
-      };
-    }
-    if (!queued || queued.ok === false) {
-      return { ok: false, reason: (queued && (queued.reason || queued.error)) || 'call-rejected' };
-    }
-  } catch (err) {
-    // 只有网络层失败才清缓存地址
+  const result = await forwardCall({ base, name, args, timeoutMs, mode });
+  // 只有网络层失败（unreachable，且非截止中止）才清缓存地址
+  if (result && result.reason === 'unreachable') {
     cachedBase = '';
-    return { ok: false, reason: 'unreachable' };
   }
-
-  const id = queued.id;
-  const started = Date.now();
-  let events = [];
-  let acceptResult = null;
-  while (Date.now() - started < timeoutMs) {
-    try {
-      const res = await fetch(base + '/dsh-l2d/ai/result?id=' + encodeURIComponent(id), { cache: 'no-store' });
-      if (res.ok) {
-        const body = await res.json();
-        if (body && Array.isArray(body.events)) events = mergeActEvents(events, body.events);
-        if (body && body.ready) {
-          acceptResult = normalize(body.result);
-          if (acceptResult && Array.isArray(acceptResult.events)) {
-            events = mergeActEvents(events, acceptResult.events);
-          }
-        }
-        if (acceptResult) {
-          const waitForTerminal = mode === 'act' && acceptResult.accepted === true;
-          if (!waitForTerminal || actSettled(events, acceptResult.runId)) {
-            return mode === 'act' ? shapeActReceipt(acceptResult, events) : acceptResult;
-          }
-        }
-      }
-    } catch {
-      /* 下一轮再取 */
-    }
-    await new Promise((resolve) => setTimeout(resolve, 120));
-  }
-  if (mode === 'act' && acceptResult && acceptResult.accepted === true) {
-    return shapeActReceipt(acceptResult, events);
-  }
-  return { ok: false, reason: 'timeout', events };
+  return result;
 }
 
 function toolResult(result) {

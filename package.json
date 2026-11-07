@@ -20,7 +20,7 @@
     "accept": "node tools/acceptance/run.mjs",
     "test:breakpoint": "node --experimental-sqlite --experimental-strip-types tests/breakpoint-lab/run.mjs",
     "test:chain15": "node --experimental-sqlite tests/chain-15/run.mjs",
-    "test:bridge": "node --experimental-sqlite packages/mcp-bridge/tests/workspace.test.mjs && node packages/mcp-bridge/tests/status-reporter.test.mjs && node packages/mcp-bridge/tests/mcp-tools.test.mjs && node --experimental-sqlite packages/mcp-bridge/tests/action-queue.test.mjs && node --experimental-sqlite packages/mcp-bridge/tests/continuous.test.mjs && node packages/mcp-bridge/tests/action-executor-completion.test.mjs",
+    "test:bridge": "node --experimental-sqlite packages/mcp-bridge/tests/workspace.test.mjs && node packages/mcp-bridge/tests/status-reporter.test.mjs && node packages/mcp-bridge/tests/mcp-tools.test.mjs && node --experimental-sqlite packages/mcp-bridge/tests/action-queue.test.mjs && node --experimental-sqlite packages/mcp-bridge/tests/continuous.test.mjs && node packages/mcp-bridge/tests/action-executor-completion.test.mjs && node packages/dsh-l2d-mcp/src/forward.test.mjs",
     "test:supervisor": "node --experimental-sqlite packages/mcp-bridge/tests/observer.test.mjs && node --experimental-sqlite packages/mcp-bridge/tests/matcher.test.mjs",
     "bench:action-cache": "node --experimental-sqlite tests/breakpoint-lab/bench.mjs",
     "test:contract": "node tools/renderer-contract/check.mjs",
