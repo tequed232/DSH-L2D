@@ -90,7 +90,24 @@ export function parseModel3(json) {
     refs.Motions && typeof refs.Motions === 'object' && !Array.isArray(refs.Motions)
       ? Object.keys(refs.Motions)
       : [];
-  return { expressions, motionGroups };
+  // [#28] 模型自声明引用的物理文件（相对模型目录）；没有则由调用方回退默认名。
+  const physics = typeof refs.Physics === 'string' && refs.Physics ? refs.Physics : null;
+  return { expressions, motionGroups, physics };
+}
+
+/**
+ * [#28] 发现目录下全部 .model3.json（按文件名排序）。
+ * 目录不可读 / 不是目录时返回空数组不抛，调用方回退到写死名单。
+ */
+export function discoverModelFiles(modelDir, fsImpl = fs) {
+  try {
+    return fsImpl
+      .readdirSync(modelDir)
+      .filter((n) => typeof n === 'string' && n.endsWith('.model3.json'))
+      .sort();
+  } catch {
+    return [];
+  }
 }
 
 /** 从 physics3.json 抽物理输出参数表（Output[].Destination.Id）。 */
@@ -129,17 +146,25 @@ export function loadModelIndex(modelDir, options = {}) {
     return result;
   }
   const readJson = (file) => JSON.parse(fsImpl.readFileSync(path.join(modelDir, file), 'utf8'));
+  // [#28] 未显式指定时不再写死大肥鱼名单：按目录实际发现的 .model3.json 建索引，
+  // 目录不可读 / 为空才回退 MODEL_FILES（保持旧目录名下的旧行为）。
+  const discovered = discoverModelFiles(modelDir, fsImpl);
   const modelFiles = options.modelFile
     ? [options.modelFile]
     : Array.isArray(options.modelFiles) && options.modelFiles.length
       ? options.modelFiles
-      : MODEL_FILES;
+      : discovered.length
+        ? discovered
+        : MODEL_FILES;
   const expressions = new Set();
   const motionGroups = new Set();
   const modelFailures = [];
+  // [#28] 记录模型自声明的 physics3 文件名（优先于写死的 PHYSICS_FILE）。
+  let physicsRef = null;
   for (const file of modelFiles) {
     try {
       const parsed = parseModel3(readJson(file));
+      if (!physicsRef && parsed.physics) physicsRef = parsed.physics;
       for (const name of parsed.expressions) expressions.add(name);
       for (const name of parsed.motionGroups) motionGroups.add(name);
     } catch (err) {
@@ -153,7 +178,7 @@ export function loadModelIndex(modelDir, options = {}) {
     result.warnings.push('model3-unavailable: ' + modelFailures.join('; '));
   }
   try {
-    result.physicsOutputs = parsePhysics3(readJson(options.physicsFile || PHYSICS_FILE));
+    result.physicsOutputs = parsePhysics3(readJson(options.physicsFile || physicsRef || PHYSICS_FILE));
   } catch (err) {
     result.warnings.push('physics3-unavailable: ' + String((err && err.message) || err));
   }

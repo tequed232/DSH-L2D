@@ -24,7 +24,25 @@
       stage.appendChild(canvas);
 
       // 与 overlay.js:1832 同源同参（模型零拷贝，走既有模型路由）
-      var MODEL_URL = '/dsh-l2d/model/' + encodeURIComponent('大肥鱼.dsl2d.2048.model3.json');
+      // [#28] 模型入口不再写死大肥鱼：先问服务端 status.json（按 MODEL_DIR 发现的
+      // 当前模型），不可达时回落 2048 档，与 overlay 主窗同语义。
+      var MODEL_URL_FALLBACK = '/dsh-l2d/model/' + encodeURIComponent('大肥鱼.dsl2d.2048.model3.json');
+      var resolvedModelUrl = null;
+      function resolveModelUrl() {
+        if (resolvedModelUrl) return Promise.resolve(resolvedModelUrl);
+        return fetch('/dsh-l2d/status.json', { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (s) {
+            resolvedModelUrl = s && s.model
+              ? '/dsh-l2d/model/' + encodeURIComponent(s.model)
+              : MODEL_URL_FALLBACK;
+            return resolvedModelUrl;
+          })
+          .catch(function () {
+            resolvedModelUrl = MODEL_URL_FALLBACK;
+            return resolvedModelUrl;
+          });
+      }
       var ALPHA_THRESHOLD = 22; // 踩坑补充①实测阈值
       var mounted = false;
       var gl = null;
@@ -195,15 +213,16 @@
         if (!window.Live2DCubismCore) return fallbackToImage('Core 未挂载');
         if (!window.DSH_L2D || !window.DSH_L2D.mount) return fallbackToImage('渲染包未挂载');
         try {
-          Promise.resolve(
-            window.DSH_L2D.mount(canvas, {
-              modelUrl: MODEL_URL,
-              width: window.innerWidth,
-              height: window.innerHeight,
-              zoom: 1,
-              dpr: renderScale(), // 与页内浮层同倍率，清晰度对齐
-            }),
-          )
+          resolveModelUrl()
+            .then(function (modelUrl) {
+              return window.DSH_L2D.mount(canvas, {
+                modelUrl: modelUrl,
+                width: window.innerWidth,
+                height: window.innerHeight,
+                zoom: 1,
+                dpr: renderScale(), // 与页内浮层同倍率，清晰度对齐
+              });
+            })
             .then(function () {
               mounted = true;
               fit();

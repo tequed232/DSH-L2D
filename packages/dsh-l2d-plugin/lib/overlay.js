@@ -2857,9 +2857,29 @@
   }
   // 性能：挂件显示尺寸 593×741，4096 贴图（5×64MiB=320MiB 显存）纯属浪费；
   // 2048 档肉眼无差，显存降到 80MiB、采样带宽降到 1/4。
-  // 回到高清只要把下面文件名换回 '大肥鱼.dsl2d.model3.json'。
-  var MODEL_URL =
+  // [#28] 模型入口不再写死大肥鱼：先问服务端 status.json（按 MODEL_DIR 发现的
+  // 当前模型），不可达时回落 2048 档。换模型 / 换目录不再 404。
+  var MODEL_URL_FALLBACK =
     '/dsh-l2d/model/' + encodeURIComponent('大肥鱼.dsl2d.2048.model3.json');
+  var resolvedModelUrl = null;
+  function resolveModelUrl() {
+    if (resolvedModelUrl) return Promise.resolve(resolvedModelUrl);
+    return fetch('/dsh-l2d/status.json', { cache: 'no-store' })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .then(function (s) {
+        resolvedModelUrl =
+          s && s.model
+            ? '/dsh-l2d/model/' + encodeURIComponent(s.model)
+            : MODEL_URL_FALLBACK;
+        return resolvedModelUrl;
+      })
+      .catch(function () {
+        resolvedModelUrl = MODEL_URL_FALLBACK;
+        return resolvedModelUrl;
+      });
+  }
 
   /**
    * 渲染倍率：高 DPI/Retina 按 devicePixelRatio 走（Mac Retina=2、Windows 150%=1.5）。
@@ -3001,25 +3021,27 @@
       }, L2D_RECOVERY.loadTimeoutMs);
     });
 
-    var loading = loadScriptOnce('dsh-l2d-core', versioned('/dsh-l2d/core.js'))
-      .then(function () {
-        if (!window.Live2DCubismCore) throw new Error('Core 未挂载');
-        return loadScriptOnce('dsh-l2d-renderer', versioned('/dsh-l2d/renderer.js'));
-      })
-      .then(nextFrame)
-      .then(function () {
-        if (!window.DSH_L2D || !window.DSH_L2D.mount) throw new Error('渲染包未挂载');
-        var box = canvasBox();
-        canvasEl.style.width = box.w + 'px';
-        canvasEl.style.height = box.h + 'px';
-        return window.DSH_L2D.mount(canvasEl, {
-          modelUrl: MODEL_URL,
-          width: box.w,
-          height: box.h,
-          zoom: 1,
-          dpr: renderScale()
+    var loading = resolveModelUrl().then(function (modelUrl) {
+      return loadScriptOnce('dsh-l2d-core', versioned('/dsh-l2d/core.js'))
+        .then(function () {
+          if (!window.Live2DCubismCore) throw new Error('Core 未挂载');
+          return loadScriptOnce('dsh-l2d-renderer', versioned('/dsh-l2d/renderer.js'));
+        })
+        .then(nextFrame)
+        .then(function () {
+          if (!window.DSH_L2D || !window.DSH_L2D.mount) throw new Error('渲染包未挂载');
+          var box = canvasBox();
+          canvasEl.style.width = box.w + 'px';
+          canvasEl.style.height = box.h + 'px';
+          return window.DSH_L2D.mount(canvasEl, {
+            modelUrl: modelUrl,
+            width: box.w,
+            height: box.h,
+            zoom: 1,
+            dpr: renderScale()
+          });
         });
-      });
+    });
 
     Promise.race([loading, timeout])
       .then(function () {

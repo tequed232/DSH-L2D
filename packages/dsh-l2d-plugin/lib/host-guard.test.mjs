@@ -10,6 +10,7 @@ import {
   extractParamIds,
   guardAiCall,
   loadModelIndex,
+  discoverModelFiles,
   parseModel3,
   parsePhysics3,
 } from './host-guard.mjs';
@@ -57,10 +58,11 @@ const guarded = (name, args, index) => guardAiCall({ name, args }, { index });
 assert.deepEqual(parseModel3(MODEL3), {
   expressions: ['兔牙', '动态表情'],
   motionGroups: ['抚胸手打开', '竖手指关闭', '新动作组', 'Idle'],
+  physics: null,
 });
 assert.deepEqual([...parsePhysics3(PHYSICS3)].sort(), ['HipAngleX', 'ParamAngleX']);
 // 结构缺失/畸形不抛，返回空集合。
-assert.deepEqual(parseModel3(null), { expressions: [], motionGroups: [] });
+assert.deepEqual(parseModel3(null), { expressions: [], motionGroups: [], physics: null });
 assert.deepEqual([...parsePhysics3({ PhysicsSettings: [{ Output: [{ Destination: null }] }, null] })], []);
 
 assert.deepEqual([...fullIndex.expressions].sort(), ['动态表情', '兔牙'].sort());
@@ -342,6 +344,37 @@ assert.deepEqual(
 );
 assert.deepEqual(extractParamIds('l2d_posture', {}), []);
 assert.deepEqual(extractParamIds('l2d_posture', { values: [1, 2] }), []);
+
+// 10) [#28] 目录发现：不再写死大肥鱼名单，索引跟随目录里的真实 model3.json
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-l2d-hostguard-'));
+  tmpDirs.push(dir);
+  fs.writeFileSync(
+    path.join(dir, 'Haru.model3.json'),
+    JSON.stringify({
+      FileReferences: {
+        Expressions: [{ Name: 'F01' }],
+        Motions: { TapBody: [], Idle: [] },
+        Physics: 'Haru.physics3.json',
+      },
+    }),
+  );
+  fs.writeFileSync(path.join(dir, 'Haru.physics3.json'), JSON.stringify(PHYSICS3));
+  const idx = loadModelIndex(dir);
+  assert.ok(idx.expressions.has('F01'), '发现机制应索引到目录里的 Haru');
+  assert.ok(idx.motionGroups.has('TapBody'));
+  // physics 优先用模型自声明引用，不再写死大肥鱼.physics3.json
+  assert.deepEqual([...idx.physicsOutputs].sort(), ['HipAngleX', 'ParamAngleX']);
+  assert.deepEqual(discoverModelFiles(dir), ['Haru.model3.json']);
+
+  // 目录不可读 → 空数组不抛；空目录 → 回退写死名单路径（model3-unavailable 警告）
+  assert.deepEqual(discoverModelFiles(path.join(dir, 'not-exist')), []);
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-l2d-hostguard-'));
+  tmpDirs.push(empty);
+  const emptyIdx = loadModelIndex(empty);
+  assert.equal(emptyIdx.expressions, null);
+  assert.ok(emptyIdx.warnings.some((w) => w.startsWith('model3-unavailable')));
+}
 
 // ---------------------------------------------------------------------------
 for (const dir of tmpDirs) fs.rmSync(dir, { recursive: true, force: true });

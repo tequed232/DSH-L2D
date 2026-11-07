@@ -9,15 +9,51 @@
  *  - 动作链每步的结构与取值范围（复用 choreography.validateStep）
  *  - 口型参数名（任何工具入参出现即拒绝）
  */
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   MODEL_EXPRESSIONS,
   MODEL_MOTION_GROUPS,
   validateStep,
 } from '../../dsh-l2d-plugin/lib/choreography.mjs';
+import { loadModelIndex } from '../../dsh-l2d-plugin/lib/host-guard.mjs';
 import { collectReservedParams } from '../../dsh-l2d-plugin/lib/param-guards.mjs';
 
-export const ALLOWED_EXPRESSIONS = Object.freeze([...MODEL_EXPRESSIONS]);
-export const PLAYABLE_MOTION_GROUPS = Object.freeze([...MODEL_MOTION_GROUPS]);
+/**
+ * [#28] 白名单以当前模型目录的真实 model3.json 为准（DSH_L2D_MODEL_DIR 可覆盖），
+ * 不再只认写死的大肥鱼名单——换 Haru/Hiyori 等其它模型时，它们的表情与动作组
+ * 才能通过 MCP 第一道闸转发到宿主。索引不可用时回退写死名单（旧行为）。
+ * Idle 不允许外部手动播，从可播集合剔除（拒绝逻辑在 validateMotionGroup 里保留）。
+ */
+const DEFAULT_MODEL_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  'DeepSeek免费公皮',
+  'DeepSeek',
+);
+
+function buildWhitelist() {
+  let expressions = MODEL_EXPRESSIONS;
+  let motionGroups = MODEL_MOTION_GROUPS;
+  try {
+    const modelDir = process.env.DSH_L2D_MODEL_DIR || DEFAULT_MODEL_DIR;
+    const index = loadModelIndex(modelDir);
+    if (index.expressions && index.expressions.size) expressions = [...index.expressions];
+    if (index.motionGroups && index.motionGroups.size) {
+      motionGroups = [...index.motionGroups].filter((g) => g !== 'Idle');
+    }
+  } catch {
+    // 目录不可读等场景：回退 choreography 写死名单
+  }
+  return { expressions, motionGroups };
+}
+
+const WHITELIST = buildWhitelist();
+
+export const ALLOWED_EXPRESSIONS = Object.freeze(WHITELIST.expressions);
+export const PLAYABLE_MOTION_GROUPS = Object.freeze(WHITELIST.motionGroups);
 
 const EXPRESSION_SET = new Set(ALLOWED_EXPRESSIONS);
 const MOTION_SET = new Set(PLAYABLE_MOTION_GROUPS);

@@ -24,7 +24,7 @@ import { createAiInbox } from './ai-inbox.mjs';
 import { createWorkspaceAgentBridge } from './workspace-agent.mjs';
 import { createReverseLog } from './reverse-log.mjs';
 import { normalizePresencePayload, readEnvState, writeEnvState } from './env-state.mjs';
-import { createModelIndexCache, guardAiCall } from './host-guard.mjs';
+import { createModelIndexCache, guardAiCall, discoverModelFiles } from './host-guard.mjs';
 import { isReservedParam } from './param-guards.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
 import { ageSummaryState, isActionTool, legacyAgentState, summarizeSession } from './session-events.mjs';
@@ -1207,11 +1207,9 @@ export function apply(root, config = {}) {
         // 运行时资源就位情况：之前这里写死了一句「静态立绘预览」，Cubism 接入后已失真。
         renderer: fs.existsSync(RENDERER_FILE),
         core: fs.existsSync(CORE_FILE),
-        // find() 找不到时是 undefined，JSON.stringify 会整键丢掉；显式落成 null。
-        model:
-          ['大肥鱼.dsl2d.2048.model3.json', '大肥鱼.dsl2d.model3.json'].find((f) =>
-            fs.existsSync(path.join(MODEL_DIR, f)),
-          ) || null,
+        // [#28] 不再写死大肥鱼名单：按 MODEL_DIR 实际发现的 .model3.json 报告当前模型
+        // （排序后第一份与旧行为一致：2048 档排在无后缀版之前）。
+        model: discoverModelFiles(MODEL_DIR)[0] || null,
         note: 'Cubism 5 Web SDK 运行时：渲染包 /dsh-l2d/renderer.js，Core /dsh-l2d/core.js，模型前缀 /dsh-l2d/model/',
       });
       sendBuffer(res, 200, MIME['.json'], Buffer.from(body, 'utf8'));
@@ -1310,7 +1308,19 @@ export function apply(root, config = {}) {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       let file = null;
       try {
-        file = fs.readdirSync(CAPABILITY_DIR).filter((n) => /^profile\..+\.json$/.test(n)).sort()[0] || null;
+        const profiles = fs
+          .readdirSync(CAPABILITY_DIR)
+          .filter((n) => /^profile\..+\.json$/.test(n))
+          .sort();
+        // [#28] 画像按当前模型选：profile.<modelId>.json（modelId = 模型文件名去掉
+        // .model3.json，与 scan.mjs 的命名规则一致）。当前模型没有画像时回退
+        // 按文件名排序的第一份（旧行为），不再无声地把别的模型的画像当现状返回。
+        const modelFile = discoverModelFiles(MODEL_DIR)[0];
+        if (modelFile) {
+          const expected = 'profile.' + modelFile.replace(/\.model3\.json$/, '') + '.json';
+          file = profiles.find((n) => n === expected) || null;
+        }
+        file = file || profiles[0] || null;
       } catch {
         file = null;
       }
