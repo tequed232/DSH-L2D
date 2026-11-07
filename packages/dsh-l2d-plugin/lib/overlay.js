@@ -585,9 +585,46 @@
   }
 
   var bubbleTimer = null;
+
+  // ---- 字幕准入：参数 / 模板 / JSON / 标签片段在渲染出口前一律剔除，只放行自然语言 ----
+  // 以下三个标识符自包含（不引用本模块其它变量），单测用 vm 抽取本段真实实现直接验证。
+  var CAPTION_PARAM_RE = new RegExp([
+    /[A-Za-z_][A-Za-z0-9_.]*\s*(?:==|=|:)\s*-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/,
+    /\b(?:Param[A-Za-z0-9_]*|Clothes\d+|Hair\d+|LEar\d+|REar\d+|BodyAngle[XYZ]|Angle[XYZ]|AngryMove)\b/,
+    /\{\s*"[^"]+"\s*:[^}]*\}/,
+    /"(?:paramId|value|values|param|track|key|weight|durationMs|schemaVersion|chain_id|args)"\s*:/,
+    /\$\{[^}]*\}|\{\{[^}]*\}\}|<\/?[A-Za-z_][^>]*>|%[sdif]/,
+    /\b(?:setParameters?|readParameters?|applyAppearance|setSwitch|setBodyType)\s*\([^)]*\)/,
+  ].map(function (r) { return r.source; }).join('|'), 'g');
+
+  // 准入字符白名单：不含 = { } $ | ` < > 等参数语法特征；英文冒号保留，避免误伤普通字幕。
+  var CAPTION_ALLOW_RE = /[\u3400-\u9fff\u3040-\u30ffA-Za-z0-9\s\u3000-\u303f\uff01-\uff65~!?.,:;'"()《》【】「」“”‘’_\-+*\/&#@%\p{So}\p{Sk}]/gu;
+
+  function admitCaption(input) {
+    try {
+      CAPTION_PARAM_RE.lastIndex = 0;
+      var stripped = String(input == null ? '' : input).replace(CAPTION_PARAM_RE, ' ');
+      CAPTION_ALLOW_RE.lastIndex = 0;
+      var kept = stripped.match(CAPTION_ALLOW_RE) || [];
+      var text = kept.join('')
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s,.;:'"()\-+*\/&#@%_，、：；（）《》【】「」“”‘’]+|[\s,.;:'"()\-+*\/&#@%_，、：；（）《》【】「」“”‘’]+$/g, '')
+        .trim();
+      return text ? { ok: true, text: text } : { ok: false, text: '' };
+    } catch (e) {
+      return { ok: false, text: '' };
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.DSH_L2D_CAPTION__ = { admit: admitCaption, paramRe: CAPTION_PARAM_RE, allowRe: CAPTION_ALLOW_RE };
+  }
+
   function say(text, holdMs) {
     if (!bubbleEl || !text) return;
-    bubbleEl.textContent = text;
+    var admitted = admitCaption(text);
+    if (!admitted.ok) return;
+    bubbleEl.textContent = admitted.text;
     bubbleEl.classList.add('show');
     if (bubbleTimer) clearTimeout(bubbleTimer);
     bubbleTimer = setTimeout(function () {
