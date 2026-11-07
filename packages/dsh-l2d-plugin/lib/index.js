@@ -110,16 +110,15 @@ function overlayBuildTag() {
   }
 }
 
-function injectRowText() {
-  const src = '/dsh-l2d/overlay.js?v=' + overlayBuildTag();
-  return (
-    '(function(){try{' +
-    'var d=document.body||document.documentElement;if(!d)return;' +
-    'if(document.querySelector("script[data-dsh-l2d]"))return;' +
-    'var s=document.createElement("script");s.src=' + JSON.stringify(src) + ';s.async=true;' +
-    's.setAttribute("data-dsh-l2d","1");s.onerror=function(){};d.appendChild(s)' +
-    '}catch(e){}})()'
-  );
+function overlayInjectRow() {
+  // 宿主原生支持 kind:'script-src'（渲染为静态 <script src>，由 HTML 解析器执行）。
+  // 旧方案是内联加载器 IIFE 动态 createElement('script')——在真机宿主页面上实测
+  // 动态加载不可靠（内联 settings-entry 同表执行成功而 overlay 不加载），改用静态标签。
+  return {
+    kind: 'script-src',
+    placement: 'body',
+    src: '/dsh-l2d/overlay.js?v=' + overlayBuildTag(),
+  };
 }
 
 export const name = 'dsh-l2d';
@@ -872,11 +871,10 @@ export function apply(root, config = {}) {
         // 双消费者会分食 AI 指令（proposals/pet-window-feasibility.md A8）。
         if (readSettings().petWindow === 'only') return;
         for (const row of table) {
-          if (row && row.kind === 'script' && typeof row.text === 'string') {
-            if (row.text.indexOf('/dsh-l2d/overlay.js') >= 0) return; // 已推过，不重复
-          }
+          const injected = row && (row.src === undefined ? row.text : row.src);
+          if (typeof injected === 'string' && injected.indexOf('/dsh-l2d/overlay.js') >= 0) return; // 已推过，不重复
         }
-        table.push({ kind: 'script', placement: 'body', text: injectRowText() });
+        table.push(overlayInjectRow());
         // UI-FLOAT 特批（本席文件所有权例外，仅此一处注入注册）：全局设置入口。
         // lib/settings-entry.js 整体内联（无 src，不新增路由）；幂等标记 __DSH_SETTINGS_ENTRY__ 防重复。
         try {

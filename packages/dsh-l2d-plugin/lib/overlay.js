@@ -3795,8 +3795,11 @@
   function bootOverlay() {
     // P0 修复：用户裁决「禁用整个模组」后 localStorage 持久化——刷新页面/重启宿主
     // 都不再注入角色，但 DSH 主界面、聊天、Agent、MCP 等核心功能全部照常。
-    // 恢复方式：控制台 localStorage.removeItem('dsh-l2d.disabled') 后刷新。
+    // 恢复方式：① 地址栏访问 http://<host>:<port>/?l2d-enable=1（本旁路，禁用后
+    // 页内 gear 菜单已消失，控制台不是普通用户可达的入口）；② 控制台
+    // localStorage.removeItem('dsh-l2d.disabled') 后刷新。
     try {
+      if (/[?&]l2d-enable=1/.test(location.search)) localStorage.removeItem('dsh-l2d.disabled');
       if (localStorage.getItem('dsh-l2d.disabled') === 'true') return;
     } catch (err) { /* localStorage 不可用（隐私模式等）按未禁用处理 */ }
     try {
