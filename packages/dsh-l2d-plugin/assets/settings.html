@@ -687,6 +687,8 @@
           <a href="/dsh-l2d/test.html">参数监视台</a>
           <button class="btn" type="button" id="rescanBtn">能力重扫</button>
           <span class="hint" id="devMsg"></span>
+          <button class="btn" type="button" id="formBtn">模型形态变化</button>
+          <span class="hint" id="formMsg"></span>
         </div>
       </section>
 
@@ -712,6 +714,7 @@
         var LS_KEY = 'dsh-l2d.settings-ui.v1';
 
         var state = { settings: null, status: null, capability: null };
+        var syncFormAvailability = null; // 由 bindFormChange 注册，复用 loadAll 现有 status 探测结果
         var fields = {};
         var pending = {};
         var pendingRows = {};
@@ -1579,6 +1582,7 @@
             renderCapability(state.capability);
 
             paintTopBar();
+            if (syncFormAvailability) syncFormAvailability();
           });
         }
 
@@ -1625,6 +1629,109 @@
           });
         }
 
+        function bindFormChange() {
+          var btn = $('formBtn');
+          var msg = $('formMsg');
+          var busy = false;
+          var unavailable = false;
+
+          function say(text, isError) {
+            msg.textContent = text;
+            msg.className = 'hint' + (isError ? ' is-error' : '');
+          }
+
+          // 统一收口：解除请求锁；仅当运行时仍不可用才保持禁用，杜绝按钮永久锁死
+          function settle() {
+            busy = false;
+            if (unavailable) {
+              btn.disabled = true;
+              btn.title = '运行时不可用：status.json 读取失败';
+              say('运行时不可用', true);
+            } else {
+              btn.disabled = false;
+            }
+          }
+
+          function fail(text) {
+            say(text, true);
+            settle();
+          }
+
+          function poll(id, startedAt) {
+            if (Date.now() - startedAt >= 8000) {
+              fail('切换失败：等待运行时回执超时');
+              return;
+            }
+            fetchJson(API.result + '?id=' + encodeURIComponent(id)).then(function (res) {
+              var data = res.ok ? res.data : null;
+              if (data && data.ready) {
+                var r = data.result;
+                if (r && r.ok === true) {
+                  var label = (r.form && r.form.label) || '未知形态';
+                  say('已切换 · 当前形态：' + label, false);
+                  settle();
+                } else {
+                  fail('切换失败：' + ((r && r.reason) || '未知原因'));
+                }
+                return;
+              }
+              window.setTimeout(function () { poll(id, startedAt); }, 250);
+            });
+          }
+
+          btn.addEventListener('click', function () {
+            if (busy || unavailable) return;
+            busy = true;
+            btn.disabled = true;
+            say('正在切换…', false);
+            fetch(API.call, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: 'l2d_change_form', args: {} }),
+              cache: 'no-store'
+            })
+              .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+              })
+              .then(function (queued) {
+                var id = queued && queued.id;
+                if (id === undefined || id === null || id === '') throw new Error('未返回队列 id');
+                poll(id, Date.now());
+              })
+              .catch(function (err) {
+                fail('切换失败：' + reason(err));
+              });
+          });
+
+          // 复用 loadAll 现有的 status.json 探测结果（state.status），不另造一套探测
+          syncFormAvailability = function () {
+            unavailable = !state.status;
+            if (busy) return;
+            if (unavailable) {
+              btn.disabled = true;
+              btn.title = '运行时不可用：status.json 读取失败';
+              say('运行时不可用', true);
+            } else {
+              btn.disabled = false;
+              btn.title = '';
+              if (msg.textContent === '运行时不可用') say('', false);
+            }
+          };
+
+          // 只读调试钩子：供浏览器验收读取三态 / 主动触发，不影响正常使用
+          window.__L2D_FORM_UI__ = {
+            state: function () {
+              return {
+                disabled: btn.disabled,
+                message: msg.textContent,
+                error: msg.classList.contains('is-error')
+              };
+            },
+            trigger: function () { btn.click(); }
+          };
+        }
+
         window.addEventListener('error', function (event) {
           showAlert('脚本错误：' + (event && event.message ? event.message : '未知'));
         });
@@ -1636,6 +1743,7 @@
 
         mount();
         bindDev();
+        bindFormChange();
         loadAll();
         refreshReadouts();
         window.setInterval(refreshReadouts, 6000);

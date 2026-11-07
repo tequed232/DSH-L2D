@@ -31,14 +31,15 @@
     'border:1px solid var(--dsh-line,rgba(255,255,255,.12));box-shadow:var(--dsh-shadow-2,0 8px 24px rgba(0,0,0,.35));',
     'z-index:2147483300;display:none;flex-direction:column;}',
     '.dsh-se-menu.open{display:flex;}',
-    '.dsh-se-menu button{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;',
+    '.dsh-se-menu button, .dsh-se-menu a{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;',
     'padding:8px 12px;border:none;border-radius:var(--dsh-radius-md,8px);background:transparent;',
     'color:inherit;font:400 13px/1.4 var(--dsh-font-sans,system-ui,sans-serif);cursor:pointer;text-align:left;}',
-    '.dsh-se-menu button:hover,.dsh-se-menu button:focus-visible{background:var(--dsh-hover,rgba(255,255,255,.08));outline:none;}',
-    '.dsh-se-menu button:focus-visible{outline:2px solid var(--dsh-accent,#4c8bf0);outline-offset:-2px;}',
+    '.dsh-se-menu a{text-decoration:none;color:inherit;box-sizing:border-box;}',
+    '.dsh-se-menu button:hover, .dsh-se-menu button:focus-visible, .dsh-se-menu a:hover, .dsh-se-menu a:focus-visible{background:var(--dsh-hover,rgba(255,255,255,.08));outline:none;}',
+    '.dsh-se-menu button:focus-visible, .dsh-se-menu a:focus-visible{outline:2px solid var(--dsh-accent,#4c8bf0);outline-offset:-2px;}',
     '.dsh-se-menu .dsh-se-menu-title{padding:6px 12px 4px;font:var(--dsh-text-xs,11px/1.4 sans-serif);',
     'color:var(--dsh-ink-muted,rgba(255,255,255,.55));}',
-    '@media (prefers-reduced-motion: reduce){.dsh-se-btn,.dsh-se-menu button{transition:none;}}'
+    '@media (prefers-reduced-motion: reduce){.dsh-se-btn,.dsh-se-menu button,.dsh-se-menu a{transition:none;}}'
   ].join('');
 
   var GEAR_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">'
@@ -49,7 +50,8 @@
   var MENU_ITEMS = [
     { group: 'appearance', label: '外观' },
     { group: 'behavior', label: '行为与联动' },
-    { group: 'account', label: '账户与余额' }
+    { group: 'account', label: '账户与余额' },
+    { label: '参数监视台', href: '/dsh-l2d/test.html' }
   ];
 
   var btn = null;
@@ -92,19 +94,32 @@
     title.textContent = '设置';
     menu.appendChild(title);
     MENU_ITEMS.forEach(function (item) {
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.setAttribute('role', 'menuitem');
-      b.textContent = item.label;
-      b.addEventListener('click', function () {
-        closeMenu();
-        SettingsWindowManager.open(item.group);
-      });
-      menu.appendChild(b);
+      var el;
+      if (item.href) {
+        el = document.createElement('a');
+        el.setAttribute('role', 'menuitem');
+        el.setAttribute('href', item.href);
+        el.setAttribute('target', '_blank');
+        el.setAttribute('rel', 'noopener');
+        el.textContent = item.label;
+        el.addEventListener('click', function () {
+          closeMenu();
+        });
+      } else {
+        el = document.createElement('button');
+        el.type = 'button';
+        el.setAttribute('role', 'menuitem');
+        el.textContent = item.label;
+        el.addEventListener('click', function () {
+          closeMenu();
+          SettingsWindowManager.open(item.group);
+        });
+      }
+      menu.appendChild(el);
     });
     // Esc / 外点关闭；ArrowUp/Down 在菜单项间移动焦点
     menu.addEventListener('keydown', function (e) {
-      var items = menu.querySelectorAll('button');
+      var items = menu.querySelectorAll('button, a');
       var idx = Array.prototype.indexOf.call(items, document.activeElement);
       if (e.key === 'Escape') { e.stopPropagation(); closeMenu(); if (btn) btn.focus(); }
       else if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0]).focus(); }
@@ -128,7 +143,7 @@
     m.style.left = Math.round(x) + 'px';
     m.style.top = Math.round(y) + 'px';
     btn.setAttribute('aria-expanded', 'true');
-    var first = m.querySelector('button');
+    var first = m.querySelector('button, a');
     if (first) first.focus();
   }
 
