@@ -58,6 +58,8 @@ export const HOST_ALLOWED_TOOLS = Object.freeze([
   'l2d_posture',
   'l2d_get_state',
   'l2d_reset',
+  // 无参形态切换工具：不写参数，故不进 PARAM_KEYED_TOOLS / OWN_REQUIRED_TOOLS。
+  'l2d_change_form',
 ]);
 
 const ALLOWED_SET = new Set(HOST_ALLOWED_TOOLS);

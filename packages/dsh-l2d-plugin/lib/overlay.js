@@ -5112,6 +5112,23 @@
             var n = L.resetPose();
             return { ok: true, params: n };
           }
+          case 'l2d_change_form': {
+            // 形态切换复用 UI 既有入口。setBodyType 内部在缺 L.setParameter 时会静默返回，
+            // 故先判定可用性，再用切换前后 index 是否变化确认真的生效（被钳制时算失败）。
+            if (typeof L.setParameter !== 'function' || typeof cycleBodyType !== 'function') {
+              return { ok: false, reason: 'form-unavailable' };
+            }
+            var formBefore = Math.max(0, Math.min(2, Number(prefs.bodyType) || 0));
+            try {
+              cycleBodyType();
+            } catch (err) {
+              return { ok: false, reason: 'form-unavailable' };
+            }
+            var formAfter = Math.max(0, Math.min(2, Number(prefs.bodyType) || 0));
+            if (formAfter === formBefore) return { ok: false, reason: 'form-unavailable' };
+            var formItem = BODY_TYPES[formAfter] || BODY_TYPES[0];
+            return { ok: true, form: { index: formAfter, label: formItem.label } };
+          }
           default:
           case 'l2d_posture': {
 

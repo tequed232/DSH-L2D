@@ -72,7 +72,7 @@ assert.deepEqual(fullIndex.warnings, []);
 // ---------------------------------------------------------------------------
 // 1) 工具白名单：只放行 index.js 原 ALLOWED 集合
 // ---------------------------------------------------------------------------
-assert.equal(HOST_ALLOWED_TOOLS.length, 15);
+assert.equal(HOST_ALLOWED_TOOLS.length, 16);
 for (const tool of HOST_ALLOWED_TOOLS) {
   // 空入参可能因"缺字段"被拒（如空表情名），但绝不能是 unknown-tool。
   const r = guardAiCall({ name: tool, args: {} });
@@ -90,6 +90,31 @@ for (const bad of ['l2d_unknown', 'rm -rf', 'l2d_set_parameter', '', ' L2D_RESET
 assert.equal(guardAiCall(null).reason, 'unknown-tool');
 assert.equal(guardAiCall({}).reason, 'unknown-tool');
 assert.equal(guardAiCall({ name: 42 }).reason, 'unknown-tool');
+
+// ---------------------------------------------------------------------------
+// 1b) l2d_change_form：无参形态切换工具（白名单末尾追加，既有工具零改动）
+// ---------------------------------------------------------------------------
+// (1) 白名单含新名，且前 15 项名称与顺序未变。
+const LEGACY_ALLOWED_TOOLS = [
+  'l2d_set_expression', 'l2d_play_motion', 'l2d_look_at', 'l2d_set_parameters',
+  'l2d_reset_pose', 'l2d_play_keyframes', 'l2d_stop_keyframes', 'l2d_set_pose',
+  'l2d_emote', 'l2d_gaze', 'l2d_say', 'l2d_act', 'l2d_posture', 'l2d_get_state', 'l2d_reset',
+];
+assert.ok(HOST_ALLOWED_TOOLS.includes('l2d_change_form'), '白名单应含 l2d_change_form');
+assert.equal(HOST_ALLOWED_TOOLS[HOST_ALLOWED_TOOLS.length - 1], 'l2d_change_form', '新工具应追加在末尾');
+assert.deepEqual(HOST_ALLOWED_TOOLS.slice(0, 15), LEGACY_ALLOWED_TOOLS, '前 15 项名称与顺序零改动');
+// (2) guardAiCall 对无参调用放行，且不触发参数写入类守卫。
+const changeForm = guardAiCall({ name: 'l2d_change_form', args: {} });
+assert.equal(changeForm.ok, true, '无参形态切换应放行');
+assert.deepEqual(changeForm.warnings, []);
+assert.deepEqual(changeForm.ignored, []);
+assert.equal(guardAiCall({ name: 'l2d_change_form', args: { values: { ParamMouthOpenY: 1 } } }).ok, true,
+  '无参工具不进 PARAM_KEYED_TOOLS / OWN_REQUIRED_TOOLS');
+// (3) 既有工具仍可用，且顺序未变。
+assert.equal(guarded('l2d_set_expression', { name: '兔牙' }).ok, true);
+assert.equal(guarded('l2d_get_state', {}).ok, true);
+assert.equal(HOST_ALLOWED_TOOLS.indexOf('l2d_set_expression'), 0);
+assert.equal(HOST_ALLOWED_TOOLS.indexOf('l2d_get_state'), 13);
 
 // ---------------------------------------------------------------------------
 // 2) 口型参数：任何通道永拒（含嵌套 / 数组形式），且优先于其它规则

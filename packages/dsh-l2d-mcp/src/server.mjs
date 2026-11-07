@@ -416,5 +416,14 @@ server.registerTool(
   },
 );
 
+server.registerTool(
+  'l2d_change_form',
+  {
+    description: '切换模型形态（默认体型 / 体型1 / 体型2 循环切换）。一次调用切到下一形态，返回当前形态名称。',
+    inputSchema: z.object({}),
+  },
+  async () => toolResult(await forward('l2d_change_form', {}, 3000)),
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
