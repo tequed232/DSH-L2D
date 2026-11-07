@@ -30,7 +30,7 @@ export function seedLabDb({ dir }) {
 
   const chainOf = (tag) => ({
     schemaVersion: '1.0',
-    steps: [{ step_index: 0, kind: 'keyframes', params: { track: 'tailSway', keys: [{ t: 0, value: -1 }, { t: 450, value: 1 }] }, duration_ms: 450 }],
+    steps: [{ step_index: 0, kind: 'keyframes', params: { track: 'tailSway', keys: [{ t: 0, value: -1 }, { t: 450, value: 1 }] }, durationMs: 450 }],
     ...({ tag }),
   });
   const motions = {};

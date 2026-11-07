@@ -39,7 +39,7 @@ const extraMotions = [];
     const r = lab.repo.createActionChain({
       semanticKey: `bp.bench_key_${i}`,
       description: `bench ${i}`,
-      chain: { schemaVersion: '1.0', steps: [{ step_index: 0, kind: 'keyframes', params: { track: 'tailSway', keys: [{ t: 0, value: -1 }, { t: 450, value: 1 }] }, duration_ms: 450 }] },
+      chain: { schemaVersion: '1.0', steps: [{ step_index: 0, kind: 'keyframes', params: { track: 'tailSway', keys: [{ t: 0, value: -1 }, { t: 450, value: 1 }] }, durationMs: 450 }] },
       provenance: { assets: [], analyses: [] },
       sourceId: 'bp-bench',
     });

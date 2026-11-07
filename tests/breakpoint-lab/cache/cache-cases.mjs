@@ -87,7 +87,7 @@ const cases = [
       const { motionId } = lab.motions['bp.tail_sway_a'];
       const v1 = await cache.resolve(hash, motionId);
       const motion = lab.repo.getMotion(motionId);
-      const v2chain = { schemaVersion: '1.0', steps: [{ step_index: 0, kind: 'keyframes', params: { track: 'tailSway', keys: [{ t: 0, value: -1 }, { t: 900, value: 1 }] }, duration_ms: 900 }] };
+      const v2chain = { schemaVersion: '1.0', steps: [{ step_index: 0, kind: 'keyframes', params: { track: 'tailSway', keys: [{ t: 0, value: -1 }, { t: 900, value: 1 }] }, durationMs: 900 }] };
       const r = await lab.repo.createActionChainVersion(motionId, { chain: v2chain }, motion.version);
       assert.equal(r.version, 2);
       const v2 = await cache.resolve(hash, motionId);

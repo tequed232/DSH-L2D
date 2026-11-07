@@ -17,10 +17,13 @@ const suite = createSuite('ownership/（白名单纯逻辑）');
 
 const cases = [
   {
-    name: 'whitelist：policy 契约 + 初始托管集精确等于 8 个已核实 ID',
+    name: 'whitelist：policy 契约 + 初始托管集精确等于 11 个已核实 ID',
     fn: () => {
       assert.deepEqual(HOST_POLICY, { defaultOwnership: 'none', unknownParameter: 'reject', allowDynamicDiscovery: false, preservePhysics: true });
-      assert.deepEqual([...MANAGED_PARAM_IDS].sort(), ['ParamAngleX', 'ParamAngleY', 'ParamAngleZ', 'ParamBodyAngleX', 'ParamBodyAngleY', 'ParamBodyAngleZ', 'ParamEyeBallX', 'ParamEyeBallY']);
+      // S1-RACE 修复（2026-11-05，param-host-policy.ts）把短名 AngleX/Y/Z 并入托管集：
+      // 模型里短名与 ParamAngle* 是并存的两套真实参数，overlay 验收契约与 MCP 写入用短名，
+      // 不并入会被 not_hostable 拒绝。PositionX/Y/Z 维持拒绝（留待产品裁决）。
+      assert.deepEqual([...MANAGED_PARAM_IDS].sort(), ['AngleX', 'AngleY', 'AngleZ', 'ParamAngleX', 'ParamAngleY', 'ParamAngleZ', 'ParamBodyAngleX', 'ParamBodyAngleY', 'ParamBodyAngleZ', 'ParamEyeBallX', 'ParamEyeBallY']);
       assert.equal(managedSnapshot().length, MANAGED_PARAM_IDS.length);
     },
   },

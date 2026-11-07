@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-11-05T07:06:09.370Z",
+  "generatedAt": "2026-11-07T03:49:14.319Z",
   "branch": "feat/model-registry",
-  "totalDurationMs": 667,
+  "totalDurationMs": 642,
   "totals": {
     "cases": 13,
     "pass": 13,
@@ -18,7 +18,7 @@
       "suite": "cache/（真实 SQLite + Repository）",
       "case": "lru-eviction：capacity=2 时最旧条目被淘汰且可重读",
       "verdict": "pass",
-      "durationMs": 1
+      "durationMs": 2
     },
     {
       "suite": "cache/（真实 SQLite + Repository）",
@@ -36,19 +36,19 @@
       "suite": "recovery/（真实 SIGKILL 子进程）",
       "case": "sqlite-reopen：SIGKILL 未决事务回滚，重开库数据完整且可写",
       "verdict": "pass",
-      "durationMs": 155
+      "durationMs": 157
     },
     {
       "suite": "recovery/（真实 SIGKILL 子进程）",
       "case": "process-restart：P0 Resolve 中断 → 重启后重查与中断前一致",
       "verdict": "pass",
-      "durationMs": 308
+      "durationMs": 258
     },
     {
       "suite": "recovery/（真实 SIGKILL 子进程）",
       "case": "interrupted-execution：SIGKILL 后不自动续播 / 旧租约不复活 / 重走 admission（纯逻辑侧）",
       "verdict": "pass",
-      "durationMs": 170
+      "durationMs": 193
     },
     {
       "suite": "recovery/（真实 SIGKILL 子进程）",
@@ -58,7 +58,7 @@
     },
     {
       "suite": "ownership/（白名单纯逻辑）",
-      "case": "whitelist：policy 契约 + 初始托管集精确等于 8 个已核实 ID",
+      "case": "whitelist：policy 契约 + 初始托管集精确等于 11 个已核实 ID",
       "verdict": "pass",
       "durationMs": 0
     },
