@@ -122,6 +122,73 @@ ok('G1：未知 schemaVersion → SCHEMA_VERSION_UNSUPPORTED', () => {
   assert.equal(r.code, 'SCHEMA_VERSION_UNSUPPORTED');
 });
 
+// ---- #32 回归：违反自身 Schema 的数据不得被门禁放行 ----
+ok('#32：G0 confidence 越界（3 ∉ 0–1）→ CONFIDENCE_INVALID（不再依赖 SQLite CHECK 兜底）', () => {
+  const r = pipeline.ingest(validCandidate({
+    semanticKey: 'test.conf',
+    provenance: { assets: provenance.assets, analyses: [{ id: 'x', assetId: 'asset-1', modelName: 'm', analysis: {}, confidence: 3 }] },
+  }));
+  assert.equal(r.status, 'rejected');
+  assert.equal(r.gate, 'G0');
+  assert.equal(r.code, 'CONFIDENCE_INVALID');
+});
+
+ok('#32：G0 analysis 非对象 → ANALYSIS_INVALID（此前入库为裸字符串）', () => {
+  const r = pipeline.ingest(validCandidate({
+    semanticKey: 'test.anobj',
+    provenance: { assets: provenance.assets, analyses: [{ id: 'x', assetId: 'asset-1', modelName: 'm', analysis: 'oops' }] },
+  }));
+  assert.equal(r.status, 'rejected');
+  assert.equal(r.gate, 'G0');
+  assert.equal(r.code, 'ANALYSIS_INVALID');
+});
+
+ok('#32：G0 modelName 非字符串 → ANALYSIS_INVALID', () => {
+  const r = pipeline.ingest(validCandidate({
+    semanticKey: 'test.mname',
+    provenance: { assets: provenance.assets, analyses: [{ id: 'x', assetId: 'asset-1', modelName: 999, analysis: {} }] },
+  }));
+  assert.equal(r.status, 'rejected');
+  assert.equal(r.gate, 'G0');
+  assert.equal(r.code, 'ANALYSIS_INVALID');
+});
+
+ok('#32：confidence 边界 0 与 1 放行（正例）', () => {
+  const r0 = pipeline.ingest(validCandidate({
+    semanticKey: 'test.conf0',
+    provenance: { assets: provenance.assets, analyses: [{ id: 'x', assetId: 'asset-1', modelName: 'm', analysis: {}, confidence: 0 }] },
+  }));
+  assert.equal(r0.status, 'validated', `confidence=0 应放行: ${r0.reason ?? ''}`);
+  const r1 = pipeline.ingest(validCandidate({
+    semanticKey: 'test.conf1',
+    provenance: { assets: provenance.assets, analyses: [{ id: 'x', assetId: 'asset-1', modelName: 'm', analysis: {}, confidence: 1 }] },
+  }));
+  assert.equal(r1.status, 'validated', `confidence=1 应放行: ${r1.reason ?? ''}`);
+});
+
+ok('#32：G1 description 空/超长/非字符串 → SCHEMA_INVALID', () => {
+  const keys = ['test.desc.empty', 'test.desc.long', 'test.desc.type'];
+  const descs = ['', 'x'.repeat(501), 123];
+  descs.forEach((desc, i) => {
+    const r = pipeline.ingest(validCandidate({ semanticKey: keys[i], description: desc }));
+    assert.equal(r.status, 'rejected', `description=${JSON.stringify(desc).slice(0, 20)} 应拒绝`);
+    assert.equal(r.gate, 'G1');
+    assert.equal(r.code, 'SCHEMA_INVALID');
+  });
+});
+
+ok('#32：G1 语义字段非字符串（emotion=42）→ SCHEMA_INVALID（此前入库为 "42.0"）', () => {
+  const r = pipeline.ingest(validCandidate({ semanticKey: 'test.emotion', emotion: 42 }));
+  assert.equal(r.status, 'rejected');
+  assert.equal(r.gate, 'G1');
+  assert.equal(r.code, 'SCHEMA_INVALID');
+});
+
+ok('#32：G1 语义字段 null 放行（正例）', () => {
+  const r = pipeline.ingest(validCandidate({ semanticKey: 'test.emotion.null', emotion: null, gaze: null }));
+  assert.equal(r.status, 'validated', `null 应放行: ${r.reason ?? ''}`);
+});
+
 // ---- G2 拒绝案例（含 PAIRED_CLOSES）----
 ok('G2：模型参数 ID 字面量（ParamAngleX）→ MODEL_PARAM_ID_IN_CHAIN（R1）', () => {
   const r = pipeline.ingest(validCandidate({

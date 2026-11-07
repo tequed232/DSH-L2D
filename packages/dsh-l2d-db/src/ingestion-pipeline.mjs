@@ -106,6 +106,13 @@ export function createIngestionPipeline({ repository, registry }) {
     }
     for (const an of analyses) {
       if (!assetIds.has(an.assetId)) return { ok: false, code: 'PROVENANCE_INCOMPLETE', reason: `分析记录引用未知素材：${an.assetId}` };
+      // #32：分析记录自身的 Schema（Schema analysis_report/analysis 结构）不得被门禁放过
+      if (!isPlainObject(an.analysis)) return { ok: false, code: 'ANALYSIS_INVALID', reason: `analysis 必须为结构化对象：${JSON.stringify(an.analysis)}` };
+      if (typeof an.modelName !== 'string' || an.modelName.length === 0) return { ok: false, code: 'ANALYSIS_INVALID', reason: `modelName 必须为非空字符串：${JSON.stringify(an.modelName)}` };
+      if (an.confidence !== undefined && an.confidence !== null
+        && (typeof an.confidence !== 'number' || !Number.isFinite(an.confidence) || an.confidence < 0 || an.confidence > 1)) {
+        return { ok: false, code: 'CONFIDENCE_INVALID', reason: `confidence 越界（Schema 规定 0–1）：${JSON.stringify(an.confidence)}` };
+      }
     }
     // 幂等判定（R9）：同键同内容 → duplicate；同键异内容 → version_conflict（不静默覆盖）
     const chainHash = canonicalChainHash(candidate.chain);
@@ -120,6 +127,17 @@ export function createIngestionPipeline({ repository, registry }) {
   // ------------------------------------------------------------ G1 Schema
 
   function g1(candidate) {
+    // #32：候选层字段对齐 Schema 类型约束（§2：description 1–500 字符串；语义字段 string|null）
+    const desc = candidate.description;
+    if (typeof desc !== 'string' || desc.length === 0 || desc.length > 500) {
+      return { ok: false, code: 'SCHEMA_INVALID', reason: `description 必须为 1–500 字符的字符串：${JSON.stringify(desc)}` };
+    }
+    for (const field of ['emotion', 'expression', 'gaze', 'bodyLanguage']) {
+      const v = candidate[field];
+      if (v !== undefined && v !== null && typeof v !== 'string') {
+        return { ok: false, code: 'SCHEMA_INVALID', reason: `${field} 必须为字符串或 null：${JSON.stringify(v)}` };
+      }
+    }
     const chain = candidate.chain;
     if (!isPlainObject(chain)) return { ok: false, code: 'SCHEMA_INVALID', reason: 'chain 必须为对象' };
     if (!/^1\.\d+$/.test(String(chain.schemaVersion ?? ''))) {
