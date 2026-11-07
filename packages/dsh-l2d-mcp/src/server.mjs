@@ -19,6 +19,18 @@ import { readToolchainStatus } from './toolchain-status.mjs';
 
 let cachedBase = '';
 
+/**
+ * 带超时的直接 fetch（不走 forward 的 deadline 机制）。
+ * balance / workspace / persona 等低频辅助端点此前是裸 fetch：宿主进程僵死时
+ * 调用方会无限挂起。Node 22 的 AbortSignal.timeout 同时约束连接与响应体读取。
+ */
+async function fetchTimeout(url, init = {}, timeoutMs = 5000) {
+  return fetch(url, {
+    ...init,
+    signal: init.signal || AbortSignal.timeout(timeoutMs),
+  });
+}
+
 async function baseUrl() {
   if (cachedBase) return cachedBase;
   cachedBase = await resolveBase();
@@ -272,7 +284,7 @@ server.registerTool(
     let balance = { ok: false, reason: 'unavailable' };
     if (base) {
       try {
-        const res = await fetch(base + '/dsh-l2d/balance.json', { cache: 'no-store' });
+        const res = await fetchTimeout(base + '/dsh-l2d/balance.json', { cache: 'no-store' });
         if (res.ok) balance = await res.json();
       } catch {
         balance = { ok: false, reason: 'unavailable' };
@@ -301,7 +313,7 @@ server.registerTool(
     const base = await baseUrl();
     if (!base) return toolResult({ ok: false, reason: 'plugin-offline' });
     try {
-      const response = await fetch(base + '/dsh-l2d/workspace/ensure', { method: 'POST' });
+      const response = await fetchTimeout(base + '/dsh-l2d/workspace/ensure', { method: 'POST' });
       const result = await response.json();
       return toolResult(result && typeof result === 'object' ? result : { ok: false, reason: 'invalid-response' });
     } catch {
@@ -321,7 +333,7 @@ server.registerTool(
     const base = await baseUrl();
     if (!base) return toolResult({ ok: false, reason: 'plugin-offline' });
     try {
-      const response = await fetch(base + '/dsh-l2d/workspace/status.json', { cache: 'no-store' });
+      const response = await fetchTimeout(base + '/dsh-l2d/workspace/status.json', { cache: 'no-store' });
       const result = await response.json();
       return toolResult(result && typeof result === 'object' ? result : { ok: false, reason: 'invalid-response' });
     } catch {
@@ -372,12 +384,12 @@ server.registerTool(
     if (!base) return toolResult({ ok: false, reason: 'plugin-offline' });
     try {
       if (action === 'get') {
-        const res = await fetch(base + '/dsh-l2d/persona.json', { cache: 'no-store' });
+        const res = await fetchTimeout(base + '/dsh-l2d/persona.json', { cache: 'no-store' });
         if (!res.ok) return toolResult({ ok: false, reason: 'http-' + res.status });
         return toolResult(await res.json());
       }
       const body = action === 'reset' ? { reset: true } : { patch: patch || {} };
-      const res = await fetch(base + '/dsh-l2d/persona.json', {
+      const res = await fetchTimeout(base + '/dsh-l2d/persona.json', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
