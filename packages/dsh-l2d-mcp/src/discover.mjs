@@ -1,16 +1,27 @@
 /**
  * 寻找本机 DSH-L2D 的 HTTP 根地址。
- * 顺序：DSH_L2D_URL → ~/.dsh 里出现过的端口 → 本地调试服 5300。
+ * 顺序：DSH_L2D_URL → $DSH_HOME 里出现过的端口 → 本地调试服 5300。
  * 只接受回环地址，不把控制面指到外网。
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+/**
+ * DSH home 解析（#30：与宿主/插件共用同一规则）。
+ * 插件把 l2d-service.json 等会合点写在 $DSH_HOME 下；DSH_HOME 缺省才落到 ~/.dsh。
+ * @param {object} env 以 process.env 或注入对象调用（可测）
+ */
+export function dshHome(env = process.env) {
+  const custom = String(env.DSH_HOME || '').trim();
+  return custom || path.join(os.homedir(), '.dsh');
+}
+
 export function isLoopbackUrl(raw) {
   try {
     const url = new URL(raw);
-    const host = url.hostname;
+    // WHATWG URL 对 IPv6 主机保留方括号（http://[::1]:42137 → hostname 为 "[::1]"），剥掉再比对
+    const host = url.hostname.replace(/^\[/, '').replace(/\]$/, '').toLowerCase();
     return host === '127.0.0.1' || host === 'localhost' || host === '::1';
   } catch {
     return false;
@@ -54,7 +65,7 @@ function walkFiles(dir, depth, acc) {
   return acc;
 }
 
-export function portsFromDshHome(homeDir = path.join(os.homedir(), '.dsh')) {
+export function portsFromDshHome(homeDir = dshHome()) {
   const ports = [];
   for (const file of walkFiles(homeDir, 0, [])) {
     let text = '';
@@ -72,9 +83,9 @@ export function portsFromDshHome(homeDir = path.join(os.homedir(), '.dsh')) {
 
 /**
  * 插件启动时写下的服务地址（$DSH_HOME/l2d-service.json）。
- * DSH 每次重启端口都会变，扫描 ~/.dsh 只能碰巧命中旧端口；这是唯一稳定会合点。
+ * DSH 每次重启端口都会变，扫描 $DSH_HOME 只能碰巧命中旧端口；这是唯一稳定会合点。
  */
-export function serviceOrigin(homeDir = path.join(os.homedir(), '.dsh')) {
+export function serviceOrigin(homeDir = dshHome()) {
   try {
     const data = JSON.parse(fs.readFileSync(path.join(homeDir, 'l2d-service.json'), 'utf8'));
     return data && typeof data.origin === 'string' ? data.origin.replace(/\/$/, '') : '';
@@ -87,9 +98,10 @@ export function candidateBases(env = process.env) {
   const list = [];
   const explicit = String(env.DSH_L2D_URL || '').trim();
   if (explicit) list.push(explicit.replace(/\/$/, ''));
-  const rendezvous = serviceOrigin();
+  const home = dshHome(env);
+  const rendezvous = serviceOrigin(home);
   if (rendezvous) list.push(rendezvous);
-  for (const port of portsFromDshHome()) {
+  for (const port of portsFromDshHome(home)) {
     list.push(`http://127.0.0.1:${port}`);
   }
   list.push('http://127.0.0.1:5300');
