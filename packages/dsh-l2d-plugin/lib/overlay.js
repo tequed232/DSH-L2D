@@ -1435,8 +1435,29 @@
   }
 
   function overModel(e) {
+    // Fix #40：命中判定的 fail-open 缺口。渲染包 hitTestAt 对「没采样过的点」
+    // 一律返回 true（!hasSample → true），鼠标静止后的第一次按下、程序化 click
+    // 都拿不到样本——旧实现无条件信任它，页面任意位置的 pointerdown 都会被当成
+    // 「命中模型」启动拖拽+指针捕获，之后的鼠标移动会把容器拖走（clamp 下界
+    // y=0、x≥-0.35w 正好是左上角部分出屏），换装按钮点击也被劫持成戳一戳。
+    // 修复分两层，不动渲染包：
+    // ① 容器矩形外必无模型像素，直接判否，不受探针语义影响；
+    // ② 有渲染包时先用同步、fail-closed 的包围盒 hitTestBox 预筛（与右键菜单
+    //    overModelRightClick 同一套语义），点不在模型包围盒内判否；剩下的再交给
+    //    alpha 精确判定。探针 fail-open 的 true 只可能落在包围盒内，不再外溢。
+    if (root) {
+      var rr = root.getBoundingClientRect();
+      if (e.clientX < rr.left || e.clientX > rr.right || e.clientY < rr.top || e.clientY > rr.bottom) {
+        return false;
+      }
+    }
     var L = window.DSH_L2D;
-    if (!L || !L.hitTestAt) return true; // 旧渲染包/静态兜底：保持整盒可交互
+    if (!L || !L.hitTestAt) return true; // 旧渲染包/静态兜底：容器矩形内保持整盒可交互
+    if (L.hitTestBox) {
+      try {
+        if (!L.hitTestBox(e.clientX, e.clientY)) return false;
+      } catch (errBox) { /* 包围盒不可用时退回 alpha 判定 */ }
+    }
     try { return !!L.hitTestAt(e.clientX, e.clientY); } catch (err) { return true; }
   }
 
