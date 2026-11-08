@@ -129,7 +129,8 @@ button, input, select, textarea { font-family:inherit; }
 #validate-badge .dot { width:7px; height:7px; border-radius:50%; background:currentColor; flex:none; }
 
 #main { display:flex; height:calc(100% - var(--topbar-h) - var(--status-h)); min-height:0; }
-#library, #inspector { flex:none; background:var(--panel); overflow-y:auto; overflow-x:hidden; min-width:0; }
+/* 节点库内容溢出时可上下滚动（工作区式平滑滚动，滚动条全局细样式可见）；指南已迁画布顶部 */
+#library, #inspector { flex:none; background:var(--panel); overflow-y:auto; overflow-x:hidden; min-width:0; scroll-behavior:smooth; }
 #library { width:var(--rail-w); border-right:1px solid var(--mg-border-strong); padding:var(--s4) var(--s3); }
 #inspector { width:var(--insp-w); border-left:1px solid var(--mg-border-strong); }
 #canvas-wrap { flex:1 1 auto; min-width:0; position:relative; overflow:hidden; }
@@ -169,6 +170,25 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
 .lib-item .glyph svg { width:14px; height:14px; }
 .lib-item .txt { font-size:12px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .lib-item .en { margin-left:auto; font:500 9px var(--mono); color:var(--ink3); white-space:nowrap; }
+.lib-item .combo-del {
+  flex:none; width:18px; height:18px; margin-left:4px; border-radius:4px;
+  border:1px solid var(--mg-border-strong); background:transparent; color:var(--ink3);
+  font:12px/1 var(--mono); cursor:pointer; display:grid; place-items:center; padding:0;
+}
+.lib-item .combo-del:hover { color:var(--danger); border-color:var(--danger); }
+
+/* ---- 画布顶部操作指南（原节点库 lib-tip 迁入，无需滚动完整可见） ---- */
+#canvas-hint {
+  position:absolute; left:14px; right:14px; top:12px; z-index:4; pointer-events:none;
+  font:10px/1.8 var(--mono); color:var(--ink3);
+  background:color-mix(in srgb,var(--panel) 82%,transparent); border:1px solid var(--mg-border-strong);
+  border-radius:var(--r-sm); padding:8px 12px;
+}
+#canvas-hint b { color:var(--ink2); font-weight:600; }
+#canvas-hint .hint-row { display:flex; flex-wrap:wrap; gap:2px 14px; align-items:center; }
+#canvas-hint kbd { font:10px var(--mono); background:var(--surface); border:1px solid var(--mg-border-strong); border-radius:3px; padding:1px 4px; color:var(--ink); }
+#canvas-hint .legend { display:inline-flex; align-items:center; gap:5px; }
+#canvas-hint .legend i { width:8px; height:8px; border-radius:50%; display:inline-block; }
 .lib-tip { border-top:1px solid var(--line-soft); padding-top:12px; margin-top:16px; font-size:10.5px; color:var(--ink2); line-height:1.65; }
 .lib-tip kbd { font:10px var(--mono); background:var(--surface); border:1px solid var(--mg-border-strong); border-radius:3px; padding:1px 4px; color:var(--ink); }
 .legend-row { display:flex; align-items:center; gap:7px; margin-top:6px; }
@@ -242,13 +262,6 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
   background:color-mix(in srgb,var(--accent) 14%,transparent); pointer-events:none; z-index:5; }
 
 /* ---- Canvas overlays ---- */
-#canvas-hint {
-  position:absolute; left:14px; top:12px; z-index:4; pointer-events:none;
-  font:10px/1.7 var(--mono); color:var(--ink3);
-  background:color-mix(in srgb,var(--panel) 80%,transparent); border:1px solid var(--mg-border-strong);
-  border-radius:var(--r-sm); padding:7px 10px;
-}
-#canvas-hint b { color:var(--ink2); font-weight:600; }
 #minimap-wrap {
   position:absolute; right:14px; bottom:14px; z-index:6;
   background:var(--panel); border:1px solid var(--mg-border-strong); border-radius:var(--r-md); padding:6px;
@@ -452,15 +465,7 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
     <h1 class="panel-title">节点库</h1>
     <p class="panel-sub">拖入画布，或单击追加节点。设计层辅助节点仅存于 meta.editor。</p>
     <div id="lib-groups"></div>
-    <div class="lib-tip">
-      <b>操作</b><br>
-      空白拖拽平移 · 滚轮缩放<br>
-      <kbd>Shift</kbd> + 拖拽框选 · <kbd>Del</kbd> 删除<br>
-      <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd> 复制粘贴 · <kbd>Ctrl</kbd>+<kbd>0</kbd> 适配
-      <div class="legend-row"><i style="background:var(--port-flow)"></i> 执行流 flow（同色才可连）</div>
-      <div class="legend-row"><i style="background:var(--port-signal)"></i> 信号 signal</div>
-      <div class="legend-row"><i style="background:var(--port-data)"></i> 数据 data</div>
-    </div>
+    <div id="lib-combos"></div>
   </aside>
 
   <div class="col-resizer" id="rz-lib" role="separator" aria-orientation="vertical" aria-label="调整节点库面板宽度" title="拖拽调整宽度 · 双击复位"></div>
@@ -473,7 +478,21 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
       </div>
       <div id="marquee"></div>
     </div>
-    <div id="canvas-hint"><b>GRAPH CANVAS</b> · DFS 前序编译 / 每 8 步一段<br>22px 点阵网格 · 拖拽端口连线 · 单击连线可选中删除</div>
+    <div id="canvas-hint">
+      <div class="hint-row"><b>GRAPH CANVAS</b> · DFS 前序编译 / 每 8 步一段 · 22px 点阵网格 · 拖拽端口连线 · 单击连线选中删除 · 右键节点可删除/复制/禁用</div>
+      <div class="hint-row"><b>操作</b>
+        <span>空白拖拽 平移</span><span>滚轮 缩放</span>
+        <span><kbd>Shift</kbd>+拖拽 框选</span><span><kbd>Del</kbd> 删除</span>
+        <span><kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd> 复制粘贴</span>
+        <span><kbd>Ctrl</kbd>+<kbd>0</kbd> 适配</span>
+        <span>选中多节点 → 右键「存为组合事件」</span>
+      </div>
+      <div class="hint-row"><b>端口</b>
+        <span class="legend"><i style="background:var(--port-flow)"></i>执行流 flow（同色才可连）</span>
+        <span class="legend"><i style="background:var(--port-signal)"></i>信号 signal</span>
+        <span class="legend"><i style="background:var(--port-data)"></i>数据 data</span>
+      </div>
+    </div>
     <div id="sim-panel">
       <div class="sp-head"><span class="sp-title">LOCAL SIMULATION</span><button class="sp-close" id="sim-close" title="停止">×</button></div>
       <div id="sim-track"><div id="sim-fill"></div></div>
@@ -1262,6 +1281,46 @@ var Validator = {
    Slots：localStorage 按 modelId 分槽，每个模型可存多个 JSON 互不覆盖（§5.6）
    file:// 下 localStorage 可能受限 → try/catch 降级为内存 Map。
    ------------------------------------------------------------------------- */
+/* =========================================================================
+   Combos：用户自定义节点组合事件。多选节点存为可复用组合，节点库一键实例化。
+   存储 localStorage 'dsh-mg-combos.v1'；file:// 受限时降级内存（同 Slots 策略）。
+   组合是编辑器侧便利层：实例化后展开为普通节点+连线，导出 JSON 语义不变。
+   ========================================================================= */
+var Combos = {
+  KEY: 'dsh-mg-combos.v1',
+  available: true,
+  memory: [],
+  all: function () {
+    if (this.available) {
+      try {
+        var raw = localStorage.getItem(this.KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch (err) { this.available = false; }
+    }
+    return this.memory.slice();
+  },
+  byName: function (name) {
+    var list = this.all();
+    for (var i = 0; i < list.length; i++) if (list[i].name === name) return list[i];
+    return null;
+  },
+  save: function (combo) {
+    var list = this.all().filter(function (c) { return c.name !== combo.name; });
+    list.push(combo);
+    this.persist(list);
+  },
+  del: function (name) {
+    this.persist(this.all().filter(function (c) { return c.name !== name; }));
+  },
+  persist: function (list) {
+    if (this.available) {
+      try { localStorage.setItem(this.KEY, JSON.stringify(list)); return; }
+      catch (err) { this.available = false; }
+    }
+    this.memory = list;
+  }
+};
+
 var Slots = {
   memory: new Map(), available:true,
   prefix: function (modelId) { return 'mg-lab:v1:' + encodeURIComponent(modelId || '_default') + ':'; },
@@ -1323,13 +1382,118 @@ var UI = {
       html += '</div>';
     });
     $('#lib-groups').innerHTML = html;
-    $$('.lib-item').forEach(function (el) {
+    $$('#lib-groups .lib-item').forEach(function (el) {
       el.addEventListener('dragstart', function (ev) {
         ev.dataTransfer.setData('text/plain', el.dataset.type);
         ev.dataTransfer.effectAllowed = 'copy';
       });
       el.addEventListener('click', function () { UI.appendNode(el.dataset.type); });
     });
+    this.renderCombos();
+  },
+
+  /* ---- 组合事件：库内分组渲染 / 选区保存 / 实例化 ---- */
+  renderCombos: function () {
+    var box = $('#lib-combos');
+    if (!box) return;
+    var list = Combos.all();
+    var head = '<div class="lib-group"><div class="lib-head" style="--gc:var(--accent)"><span class="swatch"></span><span>组合事件 / COMBO</span><span class="count">' + list.length + '</span></div>';
+    if (!list.length) {
+      box.innerHTML = head + '<p class="panel-sub" style="margin:4px 2px 0">框选多个节点 → 右键「存为组合事件」，即可一键复用。</p></div>';
+      return;
+    }
+    var html = head;
+    list.forEach(function (c) {
+      html += '<div class="lib-item combo-item" draggable="true" data-combo="' + esc(c.name) + '" title="' + esc(c.name) + ' · 单击实例化到画布中心 / 拖入画布落点">' +
+        '<span class="glyph" style="--gc:var(--accent)">' + icon('workspace', 14) + '</span>' +
+        '<span class="txt">' + esc(c.name) + '</span>' +
+        '<span class="en">' + c.nodes.length + 'N/' + c.edges.length + 'E</span>' +
+        '<button class="combo-del" data-del-combo="' + esc(c.name) + '" title="删除组合">×</button></div>';
+    });
+    html += '</div>';
+    box.innerHTML = html;
+    $$('#lib-combos .combo-item').forEach(function (el) {
+      el.addEventListener('click', function (e) {
+        if (e.target.closest('.combo-del')) return;
+        UI.instantiateCombo(el.dataset.combo);
+      });
+      el.addEventListener('dragstart', function (ev) {
+        ev.dataTransfer.setData('text/plain', 'combo:' + el.dataset.combo);
+        ev.dataTransfer.effectAllowed = 'copy';
+      });
+    });
+    $$('#lib-combos .combo-del').forEach(function (b) {
+      b.addEventListener('click', function () {
+        Combos.del(b.dataset.delCombo);
+        UI.renderCombos();
+        UI.toast('组合「' + b.dataset.delCombo + '」已删除');
+      });
+    });
+  },
+  saveComboFromSelection: function (name) {
+    var ids = Array.from(Graph.selection);
+    var nodes = ids.map(function (id) { return Graph.byId(id); }).filter(Boolean);
+    if (nodes.length < 2) { this.toast('请先选中至少 2 个节点再存为组合', 'err'); return false; }
+    var idxMap = {};
+    nodes.forEach(function (n, i) { idxMap[n.id] = i; });
+    var x0 = Math.min.apply(null, nodes.map(function (n) { return n.pos.x; }));
+    var y0 = Math.min.apply(null, nodes.map(function (n) { return n.pos.y; }));
+    var combo = {
+      name: name, createdAt: Date.now(),
+      nodes: nodes.map(function (n) {
+        return { type: n.type, dx: n.pos.x - x0, dy: n.pos.y - y0,
+          label: n.label, props: JSON.parse(JSON.stringify(n.props)), disabled: !!n.disabled };
+      }),
+      edges: Graph.edges
+        .filter(function (e) { return idxMap[e.from] !== undefined && idxMap[e.to] !== undefined; })
+        .map(function (e) { return { fromIdx: idxMap[e.from], toIdx: idxMap[e.to] }; })
+    };
+    Combos.save(combo);
+    this.renderCombos();
+    this.toast('组合「' + name + '」已保存（' + nodes.length + ' 节点 / ' + combo.edges.length + ' 连线）', 'ok');
+    return true;
+  },
+  instantiateCombo: function (name) {
+    var combo = Combos.byName(name);
+    if (!combo) { this.toast('组合不存在或已被删除', 'err'); return false; }
+    var created = [];
+    var minX = Math.min.apply(null, combo.nodes.map(function (d) { return d.dx; }));
+    var minY = Math.min.apply(null, combo.nodes.map(function (d) { return d.dy; }));
+    var w = this.toWorld(
+      this.canvas.getBoundingClientRect().left + this.canvas.getBoundingClientRect().width / 2,
+      this.canvas.getBoundingClientRect().top + this.canvas.getBoundingClientRect().height / 2);
+    var baseX = w.x - minX, baseY = w.y - minY;
+    combo.nodes.forEach(function (def) {
+      created.push(Graph.addNode(def.type, { x: baseX + def.dx, y: baseY + def.dy },
+        { label: def.label, props: JSON.parse(JSON.stringify(def.props)), disabled: def.disabled }));
+    });
+    combo.edges.forEach(function (e) {
+      if (created[e.fromIdx] && created[e.toIdx]) Graph.addEdge(created[e.fromIdx].id, created[e.toIdx].id);
+    });
+    Cache.invalidate();
+    Graph.selection = new Set(created.map(function (n) { return n.id; }));
+    Graph.selectedEdge = null;
+    this.refreshAll();
+    this.toast('已实例化组合「' + name + '」（' + created.length + ' 节点 / ' + combo.edges.length + ' 连线）', 'ok');
+    return true;
+  },
+  openComboModal: function () {
+    if (Graph.selection.size < 2) { this.toast('先选中至少 2 个节点（Shift+拖拽框选）', 'err'); return; }
+    var self = this;
+    this.openModal('<h2>存为组合事件</h2><p class="sub">选中的 ' + Graph.selection.size + ' 个节点及其内部连线将存为可复用组合；' +
+      '实例化时展开为普通节点与连线，导出 JSON 语义不变。</p>' +
+      '<div class="modal-section"><div class="field"><label>组合名称</label>' +
+      '<input id="combo-name" type="text" placeholder="如：打招呼三连" spellcheck="false"></div></div>' +
+      '<div class="modal-actions"><button class="btn primary" id="combo-save">保存组合</button>' +
+      '<button class="btn" data-close>取消</button></div>');
+    $('#combo-save').addEventListener('click', function () {
+      var name = ($('#combo-name').value || '').trim();
+      if (!name) { self.toast('请输入组合名称', 'err'); return; }
+      if (self.saveComboFromSelection(name)) self.closeModal();
+    });
+    var inp = $('#combo-name');
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') $('#combo-save').click(); });
+    inp.focus();
   },
   appendNode: function (type) {
     var c = this.canvas.getBoundingClientRect();
@@ -1499,7 +1663,7 @@ var UI = {
     } else if (sel.length > 1) {
       html += '<div class="ins-head"><div class="kicker">INSPECTOR / MULTI</div><h2>已选 '+sel.length+' 个节点</h2>'+
         '<p>批量操作。属性编辑请单选节点。</p></div>'+
-        '<div class="ins-actions"><button class="btn" data-act="dup">复制选中</button>'+
+        '<div class="ins-actions"><button class="btn" data-act="combo">存为组合事件</button><button class="btn" data-act="dup">复制选中</button>'+
         '<button class="btn" data-act="disable-all">全部禁用</button>'+
         '<button class="btn danger" data-act="del-all">删除选中</button></div>';
     } else {
@@ -1673,10 +1837,12 @@ var UI = {
   openNodeMenu: function (n, x, y) {
     var pop = $('#node-menu');
     var self = this;
+    var multiSel = Graph.selection.size >= 2 && Graph.selection.has(n.id);
     pop.innerHTML =
       '<button class="mi" data-act="del" style="color:var(--danger)">删除节点<span class="g">Del</span></button>' +
       '<button class="mi" data-act="dup">复制节点<span class="g">Ctrl+C/V</span></button>' +
       '<button class="mi" data-act="toggle">' + (n.disabled ? '启用节点' : '禁用节点') + '</button>' +
+      (multiSel ? '<button class="mi" data-act="combo">存为组合事件（已选 ' + Graph.selection.size + ' 个）</button>' : '') +
       '<div class="sep"></div>' +
       '<button class="mi" data-act="inspect">在属性面板查看</button>';
     $$('#node-menu .mi').forEach(function (b) {
@@ -1689,6 +1855,7 @@ var UI = {
           n.disabled = !n.disabled; Cache.invalidate(); self.refreshAll();
           self.status(n.disabled ? '节点已禁用（导出时跳过）' : '节点已启用');
         }
+        else if (act === 'combo') { self.openComboModal(); }
         else if (act === 'inspect') { Graph.selection = new Set([n.id]); Graph.selectedEdge = null; self.refreshAll(); }
       });
     });
@@ -1800,6 +1967,8 @@ var UI = {
         var n = Graph.addNode(t, { x:w.x-NODE_W/2, y:w.y-PORT_Y });
         Graph.selection = new Set([n.id]); Graph.selectedEdge = null;
         UI.refreshAll(); UI.toast('已拖入节点 ' + NodeDef.defs[t].label, 'ok');
+      } else if (t && t.indexOf('combo:') === 0) {
+        UI.instantiateCombo(t.slice(6));
       } else if (t && t.indexOf('{') >= 0) { IO.applyText(t); }
     });
     cv.addEventListener('pointerdown', function (e) { UI.onPointerDown(e); });
@@ -2027,6 +2196,7 @@ var UI = {
       if (act === 'disable') { var n0 = Graph.byId(ids[0]); if (n0) { n0.disabled = !n0.disabled; UI.refreshAll(); } }
       else if (act === 'disable-all') { ids.forEach(function(id){var n=Graph.byId(id);if(n)n.disabled=true;}); UI.refreshAll(); }
       else if (act === 'dup') { UI.copySelection(); UI.paste(); }
+      else if (act === 'combo') UI.openComboModal();
       else if (act === 'del' || act === 'del-all') { Graph.removeNodes(ids); UI.refreshAll(); UI.status('节点已删除'); }
       else if (act === 'layout') Layout.run();
       else if (act === 'fit') UI.fitView();
@@ -2416,6 +2586,21 @@ function runSelfTest() {
       return { ok:nodeOk && edgeOk, nodeOk:nodeOk, edgeOk:edgeOk };
     } catch (e) { return { ok:false, error:String(e) }; }
   })();
+  // 组合事件自测：选区存组合 → 清画布 → 实例化 → 节点/连线数量还原 → 清理
+  var comboT = (function () {
+    try {
+      Graph.selection = new Set(['n_gate', 'n_look']);
+      if (!Graph.byId('n_gate') || !Graph.byId('n_look')) return { ok:false, error:'demo nodes missing' };
+      var saved = UI.saveComboFromSelection('__selftest_combo__');
+      var n0 = Graph.nodes.length, e0 = Graph.edges.length;
+      Graph.clear();
+      UI.instantiateCombo('__selftest_combo__');
+      var ok = saved && Combos.byName('__selftest_combo__') && Graph.nodes.length === 2 && Graph.edges.length === 1;
+      Combos.del('__selftest_combo__');
+      UI.renderCombos();
+      return { ok:ok, saved:!!saved, nodes:Graph.nodes.length, edges:Graph.edges.length };
+    } catch (e) { return { ok:false, error:String(e) }; }
+  })();
   var doc = Serializer.build();
   var result = {
     validate: v,
@@ -2427,7 +2612,8 @@ function runSelfTest() {
     graphNodeTypes: doc.graph.nodes.map(function (n) { return n.type; }),
     cacheNote: Cache.note(),
     resizers: rz,
-    contextMenus: ctx
+    contextMenus: ctx,
+    combo: comboT
   };
   $('#mg-selftest').textContent = JSON.stringify(result, null, 2);
   $('#mg-export').textContent = Serializer.exportText();
@@ -2439,6 +2625,7 @@ function runSelfTest() {
     + ' sim=' + sim.steps + 'steps/' + sim.segments + 'segs'
     + ' resizers-' + (rz.ok ? 'ok' : 'FAIL(rail=' + (rz.rail===true?'ok':rz.rail) + ',insp=' + (rz.insp===true?'ok':rz.insp) + ',dock=' + (rz.dock===true?'ok':rz.dock) + (rz.dockGot!==undefined ? '[' + rz.dockGot + ']' : '') + ',reset=' + (rz.reset===true?'ok':rz.reset) + (rz.error ? ',err=' + rz.error : '') + ')')
     + ' ctx-' + (ctx.ok ? 'ok' : 'FAIL(node=' + (ctx.nodeOk===true?'ok':ctx.nodeOk) + ',edge=' + (ctx.edgeOk===true?'ok':ctx.edgeOk) + (ctx.error ? ',err=' + ctx.error : '') + ')')
+    + ' combo-' + (comboT.ok ? 'ok' : 'FAIL(' + (comboT.error ? 'err=' + comboT.error : 'nodes=' + comboT.nodes + '/edges=' + comboT.edges) + ')')
     + (rt.diff.length ? ' diff=' + rt.diff.join('|') : '');
 }
 
