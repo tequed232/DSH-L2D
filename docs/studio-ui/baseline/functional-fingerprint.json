@@ -1,0 +1,1944 @@
+{
+  "generatedAt": "2026-11-08T05:14:27.266Z",
+  "files": {
+    "apps/stage-web/src/components/ChatArea.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [
+        [
+          "click",
+          1
+        ]
+      ],
+      "texts": [
+        [
+          "对话通道尚未接入（TODO）。此处将展示与 Companion 的对话记录。",
+          1
+        ]
+      ]
+    },
+    "apps/stage-web/src/components/CompanionPanel.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [
+        [
+          "click",
+          3
+        ],
+        [
+          "error",
+          1
+        ]
+      ],
+      "texts": [
+        [
+          "前往 Plugin Center",
+          1
+        ],
+        [
+          "动作入口",
+          1
+        ],
+        [
+          "快捷操作",
+          1
+        ],
+        [
+          "行为与性能设置",
+          1
+        ]
+      ]
+    },
+    "apps/stage-web/src/components/CompanionSidebar.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [
+        [
+          "click",
+          3
+        ]
+      ],
+      "texts": [
+        [
+          "新建对话",
+          1
+        ],
+        [
+          "最近对话",
+          1
+        ],
+        [
+          "本地用户",
+          1
+        ]
+      ]
+    },
+    "apps/stage-web/src/components/DshSelect.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [
+        [
+          "change",
+          1
+        ]
+      ],
+      "texts": []
+    },
+    "apps/stage-web/src/components/DshTextInput.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [
+        [
+          "input",
+          1
+        ]
+      ],
+      "texts": []
+    },
+    "apps/stage-web/src/components/M3Button.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [],
+      "texts": []
+    },
+    "apps/stage-web/src/components/M3Icon.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [],
+      "texts": []
+    },
+    "apps/stage-web/src/components/M3Segmented.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [
+        [
+          "click",
+          1
+        ]
+      ],
+      "texts": []
+    },
+    "apps/stage-web/src/components/M3Sheet.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [
+        [
+          "click",
+          2
+        ]
+      ],
+      "texts": []
+    },
+    "apps/stage-web/src/components/M3Slider.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [
+        [
+          "input",
+          1
+        ]
+      ],
+      "texts": []
+    },
+    "apps/stage-web/src/components/M3Switch.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [
+        [
+          "click",
+          1
+        ]
+      ],
+      "texts": []
+    },
+    "apps/stage-web/src/components/PluginCenterView.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [],
+      "texts": [
+        [
+          "插件服务通道（/dsh-l2d/）当前不可达（）。以下卡片来自仓内注册表静态数据；\r\n      调用/启停在通道接通前保持禁用（TODO），不会伪造成功。",
+          1
+        ],
+        [
+          "模型  · 能力  项 · 表情  ·\r\n          动作组",
+          1
+        ],
+        [
+          "该类型暂无注册条目。",
+          1
+        ],
+        [
+          "调用",
+          1
+        ]
+      ]
+    },
+    "apps/stage-web/src/components/SettingsPanel.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [
+        [
+          "click",
+          1
+        ]
+      ],
+      "texts": [
+        [
+          "Cubism 5 Core（待接入）",
+          1
+        ],
+        [
+          "DeepSeek-chan · 原画 神宫凉子 / 建模 霓虹猫_NeonNeko",
+          1
+        ],
+        [
+          "MediaPipe 本地推理，画面不出本机",
+          1
+        ],
+        [
+          "status.json 不可达（独立设置页 /dsh-l2d/settings.html 仍可直读运行时）。",
+          1
+        ],
+        [
+          "不记录按键内容、不落盘、不上传",
+          1
+        ],
+        [
+          "主题",
+          1
+        ],
+        [
+          "仅用于预览行为差异，不影响真实感知",
+          1
+        ],
+        [
+          "传输通道",
+          1
+        ],
+        [
+          "全局键鼠感知",
+          1
+        ],
+        [
+          "全局键鼠感知只统计「是否有输入」与输入速率，",
+          1
+        ],
+        [
+          "全屏时自动降级",
+          1
+        ],
+        [
+          "关于",
+          1
+        ],
+        [
+          "口型同步",
+          1
+        ],
+        [
+          "口型增益",
+          1
+        ],
+        [
+          "呼吸、眨眼、视线漂移的幅度",
+          1
+        ],
+        [
+          "外观",
+          1
+        ],
+        [
+          "当前模型",
+          1
+        ],
+        [
+          "待机活跃度",
+          1
+        ],
+        [
+          "恢复默认设置",
+          1
+        ],
+        [
+          "情境预览",
+          1
+        ],
+        [
+          "感知与隐私",
+          1
+        ],
+        [
+          "打字节奏、窗口切换时轻微回应",
+          1
+        ],
+        [
+          "按音频包络驱动嘴部开合",
+          1
+        ],
+        [
+          "插件注入页走 /dsh-l2d/，调试页走 dev-server",
+          1
+        ],
+        [
+          "摄像头面部捕捉",
+          1
+        ],
+        [
+          "操作时反应",
+          1
+        ],
+        [
+          "检测到全屏应用降到 15fps，避免打扰",
+          1
+        ],
+        [
+          "模型缩放",
+          1
+        ],
+        [
+          "模型署名",
+          1
+        ],
+        [
+          "渲染内核",
+          1
+        ],
+        [
+          "渲染包",
+          1
+        ],
+        [
+          "版本",
+          1
+        ],
+        [
+          "用于判断「正在操作电脑」",
+          1
+        ],
+        [
+          "舞台内角色的显示比例",
+          1
+        ],
+        [
+          "行为",
+          1
+        ],
+        [
+          "角色运行时服务前缀",
+          1
+        ],
+        [
+          "语音",
+          1
+        ],
+        [
+          "跟随所选主题",
+          1
+        ],
+        [
+          "运行时",
+          1
+        ],
+        [
+          "运行时接口地址",
+          1
+        ],
+        [
+          "连接",
+          1
+        ],
+        [
+          "连接项当前仅保存在本机（TODO：运行时写入通道未接通，settings.json 的读写仍由\r\n          独立设置页承担，接通后此面板成为唯一设置面）。",
+          1
+        ],
+        [
+          "静态立绘",
+          1
+        ],
+        [
+          "音量偏小时可上调，过高会「嘴抽」",
+          1
+        ],
+        [
+          "；\r\n          前台窗口只判断是否全屏，不读取窗口标题。可随时关闭。",
+          1
+        ]
+      ]
+    },
+    "apps/stage-web/src/components/StageArea.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [],
+      "texts": [
+        [
+          "P0 · 骨架",
+          1
+        ],
+        [
+          "参数",
+          1
+        ],
+        [
+          "后导入。",
+          1
+        ],
+        [
+          "导入模型",
+          1
+        ],
+        [
+          "尚未加载模型",
+          1
+        ],
+        [
+          "帧率",
+          1
+        ],
+        [
+          "情境",
+          1
+        ],
+        [
+          "把模型文件夹放入",
+          1
+        ],
+        [
+          "接入说明",
+          1
+        ],
+        [
+          "渲染内核需从 Live2D 官方 SDK 提取",
+          1
+        ],
+        [
+          "通道",
+          1
+        ]
+      ]
+    },
+    "apps/whale-workspace/src/components/AgentTaskPanel.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [],
+      "texts": [
+        [
+          "占位",
+          1
+        ],
+        [
+          "模型处理 · Agent 任务",
+          1
+        ],
+        [
+          "该面板只验证双栏布局，尚未接入真实 Agent 任务通道。",
+          1
+        ]
+      ]
+    },
+    "apps/whale-workspace/src/components/CapsuleShell.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [
+        [
+          "change",
+          1
+        ],
+        [
+          "click",
+          4
+        ],
+        [
+          "send",
+          1
+        ]
+      ],
+      "texts": [
+        [
+          "0 ? `${state.unread} 条新消息` : '已收起，点这里继续' }}",
+          1
+        ],
+        [
+          "展开到工作区",
+          1
+        ],
+        [
+          "工作区与胶囊共享同一会话",
+          1
+        ],
+        [
+          "鲸",
+          2
+        ],
+        [
+          "鲸鱼娘",
+          1
+        ],
+        [
+          "鲸鱼娘 · 迷你聊天",
+          1
+        ]
+      ]
+    },
+    "apps/whale-workspace/src/components/CharacterStage.vue": {
+      "ids": [
+        [
+          "wwGlow",
+          1
+        ],
+        [
+          "wwHair",
+          1
+        ],
+        [
+          "wwHairBack",
+          1
+        ],
+        [
+          "wwHoodie",
+          1
+        ],
+        [
+          "wwSkin",
+          1
+        ]
+      ],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [],
+      "texts": [
+        [
+          "DSH 宿主页 · 角色浮层示意",
+          1
+        ],
+        [
+          "角色站位为内置 SVG 占位；Live2D 渲染管线不在本应用内",
+          1
+        ],
+        [
+          "鲸鱼娘",
+          1
+        ]
+      ]
+    },
+    "apps/whale-workspace/src/components/ChatComposer.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [
+        [
+          "click",
+          1
+        ],
+        [
+          "compositionend",
+          1
+        ],
+        [
+          "compositionstart",
+          1
+        ],
+        [
+          "input",
+          1
+        ],
+        [
+          "keydown",
+          1
+        ]
+      ],
+      "texts": [
+        [
+          "发送",
+          1
+        ],
+        [
+          "生成中",
+          1
+        ]
+      ]
+    },
+    "apps/whale-workspace/src/components/ChatThread.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [],
+      "texts": [
+        [
+          "鲸",
+          2
+        ]
+      ]
+    },
+    "apps/whale-workspace/src/components/ConversationList.vue": {
+      "ids": [],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [
+        [
+          "click",
+          2
+        ]
+      ],
+      "texts": [
+        [
+          "会话",
+          1
+        ],
+        [
+          "生成中",
+          1
+        ],
+        [
+          "＋ 新会话",
+          1
+        ]
+      ]
+    },
+    "apps/whale-workspace/src/components/WorkspaceShell.vue": {
+      "ids": [
+        [
+          "state.conversationId",
+          1
+        ]
+      ],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [
+        [
+          "click",
+          2
+        ],
+        [
+          "create",
+          1
+        ],
+        [
+          "select",
+          1
+        ],
+        [
+          "send",
+          1
+        ]
+      ],
+      "texts": [
+        [
+          "{{ state.role === 'mirror' ? '镜像窗口' : `会话 ${state.conversationId}` }}",
+          1
+        ],
+        [
+          "只读投影",
+          1
+        ],
+        [
+          "工作区",
+          1
+        ],
+        [
+          "条消息 · 与胶囊共享同一份会话状态",
+          1
+        ],
+        [
+          "正在生成",
+          1
+        ],
+        [
+          "正在等待主窗口的会话状态…（跨窗口通道 BroadcastChannel）",
+          1
+        ],
+        [
+          "迷你聊天",
+          1
+        ],
+        [
+          "镜像窗口",
+          1
+        ],
+        [
+          "鲸",
+          1
+        ]
+      ]
+    },
+    "packages/dsh-l2d-plugin/assets/settings.html": {
+      "ids": [
+        [
+          "alert",
+          1
+        ],
+        [
+          "assetChips",
+          1
+        ],
+        [
+          "capGroups",
+          1
+        ],
+        [
+          "capSummary",
+          1
+        ],
+        [
+          "devInfo",
+          1
+        ],
+        [
+          "devMsg",
+          1
+        ],
+        [
+          "formBtn",
+          1
+        ],
+        [
+          "formMsg",
+          1
+        ],
+        [
+          "modeDot",
+          1
+        ],
+        [
+          "modeText",
+          1
+        ],
+        [
+          "modelName",
+          1
+        ],
+        [
+          "rescanBtn",
+          1
+        ],
+        [
+          "roFps",
+          1
+        ],
+        [
+          "roNote",
+          1
+        ],
+        [
+          "roReady",
+          1
+        ],
+        [
+          "roRes",
+          1
+        ],
+        [
+          "rows-behavior",
+          1
+        ],
+        [
+          "rows-display",
+          1
+        ],
+        [
+          "rows-performance",
+          1
+        ],
+        [
+          "saveState",
+          1
+        ],
+        [
+          "sec-behavior",
+          1
+        ],
+        [
+          "sec-dev",
+          1
+        ],
+        [
+          "sec-display",
+          1
+        ],
+        [
+          "sec-model",
+          1
+        ],
+        [
+          "sec-performance",
+          1
+        ]
+      ],
+      "hrefs": [
+        [
+          "/dsh-l2d/test.html",
+          1
+        ]
+      ],
+      "dataAttrs": [],
+      "events": [],
+      "texts": [
+        [
+          "DSH-L2D · 设置",
+          1
+        ],
+        [
+          "DSH-L2D 角色运行时 · 改动即时写入宿主，无需保存按钮",
+          1
+        ],
+        [
+          "分辨率",
+          1
+        ],
+        [
+          "刷新节奏、声音、传感器与桌宠形态。",
+          1
+        ],
+        [
+          "动画与性能",
+          1
+        ],
+        [
+          "参数监视台",
+          1
+        ],
+        [
+          "帧率",
+          1
+        ],
+        [
+          "开发者工具",
+          1
+        ],
+        [
+          "当前加载的模型、资源就位情况与能力边界。",
+          1
+        ],
+        [
+          "当前呈现模式：未知",
+          1
+        ],
+        [
+          "当前模型",
+          1
+        ],
+        [
+          "情绪与行为",
+          1
+        ],
+        [
+          "显示与布局",
+          1
+        ],
+        [
+          "模型形态变化",
+          1
+        ],
+        [
+          "正在读取设置",
+          1
+        ],
+        [
+          "渲染就绪",
+          1
+        ],
+        [
+          "能力画像",
+          1
+        ],
+        [
+          "能力重扫",
+          1
+        ],
+        [
+          "角色与模型",
+          1
+        ],
+        [
+          "角色怎么被驱动，以及主动说话和玩梗的尺度。",
+          1
+        ],
+        [
+          "角色挂在哪里、多大、什么时候淡出。",
+          1
+        ],
+        [
+          "设置",
+          1
+        ],
+        [
+          "诊断信息与不常用的重活。",
+          1
+        ],
+        [
+          "读数来自 status.json 与 l2d_get_state，取不到时显示「—」。",
+          1
+        ],
+        [
+          "这个页面需要 JavaScript 才能读写设置。",
+          1
+        ]
+      ]
+    },
+    "packages/dsh-l2d-plugin/assets/test.html": {
+      "ids": [
+        [
+          "cv",
+          1
+        ],
+        [
+          "stage",
+          1
+        ]
+      ],
+      "hrefs": [
+        [
+          "/dsh-l2d/ui-tokens.css",
+          1
+        ]
+      ],
+      "dataAttrs": [],
+      "events": [],
+      "texts": [
+        [
+          "DSH-L2D · 渲染自检",
+          1
+        ]
+      ]
+    },
+    "packages/dsh-l2d-plugin/lib/overlay.js": {
+      "ids": [
+        [
+          " + payload.id + ",
+          1
+        ],
+        [
+          "act",
+          1
+        ],
+        [
+          "dsh-l2d-error-dialog",
+          1
+        ],
+        [
+          "kf:",
+          1
+        ]
+      ],
+      "hrefs": [
+        [
+          "/dsh-l2d/ui-tokens.css",
+          1
+        ]
+      ],
+      "dataAttrs": [
+        [
+          "data-action",
+          1
+        ],
+        [
+          "data-dir",
+          9
+        ],
+        [
+          "data-group",
+          1
+        ],
+        [
+          "data-l2d-state",
+          15
+        ]
+      ],
+      "events": [
+        [
+          "DOMContentLoaded",
+          1
+        ],
+        [
+          "blur",
+          4
+        ],
+        [
+          "change",
+          1
+        ],
+        [
+          "chargingchange",
+          1
+        ],
+        [
+          "click",
+          14
+        ],
+        [
+          "contextmenu",
+          1
+        ],
+        [
+          "error",
+          1
+        ],
+        [
+          "focus",
+          2
+        ],
+        [
+          "focusin",
+          1
+        ],
+        [
+          "focusout",
+          1
+        ],
+        [
+          "input",
+          3
+        ],
+        [
+          "keydown",
+          3
+        ],
+        [
+          "levelchange",
+          1
+        ],
+        [
+          "load",
+          1
+        ],
+        [
+          "mouseenter",
+          1
+        ],
+        [
+          "mouseleave",
+          1
+        ],
+        [
+          "offline",
+          1
+        ],
+        [
+          "online",
+          1
+        ],
+        [
+          "pagehide",
+          1
+        ],
+        [
+          "pause",
+          1
+        ],
+        [
+          "play",
+          1
+        ],
+        [
+          "pointercancel",
+          2
+        ],
+        [
+          "pointerdown",
+          6
+        ],
+        [
+          "pointerleave",
+          1
+        ],
+        [
+          "pointermove",
+          6
+        ],
+        [
+          "pointerup",
+          4
+        ],
+        [
+          "resize",
+          4
+        ],
+        [
+          "visibilitychange",
+          2
+        ],
+        [
+          "wheel",
+          1
+        ]
+      ],
+      "texts": [
+        [
+          "';\r\n  }\r\n\r\n  function formatBalanceHtml(data, tier) {\r\n    var t = tier || billingTier();\r\n    if (!data) return '余额获取失败';\r\n    if (!data.ok) {\r\n      var miss = data.reason === 'no-key' ? '未配置 API Key' : '余额暂时不可用';\r\n      return miss +\r\n        '",
+          1
+        ],
+        [
+          "(ÒωÓ) 让我看看用户硬盘里有什么好东西",
+          2
+        ],
+        [
+          ") // 新渲染包：end + reason=",
+          1
+        ],
+        [
+          "*#\\-\\[\\]]+/, '')\r\n      .trim()\r\n      .slice(0, max || 60);\r\n  }\r\n\r\n  function speakSpontaneous(text, minGapMs) {\r\n    if (settings.spontaneousChat === false || !text) return false;\r\n    if (env.away) return false; // 离席：只做低成本表现，不刷气泡\r\n    var now = Date.now();\r\n    if (now - agentLink.lastSpokeAt",
+          1
+        ],
+        [
+          "+param（确定性、可重放，天然去重同参数轨道）；group",
+          1
+        ],
+        [
+          "/.exec(raw);\r\n    if (tag && tag[1].trim()) return tag[1].trim();\r\n    if (/(开心|高兴|哈哈|太好了|喜欢)/.test(raw)) return '开心';\r\n    if (/(害羞|不好意思|脸红)/.test(raw)) return '害羞';\r\n    if (/(生气|愤怒|讨厌)/.test(raw)) return '生气';\r\n    if (/(惊讶|不会吧|震惊|哇)/.test(raw)) return '惊讶';\r\n    if (/(难过|伤心|抱歉|对不起)/.test(raw)) return '悲伤';\r\n    if (/(爱你|么么|心心)/.test(raw)) return '爱';\r\n    if (/(思考|为什么|分析|让我想想|如何)/.test(raw)) return '思考';\r\n    return '';\r\n  }\r\n\r\n  function chatActionForReply(text) {\r\n    var t = String(text || '');\r\n    var chain = [];\r\n    function add(step) { chain.push(step); }\r\n\r\n    if (/(你好|hello|hi|在吗|早上好|晚上好|我回来了|嗨)/i.test(t)) {\r\n      add({ kind: 'expression', name: '兔牙' });\r\n      add({ kind: 'motion', name: '竖手指打开', closeMotion: '竖手指关闭', closeAfterMs: 4200, delayMs: 120 });\r\n    } else if (/(谢谢|感谢|辛苦|厉害|great|done|完成|成功|修复)/i.test(t)) {\r\n      add({ kind: 'expression', name: '兔牙' });\r\n      add({ kind: 'pose', pose: { right: 'finger' }, delayMs: 120 });\r\n    } else if (/(对不起|抱歉|失败|错误|error|failed|异常)/i.test(t)) {\r\n      add({ kind: 'expression', name: '流冷汗' });\r\n      add({ kind: 'pose', pose: { right: 'rest', left: 'chest' }, delayMs: 120 });\r\n    } else if (/(为什么|怎么|如何|是否|吗？|\\?|思考|分析|看看)/.test(t)) {\r\n      add({ kind: 'expression', name: '加载' });\r\n      add({ kind: 'look', x: 0.18, y: 0.22, delayMs: 80 });\r\n    } else if (/(哈哈|笑死|乐|草|梗|好玩)/i.test(t)) {\r\n      add({ kind: 'expression', name: '＞＜' });\r\n      add({ kind: 'pose', pose: { right: 'grass' }, delayMs: 120 });\r\n    } else if (/(抱抱|摸摸|喜欢|爱你|可爱)/i.test(t)) {\r\n      add({ kind: 'expression', name: '脸红' });\r\n      add({ kind: 'pose', pose: { right: 'rest', left: 'chest' }, delayMs: 120 });\r\n    } else {\r\n      add({ kind: 'expression', name: Math.random()",
+          1
+        ],
+        [
+          "/?l2d-enable=1（本旁路，禁用后\r\n    // 页内 gear 菜单已消失，控制台不是普通用户可达的入口）；② 控制台\r\n    // localStorage.removeItem('dsh-l2d.disabled') 后刷新。\r\n    try {\r\n      if (/[?&]l2d-enable=1/.test(location.search)) localStorage.removeItem('dsh-l2d.disabled');\r\n      if (localStorage.getItem('dsh-l2d.disabled') === 'true') return;\r\n    } catch (err) { /* localStorage 不可用（隐私模式等）按未禁用处理 */ }\r\n    try {\r\n      ensureMounted();\r\n      loadDbActions(); // UI-FLOAT ⑤：动作池读库（失败静默降级）\r\n    } catch (err) {\r\n      try {\r\n        fetch('/dsh-l2d/reverse/event', {\r\n          method: 'POST',\r\n          headers: { 'Content-Type': 'application/json' },\r\n          body: JSON.stringify({\r\n            type: 'error',\r\n            payload: { reason: String((err && err.message) || err).slice(0, 120) },\r\n          }),\r\n        }).catch(function () { /* 宿主不可达时静默 */ });\r\n      } catch (e2) { /* ignore */ }\r\n      try { startAiPoll(); } catch (e3) { /* ignore */ }\r\n    }\r\n  }\r\n\r\n  if (document.readyState === 'loading') {\r\n    document.addEventListener('DOMContentLoaded', bootOverlay);\r\n  } else {\r\n    // 脚本被注入到已加载完成的页面（DSH App 的 dsh-app:// 壳）时 readyState 是 complete。\r\n    // 这里若同步调用 bootOverlay，IIFE 后面的 var 赋值（agentLink / mediaSensorState /\r\n    // DSH_L2D_AI 等）还没执行，ensureMounted → syncMediaSensor 会因 mediaSensorState\r\n    // 为 undefined 抛 \"reading 'timer'\"，整个初始化链中断。推迟到宏任务，保证 IIFE 先跑完。\r\n    setTimeout(bootOverlay, 0);\r\n  }\r\n\r\n  // ---------------------------------------------------------------- 工作区会话联动\r\n  //\r\n  // 参照 dsh-pet-indesktop 的 Agent Link：读取 DSH 会话事件并聚合为状态，\r\n  // 状态切换时触发一条轻量动作链（表情/视线/姿势），不做高频重播。\r\n  // agentLink 已在模块顶部初始化（见文件头注释）。\r\n  var IDLE_LINES = [\r\n    '我在呢～',\r\n    '你继续忙，我陪你。',\r\n    '刚活动了一下尾巴。',\r\n    '要看会代码吗？',\r\n    '别熬太久哦。',\r\n    '嘿嘿，戳我一下嘛。',\r\n  ];\r\n\r\n  function trimChatText(text, max) {\r\n    return String(text || '')\r\n      .replace(/",
+          1
+        ],
+        [
+          "0 ? planForLife.lifeMs : plannedLifeMs(chain, action.holdMs);\r\n\r\n    if (!L.admitAct || !L.currentAct || !L.finishAct) {\r\n      legacyGen += 1;\r\n      var legacyId = legacyGen;\r\n      playbackAct(chain, legacyId, source, !!action.holdOnly);\r\n      armActEnd(legacyId, life);\r\n      if (action.bubble) say(action.bubble, 3200);\r\n      else if (!action.silent) say('戳戳~', 2200);\r\n      return {\r\n        ok: true,\r\n        accepted: true,\r\n        settled: false,\r\n        outcome: 'pending',\r\n        reason: 'no-gate',\r\n        runId: legacyId,\r\n        priority: 'NORMAL',\r\n        steps: chain.length,\r\n        events: [],\r\n      };\r\n    }\r\n\r\n    var admission = L.admitAct({\r\n      priority: priority,\r\n      callId: action.callId || null,\r\n      source: source,\r\n      steps: chain.length,\r\n    });\r\n    if (!admission || !admission.accepted) return blockedAct(admission);\r\n    preemptYandereIfNeeded(admission);\r\n    // PR-D：真实完成事件关联（executionId = callId）。老渲染包没有订阅口时 expected=0，\r\n    // 完成回执仍走 armActEnd 预估兜底。\r\n    if (!completionBound && L.onActionCompletion) {\r\n      completionBound = true;\r\n      L.onActionCompletion(onRuntimeCompletion);\r\n    }\r\n    bindActCompletion(admission.runId, action.callId, chain);\r\n    playbackAct(chain, admission.runId, source, !!action.holdOnly, planForLife, action.callId);\r\n    emitActEvents(admission.events);\r\n    // 先挂上结束回执，避免步骤里抛错后槽位一直占着。\r\n    // PR-D：真实完成先到时 finishAct 幂等（runId 不匹配返回 null），本定时器成空转。\r\n    armActEnd(admission.runId, life);\r\n    if (action.bubble) say(action.bubble, 3200);\r\n    else if (!action.silent) say('戳戳~', 2200);\r\n    return acceptedAct(admission, action.holdOnly ? 0 : chain.length, planForLife);\r\n  }\r\n\r\n  function pokeRandom() {\r\n    var L = window.DSH_L2D;\r\n    if (!L || !L.isReady || !L.isReady()) {\r\n      say('模型还没准备好', 1800);\r\n      return;\r\n    }\r\n    var cap = pokeCapabilities();\r\n    var expressions = cap.expressions;\r\n    var motions = cap.motions.filter(function (name) { return name.endsWith('打开'); });\r\n    if (dbActionRaw.length && !dbActionPoolBuilt) buildDbPool();\r\n    var roll = Math.random();\r\n\r\n    try {\r\n      // 概率分段：表情 0-0.36 / 动作 0.36-0.76 / DB 动作链 0.76-0.92 / 姿势兑底\r\n      if (roll",
+          1
+        ],
+        [
+          "0) seg.durationMs = durationMs;\r\n      segs.push(seg);\r\n    });\r\n    return segs;\r\n  }\r\n\r\n  /**\r\n   * [M1-d2] 回执 arbitration 字段格式（l2d_act 与 l2d_play_keyframes 共用）。\r\n   * 只增不改：既有消费者看不到该字段时行为不变（向后兼容增列，§6 回滚表）。\r\n   */\r\n  function arbReceipt(ga) {\r\n    if (!ga) return undefined;\r\n    return {\r\n      entryId: ga.entryId,\r\n      admitted: ga.admittedIds,\r\n      rejected: ga.rejected,\r\n      interrupted: ga.interrupted,\r\n      releasedAgentParams: ga.releasedAgentParams,\r\n      flagEnabled: ga.flagEnabled,\r\n    };\r\n  }\r\n\r\n  /**\r\n   * [M1-d2] 老包/flag 关直通判定：只有「明确拒绝且 flag 开」才短路（ga.admitted === false\r\n   * 且 ga.flagEnabled === true）。renderer 缺 admitGesture（老包）或 flag 关\r\n   * （flagEnabled:false）一律走原路径——新 overlay × 老 renderer 不误拒（§6 风险 1）。\r\n   */\r\n  function gestureBlocked(ga) {\r\n    return !!(ga && ga.admitted === false && ga.flagEnabled === true);\r\n  }\r\n\r\n  function randomOf(list) {\r\n    return list[Math.floor(Math.random() * list.length)];\r\n  }\r\n\r\n  function actStillCurrent(runId) {\r\n    var L = window.DSH_L2D;\r\n    if (L && L.currentAct) {\r\n      var cur = L.currentAct();\r\n      return !!(cur && cur.runId === runId);\r\n    }\r\n    return legacyGen === runId;\r\n  }\r\n\r\n  function rememberClose(name) {\r\n    if (!name) return;\r\n    pendingCloses.push(name);\r\n  }\r\n\r\n  function dropPendingClose(name) {\r\n    var next = [];\r\n    var removed = false;\r\n    for (var i = 0; i",
+          1
+        ],
+        [
+          "0) {\r\n            emotionSensors.vx = ((e.clientX - lastX) / dt) * 1000;\r\n            emotionSensors.vy = ((e.clientY - lastY) / dt) * 1000;\r\n          }\r\n          lastX = e.clientX;\r\n          lastY = e.clientY;\r\n          lastT = now;\r\n          driveGaze(e); // 注视要跟手，节流放到渲染端平滑（桌宠模式下保留眼神跟随）\r\n          feedHitProbe(e); // 命中探针（供 alpha 采样），悬停时也刷新\r\n          if (now - pushT",
+          1
+        ],
+        [
+          "0) {\r\n          pokeTimers.push(setTimeout(function () {\r\n            timeoutActGroup(runId);\r\n          }, bucket.atMs + bucket.timeoutMs));\r\n        }\r\n      })(buckets[b]);\r\n    }\r\n  }\r\n\r\n  function playActSteps(chain, runId, source, skipMotions, plan, executionId) {\r\n    var L = window.DSH_L2D;\r\n    // 计划由调用方一次算好并传进来（同一份对象既算寿命又记 notes），\r\n    // 老调用方没传时才就地补算，保证「寿命」与「降级事实」永远来自同一份计划。\r\n    var usePlan = plan || null;\r\n    if (!usePlan && L && L.normalizeActPlan) {\r\n      try {\r\n        usePlan = L.normalizeActPlan(chain);\r\n      } catch (err) {\r\n        usePlan = null;\r\n      }\r\n    }\r\n    if (usePlan && usePlan.buckets && usePlan.buckets.length) {\r\n      // 降级/超时这类「计划层」信息进 notes（kind=skip 不算失败），回执里能看见\r\n      if (usePlan.notes && L.noteActMotion) {\r\n        for (var n = 0; n",
+          1
+        ],
+        [
+          "0) { aiPollHoldTicks--; return; } // 租约被他人持有：降频轮询\r\n      if (!window.DSH_L2D_AI) return;\r\n      fetch('/dsh-l2d/ai/poll?consumer=' + encodeURIComponent(__aiConsumerId) + '&version=' + encodeURIComponent(__bootTag || ''), { cache: 'no-store' })\r\n        .then(function (r) {\r\n          return r.ok ? r.json() : null;\r\n        })\r\n        .then(function (d) {\r\n          // 先消费搭车的反向桥快照（必须在无指令提前 return 之前，否则没指令时永远不更新）\r\n          if (d && d.reverse) aiReverseState = d.reverse;\r\n          if (d && d.lease) {\r\n            if (d.lease.token) {\r\n              __aiLeaseToken = d.lease.token; // 接管/续期发放的新凭证（含接管后 token 轮换）\r\n              __aiLeaseEpoch = d.lease.epoch || 0;\r\n            } else if (d.lease.status === 'held') {\r\n              aiPollHoldTicks = 4; // 他人持租约：拉长下次 poll 间隔\r\n            }\r\n          }\r\n          if (!d || !d.calls || !d.calls.length) return;\r\n          d.calls.forEach(function (c) {\r\n            Promise.resolve(window.DSH_L2D_AI.exec(c.name, c.args, c.id))\r\n              .then(function (res) {\r\n                if (!res || res.ok === false) {\r\n                  // skipped / conflict 是状态机的正常结果，不当成异常刷屏\r\n                  if (!res || (res.reason !== 'skipped' && res.reason !== 'conflict' && res.status !== 'skipped' && res.status !== 'conflict')) {\r\n                    console.warn('[dsh-l2d] AI 指令执行失败', c.name, res);\r\n                  }\r\n                }\r\n                postAiResult({ id: c.id, result: res || { ok: false, reason: 'empty' } })\r\n                  .catch(function () { /* 结果回写失败，MCP 会超时 */ });\r\n              })\r\n              .catch(function (err) {\r\n                postAiResult({ id: c.id, result: { ok: false, reason: String(err && err.message ? err.message : err) } })\r\n                  .catch(function () { /* ignore */ });\r\n              });\r\n          });\r\n        })\r\n        .catch(function () {\r\n          /* 宿主未就绪，下一轮再试 */\r\n        });\r\n    }, 400);\r\n  }\r\n\r\n  // ---------------------------------------------------------------- AI 控制桥\r\n  //\r\n  // 给宿主侧 / 外部 Agent 的统一入口：把 function-calling 的工具名映射到渲染包能力。\r\n  // 设计要点：\r\n  //   - 一律返回结构化结果，失败不抛异常（AI 侧要能根据 ok/error 自行重试）\r\n  //   - 参数逐个校验，setParameters 会把不存在的参数名列进 failed\r\n  window.DSH_L2D_AI = {\r\n    version: 1,\r\n\r\n    /** 执行一次工具调用。callId 是 /ai/call 的队列号，动作链回执靠它写回 /ai/result。 */\r\n    exec: function (name, args, callId) {\r\n      var a = args || {};\r\n      pushL2dLog({ comp: 'ai', action: String(name || ''), state: 'exec' });\r\n      var L = window.DSH_L2D;\r\n      if (!L) return { ok: false, error: 'renderer-not-ready' };\r\n\r\n      if (L.markActive) L.markActive();\r\n      try {\r\n        switch (name) {\r\n          case 'l2d_set_expression': {\r\n            var okExp = L.setExpression(String(a.name || ''));\r\n            return okExp ? { ok: true } : { ok: false, error: 'unknown-expression: ' + a.name };\r\n          }\r\n          case 'l2d_play_motion': {\r\n            if (!L.playMotionAsync) return { ok: false, reason: 'motion-unavailable' };\r\n            return L.playMotionAsync(String(a.group || ''), {\r\n              index: Number(a.index || 0),\r\n              awaitFinish: a.awaitFinish === true,\r\n            }).then(function (r) {\r\n              if (r.status === 'ok') return { ok: true, status: r.status, group: r.group, slot: r.slot, dir: r.dir };\r\n              return { ok: false, reason: r.reason || r.status, status: r.status, group: r.group };\r\n            });\r\n          }\r\n          case 'l2d_emote': {\r\n            var moodName = String(a.mood || a.name || '').trim();\r\n            if (!moodName) return { ok: false, reason: 'empty-mood' };\r\n            if (L.emotionSignal) L.emotionSignal({ type: 'mood', data: { mood: moodName } });\r\n            return { ok: true, mood: moodName };\r\n          }\r\n          case 'l2d_gaze': {\r\n            var gx = Math.max(-1, Math.min(1, Number(a.x) || 0));\r\n            var gy = Math.max(-1, Math.min(1, Number(a.y) || 0));\r\n            if (L.gaze) L.gaze(gx, gy);\r\n            else L.lookAt(gx, gy);\r\n            return { ok: true, x: gx, y: gy };\r\n          }\r\n          case 'l2d_say': {\r\n            var said = String(a.text || '').slice(0, 200);\r\n            if (!said) return { ok: false, reason: 'empty-text' };\r\n            var hold = Math.max(800, Math.min(12000, Number(a.holdMs) || 3600));\r\n            say(said, hold);\r\n            return { ok: true };\r\n          }\r\n          case 'l2d_act': {\r\n            var actChain = Array.isArray(a.chain) ? a.chain : [];\r\n            if (!actChain.length && !a.phase) return { ok: false, accepted: false, reason: 'empty-chain' };\r\n            return executePokeAction({\r\n              chain: actChain,\r\n              phase: a.phase,\r\n              bubble: a.bubble || '',\r\n              silent: !a.bubble,\r\n              priority: a.priority,\r\n              callId: callId,\r\n              source: a.phase ? String(a.phase) : 'ai',\r\n            });\r\n          }\r\n          case 'l2d_get_state': {\r\n            return {\r\n              ok: true,\r\n              ready: !!(L.isReady && L.isReady()),\r\n              // 自检：计划层能力 + 注入版本，用来区分「页面跑旧脚本」与「逻辑真没生效」。\r\n              diag: {\r\n                bootTag: __bootTag || '',\r\n                hasPlan: typeof L.normalizeActPlan,\r\n                hasNote: typeof L.noteActMotion,\r\n                // [M1-d2 诊断] armed/timeline 活体状态（临时诊断，随 d2 验收移除或保留为观测面）\r\n                gesture: L.getGestureState ? L.getGestureState() : 'getGestureState-missing',\r\n                // [M1-f 第二批] cue 账本活体状态（enabled/active channels/overlay），与 gesture 并列\r\n                cue: L.getCueState ? L.getCueState() : 'missing',\r\n                rendererEl: (document.getElementById('dsh-l2d-renderer') || {}).src || '',\r\n                winHasPlan: (typeof window !== 'undefined' && window.DSH_L2D) ? typeof window.DSH_L2D.normalizeActPlan : 'no-win-api',\r\n                sameRef: !!(typeof window !== 'undefined' && window.DSH_L2D === L),\r\n                planKeys: (typeof window !== 'undefined' && window.DSH_L2D) ? Object.keys(window.DSH_L2D).filter(function (k) { return /plan|normal/i.test(k); }).join(',') : '',\r\n                scripts: Array.prototype.map.call(document.querySelectorAll('script[src*=\"dsh-l2d/renderer\"]'), function (x) { return x.src; }).join(' | '),\r\n                guarded: !!window.__DSH_L2D_GUARD__,\r\n                keyCount: Object.keys(window.DSH_L2D || {}).length,\r\n                clientEntry: (typeof window !== 'undefined')\r\n                  ? (window.__L2D_CLIENT_ERROR__ ? 'ERR: ' + String(window.__L2D_CLIENT_ERROR__).slice(0, 4000)\r\n                    : window.__L2D_CLIENT_OK__ ? 'ok'\r\n                    : 'not-run')\r\n                  : 'no-window',\r\n                keys: Object.keys(window.DSH_L2D || {}).join(','),\r\n              },\r\n              info: L.getInfo ? L.getInfo() : null,\r\n              emotion: L.getEmotionState ? L.getEmotionState() : null,\r\n              pose: L.getPose ? L.getPose() : null,\r\n              reverse: aiReverseState,\r\n            };\r\n          }\r\n          case 'l2d_reset': {\r\n            if (L.resetPerformance) return L.resetPerformance();\r\n            var n = L.resetPose ? L.resetPose() : 0;\r\n            if (L.clearExpression) L.clearExpression();\r\n            if (L.clearGaze) L.clearGaze();\r\n            return { ok: true, params: n };\r\n          }\r\n          case 'l2d_set_pose': {\r\n            if (!L.setPose) return { ok: false, error: 'pose-unavailable' };\r\n            var poseRes = L.setPose({\r\n              right: a.right ? String(a.right) : undefined,\r\n              left: a.left ? String(a.left) : undefined,\r\n            });\r\n            return poseRes.ok\r\n              ? { ok: true, pose: poseRes.pose }\r\n              : { ok: false, error: poseRes.reason || 'pose-failed' };\r\n          }\r\n          case 'l2d_look_at': {\r\n            var x = Math.max(-1, Math.min(1, Number(a.x) || 0));\r\n            var y = Math.max(-1, Math.min(1, Number(a.y) || 0));\r\n            L.lookAt(x, y);\r\n            return { ok: true, x: x, y: y };\r\n          }\r\n          case 'l2d_set_parameters': {\r\n            var values = a.values || {};\r\n            var keys = Object.keys(values);\r\n            // 可选独占：写物理输出前先向渲染包认领，到期自动释放回物理。\r\n            // durationMs 语义：有限数字（含 0/负数）原样传给渲染包；缺省 1200。\r\n            var requested = Number(a.durationMs);\r\n            var durationMs = Number.isFinite(requested) ? requested : 1200;\r\n            var owned = [];\r\n            if (a.own === true && L.ownParameters) {\r\n              owned = L.ownParameters(keys, durationMs);\r\n            }\r\n            var r = L.setParameters(values);\r\n            // 全部写入失败（口型/未知参数）时回滚本次认领，避免独占残留到 TTL\r\n            if (owned.length && !r.ok.length && r.failed.length && L.releaseParameters) {\r\n              L.releaseParameters(owned);\r\n              owned = [];\r\n            }\r\n            // ignored：未登记独占、但按普通 add/set 写入成功的参数（非物理输出）\r\n            var ignored = r.ok.filter(function (id) { return owned.indexOf(id)",
+          1
+        ],
+        [
+          "0.002) {\r\n        dragZoom.applied = dragZoom.cur;\r\n        var Lz = window.DSH_L2D;\r\n        if (Lz && Lz.setZoom && rendererReady) Lz.setZoom(dragZoom.cur);\r\n      }\r\n      // 真实模型由 Cubism 物理/动作驱动，不再叠加 CSS 位移\r\n      if (!rendererReady && imgEl && imgEl.style.display !== 'none') {\r\n        var speed = prefs.state === 'conversation' ? 2.2 : prefs.state === 'away' ? 0.45 : 1.05;\r\n        var amp = prefs.state === 'away' ? 1.2 : 3.4;\r\n        var y = Math.sin(t * speed) * amp;\r\n        var r = Math.sin(t * 0.72) * 0.7;\r\n        imgEl.style.transform = 'translateY(' + y.toFixed(2) + 'px) rotate(' + r.toFixed(2) + 'deg)';\r\n      }\r\n      requestAnimationFrame(frame);\r\n    }\r\n    requestAnimationFrame(frame);\r\n  }\r\n\r\n  // ---------------------------------------------------------------- 兜底\r\n  function observeRemoval() {\r\n    if (typeof MutationObserver !== 'function') return;\r\n    var pending = false;\r\n    var mo = new MutationObserver(function () {\r\n      if (pending) return;\r\n      pending = true;\r\n      setTimeout(function () {\r\n        pending = false;\r\n        if (!document.getElementById(ROOT_ID)) {\r\n          root = null;\r\n          ensureMounted();\r\n        }\r\n      }, 300);\r\n    });\r\n    mo.observe(document.body, { childList: true });\r\n  }\r\n\r\n  // ---------------------------------------------------------------- 设置面板\r\n  // 用户自填 API Key / 音效 / 缩放 / 刷新间隔；宿主侧落盘（$DSH_HOME/l2d-settings.json）。\r\n  var panelEl = null;\r\n  var settings = { scale: 1, soundEnabled: true, soundVolume: 0.7, refreshSeconds: 60, hasApiKey: false, eyeFollow: true, agentLink: true, clickMode: 'random', spontaneousChat: true, memeStyle: true, memeLevel: 50, autoAct: true, systemSensor: false, mediaSensor: false, petMode: true };\r\n  var panelOpen = false;\r\n\r\n  // 体型系数：三个体型的可见轮廓不同，用一个统一系数把视觉高度拉回一致。\r\n  // 这里按模型实测微调；后续换模型时只需要改这一张表。\r\n  var BODY_TYPES = [\r\n    { label: '默认体型', value: 0, factor: 1.0 },\r\n    { label: '体型1', value: 0.4, factor: 1.08 },\r\n    { label: '体型2', value: 1.0, factor: 0.95 },\r\n  ];\r\n  var BODY_BASE_W = 320;\r\n  var BODY_BASE_H = 400;\r\n\r\n  function bodyTypeFactor() {\r\n    var item = BODY_TYPES[prefs.bodyType] || BODY_TYPES[0];\r\n    return item.factor || 1;\r\n  }\r\n\r\n  function applyScale(scale) {\r\n    if (!root) return;\r\n    var sc = Math.min(2.0, Math.max(0.6, Number(scale) || 1));\r\n    settings.scale = sc;\r\n    var factor = bodyTypeFactor();\r\n    var w = Math.round(BODY_BASE_W * sc * factor);\r\n    var h = Math.round(BODY_BASE_H * sc * factor);\r\n    root.style.width = w + 'px';\r\n    root.style.height = h + 'px';\r\n    if (rendererReady && window.DSH_L2D && window.DSH_L2D.layout) {\r\n      if (canvasEl) {\r\n        canvasEl.style.width = w + 'px';\r\n        canvasEl.style.height = h + 'px';\r\n      }\r\n      window.DSH_L2D.layout(w, h, 1);\r\n    }\r\n    // 尺寸变了：重新夹一下位置，别让角色被挤出屏幕\r\n    if (pos.x !== null) {\r\n      var c = clampPos(pos.x, pos.y);\r\n      pos.x = c.x;\r\n      pos.y = c.y;\r\n    }\r\n    applyPos();\r\n  }\r\n\r\n  function loadSettings() {\r\n    fetch('/dsh-l2d/settings.json', { cache: 'no-store' })\r\n      .then(function (r) { return r.ok ? r.json() : null; })\r\n      .then(function (data) {\r\n        if (!data) return;\r\n        settings = data;\r\n        // 宿主视图可能不含 petMode（旧宿主/精简宿主）：缺省按正式行为（默认开），显式 false 才关\r\n        settings.petMode = data.petMode !== false;\r\n        applyScale(settings.scale);\r\n        syncSystemSensor();\r\n        syncMediaSensor();\r\n        applyEyeFollowSetting();\r\n        updateMouseGeometry();\r\n      })\r\n      .catch(function () { /* ignore */ });\r\n  }\r\n\r\n  /**\r\n   * 强制刷新状态（调试钩子）：重新拉宿主设置 + 销毁并重新挂载渲染包，\r\n   * 不重载整个 DSH 页面。修改设置后状态没生效、渲染卡住、或改了 overlay.js\r\n   * 想当场复位时用。仅控制台可达：window.__DSH_L2D_FORCE_REFRESH__()。\r\n   * UI 入口（设置面板里的按钮）已按降噪需求移除。\r\n   */\r\n  function forceRefreshState() {\r\n    say('正在强制刷新…', 1200);\r\n    // 1) 重拉宿主设置（缩放/传感器开关重新生效）\r\n    loadSettings();\r\n    // 2) 销毁渲染包，清掉旧挂载状态\r\n    var L = window.DSH_L2D;\r\n    if (L && L.destroy) {\r\n      try { L.destroy(); } catch (err) { /* ignore */ }\r\n    }\r\n    rendererReady = false;\r\n    rendererFailed = false;\r\n    // 2.5) 丢掉旧的渲染包",
+          1
+        ],
+        [
+          "0.004;\r\n    if (!active) return;\r\n\r\n    if (!resolvePhysParams()) return;\r\n\r\n    var vals = {};\r\n    if (physParams.angleZ) vals[physParams.angleZ.id] = normToValue(physParams.angleZ, physics.leanZ);\r\n    if (physParams.posX) vals[physParams.posX.id] = normToValue(physParams.posX, physics.posX);\r\n    if (physParams.posY) vals[physParams.posY.id] = normToValue(physParams.posY, physics.posY);\r\n    // UI 本地拖拽走 runtime 通道：不受 Node Ownership 托管白名单约束（白名单管\r\n    // Agent 控制权）；旧渲染包无 runtime 入口时回退 agent 通道。\r\n    if (L.setParametersRuntime) L.setParametersRuntime(vals);\r\n    else L.setParameters(vals);\r\n    // 头部朝向已交给 gaze（眼神/躯体跟随）统一处理，这里不再双写 AngleX/Y\r\n  }\r\n\r\n  function bindPhysics() {\r\n    if (physics.bound) return;\r\n    var L = window.DSH_L2D;\r\n    if (!L || !L.setPreUpdate) return;\r\n    L.setPreUpdate(physicsTick);\r\n    physics.bound = true;\r\n  }\r\n\r\n  // ---------------------------------------------------------------- 命中判定（alpha 采样）\r\n  // 渲染包每帧把光标点的 alpha 缓存下来（readPixels 必须紧跟渲染）。\r\n  // 只有真点在模型像素上才拦事件；空白处完全放行，鼠标直接透过到下层页面。\r\n  function feedHitProbe(e) {\r\n    var L = window.DSH_L2D;\r\n    if (L && L.setHitProbe) {\r\n      try { L.setHitProbe(e.clientX, e.clientY); } catch (err) { /* ignore */ }\r\n    }\r\n  }\r\n\r\n  function overModel(e) {\r\n    // Fix #40：命中判定的 fail-open 缺口。渲染包 hitTestAt 对「没采样过的点」\r\n    // 一律返回 true（!hasSample → true），鼠标静止后的第一次按下、程序化 click\r\n    // 都拿不到样本——旧实现无条件信任它，页面任意位置的 pointerdown 都会被当成\r\n    // 「命中模型」启动拖拽+指针捕获，之后的鼠标移动会把容器拖走（clamp 下界\r\n    // y=0、x≥-0.35w 正好是左上角部分出屏），换装按钮点击也被劫持成戳一戳。\r\n    // 修复分两层，不动渲染包：\r\n    // ① 容器矩形外必无模型像素，直接判否，不受探针语义影响；\r\n    // ② 有渲染包时先用同步、fail-closed 的包围盒 hitTestBox 预筛（与右键菜单\r\n    //    overModelRightClick 同一套语义），点不在模型包围盒内判否；剩下的再交给\r\n    //    alpha 精确判定。探针 fail-open 的 true 只可能落在包围盒内，不再外溢。\r\n    if (root) {\r\n      var rr = root.getBoundingClientRect();\r\n      if (e.clientX",
+          1
+        ],
+        [
+          "0.05) dt = 0.05;\r\n\r\n    var omega = 24;\r\n    var dx = spring.x - pos.x;\r\n    var dy = spring.y - pos.y;\r\n\r\n    function axis(x, v, d) {\r\n      var b = v + omega * d;\r\n      var e = Math.exp(-omega * dt);\r\n      // 闭式解：x_new = target + (d + b*dt)*e，target = x - d。\r\n      // 上一版漏了「- d」，误差每帧被放大（60fps 下 ×1.6），就是“飞走”的根因。\r\n      return { x: x - d + (d + b * dt) * e, v: (v - omega * b * dt) * e };\r\n    }\r\n\r\n    var rx = axis(spring.x, spring.vx, dx);\r\n    var ry = axis(spring.y, spring.vy, dy);\r\n    spring.x = rx.x;\r\n    spring.vx = rx.v;\r\n    spring.y = ry.x;\r\n    spring.vy = ry.v;\r\n\r\n    var settled =\r\n      !physics.dragging &&\r\n      Math.abs(spring.x - pos.x)",
+          1
+        ],
+        [
+          "0.5;\r\n  }\r\n\r\n  function setBodyType(index) {\r\n    var L = window.DSH_L2D;\r\n    if (!L || !L.setParameter) return;\r\n    var item = BODY_TYPES[Math.max(0, Math.min(2, Number(index) || 0))];\r\n    prefs.bodyType = Math.max(0, Math.min(2, Number(index) || 0));\r\n    persist();\r\n    setSwitch('Clothes2', item.value);\r\n    applyScale(settings.scale);\r\n    say('换好了：' + item.label, 2400);\r\n  }\r\n\r\n  function cycleBodyType() {\r\n    setBodyType((Number(prefs.bodyType) || 0) + 1);\r\n  }\r\n\r\n  function toggleShoes() {\r\n    var on = switchOn('Clothes4');\r\n    setSwitch('Clothes4', on ? 0 : 1);\r\n    say(on ? '鞋子穿好啦' : '光脚舒服～', 2600);\r\n  }\r\n\r\n  function friendlyHead() {\r\n    var L = window.DSH_L2D;\r\n    if (!L) return;\r\n    if (L.setExpression) L.setExpression(Math.random()",
+          1
+        ],
+        [
+          "1) {\r\n        var oldest = l2dLogEntries.shift();\r\n        try { total -= JSON.stringify(oldest).length; }\r\n        catch (err) { total -= 64; }\r\n      }\r\n      return l2dLogEntries.length;\r\n    } catch (e) {\r\n      return -1;\r\n    }\r\n  }\r\n\r\n  /** 纯渲染：返回行文本数组（HH:MM:SS comp state action #seq，最新在底）；面板 DOM 更新另做 */\r\n  function renderL2dLog() {\r\n    var lines = [];\r\n    var p = function (num) { return num",
+          1
+        ],
+        [
+          "200) {\r\n      text = text.slice(0, 200); // 与 l2d_say 的 slice(0,200) 对齐，超出前端先截断并提示\r\n      input.value = text;\r\n      var hintEl = menuEl && menuEl.querySelector('.l2d-qc-hint');\r\n      if (hintEl) hintEl.textContent = '太长了，已截断到 200 字';\r\n      say('太长了，只发前 200 字', 2200);\r\n    }\r\n    qcSending = true;\r\n    fetch('/dsh-l2d/ai/call', {\r\n      method: 'POST',\r\n      headers: { 'Content-Type': 'application/json' },\r\n      body: JSON.stringify({ name: 'l2d_say', args: { text: text, holdMs: 5200 } }),\r\n      cache: 'no-store',\r\n    })\r\n      .then(function (r) {\r\n        if (!r.ok) throw new Error('HTTP ' + r.status);\r\n        return r.json().catch(function () { return {}; });\r\n      })\r\n      .then(function (queued) {\r\n        if (!queued || typeof queued.id === 'undefined') throw new Error('no-queue-id');\r\n        qcSending = false;\r\n        if (input) input.value = '';\r\n        say(text, 5200); // 本地直接回显（经字幕准入）；后端消费 l2d_say 后同文再上屏一次\r\n        closeMenu();\r\n      })\r\n      .catch(function () {\r\n        qcSending = false;\r\n        say('发送失败，再试一次', 2200); // 失败不关菜单，保留输入便于重试\r\n      });\r\n  }\r\n\r\n  // ---- 调试日志面板：固定右上角小窗，开/关切换；关闭后缓冲继续记录 ----\r\n  var logPanelEl = null;\r\n  var logLinesEl = null;\r\n\r\n  function ensureLogPanel() {\r\n    if (logPanelEl) return;\r\n    logPanelEl = document.createElement('div');\r\n    logPanelEl.className = 'l2d-logpanel';\r\n    logPanelEl.setAttribute('aria-hidden', 'true');\r\n    var head = document.createElement('div');\r\n    head.className = 'l2d-logpanel-head';\r\n    var headTitle = document.createElement('span');\r\n    headTitle.textContent = '调试日志';\r\n    var clearBtn = document.createElement('button');\r\n    clearBtn.type = 'button';\r\n    clearBtn.textContent = '清空';\r\n    clearBtn.addEventListener('click', function (e) {\r\n      e.stopPropagation();\r\n      l2dLogEntries.length = 0;\r\n      renderLogPanel();\r\n    });\r\n    head.appendChild(headTitle);\r\n    head.appendChild(clearBtn);\r\n    logLinesEl = document.createElement('div');\r\n    logLinesEl.className = 'l2d-logpanel-body';\r\n    logPanelEl.appendChild(head);\r\n    logPanelEl.appendChild(logLinesEl);\r\n    document.body.appendChild(logPanelEl);\r\n  }\r\n\r\n  function renderLogPanel() {\r\n    if (!logPanelEl || !logLinesEl) return;\r\n    var lines = renderL2dLog();\r\n    logLinesEl.textContent = '';\r\n    for (var i = 0; i",
+          1
+        ],
+        [
+          "3) moved = true;\r\n\r\n      var now = performance.now();\r\n      var dt = Math.max(1, now - lastT) / 1000;\r\n\r\n      // 瞬时速度要先限幅再平滑：掉帧或事件合并会让 dt 变得极小，\r\n      // 算出来的速度能到十万 px/s，直接喂给物理会让角色瞬间甩飞。\r\n      var rawVx = (e.clientX - lastX) / dt;\r\n      var rawVy = (e.clientY - lastY) / dt;\r\n      rawVx = Math.max(-4000, Math.min(4000, rawVx));\r\n      rawVy = Math.max(-4000, Math.min(4000, rawVy));\r\n\r\n      // 指数平滑，避免单帧抖动被当成甩动\r\n      vx = vx * 0.6 + rawVx * 0.4;\r\n      vy = vy * 0.6 + rawVy * 0.4;\r\n      lastX = e.clientX;\r\n      lastY = e.clientY;\r\n      lastT = now;\r\n\r\n      var c = clampPos(startPosX + dx, startPosY + dy);\r\n      pendingX = c.x;\r\n      pendingY = c.y;\r\n      // 速度直接交给物理层：拖得越快，身体滞后越明显\r\n      physics.vx = vx;\r\n      physics.vy = vy;\r\n      physics.lastMoveAt = performance.now();\r\n\r\n      if (!rafPending) {\r\n        rafPending = true;\r\n        requestAnimationFrame(flushFrame);\r\n      }\r\n    });\r\n\r\n    function endDrag(e) {\r\n      if (!dragging) return;\r\n      dragging = false;\r\n      rafPending = false;\r\n      if (bodyEl) bodyEl.classList.remove('dragging');\r\n      if (!moved) playSound('release');\r\n      if (moved) lastDragMovedAt = Date.now();\r\n\r\n      // 惯性恢复：松手不追加初速度；弹簧带着当前速度收敛到松手点，不超调不飞走。\r\n      if (moved) {\r\n        pos.x = pendingX;\r\n        pos.y = pendingY;\r\n        ensureSpringLoop();\r\n      }\r\n      prefs.left = Math.round(pos.x);\r\n      prefs.top = Math.round(pos.y);\r\n      persist();\r\n      physics.dragging = false;\r\n      physics.vx = 0;\r\n      physics.vy = 0;\r\n      // 位置变了 → 注视锚点跟着变，用最后指针位置重算一次，避免旧目标错位\r\n      reanchorGaze();\r\n      if (moved && e && e.preventDefault) e.preventDefault();\r\n    }\r\n\r\n    window.addEventListener('pointerup', endDrag, true);\r\n    window.addEventListener('pointercancel', endDrag, true);\r\n    window.addEventListener('blur', endDrag);\r\n\r\n    // 窗口尺寸变化时直接吸附；缩放/换体型不做“慢慢滑回”。\r\n    window.addEventListener('resize', function () {\r\n      if (pos.x === null) return;\r\n      var c = clampPos(pos.x, pos.y);\r\n      pos.x = c.x;\r\n      pos.y = c.y;\r\n      snapSpringToTarget();\r\n      reanchorGaze();\r\n    });\r\n  }\r\n\r\n  // ---------------------------------------------------------------- 戳一戳动作\r\n  // 调度器仍是 executePokeAction。优先级 BACKGROUND",
+          1
+        ],
+        [
+          "30min 的过期条目；push 时顺带调用 */\r\n  function pruneL2dLog(now) {\r\n    var nowMs = typeof now === 'number' ? now : Date.now();\r\n    var keep = [];\r\n    for (var i = 0; i",
+          1
+        ],
+        [
+          "= 0) {\r\n          var bottom = box0.top + box0.height;\r\n          g.h = Math.min(bottom, Math.max(PANEL_MIN_H, box0.height - dy));\r\n          g.y = bottom - g.h;\r\n        }\r\n        setGeom(g);\r\n      }\r\n      function onUp() {\r\n        document.removeEventListener('pointermove', onMove, true);\r\n        document.removeEventListener('pointerup', onUp, true);\r\n        document.body.classList.remove('l2d-panel-interacting');\r\n        savePanelPrefsSoon();\r\n      }\r\n      document.addEventListener('pointermove', onMove, true);\r\n      document.addEventListener('pointerup', onUp, true);\r\n      document.body.classList.add('l2d-panel-interacting');\r\n    });\r\n\r\n    if (head) {\r\n      head.addEventListener('pointerdown', function (e) {\r\n        if (e.button !== 0) return;\r\n        if (e.target.closest && e.target.closest('.l2d-panel-btn')) return;\r\n        if (panelMode() === 'fullscreen') return; // 全屏态：头部仅作标题，不拖拽\r\n        // 双击标题栏最大化/还原：pointerdown 计时判定，不依赖浏览器 dblclick 兼容链\r\n        var now = Date.now();\r\n        if (now - panelLastTap",
+          1
+        ],
+        [
+          "= 1000) {\r\n      env.publishAt = now;\r\n      dispatchEnvEvent('dsh-l2d:presence', snap);\r\n    }\r\n  }\r\n\r\n  /** 环境事件 → 宿主反向桥；失败静默（宿主未开反向桥或白名单未更新都不影响本地表现） */\r\n  function envPresencePayload(kind, extra) {\r\n    var now = Date.now();\r\n    var payload = {\r\n      kind: kind || 'presence',\r\n      state: String(prefs.state || 'idle'),\r\n      away: !!env.away,\r\n      idleMs: Math.max(0, now - env.lastActivityAt),\r\n      hidden: document.hidden === true,\r\n      inputFocused: !!env.inputGazeOn,\r\n      lastTypingAt: env.lastTypingAt || 0,\r\n      at: now\r\n    };\r\n    if (extra) {\r\n      for (var key in extra) {\r\n        if (Object.prototype.hasOwnProperty.call(extra, key)) payload[key] = extra[key];\r\n      }\r\n    }\r\n    return payload;\r\n  }\r\n\r\n  function postEnvPresence(kind, extra, options) {\r\n    var now = Date.now();\r\n    var force = !!(options && options.force);\r\n    var isInput = kind === 'user-input';\r\n    var lastAt = isInput ? env.lastInputPostAt : env.lastPresencePostAt;\r\n    var minGap = isInput ? ENV_INPUT_MIN_MS : ENV_PRESENCE_MIN_MS;\r\n    if (!force && now - lastAt",
+          1
+        ],
+        [
+          "= L2D_RECOVERY.maxRetries) {\r\n      rendererFailed = true;\r\n      fallbackToImage(L2D_RECOVERY.lastError); // 300×300 内保留静态立绘兜底\r\n      setL2DState('failed');\r\n      openL2DErrorUi(L2D_RECOVERY.lastError); // PiP 优先，无 activation 降级页内小卡片\r\n      return;\r\n    }\r\n\r\n    var delay = L2D_RECOVERY.retryTimers[Math.min(L2D_RECOVERY.attempts, L2D_RECOVERY.retryTimers.length - 1)];\r\n    L2D_RECOVERY.attempts += 1;\r\n    setL2DState('retry_wait');\r\n    clearL2DRetryTimer();\r\n    L2D_RECOVERY.timer = setTimeout(function () {\r\n      L2D_RECOVERY.timer = null;\r\n      retryL2DRenderer(false);\r\n    }, delay);\r\n  }\r\n\r\n  /**\r\n   * 重试一轮加载。manual=true（用户点对话框）时计数清零，不限次数。\r\n   * 重试前销毁旧渲染实例并移除旧",
+          1
+        ],
+        [
+          "= window.innerWidth - PANEL_SNAP_EDGE) z = 'right';\r\n          if (z !== snapZone) { snapZone = z; showSnapGhost(z); }\r\n        }\r\n        function onUp() {\r\n          document.removeEventListener('pointermove', onMove, true);\r\n          document.removeEventListener('pointerup', onUp, true);\r\n          document.body.classList.remove('l2d-panel-interacting');\r\n          showSnapGhost(null);\r\n          if (snapZone) applySnap(snapZone);\r\n          else if (restored) savePanelPrefsSoon();\r\n        }\r\n        document.addEventListener('pointermove', onMove, true);\r\n        document.addEventListener('pointerup', onUp, true);\r\n        document.body.classList.add('l2d-panel-interacting');\r\n      });\r\n    }\r\n  }\r\n\r\n  // Esc 关闭（键盘可达）；视口/断点变化时重排（ResizeObserver + matchMedia，\r\n  // 不依赖固定分辨率；跨断点时浮动↔全屏形态切换）\r\n  document.addEventListener('keydown', function (e) {\r\n    if (e.key === 'Escape' && panelOpen) closePanel();\r\n  });\r\n  function panelViewportChanged() {\r\n    if (!panelOpen || !panelEl) return;\r\n    var wasFullscreen = panelEl.classList.contains('fullscreen');\r\n    if (panelMode() === 'fullscreen' || wasFullscreen) {\r\n      applyPanelPrefs(); // 跨断点：形态重算\r\n      return;\r\n    }\r\n    if (panelEl.classList.contains('maximized')) {\r\n      setGeom(clampBox({ x: 0, y: 0, w: window.innerWidth, h: window.innerHeight }));\r\n    } else if (panelGeom) {\r\n      setGeom(clampBox(panelGeom));\r\n    }\r\n    savePanelPrefsSoon();\r\n  }\r\n  if (typeof ResizeObserver === 'function') {\r\n    new ResizeObserver(panelViewportChanged).observe(document.documentElement);\r\n  }\r\n  window.addEventListener('resize', panelViewportChanged);\r\n\r\n  function row(labelText, control, group) {\r\n    var wrap = document.createElement('div');\r\n    wrap.className = 'l2d-row';\r\n    if (group) wrap.setAttribute('data-group', group); // 设置入口二级菜单锚点\r\n    var lab = document.createElement('label');\r\n    lab.textContent = labelText;\r\n    wrap.appendChild(lab);\r\n    wrap.appendChild(control);\r\n    return wrap;\r\n  }\r\n\r\n  function buildPanel() {\r\n    if (!panelEl) return;\r\n    panelEl.innerHTML = '';\r\n    panelEl.classList.remove('collapsed');\r\n\r\n    // 标题栏：拖拽把手 + 折叠/最大化/关闭。内容全部收进 .l2d-panel-body，由滚动条兜底。\r\n    var head = document.createElement('div');\r\n    head.className = 'l2d-panel-head';\r\n    head.setAttribute('tabindex', '-1'); // SettingsWindowManager 焦点落点\r\n    var title = document.createElement('h4');\r\n    title.textContent = 'DSH-L2D 设置';\r\n    var collapseBtn = document.createElement('button');\r\n    collapseBtn.type = 'button';\r\n    collapseBtn.className = 'l2d-panel-btn l2d-panel-collapse';\r\n    collapseBtn.textContent = '\\u2013';\r\n    collapseBtn.setAttribute('aria-label', '折叠设置面板');\r\n    collapseBtn.title = '折叠';\r\n    var maxBtn = document.createElement('button');\r\n    maxBtn.type = 'button';\r\n    maxBtn.className = 'l2d-panel-btn l2d-panel-max';\r\n    maxBtn.textContent = '\\u25a1';\r\n    maxBtn.setAttribute('aria-label', '最大化/还原');\r\n    maxBtn.title = '最大化 / 还原（双击标题栏同效）';\r\n    var closeBtn = document.createElement('button');\r\n    closeBtn.type = 'button';\r\n    closeBtn.className = 'l2d-panel-btn l2d-panel-close';\r\n    closeBtn.textContent = '\\u00d7';\r\n    closeBtn.setAttribute('aria-label', '关闭设置');\r\n    closeBtn.title = '关闭';\r\n    head.appendChild(title);\r\n    head.appendChild(collapseBtn);\r\n    head.appendChild(maxBtn);\r\n    head.appendChild(closeBtn);\r\n    panelEl.appendChild(head);\r\n\r\n    var body = document.createElement('div');\r\n    body.className = 'l2d-panel-body';\r\n\r\n    var keyInput = document.createElement('input');\r\n    keyInput.type = 'password';\r\n    keyInput.placeholder = settings.hasApiKey ? '已保存，留空则不修改' : 'sk-...';\r\n    keyInput.autocomplete = 'off';\r\n    body.appendChild(row('DeepSeek API Key（仅用于查询余额）', keyInput, 'account'));\r\n\r\n    var soundWrap = document.createElement('div');\r\n    soundWrap.className = 'l2d-inline';\r\n    var soundToggle = document.createElement('input');\r\n    soundToggle.type = 'checkbox';\r\n    soundToggle.checked = settings.soundEnabled !== false;\r\n    var soundVol = document.createElement('input');\r\n    soundVol.type = 'range';\r\n    soundVol.min = '0';\r\n    soundVol.max = '1';\r\n    soundVol.step = '0.05';\r\n    soundVol.value = String(settings.soundVolume);\r\n    soundWrap.appendChild(soundToggle);\r\n    soundWrap.appendChild(soundVol);\r\n    body.appendChild(row('音效开关 / 音量', soundWrap, 'behavior'));\r\n\r\n    var scaleInput = document.createElement('input');\r\n    scaleInput.type = 'range';\r\n    scaleInput.min = '0.6';\r\n    scaleInput.max = '2.0';\r\n    scaleInput.step = '0.05';\r\n    scaleInput.value = String(settings.scale);\r\n    scaleInput.addEventListener('input', function () {\r\n      applyScale(scaleInput.value);\r\n    });\r\n    body.appendChild(row('角色缩放', scaleInput, 'appearance'));\r\n\r\n    var refreshInput = document.createElement('input');\r\n    refreshInput.type = 'number';\r\n    refreshInput.min = '15';\r\n    refreshInput.max = '3600';\r\n    refreshInput.value = String(settings.refreshSeconds);\r\n    body.appendChild(row('余额刷新间隔（秒）', refreshInput, 'account'));\r\n\r\n    var agentToggle = document.createElement('input');\r\n    agentToggle.type = 'checkbox';\r\n    agentToggle.checked = settings.agentLink !== false;\r\n    body.appendChild(row('工作区联动', agentToggle, 'behavior'));\r\n    var sysToggle = document.createElement('input');\r\n    sysToggle.type = 'checkbox';\r\n    sysToggle.checked = settings.systemSensor === true;\r\n    body.appendChild(row('系统联动（CPU/内存/电量/断网）', sysToggle, 'behavior'));\r\n    var mediaToggle = document.createElement('input');\r\n    mediaToggle.type = 'checkbox';\r\n    mediaToggle.checked = settings.mediaSensor === true;\r\n    body.appendChild(row('媒体律动（音乐播放时轻摆）', mediaToggle, 'behavior'));\r\n\r\n    var petToggle = document.createElement('input');\r\n    petToggle.type = 'checkbox';\r\n    petToggle.checked = settings.petMode !== false; // 默认开（桌宠模式为正式行为）\r\n    body.appendChild(row('桌宠模式（悬停零触发 · 点击只摸头）', petToggle, 'behavior'));\r\n\r\n    var eyeFollowToggle = document.createElement('input');\r\n    eyeFollowToggle.type = 'checkbox';\r\n    eyeFollowToggle.checked = settings.eyeFollow !== false; // 默认开（与宿主默认值/存量迁移一致）\r\n    body.appendChild(row('眼神跟随（鼠标驱动视线/头/身体）', eyeFollowToggle, 'appearance'));\r\n\r\n    var clickMode = document.createElement('select');\r\n    var modeRandom = document.createElement('option');\r\n    modeRandom.value = 'random';\r\n    modeRandom.textContent = '随机动作';\r\n    var modeApi = document.createElement('option');\r\n    modeApi.value = 'api';\r\n    modeApi.textContent = 'DeepSeek 决定';\r\n    clickMode.appendChild(modeRandom);\r\n    clickMode.appendChild(modeApi);\r\n    clickMode.value = settings.clickMode === 'api' ? 'api' : 'random';\r\n    body.appendChild(row('戳一戳动作', clickMode, 'behavior'));\r\n\r\n    var spontaneousChat = document.createElement('input');\r\n    spontaneousChat.type = 'checkbox';\r\n    spontaneousChat.checked = settings.spontaneousChat !== false;\r\n    body.appendChild(row('自发聊天', spontaneousChat, 'behavior'));\r\n\r\n    var memeToggle = document.createElement('input');\r\n    memeToggle.type = 'checkbox';\r\n    memeToggle.checked = settings.memeStyle !== false;\r\n    body.appendChild(row('梗味人设', memeToggle, 'behavior'));\r\n\r\n    var memeLevel = document.createElement('input');\r\n    memeLevel.type = 'range';\r\n    memeLevel.min = '0';\r\n    memeLevel.max = '100';\r\n    memeLevel.step = '5';\r\n    memeLevel.value = String(settings.memeLevel);\r\n    body.appendChild(row('玩梗程度', memeLevel, 'behavior'));\r\n\r\n    var autoAct = document.createElement('input');\r\n    autoAct.type = 'checkbox';\r\n    autoAct.checked = settings.autoAct !== false;\r\n    body.appendChild(row('API 自主动作', autoAct, 'behavior'));\r\n\r\n    var hint = document.createElement('div');\r\n    hint.className = 'l2d-hint';\r\n    hint.textContent = '单击角色播放动作；悬停显示余额与当前峰/谷价。开启自发聊天后，完成状态会回流最新回复，空闲时偶尔说话。';\r\n    body.appendChild(hint);\r\n\r\n    var actions = document.createElement('div');\r\n    actions.className = 'l2d-actions';\r\n\r\n    var cancel = document.createElement('button');\r\n    cancel.type = 'button';\r\n    cancel.textContent = '取消';\r\n    cancel.addEventListener('click', function () {\r\n      buildPanel();\r\n      closePanel();\r\n    });\r\n\r\n    var save = document.createElement('button');\r\n    save.type = 'button';\r\n    save.className = 'primary';\r\n    save.textContent = '保存';\r\n    save.addEventListener('click', function () {\r\n      var patch = {\r\n        soundEnabled: soundToggle.checked,\r\n        soundVolume: Number(soundVol.value),\r\n        scale: Number(scaleInput.value),\r\n        refreshSeconds: Number(refreshInput.value),\r\n        agentLink: agentToggle.checked,\r\n        clickMode: clickMode.value,\r\n        spontaneousChat: spontaneousChat.checked,\r\n        memeStyle: memeToggle.checked,\r\n        memeLevel: Number(memeLevel.value),\r\n        autoAct: autoAct.checked,\r\n        systemSensor: sysToggle.checked,\r\n        mediaSensor: mediaToggle.checked,\r\n        petMode: petToggle.checked,\r\n        eyeFollow: eyeFollowToggle.checked\r\n      };\r\n      if (keyInput.value.trim()) patch.apiKey = keyInput.value.trim();\r\n      fetch('/dsh-l2d/settings.json', {\r\n        method: 'PUT',\r\n        headers: { 'Content-Type': 'application/json' },\r\n        body: JSON.stringify(patch)\r\n      })\r\n        .then(function (r) { return r.ok ? r.json() : null; })\r\n        .then(function (data) {\r\n          if (data) {\r\n            settings = data;\r\n            applyScale(settings.scale);\r\n            syncSystemSensor();\r\n            syncMediaSensor();\r\n            applyEyeFollowSetting();\r\n            updateMouseGeometry();\r\n          }\r\n          say('设置已保存', 1800);\r\n          buildPanel();\r\n          closePanel();\r\n        })\r\n        .catch(function () {\r\n          say('保存失败', 1800);\r\n        });\r\n    });\r\n\r\n    actions.appendChild(cancel);\r\n    actions.appendChild(save);\r\n    body.appendChild(actions);\r\n    panelEl.appendChild(body);\r\n\r\n    // 八向缩放手柄（N/S/E/W + 四角，方向光标由 CSS 决定）\r\n    var DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];\r\n    for (var di = 0; di",
+          1
+        ],
+        [
+          "API 不太配合，我先随机一个",
+          1
+        ],
+        [
+          "API 自主动作",
+          1
+        ],
+        [
+          "Core 未挂载",
+          1
+        ],
+        [
+          "DEAD) {\r\n      var mag = Math.min(1, (dist - DEAD) / Math.max(1, R - DEAD));\r\n      var ramp = Math.min(1, (dist - DEAD) / RAMP);\r\n      nx = (dx / dist) * mag * ramp;\r\n      ny = (dy / dist) * mag * ramp;\r\n    }\r\n    return { x: Math.max(-1, Math.min(1, nx)), y: Math.max(-1, Math.min(1, ny)) };\r\n  }\r\n\r\n  function isTextInput(el) {\r\n    if (!el || el.nodeType !== 1 || !el.matches) return false;\r\n    try {\r\n      if (el.closest('#dsh-l2d-root,.l2d-panel,.l2d-menu')) return false; // 自己的面板不算聊天输入\r\n      return el.matches(ENV_INPUT_SELECTOR);\r\n    } catch (e) {\r\n      return false;\r\n    }\r\n  }\r\n\r\n  /** 当前聚焦的聊天输入框：textarea / input / contenteditable / role=textbox 多选择器探测 */\r\n  function findChatInput() {\r\n    var active = null;\r\n    try {\r\n      active = document.activeElement;\r\n    } catch (e) {\r\n      return null;\r\n    }\r\n    if (isTextInput(active)) return active;\r\n    if (active && active.closest) {\r\n      try {\r\n        var ce = active.closest('[contenteditable=\"true\"],[contenteditable=\"\"],[role=\"textbox\"]');\r\n        if (ce && isTextInput(ce)) return ce;\r\n      } catch (e2) { /* ignore */ }\r\n    }\r\n    return null;\r\n  }\r\n\r\n  /** 从事件目标（含 shadow DOM composedPath）向上找聊天输入框 */\r\n  function closestTextInput(node) {\r\n    var el = node;\r\n    for (var i = 0; el && i",
+          1
+        ],
+        [
+          "DSH-L2D 设置",
+          1
+        ],
+        [
+          "DeepSeek API Key（仅用于查询余额）",
+          1
+        ],
+        [
+          "DeepSeek 决定",
+          1
+        ],
+        [
+          "Enter 发送 · Shift+Enter 换行 · 最多 200 字",
+          1
+        ],
+        [
+          "Live2D 初始化超时(",
+          1
+        ],
+        [
+          "Live2D 加载失败 · 点击打开恢复窗口",
+          1
+        ],
+        [
+          "Live2D 恢复",
+          1
+        ],
+        [
+          "Live2D 模型加载失败",
+          1
+        ],
+        [
+          "[dsh-l2d] AI 回执被拒 id=",
+          1
+        ],
+        [
+          "[dsh-l2d] AI 指令执行失败",
+          1
+        ],
+        [
+          "|%[sdif]/,\r\n    /\\b(?:setParameters?|readParameters?|applyAppearance|setSwitch|setBodyType)\\s*\\([^)]*\\)/,\r\n  ].map(function (r) { return r.source; }).join('|'), 'g');\r\n\r\n  // 准入字符白名单：不含 = { } $ | `",
+          1
+        ],
+        [
+          "…什么都没看到。",
+          1
+        ],
+        [
+          "← 返回",
+          3
+        ],
+        [
+          "⚠ 再点一次确认开启",
+          1
+        ],
+        [
+          "今天不太想动…",
+          1
+        ],
+        [
+          "体型1",
+          1
+        ],
+        [
+          "体型2",
+          1
+        ],
+        [
+          "余额",
+          1
+        ],
+        [
+          "余额 / 价格",
+          1
+        ],
+        [
+          "余额刷新间隔（秒）",
+          1
+        ],
+        [
+          "余额暂时不可用",
+          1
+        ],
+        [
+          "余额获取失败",
+          1
+        ],
+        [
+          "你继续忙，我陪你。",
+          1
+        ],
+        [
+          "保存",
+          1
+        ],
+        [
+          "保存失败",
+          1
+        ],
+        [
+          "元/百万tokens",
+          1
+        ],
+        [
+          "光脚舒服～",
+          1
+        ],
+        [
+          "兔牙",
+          8
+        ],
+        [
+          "关闭",
+          2
+        ],
+        [
+          "关闭设置",
+          1
+        ],
+        [
+          "关闭邪神模式",
+          1
+        ],
+        [
+          "再摸头发要乱啦",
+          1
+        ],
+        [
+          "出错了：",
+          1
+        ],
+        [
+          "切换体型（",
+          1
+        ],
+        [
+          "刚刚戳过了，等等我",
+          1
+        ],
+        [
+          "刚活动了一下尾巴。",
+          1
+        ],
+        [
+          "别、别乱摸啦！",
+          1
+        ],
+        [
+          "别熬太久哦。",
+          1
+        ],
+        [
+          "刷新页面并重新初始化",
+          1
+        ],
+        [
+          "加油",
+          1
+        ],
+        [
+          "加载",
+          4
+        ],
+        [
+          "单击角色播放动作；悬停显示余额与当前峰/谷价。开启自发聊天后，完成状态会回流最新回复，空闲时偶尔说话。",
+          1
+        ],
+        [
+          "去忙吧",
+          1
+        ],
+        [
+          "又在写代码",
+          1
+        ],
+        [
+          "发送",
+          1
+        ],
+        [
+          "发送失败，再试一次",
+          1
+        ],
+        [
+          "取消",
+          1
+        ],
+        [
+          "嗯？",
+          1
+        ],
+        [
+          "嘿嘿，好痒~",
+          2
+        ],
+        [
+          "嘿嘿，戳我一下嘛。",
+          1
+        ],
+        [
+          "回前台就顺滑、切走就省电",
+          1
+        ],
+        [
+          "回来叫我",
+          1
+        ],
+        [
+          "圈圈眼",
+          1
+        ],
+        [
+          "在等你",
+          1
+        ],
+        [
+          "大肥鱼.dsl2d.2048.model3.json",
+          1
+        ],
+        [
+          "太长了，只发前 200 字",
+          1
+        ],
+        [
+          "太长了，已截断到 200 字",
+          1
+        ],
+        [
+          "媒体律动（音乐播放时轻摆）",
+          1
+        ],
+        [
+          "害羞",
+          1
+        ],
+        [
+          "对话",
+          1
+        ],
+        [
+          "屑",
+          1
+        ],
+        [
+          "峰价",
+          1
+        ],
+        [
+          "工作区联动",
+          1
+        ],
+        [
+          "已保存，留空则不修改",
+          1
+        ],
+        [
+          "已强制刷新",
+          1
+        ],
+        [
+          "开心",
+          1
+        ],
+        [
+          "当前计费：' + priceHtml(t.label, t.mark, t.peak ? 'price-up' : 'price-down') + '",
+          1
+        ],
+        [
+          "待机",
+          2
+        ],
+        [
+          "快捷对话",
+          2
+        ],
+        [
+          "思考",
+          1
+        ],
+        [
+          "恢复默认外观",
+          1
+        ],
+        [
+          "恢复默认脸",
+          1
+        ],
+        [
+          "悲伤",
+          1
+        ],
+        [
+          "惊讶",
+          1
+        ],
+        [
+          "想对角色说什么…",
+          1
+        ],
+        [
+          "我回来啦",
+          1
+        ],
+        [
+          "我在听",
+          1
+        ],
+        [
+          "我在听，你说吧～",
+          1
+        ],
+        [
+          "我在呢～",
+          1
+        ],
+        [
+          "我看完啦，等你下一句",
+          1
+        ],
+        [
+          "我眯一会儿",
+          1
+        ],
+        [
+          "戳一戳动作",
+          1
+        ],
+        [
+          "戳戳~",
+          2
+        ],
+        [
+          "打开",
+          1
+        ],
+        [
+          "折叠",
+          1
+        ],
+        [
+          "折叠设置面板",
+          1
+        ],
+        [
+          "抚胸手关闭",
+          2
+        ],
+        [
+          "抚胸手打开",
+          2
+        ],
+        [
+          "抱抱~",
+          1
+        ],
+        [
+          "换好了：",
+          1
+        ],
+        [
+          "播放状态，\r\n  // 播放中让模型随节拍轻摆。说明：DSH 插件环境拿不到系统级音频/媒体进程，\r\n  // 这里降级为「页面内媒体元素」侦测；系统级留待原生模块。\r\n  var mediaSensorState = { bound: false, timer: 0 };\r\n\r\n  function anyMediaPlaying() {\r\n    var nodes = document.querySelectorAll('video, audio');\r\n    for (var i = 0; i",
+          1
+        ],
+        [
+          "操作电脑",
+          1
+        ],
+        [
+          "最大化 / 还原（双击标题栏同效）",
+          1
+        ],
+        [
+          "最大化/还原",
+          1
+        ],
+        [
+          "有点无聊",
+          1
+        ],
+        [
+          "未知错误",
+          1
+        ],
+        [
+          "未配置 API Key",
+          1
+        ],
+        [
+          "标签：loadScriptOnce 见到同 id 标签会直接返回，\r\n    //      否则拿到的仍是页面加载时的旧 bundle（改了渲染包后点按钮却不生效的原因）。\r\n    //      注意：这里只能换渲染包；overlay.js 本身的改动仍需要 F5 整页刷新。\r\n    try {\r\n      var stale = document.getElementById('dsh-l2d-renderer');\r\n      if (stale && stale.parentNode) stale.parentNode.removeChild(stale);\r\n    } catch (err) { /* ignore */ }\r\n    if (canvasEl) {\r\n      canvasEl.style.display = '';\r\n      canvasEl.classList.remove('dragging');\r\n    }\r\n    if (imgEl) {\r\n      imgEl.style.display = 'none';\r\n      imgEl.removeAttribute('src');\r\n    }\r\n    // 3) 重挂（initRenderer 里会重新走 Core/渲染包加载与 mount）\r\n    // P0 修复：同步重置恢复状态机计数，清掉未到期的重试定时器\r\n    L2D_RECOVERY.attempts = 0;\r\n    L2D_RECOVERY.modelDisabled = false;\r\n    clearL2DRetryTimer();\r\n    initRenderer();\r\n    say('已强制刷新', 1800);\r\n  }\r\n  try { window.__DSH_L2D_FORCE_REFRESH__ = forceRefreshState; } catch (err) { /* ignore */ }\r\n\r\n  function closePanel() {\r\n    if (!panelEl) return;\r\n    panelOpen = false;\r\n    panelEl.classList.remove('open');\r\n  }\r\n\r\n  function openPanel() {\r\n    if (!panelEl) return;\r\n    panelOpen = true;\r\n    applyPanelPrefs(); // 打开时恢复/夹取位置尺寸（视口可能已变）\r\n    panelEl.classList.add('open');\r\n  }\r\n\r\n  function togglePanel() {\r\n    if (panelOpen) closePanel();\r\n    else openPanel();\r\n  }\r\n\r\n  // ------------------------------------------------ 浮动窗口（响应式升级版）\r\n  // 几何偏好存 localStorage（非设置数据，不进宿主 settings.json），300ms 防抖写入。\r\n  // 结构：{ maximized, geometry:{x,y,w,h}, previousGeometry, collapsed }\r\n  // 四档断点：≥1200 桌面浮动 / 768-1199 紧凑 / 480-767 窄窗 / ≤479 全屏（去小窗形态）。\r\n  // 拖拽全程 clamp 视口内；最大化/吸附前的几何独立存 previousGeometry，还原时按\r\n  // 当前视口重新 clamp，绝不把旧坐标直接还原进已缩小的视口。\r\n  var PANEL_PREFS_KEY = 'dsh-l2d-panel-prefs';\r\n  var PANEL_MIN_W = 480;\r\n  var PANEL_MIN_H = 360;\r\n  var PANEL_DEFAULT_W = 860;\r\n  var PANEL_DEFAULT_H = 620;\r\n  var PANEL_SNAP_EDGE = 16;\r\n  var panelPrefsSaveTimer = 0;\r\n  var panelGeom = null;      // 当前几何（border-box px），单一事实源\r\n  var panelPrevGeom = null;  // 最大化/吸附前几何\r\n  var panelSnapped = null;   // 运行时吸附态：'left'|'right'|null（不入盘）\r\n  var panelLastTap = 0;      // 标题栏双击判定\r\n  var snapGhostEl = null;\r\n\r\n  function panelMode() {\r\n    var vw = window.innerWidth;\r\n    if (vw",
+          1
+        ],
+        [
+          "桌宠模式（悬停零触发 · 点击只摸头）",
+          1
+        ],
+        [
+          "梗味人设",
+          1
+        ],
+        [
+          "模型外观",
+          2
+        ],
+        [
+          "模型还没准备好",
+          2
+        ],
+        [
+          "正在",
+          1
+        ],
+        [
+          "正在强制刷新…",
+          1
+        ],
+        [
+          "没配 Key，我先随机一个",
+          1
+        ],
+        [
+          "流冷汗",
+          2
+        ],
+        [
+          "清空",
+          1
+        ],
+        [
+          "渲染包未挂载",
+          1
+        ],
+        [
+          "点击切换情境 · 拖动角色可移动",
+          1
+        ],
+        [
+          "爱",
+          1
+        ],
+        [
+          "爱心眼",
+          3
+        ],
+        [
+          "玩梗程度",
+          1
+        ],
+        [
+          "生气",
+          1
+        ],
+        [
+          "看这个~",
+          2
+        ],
+        [
+          "看这里！",
+          1
+        ],
+        [
+          "真的要开吗？再点一次确认",
+          1
+        ],
+        [
+          "眼神跟随（鼠标驱动视线/头/身体）",
+          1
+        ],
+        [
+          "禁用当前模型（保留 DSH 其余功能）",
+          1
+        ],
+        [
+          "禁用整个 DSH-Live2D 模组（刷新后仍生效）",
+          1
+        ],
+        [
+          "离席",
+          1
+        ],
+        [
+          "立绘没加载出来，先用占位图形顶着（重启宿主可重试）",
+          1
+        ],
+        [
+          "立绘渲染占位：模型/静态图未加载成功时显示（重启宿主可重试）",
+          1
+        ],
+        [
+          "竖手指关闭",
+          1
+        ],
+        [
+          "竖手指打开",
+          1
+        ],
+        [
+          "等参数语法特征；英文冒号保留，避免误伤普通字幕。\r\n  var CAPTION_ALLOW_RE = /[\\u3400-\\u9fff\\u3040-\\u30ffA-Za-z0-9\\s\\u3000-\\u303f\\uff01-\\uff65~!?.,:;'\"()《》【】「」“”‘’_\\-+*\\/&#@%\\p{So}\\p{Sk}]/gu;\r\n\r\n  function admitCaption(input) {\r\n    try {\r\n      CAPTION_PARAM_RE.lastIndex = 0;\r\n      var stripped = String(input == null ? '' : input).replace(CAPTION_PARAM_RE, ' ');\r\n      CAPTION_ALLOW_RE.lastIndex = 0;\r\n      var kept = stripped.match(CAPTION_ALLOW_RE) || [];\r\n      var text = kept.join('')\r\n        .replace(/\\s+/g, ' ')\r\n        .replace(/^[\\s,.;:'\"()\\-+*\\/&#@%_，、：；（）《》【】「」“”‘’]+|[\\s,.;:'\"()\\-+*\\/&#@%_，、：；（）《》【】「」“”‘’]+$/g, '')\r\n        .trim();\r\n      return text ? { ok: true, text: text } : { ok: false, text: '' };\r\n    } catch (e) {\r\n      return { ok: false, text: '' };\r\n    }\r\n  }\r\n\r\n  if (typeof window !== 'undefined') {\r\n    window.DSH_L2D_CAPTION__ = { admit: admitCaption, paramRe: CAPTION_PARAM_RE, allowRe: CAPTION_ALLOW_RE };\r\n  }\r\n\r\n  function say(text, holdMs) {\r\n    if (!bubbleEl || !text) return;\r\n    var admitted = admitCaption(text);\r\n    if (!admitted.ok) return;\r\n    bubbleEl.textContent = admitted.text;\r\n    pushL2dLog({ comp: 'overlay', action: 'say', state: String(admitted.text).slice(0, 20) });\r\n    bubbleEl.classList.add('show');\r\n    if (bubbleTimer) clearTimeout(bubbleTimer);\r\n    bubbleTimer = setTimeout(function () {\r\n      bubbleEl.classList.remove('show');\r\n    }, holdMs || 2600);\r\n  }\r\n\r\n  /** 可信 HTML 专用：只用于本插件自己构造的余额/动作气泡，不用于外部内容 */\r\n  function sayHtml(html, holdMs) {\r\n    if (!bubbleEl || !html) return;\r\n    bubbleEl.innerHTML = html;\r\n    bubbleEl.classList.add('show');\r\n    if (bubbleTimer) clearTimeout(bubbleTimer);\r\n    bubbleTimer = setTimeout(function () {\r\n      bubbleEl.classList.remove('show');\r\n    }, holdMs || 2600);\r\n  }\r\n\r\n  // ---------------------------------------------------------------- 音效\r\n  // 优先播放 $DSH_HOME/l2d-audio/ 下的自定义音频；没有则用 WebAudio 合成「小黄鸭」声。\r\n  // 不内置任何第三方音频文件，避免素材授权与复用问题。\r\n  var audioCtx = null;\r\n  var customAudio = null;\r\n  var audioLoading = false;\r\n\r\n  function getAudioCtx() {\r\n    if (!audioCtx) {\r\n      var AC = window.AudioContext || window.webkitAudioContext;\r\n      if (!AC) return null;\r\n      try {\r\n        audioCtx = new AC();\r\n      } catch (e) {\r\n        return null;\r\n      }\r\n    }\r\n    if (audioCtx.state === 'suspended') {\r\n      try {\r\n        audioCtx.resume();\r\n      } catch (e) { /* ignore */ }\r\n    }\r\n    return audioCtx;\r\n  }\r\n\r\n  function loadCustomAudio() {\r\n    if (customAudio || audioLoading) return;\r\n    audioLoading = true;\r\n    try {\r\n      fetch('/dsh-l2d/audio/index.json', { cache: 'no-store' })\r\n        .then(function (r) { return r.ok ? r.json() : null; })\r\n        .then(function (data) {\r\n          audioLoading = false;\r\n          if (data && Array.isArray(data.files) && data.files.length) {\r\n            customAudio = data.files;\r\n          }\r\n        })\r\n        .catch(function () { audioLoading = false; });\r\n    } catch (e) {\r\n      audioLoading = false;\r\n    }\r\n  }\r\n\r\n  function playCustom(kind) {\r\n    if (!customAudio || !customAudio.length) return false;\r\n    var pick = customAudio[Math.floor(Math.random() * customAudio.length)];\r\n    try {\r\n      var a = new Audio('/dsh-l2d/audio/file?name=' + encodeURIComponent(pick));\r\n      a.volume = kind === 'press' ? 0.7 : 0.55;\r\n      a.play().catch(function () { /* 自动播放被拦截时静默 */ });\r\n      return true;\r\n    } catch (e) {\r\n      return false;\r\n    }\r\n  }\r\n\r\n  // 合成鸭子叫声：锯齿波快速下滑 + 带通滤波，短促且有「嘎」的质感\r\n  function synthQuack(kind) {\r\n    var ctx = getAudioCtx();\r\n    if (!ctx) return;\r\n    var t = ctx.currentTime;\r\n    var base = kind === 'press' ? 660 : 500;\r\n    var osc = ctx.createOscillator();\r\n    var gain = ctx.createGain();\r\n    var filter = ctx.createBiquadFilter();\r\n\r\n    osc.type = 'sawtooth';\r\n    osc.frequency.setValueAtTime(base, t);\r\n    osc.frequency.exponentialRampToValueAtTime(base * 0.52, t + 0.13);\r\n\r\n    filter.type = 'bandpass';\r\n    filter.frequency.setValueAtTime(1150, t);\r\n    filter.frequency.exponentialRampToValueAtTime(780, t + 0.13);\r\n    filter.Q.value = 3.5;\r\n\r\n    gain.gain.setValueAtTime(0.0001, t);\r\n    gain.gain.exponentialRampToValueAtTime(kind === 'press' ? 0.22 : 0.16, t + 0.012);\r\n    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);\r\n\r\n    osc.connect(filter);\r\n    filter.connect(gain);\r\n    gain.connect(ctx.destination);\r\n    osc.start(t);\r\n    osc.stop(t + 0.19);\r\n  }\r\n\r\n  function playSound(kind) {\r\n    if (playCustom(kind)) return;\r\n    synthQuack(kind);\r\n  }\r\n\r\n  // ---------------------------------------------------------------- 余额\r\n  var balanceCache = null;\r\n  var balanceAt = 0;\r\n\r\n  function fetchBalance() {\r\n    var now = Date.now();\r\n    if (balanceCache && now - balanceAt",
+          1
+        ],
+        [
+          "系统联动（CPU/内存/电量/断网）",
+          1
+        ],
+        [
+          "给你草草",
+          1
+        ],
+        [
+          "缓存命中 V4-Pro ' + t.prices.pro.cache + ' · Flash ' + t.prices.flash.cache +\r\n      ' 元/百万tokens' + (t.weekend ? '（周末全天谷价）' : '') + '",
+          1
+        ],
+        [
+          "胸口衣服",
+          2
+        ],
+        [
+          "脱鞋",
+          2
+        ],
+        [
+          "脸红",
+          3
+        ],
+        [
+          "自发聊天",
+          1
+        ],
+        [
+          "裙摆收短了",
+          1
+        ],
+        [
+          "裙摆放长了",
+          1
+        ],
+        [
+          "裙摆样式",
+          1
+        ],
+        [
+          "裙长切换",
+          1
+        ],
+        [
+          "要不要休息下",
+          1
+        ],
+        [
+          "要不要聊会",
+          1
+        ],
+        [
+          "要看会代码吗？",
+          1
+        ],
+        [
+          "角色可见但桥死",
+          1
+        ],
+        [
+          "角色缩放",
+          1
+        ],
+        [
+          "计费：' + priceHtml(t.label, t.mark, tierClass) +\r\n      ' · V4-Pro ' + t.prices.pro.input + '/' + t.prices.pro.output +\r\n      ' · Flash ' + t.prices.flash.input + '/' + t.prices.flash.output + '",
+          1
+        ],
+        [
+          "让 DeepSeek 想想…",
+          1
+        ],
+        [
+          "让我想想",
+          1
+        ],
+        [
+          "设置",
+          2
+        ],
+        [
+          "设置已保存",
+          1
+        ],
+        [
+          "调试日志",
+          2
+        ],
+        [
+          "谷价",
+          1
+        ],
+        [
+          "这个动作先让位",
+          2
+        ],
+        [
+          "这个我知道",
+          1
+        ],
+        [
+          "这行有点长",
+          1
+        ],
+        [
+          "邪神模式（勿点）",
+          1
+        ],
+        [
+          "重新加载 Plugin（重置重试计数）",
+          1
+        ],
+        [
+          "问答中",
+          1
+        ],
+        [
+          "随机动作",
+          2
+        ],
+        [
+          "面部",
+          2
+        ],
+        [
+          "鞋子穿好啦",
+          1
+        ],
+        [
+          "音效开关 / 音量",
+          1
+        ],
+        [
+          "黑脸",
+          3
+        ],
+        [
+          "默认体型",
+          1
+        ],
+        [
+          "（周末全天谷价）",
+          1
+        ],
+        [
+          "（外部设置热更新）",
+          1
+        ],
+        [
+          "（已自动重试 3 次，模型为可选组件，DSH 其余功能不受影响）",
+          1
+        ],
+        [
+          "（缓存）",
+          1
+        ],
+        [
+          "，防止重复 Canvas / 双 RAF / 双实例。\r\n   */\r\n  function retryL2DRenderer(manual) {\r\n    if (L2D_RECOVERY.moduleDisabled) return;\r\n    if (manual) {\r\n      L2D_RECOVERY.attempts = 0;\r\n      L2D_RECOVERY.modelDisabled = false;\r\n    } else if (L2D_RECOVERY.modelDisabled) {\r\n      return;\r\n    }\r\n    clearL2DRetryTimer();\r\n    // 旧实例销毁（WebGL/纹理/事件监听由渲染包 destroy 统一释放）\r\n    var L = window.DSH_L2D;\r\n    if (L && L.destroy) { try { L.destroy(); } catch (err) { /* ignore */ } }\r\n    // 旧渲染包",
+          1
+        ]
+      ]
+    },
+    "packages/dsh-l2d-plugin/lib/pet.html": {
+      "ids": [
+        [
+          "fallback",
+          1
+        ],
+        [
+          "stage",
+          1
+        ]
+      ],
+      "hrefs": [],
+      "dataAttrs": [],
+      "events": [],
+      "texts": []
+    },
+    "packages/dsh-l2d-plugin/lib/settings-entry.js": {
+      "ids": [
+        [
+          "dsh-se-style",
+          1
+        ]
+      ],
+      "hrefs": [
+        [
+          "/dsh-l2d/test.html",
+          1
+        ]
+      ],
+      "dataAttrs": [],
+      "events": [
+        [
+          "click",
+          3
+        ],
+        [
+          "keydown",
+          2
+        ],
+        [
+          "pointerdown",
+          1
+        ]
+      ],
+      "texts": [
+        [
+          "';\r\n\r\n  var MENU_ITEMS = [\r\n    { group: 'appearance', label: '外观' },\r\n    { group: 'behavior', label: '行为与联动' },\r\n    { group: 'account', label: '账户与余额' },\r\n    { label: '参数监视台', href: '/dsh-l2d/test.html' }\r\n  ];\r\n\r\n  var btn = null;\r\n  var menu = null;\r\n  var ro = null;\r\n  var tries = 0;\r\n\r\n  function ensureStyle() {\r\n    if (document.getElementById('dsh-se-style')) return;\r\n    var s = document.createElement('style');\r\n    s.id = 'dsh-se-style';\r\n    s.textContent = STYLE;\r\n    document.head.appendChild(s);\r\n  }\r\n\r\n  function findSidebar() {\r\n    var cands = ['.sidebar', '[class*=\"sidebar\" i]', 'aside'];\r\n    for (var i = 0; i",
+          1
+        ],
+        [
+          "';\r\n    btn.addEventListener('click', function () {\r\n      if (menuIsOpen()) closeMenu();\r\n      else openMenu();\r\n    });\r\n\r\n    // Flex 真实布局占位：footer 有就放 footer 首位（账户上方），没有就挂 sidebar 底部\r\n    if (footer) footer.insertBefore(btn, footer.firstChild);\r\n    else sidebar.appendChild(btn);\r\n\r\n    // 侧栏折叠（窄宽）→ 只留图标 + Tooltip\r\n    if (typeof ResizeObserver === 'function') {\r\n      ro = new ResizeObserver(function () {\r\n        btn.classList.toggle('dsh-se-compact', sidebar.offsetWidth",
+          1
+        ],
+        [
+          "120) return el;\r\n      }\r\n    }\r\n    return null;\r\n  }\r\n\r\n  function findFooter(sidebar) {\r\n    return sidebar.querySelector('.sidebar-footer, [class*=\"sidebar-footer\" i], [class*=\"footer\" i]');\r\n  }\r\n\r\n  function buildMenu() {\r\n    if (menu) return menu;\r\n    menu = document.createElement('div');\r\n    menu.className = 'dsh-se-menu';\r\n    menu.setAttribute('role', 'menu');\r\n    menu.setAttribute('aria-label', '设置分组');\r\n    var title = document.createElement('div');\r\n    title.className = 'dsh-se-menu-title';\r\n    title.textContent = '设置';\r\n    menu.appendChild(title);\r\n    MENU_ITEMS.forEach(function (item) {\r\n      var el;\r\n      if (item.href) {\r\n        el = document.createElement('a');\r\n        el.setAttribute('role', 'menuitem');\r\n        el.setAttribute('href', item.href);\r\n        el.setAttribute('target', '_blank');\r\n        el.setAttribute('rel', 'noopener');\r\n        el.textContent = item.label;\r\n        el.addEventListener('click', function () {\r\n          closeMenu();\r\n        });\r\n      } else {\r\n        el = document.createElement('button');\r\n        el.type = 'button';\r\n        el.setAttribute('role', 'menuitem');\r\n        el.textContent = item.label;\r\n        el.addEventListener('click', function () {\r\n          closeMenu();\r\n          SettingsWindowManager.open(item.group);\r\n        });\r\n      }\r\n      menu.appendChild(el);\r\n    });\r\n    // Esc / 外点关闭；ArrowUp/Down 在菜单项间移动焦点\r\n    menu.addEventListener('keydown', function (e) {\r\n      var items = menu.querySelectorAll('button, a');\r\n      var idx = Array.prototype.indexOf.call(items, document.activeElement);\r\n      if (e.key === 'Escape') { e.stopPropagation(); closeMenu(); if (btn) btn.focus(); }\r\n      else if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0]).focus(); }\r\n      else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1]).focus(); }\r\n    });\r\n    document.body.appendChild(menu);\r\n    return menu;\r\n  }\r\n\r\n  function openMenu() {\r\n    if (!btn) return;\r\n    var m = buildMenu();\r\n    var r = btn.getBoundingClientRect();\r\n    m.classList.add('open');\r\n    // 定位在按钮上方，右对齐；clamp 进视口\r\n    var mw = m.offsetWidth;\r\n    var mh = m.offsetHeight;\r\n    var x = Math.min(Math.max(8, r.right - mw), window.innerWidth - mw - 8);\r\n    var y = r.top - mh - 8;\r\n    if (y",
+          1
+        ],
+        [
+          "20) {\r\n          clearInterval(timer);\r\n        }\r\n      }, 250);\r\n      return false;\r\n    },\r\n    close: function () {\r\n      var ui = window.DSH_L2D_UI;\r\n      if (ui && ui.settings && ui.settings.close) ui.settings.close();\r\n    },\r\n    focus: function () {\r\n      var ui = window.DSH_L2D_UI;\r\n      if (ui && ui.settings && ui.settings.isOpen && ui.settings.isOpen()) ui.settings.focus();\r\n    }\r\n  };\r\n  window.DSH_L2D_SettingsWindowManager = SettingsWindowManager;\r\n\r\n  function mount(sidebar) {\r\n    if (btn && document.body.contains(btn)) return true;\r\n    ensureStyle();\r\n    var footer = findFooter(sidebar);\r\n\r\n    btn = document.createElement('button');\r\n    btn.type = 'button';\r\n    btn.className = 'dsh-se-btn';\r\n    btn.setAttribute('aria-haspopup', 'menu');\r\n    btn.setAttribute('aria-expanded', 'false');\r\n    btn.title = '设置';\r\n    btn.innerHTML = GEAR_SVG + '",
+          1
+        ],
+        [
+          "参数监视台",
+          1
+        ],
+        [
+          "外观",
+          1
+        ],
+        [
+          "行为与联动",
+          1
+        ],
+        [
+          "设置",
+          3
+        ],
+        [
+          "设置分组",
+          1
+        ],
+        [
+          "账户与余额",
+          1
+        ]
+      ]
+    }
+  }
+}
