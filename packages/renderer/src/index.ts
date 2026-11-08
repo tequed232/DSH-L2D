@@ -16,6 +16,7 @@ import { isHostable } from './app/param-host-policy';
 import { EmotionRouter, EmotionIntent, EmotionSignal } from './app/emotion-router';
 import { MotionDirector, motionsShareArm } from './app/motion-director';
 import { PoseController, POSE_IDS } from './app/pose-controller';
+import { FacialBridge, type FacialFrame, type FacialSemantic } from './app/facial-bridge.ts';
 import { SHADER_SOURCES } from './shaders';
 import { mixAdditive } from '../../core/src/angle-mix.ts';
 import { sampleAmbient, type AmbientKind } from '../../core/src/ambient.ts';
@@ -68,6 +69,7 @@ interface ModelSettingRefs {
   Expressions?: Array<{ Name?: string; File?: string }>;
   Motions?: Record<string, Array<{ File?: string }>>;
   Physics?: string;
+  Parameters?: Array<{ Id?: string; Min?: number; Max?: number; Default?: number }>;
 }
 interface ModelSetting {
   FileReferences?: ModelSettingRefs;
@@ -369,6 +371,19 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
   // 首次动作调用必须等预加载完成，否则一定命中「缓存尚未写入」的竞态。
   await model.waitForAllMotions(12000);
 
+  // FI：真实参数扫描 → 语义映射。每次模型加载执行一次；模型切换重建绑定（任务书 Part 10）。
+  // 不存在的语义（如眉毛）不生成映射、永不写入、进 unsupported 诊断，不伪造写入成功。
+  facialBridge.configure(
+    (modelSetting?.FileReferences?.Parameters || [])
+      .map((p) => ({
+        id: String(p?.Id ?? ''),
+        min: Number(p?.Min ?? 0),
+        max: Number(p?.Max ?? 0),
+        defaultValue: Number(p?.Default ?? 0),
+      }))
+      .filter((p) => p.id),
+  );
+
   // 唯一正确的外部写入窗口：saveParameters 之后、物理/表情更新之前。
   // 兼容旧 setPreUpdate 名称，但实际已不在 sub.update() 之前执行。
   // 两个注入相位：
@@ -381,6 +396,8 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
     // 走 mixAdditive 限幅并只注入一次——否则 gaze 的 set 写入会把拖拽 PositionX 顶掉。
     applyGazeBody(core);
     flushAngleBus(core);
+    // FI 头角（pre 相位物理输入）：动作播放期让位（manual 来源不让位），写法同 gaze。
+    if (FI_ENABLED) applyFacialHead(core);
     injector.apply(core, 'pre');
     // [M1-b] 生产者让位：pre 相位独占参数（Hip*）写入物理让位表；
     // 本钩子返回后、物理 evaluate（Physics600）前生效。flag 关 = 空操作。
@@ -407,6 +424,8 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
     // [M1-f 第二批] cue 写值必须晚于 applyGazeEyes：gaze 通道写的就是 ParamEyeBallX/Y，
     // 先写会被注视收招覆盖；cue 持有期间以持有值为准（clear/到期后立即交还）。
     if (CUE_ENABLED) applyCueFrame(core);
+    // FI 眼（post 相位最后写者）：FI 持有眼参数期间压过注视/天然眨眼，到期让位即恢复。
+    if (FI_ENABLED) applyFacialEyes(core, deltaTimeSeconds);
   });
 
   // 从模型自己的 physics3.json 读取输出表，禁止把无效写入误报为成功。
@@ -755,8 +774,27 @@ function motionCompletionTick(): void {
  * 避免 reset 之后 adoptAfterMotion 又把终态姿势（如 finger）收养回来。
  */
 let motionEpoch = 0;
+/**
+ * awaitFinish 等待者登记：playMotionAsync(opts.awaitFinish) 创建的 finishResolve。
+ * completeMotion 的各终点路径会放行并移除；resetPerformance 会清掉 completeMotion 的
+ * 全部触发路径（停定时器 + motionFinishPending=null + 纪元递增），若不放行，等待方的
+ * finished promise 永久挂起（playMotionAsync 的 await finished 永不返回）。
+ */
+const pendingFinishResolvers = new Set<() => void>();
 /** 动作播放期间姿势层让位；Loop 动作靠定时器交还。 */
 let poseOwnedByMotion = false;
+
+// ---------------------------------------------------------------- Facial Intelligence（PR-01）
+// 链路：LLM/手动 → FacialBridge（验证/仲裁/平滑，纯逻辑）→ 本文件在正确相位经 injector 写入。
+// 不复写 Cubism；口型红线不触碰（见 docs/facial-intelligence/DEVIATION-REPORT.md）。
+const FI_ENABLED = true;
+const facialBridge = new FacialBridge();
+/** 最近一帧 FI 输出：post 钩子 tick 产出，pre 钩子用它写头角（一帧延迟可接受）。 */
+let facialFrameCache: FacialFrame | null = null;
+const FI_SEMANTICS: readonly FacialSemantic[] = [
+  'head.yaw', 'head.pitch', 'head.roll',
+  'eyes.leftOpen', 'eyes.rightOpen', 'eyes.gazeX', 'eyes.gazeY',
+];
 /** 注入相位诊断：确认 pre/post 钩子都在跑。 */
 const phaseDiag = { pre: 0, post: 0 };
 let windowFocused = true;
@@ -1564,6 +1602,7 @@ export async function playMotionAsync(
   if (opts.awaitFinish) {
     finished = new Promise<void>((resolve) => {
       finishResolve = resolve;
+      pendingFinishResolvers.add(resolve);
     });
   }
   const epoch = motionEpoch;
@@ -1579,7 +1618,10 @@ export async function playMotionAsync(
       // reset 已发生：收养作废（停动作/姿势收养都归 reset 负责），只放行 awaitFinish 等待者，
       // 否则 playMotionAsync 的 finished promise 会永久挂起。不消耗 motionCompletionDone，
       // 不产完成事件——后续动作的终点归属它自己的 completeMotion。
-      if (finishResolve) finishResolve();
+      if (finishResolve) {
+        pendingFinishResolvers.delete(finishResolve);
+        finishResolve();
+      }
       return;
     }
     if (motionCompletionDone) return; // 自然收敛已收割，看门狗只做幂等空转
@@ -1593,7 +1635,10 @@ export async function playMotionAsync(
     const terminal = terminalPoseForMotion(target);
     if (terminal) poseController.adoptPreset(terminal);
     else poseController.adopt(injector.snapshot(core, POSE_IDS));
-    if (finishResolve) finishResolve();
+    if (finishResolve) {
+      pendingFinishResolvers.delete(finishResolve);
+      finishResolve();
+    }
     // PR-D：真实终点只认自然收敛；看门狗/预估路径不发事件（裁决书：不得预估时长）。
     if (natural) {
       emitActionCompletion('motion', executionId, target, injector.getAgentOwned());
@@ -1632,7 +1677,10 @@ export async function playMotionAsync(
     motionFinishPending = null;
     motionCompletionDone = true; // start 失败无终点可言，防御看门狗/事件残留
     poseOwnedByMotion = false;
-    if (finishResolve) finishResolve();
+    if (finishResolve) {
+      pendingFinishResolvers.delete(finishResolve);
+      finishResolve();
+    }
     // PR-A 三态：start 被拒是 failed（非 completed）——同步回执之外的异步消费者
     // （事件订阅链）也必须拿到明确失败，不再静默无事件。
     emitActionCompletion('motion', executionId, target, injector.getAgentOwned(), 'failed', 'start-rejected');
@@ -1864,6 +1912,74 @@ function applyGazeEyes(core: CoreModel): void {
   writeParam(core, 'ParamEyeBallY', gazeState.cur.y);
 }
 
+// ---------------------------------------------------------------- FI 帧写入（PR-01）
+const clampUnit = (v: number): number => Math.max(0, Math.min(1, v));
+const clampBipolar = (v: number): number => Math.max(-1, Math.min(1, v));
+
+/** pre 相位：头角写入（AngleX/Y/Z 是 ADDITIVE_INPUTS，必须显式 mode:'set' 否则逐帧累加）。 */
+function applyFacialHead(core: CoreModel): void {
+  const f = facialFrameCache;
+  if (!f) return;
+  const motionBusy = poseOwnedByMotion || isUserMotionPlaying();
+  const manualHead = facialBridge.manualActives().some((s) => s.startsWith('head.'));
+  if (motionBusy && !manualHead) return; // 动作播放期头让位（与 gaze 的 motionWritesHead 约定一致）
+  let written = 0;
+  let rejected = 0;
+  if (f.headX !== undefined) { if (injector.set(core, 'AngleX', f.headX, 1, { mode: 'set' })) written++; else rejected++; }
+  if (f.headY !== undefined) { if (injector.set(core, 'AngleY', f.headY, 1, { mode: 'set' })) written++; else rejected++; }
+  if (f.headZ !== undefined) { if (injector.set(core, 'AngleZ', f.headZ, 1, { mode: 'set' })) written++; else rejected++; }
+  facialBridge.recordWriteResult(written, rejected, performance.now());
+}
+
+/** post 相位（cue 之后最后写者）：tick 产帧 + 眼部写入；头角留给下一帧 pre。 */
+function applyFacialEyes(core: CoreModel, dtSeconds: number): void {
+  const f = facialBridge.tick(performance.now(), Math.max(0, dtSeconds * 1000));
+  facialFrameCache = f;
+  let written = 0;
+  let rejected = 0;
+  if (f.eyeL !== undefined) { if (injector.set(core, 'ParamEyeLOpen', clampUnit(f.eyeL), 1, { mode: 'set' })) written++; else rejected++; }
+  if (f.eyeR !== undefined) { if (injector.set(core, 'ParamEyeROpen', clampUnit(f.eyeR), 1, { mode: 'set' })) written++; else rejected++; }
+  if (f.eyeGX !== undefined) { if (injector.set(core, 'ParamEyeBallX', clampBipolar(f.eyeGX), 1, { mode: 'set' })) written++; else rejected++; }
+  if (f.eyeGY !== undefined) { if (injector.set(core, 'ParamEyeBallY', clampBipolar(f.eyeGY), 1, { mode: 'set' })) written++; else rejected++; }
+  facialBridge.recordWriteResult(written, rejected, performance.now());
+}
+
+/**
+ * LLM FacialPlan 入口：Schema 验证（validateFacialPlan）→ 仲裁登记 → 平滑执行。
+ * 验证失败拒绝并回 errors，不写入任何参数。
+ */
+export function applyFacialIntent(json: unknown): { ok: boolean; errors: string[]; warnings?: string[] } {
+  if (!FI_ENABLED) return { ok: false, errors: ['facial-intelligence disabled'] };
+  return facialBridge.applyPlan(json, performance.now());
+}
+
+/** 手动覆盖（Parameter Inspector 拖动）：MANUAL=900，不被 LLM 盖；release 释放后平滑恢复 */
+export function setManualFacialParam(semantic: string, value: number): boolean {
+  if (!FI_ENABLED) return false;
+  if (!(FI_SEMANTICS as readonly string[]).includes(semantic)) return false;
+  return facialBridge.setManual(semantic as FacialSemantic, value);
+}
+
+export function releaseManualFacial(): void {
+  facialBridge.releaseManual();
+}
+
+/** 表情预览（Control Studio 测试按钮）：走同一 FI 链路，不新建 Cubism 控制路径 */
+export function previewFacialEmotion(emotion: string, intensity = 0.6): boolean {
+  if (!FI_ENABLED) return false;
+  facialBridge.setEmotion(emotion, intensity, performance.now());
+  return true;
+}
+
+export function getFacialState(): Record<string, unknown> {
+  return {
+    enabled: FI_ENABLED,
+    authority: facialBridge.hasAuthority(),
+    manual: facialBridge.manualActives(),
+    diag: facialBridge.getDiag(),
+  };
+}
+
 // ---------------------------------------------------------------- 命中判定（alpha 采样）
 // overlay 把光标位置设为探针（setHitProbe），本包在每帧渲染完的同一任务里
 // readPixels 1×1 缓存 alpha——默认 drawingBuffer 会在合成后被清，事件回调里临时读恒为 0，
@@ -2034,6 +2150,10 @@ export function resetPerformance(): { ok: boolean; params: number } {
   }
   motionFinishPending = null;
   motionCompletionDone = true;
+  // 泄漏修复：reset 清掉了 completeMotion 的全部触发路径（定时器已清、待处理已空、
+  // 纪元已递增），登记中的 awaitFinish 等待者若不放行，其 finished promise 永久挂起。
+  for (const settle of pendingFinishResolvers) settle();
+  pendingFinishResolvers.clear();
   try {
     model?.stopMotions();
   } catch {
@@ -2041,6 +2161,7 @@ export function resetPerformance(): { ok: boolean; params: number } {
   }
   poseOwnedByMotion = false;
   motionDirector.reset();
+  facialBridge.reset(); // FI 状态归零：意图/手动/微表情全清，控制器平滑回默认
   motionDiag = { group: 'none', startedAt: 0, playing: false };
   const params = resetPose();
   clearExpression();
@@ -2521,6 +2642,11 @@ const api = {
   setMediaSway,
   setStageBusy,
   resetPerformance,
+  applyFacialIntent,
+  setManualFacialParam,
+  releaseManualFacial,
+  previewFacialEmotion,
+  getFacialState,
   setZoom,
   getEmotionState,
   injectEmotionIntent,

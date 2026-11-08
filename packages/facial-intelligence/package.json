@@ -1,0 +1,9 @@
+{
+  "name": "@dsh/facial-intelligence",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "node --experimental-strip-types tests/schema.test.ts && node --experimental-strip-types tests/controller.test.ts && node --experimental-strip-types tests/mapping.test.ts && node --experimental-strip-types tests/arbitration.test.ts"
+  }
+}

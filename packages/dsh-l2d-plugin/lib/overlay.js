@@ -5274,6 +5274,24 @@
             if (L.emotionSignal) L.emotionSignal({ type: 'mood', data: { mood: moodName } });
             return { ok: true, mood: moodName };
           }
+          case 'l2d_facial': {
+            // FI PR-01：FacialPlan 透传渲染层 applyFacialIntent（Schema 验证/仲裁/平滑全在桥内）。
+            // 验证失败拒绝并回 errors，不写入任何参数。
+            if (!L.applyFacialIntent) return { ok: false, reason: 'facial-unavailable' };
+            var planBody = a.plan !== undefined ? a.plan : a;
+            var fr = L.applyFacialIntent(planBody);
+            return { ok: !!fr.ok, errors: fr.errors || [], warnings: fr.warnings || [] };
+          }
+          case 'l2d_facial_manual': {
+            // FI PR-01 手动覆盖：MANUAL=900，不被 LLM 盖；释放用 l2d_facial_manual {release:true}
+            if (!L.setManualFacialParam) return { ok: false, reason: 'facial-unavailable' };
+            if (a.release) {
+              L.releaseManualFacial ? L.releaseManualFacial() : null;
+              return { ok: true, released: true };
+            }
+            var okM = L.setManualFacialParam(String(a.semantic || ''), Number(a.value));
+            return { ok: !!okM };
+          }
           case 'l2d_gaze': {
             var gx = Math.max(-1, Math.min(1, Number(a.x) || 0));
             var gy = Math.max(-1, Math.min(1, Number(a.y) || 0));

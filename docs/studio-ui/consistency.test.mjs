@@ -163,8 +163,8 @@ runGroup('3 快照一致', () => {
 runGroup('4 禁改项零改动', () => {
   const names = changedFiles();
   const FORBIDDEN = [
-    'packages/dsh-l2d-plugin/assets/renderer.js',
-    // NG 轮（2026-11-08）主理人授权：lib/index.js 归后端席（4 条节点图路由），移出禁改清单
+    // FI 轮（2026-11-08 深夜）主理人授权：renderer.js 重建（facial API 具名导出），移出禁改清单；
+    // 漂移由 ALLOW 清单 FI 轮条目约束（本轮白名单外的改动仍会 WARN/FAIL）
     // 查虫轮（2026-11-08 夜）主理人授权：packages/dsh-l2d-db/、packages/mcp-bridge/、packages/dsh-l2d-mcp/
     // 移出禁改清单——用户明令全项目审查修复（卡死类缺陷），具体文件归 ALLOW 清单逐项授权
     'data/',
@@ -193,6 +193,13 @@ runGroup('4 禁改项零改动', () => {
     /^packages\/dsh-l2d-plugin\/lib\/(ai-inbox|ai-inbox\.test)\.mjs$/,
     /^tests\/breakpoint-lab\/reports\/acceptance-report\.json$/,
     /^tools\/capability-scan\/profile\..+\.json$/,
+    // FI 轮（2026-11-08 深夜，Facial Intelligence PR-01）主理人授权：
+    // renderer.js 重建（新增 facial API 具名导出）+ host-guard 白名单 + overlay 分发
+    /^packages\/dsh-l2d-plugin\/assets\/renderer\.js$/,
+    /^packages\/dsh-l2d-plugin\/lib\/(host-guard\.mjs|overlay\.js)$/,
+    /^packages\/facial-intelligence\//,
+    /^packages\/renderer\/src\/(index\.ts|app\/facial-bridge\.ts|app\/facial-bridge\.test\.mjs)$/,
+    /^docs\/facial-intelligence\//,
   ];
   const out = [];
   const hits = names.filter((n) => FORBIDDEN.some((f) => n === f || n.startsWith(f)));

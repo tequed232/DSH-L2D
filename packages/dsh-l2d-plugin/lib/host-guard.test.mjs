@@ -72,7 +72,8 @@ assert.deepEqual(fullIndex.warnings, []);
 // ---------------------------------------------------------------------------
 // 1) 工具白名单：只放行 index.js 原 ALLOWED 集合
 // ---------------------------------------------------------------------------
-assert.equal(HOST_ALLOWED_TOOLS.length, 16);
+// FI 轮（2026-11-08）：+l2d_facial / +l2d_facial_manual（Facial Intelligence PR-01）
+assert.equal(HOST_ALLOWED_TOOLS.length, 18);
 for (const tool of HOST_ALLOWED_TOOLS) {
   // 空入参可能因"缺字段"被拒（如空表情名），但绝不能是 unknown-tool。
   const r = guardAiCall({ name: tool, args: {} });
@@ -101,7 +102,8 @@ const LEGACY_ALLOWED_TOOLS = [
   'l2d_emote', 'l2d_gaze', 'l2d_say', 'l2d_act', 'l2d_posture', 'l2d_get_state', 'l2d_reset',
 ];
 assert.ok(HOST_ALLOWED_TOOLS.includes('l2d_change_form'), '白名单应含 l2d_change_form');
-assert.equal(HOST_ALLOWED_TOOLS[HOST_ALLOWED_TOOLS.length - 1], 'l2d_change_form', '新工具应追加在末尾');
+// FI 轮：l2d_facial_manual 追加在末尾
+assert.equal(HOST_ALLOWED_TOOLS[HOST_ALLOWED_TOOLS.length - 1], 'l2d_facial_manual', '新工具应追加在末尾');
 assert.deepEqual(HOST_ALLOWED_TOOLS.slice(0, 15), LEGACY_ALLOWED_TOOLS, '前 15 项名称与顺序零改动');
 // (2) guardAiCall 对无参调用放行，且不触发参数写入类守卫。
 const changeForm = guardAiCall({ name: 'l2d_change_form', args: {} });

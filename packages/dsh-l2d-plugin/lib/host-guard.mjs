@@ -62,6 +62,11 @@ export const HOST_ALLOWED_TOOLS = Object.freeze([
   'l2d_reset',
   // 无参形态切换工具：不写参数，故不进 PARAM_KEYED_TOOLS / OWN_REQUIRED_TOOLS。
   'l2d_change_form',
+  // FI PR-01（feat/facial-intelligence）：语义面部意图。plan 全文经渲染层
+  // validateFacialPlan 二次验证（本层不做字段级校验，仅准入白名单 + 载荷大小限制）。
+  // 口型红线天然适用：renderer 口型参数在 injector.set 不区分通道无条件拒绝。
+  'l2d_facial',
+  'l2d_facial_manual',
 ]);
 
 const ALLOWED_SET = new Set(HOST_ALLOWED_TOOLS);

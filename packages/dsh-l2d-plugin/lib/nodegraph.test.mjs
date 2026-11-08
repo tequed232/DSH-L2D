@@ -285,9 +285,9 @@ assert.equal(guardAiCall({ name: 'l2d_get_state', args: {} }, { mode: 'nodegraph
 assert.equal(guardAiCall({ name: 'l2d_change_form', args: {} }, { mode: 'nodegraph' }).ok, true);
 // 未知工具优先于 mode-blocked（unknown-tool 语义不变）
 assert.equal(guardAiCall({ name: 'l2d_unknown' }, { mode: 'nodegraph' }).reason, 'unknown-tool');
-// 白名单 16 项与顺序零改动
-assert.equal(HOST_ALLOWED_TOOLS.length, 16);
-assert.equal(HOST_ALLOWED_TOOLS[15], 'l2d_change_form');
+// 白名单 18 项（FI 轮：追加 l2d_facial / l2d_facial_manual，其余顺序零改动）
+assert.equal(HOST_ALLOWED_TOOLS.length, 18);
+assert.equal(HOST_ALLOWED_TOOLS[17], 'l2d_facial_manual');
 
 // ---------------------------------------------------------------------------
 // 8) 存取：保存 / 重名覆盖 / 失败原子性 / 列表 / 导出 / 文件名安全化（SPEC §4 + §5.1）
