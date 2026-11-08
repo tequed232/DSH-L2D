@@ -323,6 +323,75 @@ function makeLeaseInbox(t0, overrides = {}) {
   assert.deepEqual(b5.poll().calls.map((c) => c.args.n), [2, 3]);
 }
 
+// ---------------------------------------------------------------- 回执时序修复回归（ownedCalls 过早删除）
+// TL1：result 受理后，end/interrupted event 晚到（带受理时 token）→ 放行落库
+{
+  const t = makeLeaseInbox(1000);
+  t.box.call('a1', {});
+  const pa = t.box.poll({ consumerId: 'pageA' });
+  const token = pa.lease.token;
+  const callId = pa.calls[0].id;
+  assert.equal(t.box.post({ id: callId, token, result: { ok: true } }).ok, true);
+  // 晚到 event：归属已删，但 answeredTokens 仍记着受理时 token → 必须放行
+  const late = t.box.post({ id: callId, token, event: { phase: 'end' } });
+  assert.equal(late.ok, true, '晚到 end event 凭受理时 token 必须放行（不得 stale-token fence）');
+  const r = t.box.read(callId);
+  assert.equal(r.result.ok, true);
+  assert.equal(r.events.length, 1);
+  assert.deepEqual(r.events[0], { phase: 'end' });
+  console.log('TL1 result 后晚到 event ok');
+}
+
+// TL2：仅 event 的 post 不得销毁归属 → 随后 result 正常受理（修复前会被 stale-token fence）
+{
+  const t = makeLeaseInbox(1000);
+  t.box.call('a1', {});
+  const pa = t.box.poll({ consumerId: 'pageA' });
+  const token = pa.lease.token;
+  const callId = pa.calls[0].id;
+  assert.equal(t.box.post({ id: callId, token, event: { phase: 'start' } }).ok, true);
+  assert.equal(t.box.post({ id: callId, token, result: { ok: true } }).ok, true,
+    'event 先到后 result 必须正常受理（不得被 stale-token fence）');
+  const r = t.box.read(callId);
+  assert.equal(r.ready, true);
+  assert.equal(r.result.ok, true);
+  assert.equal(r.events.length, 1);
+  console.log('TL2 event 先到不销毁归属 ok');
+}
+
+// TL3：接管后 token 轮换，旧 token 的晚到 event 仍被 fence（answeredTokens 随 takeover 清空）
+{
+  const t = makeLeaseInbox(1000);
+  t.box.call('a1', {});
+  const pa = t.box.poll({ consumerId: 'pageA' });
+  const oldToken = pa.lease.token;
+  const callId = pa.calls[0].id;
+  assert.equal(t.box.post({ id: callId, token: oldToken, result: { ok: true } }).ok, true);
+  t.tick(1001);
+  t.box.call('a2', {});
+  const pb = t.box.poll({ consumerId: 'pageB' });
+  assert.equal(pb.lease.epoch, 2);
+  const stale = t.box.post({ id: callId, token: oldToken, event: { phase: 'end' } });
+  assert.equal(stale.ok, false, '接管后旧 token 晚到 event 必须拒绝');
+  assert.equal(stale.reason, 'fenced');
+  console.log('TL3 接管后旧 token 晚到 event 拒绝 ok');
+}
+
+// TL4：伪造 token / 无 token 的晚到 event 不走放行分支
+{
+  const t = makeLeaseInbox(1000);
+  t.box.call('a1', {});
+  const pa = t.box.poll({ consumerId: 'pageA' });
+  const token = pa.lease.token;
+  const callId = pa.calls[0].id;
+  assert.equal(t.box.post({ id: callId, token, result: { ok: true } }).ok, true);
+  const forged = t.box.post({ id: callId, token: 'lease-99-forged', event: { phase: 'end' } });
+  assert.equal(forged.ok, false, '伪造 token 晚到 event 必须拒绝');
+  const noToken = t.box.post({ id: callId, event: { phase: 'end' } });
+  assert.equal(noToken.ok, false, '无 token 落宽容期分支，但 id 已有 result → already-answered fence（既有设计）');
+  console.log('TL4 伪造/无 token 分流 ok');
+}
+
 // CODE-REVIEW-1 #13 伴随收紧：既无 event 也无 result 的 post 拒绝（原为静默 ok:true）
 assert.equal(inbox.post({ id: 999 }).ok, false);
 

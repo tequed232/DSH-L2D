@@ -504,17 +504,28 @@ export function upsertActionChain(db, { chainId, motionId, chain, schemaVersion,
         INSERT INTO action_chains (id, motion_id, chain_json, schema_version, validation_report, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `).run(chainId, motionId, nextJson, schemaVersion, validationReport, createdAt ?? nowIso());
-    } else if (validationReport !== null && validationReport !== existing.validation_report) {
+      steps.forEach((s, i) => {
+        db.prepare(`
+          INSERT INTO action_steps (id, chain_id, step_index, kind, params_json, duration_ms)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(s.id ?? `${chainId}#${i}`, chainId, s.stepIndex ?? i, s.kind, json(s.params, '{}'), s.durationMs ?? null);
+      });
+      return db.prepare('SELECT COUNT(*) AS n FROM action_steps WHERE chain_id = ?').get(chainId).n;
+    }
+    // R8 封堵（fix-p4/H2）：chain_json 相同但独立入参 steps 不同同样属于覆盖写。
+    // 用与首次写入同构的签名比对，既保留「同内容幂等不抛错」的既有语义，又拒绝静默 DELETE+重插。
+    const nextStepsSig = steps.map((s, i) => [s.stepIndex ?? i, s.kind, json(s.params, '{}'), s.durationMs ?? null]);
+    const currentStepsSig = db.prepare(
+      'SELECT step_index, kind, params_json, duration_ms FROM action_steps WHERE chain_id = ? ORDER BY step_index',
+    ).all(chainId).map((r) => [r.step_index, r.kind, r.params_json ?? '{}', r.duration_ms ?? null]);
+    if (JSON.stringify(nextStepsSig) !== JSON.stringify(currentStepsSig)) {
+      throw new Error(`upsertActionChain: 禁止覆盖已有版本的 action_steps（R8 版本不可变），chainId=${chainId}；同链 steps 变更请走 actions-repo createActionChainVersion`);
+    }
+    // 幂等：仅允许同步 validation_report，不再重写 action_steps
+    if (validationReport !== null && validationReport !== existing.validation_report) {
       db.prepare('UPDATE action_chains SET validation_report = ? WHERE id = ?').run(validationReport, chainId);
     }
-    db.prepare('DELETE FROM action_steps WHERE chain_id = ?').run(chainId);
-    steps.forEach((s, i) => {
-      db.prepare(`
-        INSERT INTO action_steps (id, chain_id, step_index, kind, params_json, duration_ms)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(s.id ?? `${chainId}#${i}`, chainId, s.stepIndex ?? i, s.kind, json(s.params, '{}'), s.durationMs ?? null);
-    });
-    return db.prepare('SELECT COUNT(*) AS n FROM action_steps WHERE chain_id = ?').get(chainId).n;
+    return currentStepsSig.length;
   });
 }
 

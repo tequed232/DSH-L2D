@@ -13,7 +13,8 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { forwardCall } from './forward.mjs';
 
-/** 本机模拟 HTTP 宿主。返回 { base, close }。 */
+/** 本机模拟 HTTP 宿主。返回 { base, close }。F7：用例间串行 close，杜绝残留连接/端口复用。 */
+let pendingClose = Promise.resolve();
 function startHost({
   callBody = { ok: true, id: 'q1' },
   callDelayMs = 0,
@@ -24,33 +25,52 @@ function startHost({
   resultEvents = [],
 }) {
   const hits = { call: 0, result: 0 };
+  const timers = new Set();
+  const hanging = new Set();
   const server = http.createServer((req, res) => {
     if (req.url.startsWith('/dsh-l2d/ai/call')) {
       hits.call++;
-      if (hangCall) return; // 永不响应
-      setTimeout(() => {
+      if (hangCall) { hanging.add(res); return; } // 永不响应
+      const t = setTimeout(() => {
+        timers.delete(t);
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify(callBody));
       }, callDelayMs);
+      timers.add(t);
       return;
     }
     if (req.url.startsWith('/dsh-l2d/ai/result')) {
       hits.result++;
-      if (hangResult) return; // 永不响应
-      setTimeout(() => {
+      if (hangResult) { hanging.add(res); return; } // 永不响应
+      const t = setTimeout(() => {
+        timers.delete(t);
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ ...resultBody, events: resultEvents }));
       }, resultDelayMs);
+      timers.add(t);
       return;
     }
     res.writeHead(404);
     res.end();
   });
-  return new Promise((resolve) => {
+  // F7：等上一个 host 真正关闭再 listen，避免临时端口被回收复用导致跨用例连接错配。
+  return pendingClose.then(() => new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
-      resolve({ base: `http://127.0.0.1:${server.address().port}`, hits, close: () => server.close() });
+      resolve({
+        base: `http://127.0.0.1:${server.address().port}`,
+        hits,
+        close: () => {
+          for (const t of timers) clearTimeout(t);
+          timers.clear();
+          for (const res of hanging) { try { res.destroy(); } catch { /* 已断开 */ } }
+          hanging.clear();
+          server.closeAllConnections?.();
+          pendingClose = new Promise((r) => server.close(r));
+          return pendingClose;
+        },
+      });
     });
-  });
+  }));
 }
 
 let passed = 0;

@@ -35,6 +35,7 @@ export function createAiInbox(options = {}) {
   let lease = null;        // null = 从未有租约
   const ownedCalls = new Map(); // callId -> { token, epoch, polledAt }；poll 出队登记，回执/清理删除
   const delivered = new Map();  // 已被 read 消费的 callId -> 1；防已消费 id 被宽容期/陈旧回执覆盖
+  const answeredTokens = new Map(); // 已受理 result 的 callId -> 受理时 token；供晚到的 action-done event 校验
   let leaseEnabledAt = 0;  // flag 首次（或重新）生效时刻，宽容期计时起点
   let leaseArmed = false;  // flag 开→关→开时重新记 grace 起点
 
@@ -74,6 +75,7 @@ export function createAiInbox(options = {}) {
     }
     if (ownedCalls.size) trim(results);
     ownedCalls.clear();
+    answeredTokens.clear(); // 接管后 token 轮换，旧 lease 受理记录同步作废
     return issueCalls(now);
   }
 
@@ -194,8 +196,23 @@ export function createAiInbox(options = {}) {
           // 仅 undefined/null 视为空结果；false/0 等合法 falsy 值原样保留。
           results.set(id, body.result ?? { ok: false, reason: 'empty' });
           trim(results);
+          // result 受理即销毁归属，但记录受理时 token：end/interrupted 合法晚于 result 到达，
+          // 届时归属已删，凭 answeredTokens 校验放行 event（见下方晚到分支）。
+          answeredTokens.set(id, owned.token);
+          trim(answeredTokens);
+          ownedCalls.delete(id);
         }
-        ownedCalls.delete(id);
+        // 仅 event 的 post 不销毁归属：result 仍在途中，删除会导致后续 result 被 stale-token fence。
+        return { ok: true };
+      }
+      // 晚到 event（result 已受理、归属已删）：凭受理时 token 放行，仅限纯 event post。
+      // 带 result 的晚到回执仍走下方 stale-token / already-answered 拒绝路径。
+      if (hasEvent && !hasResult && body.token && answeredTokens.get(id) === body.token) {
+        const list = events.get(id) || [];
+        list.push(body.event);
+        while (list.length > maxEventsPerId) list.shift();
+        events.set(id, list);
+        trim(events);
         return { ok: true };
       }
       // 无归属记录：带 token 的一律是陈旧消费者（token 已轮换/无主 id），拒绝

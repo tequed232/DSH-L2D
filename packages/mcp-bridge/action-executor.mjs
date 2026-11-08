@@ -33,7 +33,28 @@ function mapPriority(priority) {
   return 'BACKGROUND';
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** 可中断 sleep：signal abort 时立即 resolve，不遗留后台定时器。 */
+const sleep = (ms, signal) => new Promise((resolve) => {
+  if (!signal) { setTimeout(resolve, ms); return; }
+  const timer = setTimeout(resolve, ms);
+  signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+});
+
+/** cancel 的 /ai/call POST 独立短超时（与队列 STOPPING 预算对齐，不依赖 execute 的 signal）。 */
+const CANCEL_TIMEOUT_MS = 3000;
+
+function isAbortError(err) {
+  return !!err && (err.name === 'AbortError' || err.name === 'TimeoutError');
+}
+
+/** 订阅路径的可中断占位：signal 存在时 abort 即 resolve(null)；无 signal 时永不 settle（仅作 race 占位）。 */
+function abortPromise(signal) {
+  if (!signal) return new Promise(() => {});
+  return new Promise((resolve) => {
+    if (signal.aborted) { resolve(null); return; }
+    signal.addEventListener('abort', () => resolve(null), { once: true });
+  });
+}
 
 /**
  * 链里会走 ParamInjector 认领的物理输出参数（ownership 出口核对的范围）。
@@ -95,7 +116,14 @@ export class HttpActionExecutor {
    *                     completionSource?: string, ownedParams?: string[]}>}
    *          ok:true = end/interrupted 到达；ok:false = 链被拒绝（priority-blocked 等）。
    */
-  async execute(request) {
+  async execute(request, options = {}) {
+    // F1：queue 传入的 signal；三重退出（signal / 本地 deadline / 最大轮询次数）据此判定。
+    const signal = options.signal || null;
+    const cancelled = () => !!(signal && signal.aborted);
+    const budgetMs = Number.isFinite(request?.timeoutMs) ? request.timeoutMs : 30_000;
+    // 本地 deadline 比队列预算少 500ms，给 STOPPING 收尾留余量
+    const localDeadline = Date.now() + Math.max(0, budgetMs - 500);
+    const MAX_POLLS = 240;
     await this.probeReady();
 
     const callRes = await this.fetchImpl(`${this.baseUrl}/ai/call`, {
@@ -115,6 +143,7 @@ export class HttpActionExecutor {
     if (!call.ok || !call.id) throw new Error(`/ai/call 未受理：${JSON.stringify(call).slice(0, 200)}`);
     const callId = String(call.id);
     const ownedScope = chainOwnedParams(request.args?.chain);
+    const cancelledResult = () => ({ ok: false, executionId: callId, reason: 'cancelled' });
     this.log(`execute ${request.requestId} → callId=${callId}`);
 
     // 终态事件收集器：订阅与轮询共用一套判定语义。
@@ -133,10 +162,14 @@ export class HttpActionExecutor {
       phase: 'failed',
     });
 
-    // ---- 事件订阅优先 ----
+    // ---- 事件订阅优先（F1：signal 透传 + abort 可脱离，避免订阅挂起拖死 execute）----
     if (this.subscribeEvents) {
       try {
-        const sub = await this.subscribeEvents(callId, onEvent);
+        const sub = await Promise.race([
+          Promise.resolve(this.subscribeEvents(callId, onEvent, { signal })),
+          abortPromise(signal),
+        ]);
+        if (cancelled()) return cancelledResult();
         if (ctx.failed) return failResult();
         const phase = sub && (sub.phase || (ctx.terminal && ctx.terminal.phase));
         if (phase === 'end' || phase === 'interrupted') {
@@ -144,23 +177,39 @@ export class HttpActionExecutor {
         }
         // 订阅返回但无终态：订阅链路没交付，落轮询；已见终态直接采信（事件已被 read 排空）
       } catch (error) {
+        if (cancelled() || isAbortError(error)) return cancelledResult();
         this.log(`subscribe ${request.requestId} unavailable → polling fallback（${String(error && error.message || error)}）`);
         if (ctx.failed) return failResult();
         if (ctx.terminal) return this._finalize(request, callId, ctx.terminal.phase, ctx, ownedScope);
       }
     }
 
-    // ---- 轮询降级（fail-closed 主路径；总时限由 queue 的 timeoutMs 驱动 cancel）----
-    for (;;) {
-      await sleep(this.pollIntervalMs);
-      const res = await this.fetchImpl(`${this.baseUrl}/ai/result?id=${encodeURIComponent(callId)}`, { cache: 'no-store' });
-      if (!res.ok) continue; // 瞬时 4xx/5xx 不放弃，交给超时
+    // ---- 轮询降级：三重退出（signal 中止 / 本地 deadline / 最大轮询次数）----
+    // F1：queue 超时会 abort signal；此处必须真正停止后台轮询，不再泄漏连接。
+    for (let polls = 0; ; polls += 1) {
+      if (cancelled()) return cancelledResult();
+      if (Date.now() >= localDeadline || polls >= MAX_POLLS) {
+        return { ok: false, executionId: callId, reason: 'cancelled' };
+      }
+      await sleep(this.pollIntervalMs, signal);
+      if (cancelled()) return cancelledResult();
+      let res;
+      try {
+        res = await this.fetchImpl(`${this.baseUrl}/ai/result?id=${encodeURIComponent(callId)}`, {
+          cache: 'no-store',
+          ...(signal ? { signal } : {}),
+        });
+      } catch (error) {
+        if (cancelled() || isAbortError(error)) return cancelledResult();
+        continue; // 瞬时失败交给三重退出兜底，不再无限重试
+      }
+      if (!res.ok) continue;
       const body = await res.json().catch(() => ({}));
       // 拒绝：result 通道 ok:false（acceptedAct 同步回执的失败形态）
       if (body.ready && body.result && body.result.ok === false) {
         return { ok: false, executionId: callId, reason: body.result.reason || body.result.error || 'rejected' };
       }
-      // 完成：event 通道 end / interrupted；失败：event 通道 failed（PR-A 三态，act 的完成回执只走 event，见核查 A）
+      // 完成：event 通道 end / interrupted；失败：event 通道 failed（PR-A 三态）
       const events = Array.isArray(body.events) ? body.events : [];
       for (const e of events) onEvent(e);
       if (ctx.failed) return failResult();
@@ -194,6 +243,8 @@ export class HttpActionExecutor {
         name: 'l2d_act',
         args: { chain: [{ kind: 'look', x: 0, y: 0 }], priority: 'FORCE', silent: true },
       }),
+      // F2：独立短超时，宿主挂住时 cancel 不会把 STOPPING 永久卡死（与 execute 的 signal 无关）
+      signal: AbortSignal.timeout(CANCEL_TIMEOUT_MS),
     });
     if (!callRes.ok) throw new Error(`cancel: /ai/call ${callRes.status}`);
     this.log(`cancel ${request?.requestId ?? '(active)'} → FORCE 抢占已发`);

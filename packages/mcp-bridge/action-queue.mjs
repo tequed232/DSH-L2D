@@ -49,6 +49,7 @@ export class ModelActionQueue {
     this.seen = new Set(); // 无 repo 时的幂等去重
     this.qState = Q_STATE.IDLE;
     this.activeRequestId = null;
+    this.activeHandle = null; // F6：活动项句柄 {timer,resolve,timeoutReject,controller}
     this.disposed = false;
   }
 
@@ -101,22 +102,56 @@ export class ModelActionQueue {
     void this.runOne(entry);
   }
 
+  /** F2：STOPPING 阶段单步超时预算（≤3s 且 ≤请求预算 1/4）。 */
+  stoppingBudgetMs(request) {
+    const budget = Number.isFinite(request?.timeoutMs) ? request.timeoutMs : 30_000;
+    return Math.max(1, Math.min(3000, Math.floor(budget / 4)));
+  }
+
+  /** F2：给 STOPPING 的 cancel/release 套 Promise.race 超时兜底，任何结果都清 timer。 */
+  async withTimeout(promise, ms, label) {
+    let timer = null;
+    const timeout = new Promise((_, reject) => {
+      timer = this.clock.setTimeout(() => reject(new Error(label)), ms);
+    });
+    try {
+      return await Promise.race([Promise.resolve(promise), timeout]);
+    } finally {
+      if (timer !== null) this.clock.clearTimeout(timer);
+    }
+  }
+
   async runOne({ request, resolve }) {
     this.activeRequestId = request.requestId;
     if (this.repo) this.repo.markRunning(request.requestId);
 
     let timedOut = false;
     let timeoutReject = null;
-    // 超时以 reject 参与 race：到点即从 execute 的挂起中脱离（B13）
+    const controller = new AbortController();
+    // 超时以 reject 参与 race：到点脱离 execute；F1 同时 abort 底层 execute，
+    // 让 HttpActionExecutor 的轮询循环真正停止，不再后台泄漏连接。
     const timeoutPromise = new Promise((_, reject) => { timeoutReject = reject; });
     const timer = this.clock.setTimeout(() => {
       timedOut = true;
+      try { controller.abort(new DOMException('queue-timeout', 'TimeoutError')); } catch { /* 忽略 */ }
       timeoutReject(new Error('timeout'));
     }, request.timeoutMs ?? 30_000);
 
+    // F6：登记活动句柄，供 cancel(activeId) 精确结算/清理，避免两条 runOne 交错覆盖 qState。
+    const handle = {
+      requestId: request.requestId, timer, resolve, timeoutReject, controller,
+      cancelled: false, timeoutMs: request.timeoutMs ?? 30_000,
+    };
+    this.activeHandle = handle;
+    const cancelledExternally = () => handle.cancelled;
+
     let result = null;
     try {
-      result = await Promise.race([this.executor.execute(request), timeoutPromise]);
+      result = await Promise.race([
+        this.executor.execute(request, { signal: controller.signal }),
+        timeoutPromise,
+      ]);
+      if (cancelledExternally()) return;
       // 超时可能恰在 execute 正常返回前后触发：以 timedOut 为准走 STOPPING
       if (timedOut) throw new Error('timeout');
 
@@ -126,7 +161,7 @@ export class ModelActionQueue {
         return;
       }
     } catch (error) {
-      this.clock.clearTimeout(timer);
+      if (cancelledExternally()) return;
       const message = String(error && error.message || error);
       if (message !== 'timeout') {
         // execute 抛错（RUNTIME_NOT_READY / 拒绝等）：本条 failed，队列继续（不阻断）
@@ -137,23 +172,32 @@ export class ModelActionQueue {
       // ---- 超时 → STOPPING：cancel + 确认释放 → failed → next（B13）----
       this.qState = Q_STATE.STOPPING;
       try {
-        if (typeof this.executor.cancel === 'function') await this.executor.cancel(request);
-        await this.executor.release(request); // 确认释放后才允许下一条
+        if (typeof this.executor.cancel === 'function') {
+          await this.withTimeout(this.executor.cancel(request), this.stoppingBudgetMs(request), 'cancel-timeout');
+        }
+        await this.withTimeout(this.executor.release(request), this.stoppingBudgetMs(request), 'release-timeout'); // 确认释放后才允许下一条
         finishFailed(this, request, resolve, 'timeout');
       } catch (cancelError) {
         const cancelMessage = String(cancelError && cancelError.message || cancelError);
+        const budgetTimeout = cancelMessage === 'cancel-timeout' || cancelMessage === 'release-timeout';
         if (this.repo) this.repo.markTerminal(request.requestId, 'failed', { error: 'timeout' });
         resolve({ requestId: request.requestId, state: 'failed', error: 'timeout' });
-        this.fault(cancelMessage); // FAULTED 不 advance：阻断全部，仅 recover() 解锁
+        if (budgetTimeout) {
+          this.advance(); // F2：兜底超时也要推进，绝不留 qState 永久 STOPPING
+        } else {
+          this.fault(cancelMessage); // 真实 cancel/release 抛错：保持 FAULTED 语义（B14）
+        }
         return;
       }
       this.advance();
       return;
+    } finally {
+      // F5：任何退出路径都清 timer（clearTimeout 幂等）
+      this.clock.clearTimeout(timer);
     }
 
-    this.clock.clearTimeout(timer);
-
     // ---- 完成但未释放不启动下一条（B12）；释放失败 → FAULTED（B14）----
+    if (cancelledExternally()) return;
     try {
       await this.executor.release(request);
     } catch (releaseError) {
@@ -163,6 +207,7 @@ export class ModelActionQueue {
       resolve({ requestId: request.requestId, state: 'failed', error: `release-failed: ${message}` });
       return;
     }
+    if (cancelledExternally()) return; // F6：release 期间被外部 cancel 结算，不再二次 advance
 
     if (this.repo) {
       this.repo.markTerminal(request.requestId, 'completed', { result: result ?? null, executionId: result?.executionId });
@@ -174,6 +219,7 @@ export class ModelActionQueue {
   /** 完成当前 worker，回到 idle 并尝试取下一条。 */
   advance() {
     this.activeRequestId = null;
+    this.activeHandle = null;
     this.qState = Q_STATE.IDLE;
     this.pump();
   }
@@ -183,6 +229,7 @@ export class ModelActionQueue {
     this.qState = Q_STATE.FAULTED;
     this.faultReason = reason;
     this.activeRequestId = null;
+    this.activeHandle = null;
   }
 
   /** 显式解锁 FAULTED（调用方确认 Runtime 已清）。@returns boolean 是否发生了解锁 */
@@ -215,10 +262,23 @@ export class ModelActionQueue {
     }
     if (this.activeRequestId !== requestId) return { requestId, state: 'not-found' };
 
+    // F6：命中活动项——先精确结算句柄、清 timer、abort 底层 execute，让该 runOne 的
+    // race 脱离且不再 advance，避免两条 runOne 交错覆盖 qState / 重复消费。
+    const handle = this.activeHandle && this.activeHandle.requestId === requestId ? this.activeHandle : null;
     this.qState = Q_STATE.STOPPING;
+    if (handle && !handle.cancelled) {
+      handle.cancelled = true;
+      this.clock.clearTimeout(handle.timer);
+      try { handle.controller.abort(new DOMException('queue-cancel', 'AbortError')); } catch { /* 忽略 */ }
+      handle.timeoutReject(new Error('cancelled-by-cancel'));
+      handle.resolve({ requestId, state: 'cancelled' });
+    }
+    const budget = this.stoppingBudgetMs(handle || { timeoutMs: 30_000 });
     try {
-      if (typeof this.executor.cancel === 'function') await this.executor.cancel({ requestId });
-      await this.executor.release({ requestId });
+      if (typeof this.executor.cancel === 'function') {
+        await this.withTimeout(this.executor.cancel({ requestId }), budget, 'cancel-timeout');
+      }
+      await this.withTimeout(this.executor.release({ requestId }), budget, 'release-timeout');
       if (this.repo) this.repo.markTerminal(requestId, 'cancelled', { error: 'cancelled-while-running' });
       this.advance();
       return { requestId, state: 'cancelled' };
@@ -245,6 +305,11 @@ export class ModelActionQueue {
         await this.executor.release({ requestId: activeId });
       } catch { /* dispose 阶段尽力而为，不再 FAULTED */ }
       if (this.repo) this.repo.markTerminal(activeId, 'cancelled', { error: 'disposed-while-running' });
+    }
+    // F1：dispose 也中止底层 execute，避免后台轮询继续泄漏连接
+    if (this.activeHandle) {
+      try { this.activeHandle.controller.abort(new DOMException('queue-dispose', 'AbortError')); } catch { /* 忽略 */ }
+      this.activeHandle = null;
     }
     this.activeRequestId = null;
     this.qState = Q_STATE.DISPOSED;

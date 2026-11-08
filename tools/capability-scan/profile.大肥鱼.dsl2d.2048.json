@@ -1046,7 +1046,7 @@
     "note": "存在但 model3 未引用；不允许在 W3/W4 被当作可用能力（除非先验证并登记）"
   },
   "metadata": {
-    "scannedAt": "2026-11-06T16:39:17.427Z",
+    "scannedAt": "2026-11-07T23:05:26.505Z",
     "modelFile": "大肥鱼.dsl2d.2048.model3.json",
     "cdiFile": "大肥鱼.cdi3.json",
     "paramCount": 509,

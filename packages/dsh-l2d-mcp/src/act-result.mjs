@@ -23,25 +23,25 @@ export function mergeActEvents(existing, incoming) {
 
 export function actOutcome(result, events) {
   if (!result || result.accepted !== true) return 'rejected';
-  const terminal = (events || []).find(
-    (event) =>
-      event &&
-      event.runId === result.runId &&
-      (event.phase === 'end' || event.phase === 'interrupted'),
-  );
+  const own = (events || []).filter((event) => event && event.runId === result.runId);
+  // F3：failed 优先于 end/interrupted——避免「end+failed 并存」被误判为 completed。
+  const failed = own.find((event) => event.phase === 'failed');
+  if (failed) return 'failed';
+  const terminal = own.find((event) => event.phase === 'end' || event.phase === 'interrupted');
   if (!terminal) return 'pending';
   return terminal.phase === 'end' ? 'completed' : 'interrupted';
 }
 
 export function actSettled(events, runId) {
   return (events || []).some(
-    (event) => event && event.runId === runId && (event.phase === 'end' || event.phase === 'interrupted'),
+    (event) => event && event.runId === runId &&
+      (event.phase === 'end' || event.phase === 'interrupted' || event.phase === 'failed'),
   );
 }
 
 /**
  * accepted=true 只表示进了槽。
- * settled=true 才表示已经看到 end 或 interrupted。
+ * settled=true 才表示已经看到 end / interrupted / failed 终态。
  * 还在播时 ok 仍为 true，reason 为 pending，避免把「没播完」说成调用失败。
  */
 export function shapeActReceipt(acceptResult, events) {
@@ -50,8 +50,14 @@ export function shapeActReceipt(acceptResult, events) {
   const outcome = actOutcome(result, own);
   if (result.accepted === true) {
     result.outcome = outcome;
-    result.settled = outcome === 'completed' || outcome === 'interrupted';
-    if (result.settled) {
+    result.settled = outcome === 'completed' || outcome === 'interrupted' || outcome === 'failed';
+    if (outcome === 'failed') {
+      // F3：失败是终态且必须如实报失败，禁止 ok:true / completed + 失败 reason 的矛盾形状。
+      result.ok = false;
+      const failedEvent = own.find((event) => event && event.phase === 'failed');
+      result.reason = (failedEvent && (failedEvent.reason || failedEvent.error)) ||
+        (result.reason && result.reason !== 'pending' ? result.reason : 'failed');
+    } else if (result.settled) {
       if (result.reason === 'pending') delete result.reason;
     } else {
       result.reason = 'pending';

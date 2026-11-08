@@ -17,11 +17,15 @@ import { actSettled, mergeActEvents, shapeActReceipt } from './act-result.mjs';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function isDeadlineAbort(err) {
-  return err && (err.name === 'TimeoutError' || err.name === 'AbortError');
+  if (!err) return false;
+  if (err.name === 'TimeoutError' || err.name === 'AbortError') return true;
+  // F9：Node/undici 可能把 abort 包成 TypeError: fetch failed，真正原因在 cause。
+  const cause = err.cause;
+  return !!cause && (cause.name === 'TimeoutError' || cause.name === 'AbortError');
 }
 
-/** 在 deadline 剩余预算内发起 fetch；signal 同时约束连接与响应体读取。 */
-async function fetchWithDeadline(url, init, deadline, fetchImpl) {
+/** 在 deadline 剩余预算内发起 fetch 并读取响应体；signal 同时约束连接与响应体读取。 */
+async function fetchWithDeadline(url, init, deadline, fetchImpl, consume) {
   const ctrl = new AbortController();
   const remaining = deadline - Date.now();
   const timer = setTimeout(
@@ -29,7 +33,18 @@ async function fetchWithDeadline(url, init, deadline, fetchImpl) {
     Math.max(1, remaining),
   );
   try {
-    return await fetchImpl(url, { ...init, signal: ctrl.signal });
+    const res = await fetchImpl(url, { ...init, signal: ctrl.signal });
+    if (!consume) return { res, body: undefined };
+    // F4：body 消费仍在 deadline 内；即使注入的 fetchImpl 不响应 signal，
+    // 到点 abort 也经 race 硬性脱离，保证「headers 到但 body 悬挂」不会无限挂起。
+    const body = await Promise.race([
+      consume(res),
+      new Promise((_, reject) => {
+        if (ctrl.signal.aborted) return reject(new DOMException('deadline-exceeded', 'TimeoutError'));
+        ctrl.signal.addEventListener('abort', () => reject(new DOMException('deadline-exceeded', 'TimeoutError')), { once: true });
+      }),
+    ]);
+    return { res, body };
   } finally {
     clearTimeout(timer);
   }
@@ -64,11 +79,12 @@ export async function forwardCall({
   pollIntervalMs = 120,
 }) {
   const deadline = Date.now() + timeoutMs;
+  let lastError = null; // F8：瞬时失败/响应体失败留痕，不再静默吞掉
 
   // ---- 入队 POST（受同一截止时间约束）----
   let queued;
   try {
-    const res = await fetchWithDeadline(
+    const { res, body: text } = await fetchWithDeadline(
       base + '/dsh-l2d/ai/call',
       {
         method: 'POST',
@@ -77,15 +93,15 @@ export async function forwardCall({
       },
       deadline,
       fetchImpl,
+      (r) => r.text(),
     );
     // 守卫拒绝的 4xx 是 text/plain（如 "reserved-param: ParamMouthOpenY"），
     // 先 res.json() 会抛 SyntaxError 掉进 catch，被误报成 unreachable 并清掉缓存地址。
     // 正确顺序：先读文本 → 尽力解析 → 再看状态码。
-    const text = await res.text();
     try {
       queued = text ? JSON.parse(text) : null;
     } catch {
-      queued = { ok: false, reason: text.slice(0, 200) || 'call-rejected' };
+      queued = { ok: false, reason: String(text).slice(0, 200) || 'call-rejected' };
     }
     if (!res.ok) {
       return {
@@ -108,19 +124,26 @@ export async function forwardCall({
   let acceptResult = null;
   while (Date.now() < deadline) {
     let res = null;
+    let body = null;
     try {
-      res = await fetchWithDeadline(
+      ({ res, body } = await fetchWithDeadline(
         base + '/dsh-l2d/ai/result?id=' + encodeURIComponent(id),
         { cache: 'no-store' },
         deadline,
         fetchImpl,
-      );
-    } catch {
-      /* 截止中止或瞬时失败：过截止由循环条件退出，否则下一轮再取 */
+        (r) => r.json(),
+      ));
+    } catch (err) {
+      // F8：区分截止中止与瞬时网络失败；瞬时失败短退避，避免高频重试打满宿主
+      const deadlineHit = isDeadlineAbort(err);
+      lastError = deadlineHit ? 'deadline' : String(err && err.message || err);
+      if (!deadlineHit) {
+        const remain = deadline - Date.now();
+        if (remain > 0) await sleep(Math.min(pollIntervalMs, remain));
+      }
     }
     if (res && res.ok) {
       try {
-        const body = await res.json();
         if (body && Array.isArray(body.events)) events = mergeActEvents(events, body.events);
         if (body && body.ready) {
           acceptResult = normalizeResult(body.result);
@@ -134,8 +157,9 @@ export async function forwardCall({
             return mode === 'act' ? shapeActReceipt(acceptResult, events) : acceptResult;
           }
         }
-      } catch {
-        /* 响应体读取被截止中止：走下一轮 / 退出 */
+      } catch (err) {
+        // F8：响应体处理失败留痕，不静默吞掉
+        lastError = isDeadlineAbort(err) ? 'deadline' : String(err && err.message || err);
       }
     }
     const remaining = deadline - Date.now();
@@ -143,8 +167,8 @@ export async function forwardCall({
   }
   if (mode === 'act' && acceptResult && acceptResult.accepted === true) {
     // accepted 但终态未知：回执保留 pending 语义，附 id 供后续查询，不误报成功完成
-    return { ...shapeActReceipt(acceptResult, events), id };
+    return { ...shapeActReceipt(acceptResult, events), id, ...(lastError ? { lastError } : {}) };
   }
   // 已入队、终态未知：保留可查询标识，明确等待超时，避免客户端误重放
-  return { ok: false, reason: 'timeout', id, events };
+  return { ok: false, reason: 'timeout', id, events, ...(lastError ? { lastError } : {}) };
 }

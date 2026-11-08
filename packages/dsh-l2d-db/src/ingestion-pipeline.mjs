@@ -34,12 +34,17 @@ const KNOWN_CUBISM_PARAM_IDS = new Set([
 
 const SHA256_RE = /^sha256:[0-9a-f]{64}$/;
 
+/** fix-p4/H3：params 递归深度上限（同时兜住循环引用），超限走受控拒绝而非 RangeError。 */
+const MAX_PARAM_DEPTH = 64;
+const PARAM_DEPTH_EXCEEDED = 'PARAM_DEPTH_EXCEEDED';
+
 function isPlainObject(v) {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 /** 深度遍历 params，收集可能的具体参数 ID（键与字符串值）。 */
-function findConcreteParamIds(value, hits, pathKey = '') {
+function findConcreteParamIds(value, hits, pathKey = '', depth = 0) {
+  if (depth > MAX_PARAM_DEPTH) throw new Error(PARAM_DEPTH_EXCEEDED);
   if (typeof value === 'string') {
     if (CONCRETE_PARAM_ID_RE.test(value) || KNOWN_CUBISM_PARAM_IDS.has(value)) {
       hits.push(`${pathKey || '<value>'}=${value}`);
@@ -47,13 +52,13 @@ function findConcreteParamIds(value, hits, pathKey = '') {
     return;
   }
   if (Array.isArray(value)) {
-    value.forEach((v, i) => findConcreteParamIds(v, hits, `${pathKey}[${i}]`));
+    value.forEach((v, i) => findConcreteParamIds(v, hits, `${pathKey}[${i}]`, depth + 1));
     return;
   }
   if (isPlainObject(value)) {
     for (const [k, v] of Object.entries(value)) {
       if (CONCRETE_PARAM_ID_RE.test(k) || KNOWN_CUBISM_PARAM_IDS.has(k)) hits.push(`${pathKey}.${k}`);
-      findConcreteParamIds(v, hits, `${pathKey}.${k}`);
+      findConcreteParamIds(v, hits, `${pathKey}.${k}`, depth + 1);
     }
   }
 }
@@ -80,6 +85,29 @@ export function createIngestionPipeline({ repository, registry }) {
       candidate.provenance ?? null,
     );
     return { status: 'rejected', gate, code, reason, evidence, recorded };
+  }
+
+  /**
+   * fix-p4/H1 ②：快照缺失自愈。
+   * G0 的 duplicate 短路会永久封死重试路径——若目标链尚未登记快照（此前导出失败过），
+   * 在此补导一次并返回明确状态，避免「已 validated 却永久缺快照」的不可逆卡死。
+   * 只经 Repository（R4），Pipeline 不直写动作链表。
+   */
+  function healMissingSnapshot(motionId, chainId) {
+    if (typeof repository.getActionChain !== 'function' || typeof repository.exportActionSnapshot !== 'function') return null;
+    let chain;
+    try { chain = repository.getActionChain(chainId); } catch { return null; }
+    if (!chain || chain.jsonAddress) return null; // 已登记快照 → 维持 duplicate 语义
+    try {
+      const snap = repository.exportActionSnapshot(motionId, chain.version);
+      return {
+        status: 'snapshot_healed', motionId, chainId,
+        chainHash: chain.chainHash, version: chain.version,
+        snapshot: { path: snap.path, contentSha256: snap.contentSha256 },
+      };
+    } catch {
+      return null; // 仍失败 → 维持 duplicate，下次继续重试，绝不伪造成功
+    }
   }
 
   // ------------------------------------------------------------ G0 完整性与幂等
@@ -172,7 +200,15 @@ export function createIngestionPipeline({ repository, registry }) {
   function g2(candidate) {
     for (const s of candidate.chain.steps) {
       const hits = [];
-      findConcreteParamIds(s.params ?? {}, hits);
+      try {
+        findConcreteParamIds(s.params ?? {}, hits);
+      } catch (err) {
+        // fix-p4/H3：超深/循环 params 不得让门禁链 RangeError 崩溃，转受控拒绝
+        if (err && err.message === PARAM_DEPTH_EXCEEDED) {
+          return { ok: false, code: 'SCHEMA_INVALID', reason: `step.params 嵌套深度超过 ${MAX_PARAM_DEPTH} 层（防止递归栈溢出）` };
+        }
+        throw err;
+      }
       if (hits.length > 0) {
         return { ok: false, code: 'MODEL_PARAM_ID_IN_CHAIN', reason: `R1：动作链出现模型参数 ID 字面量 → ${hits.join('; ')}` };
       }
@@ -260,7 +296,10 @@ export function createIngestionPipeline({ repository, registry }) {
   function ingest(candidate) {
     const g0r = g0(candidate);
     if (!g0r.ok) {
-      if (g0r.shortCircuit === 'duplicate') return { status: 'duplicate', motionId: g0r.motionId, chainId: g0r.chainId };
+      if (g0r.shortCircuit === 'duplicate') {
+        return healMissingSnapshot(g0r.motionId, g0r.chainId)
+          || { status: 'duplicate', motionId: g0r.motionId, chainId: g0r.chainId };
+      }
       if (g0r.shortCircuit === 'version_conflict') return { status: 'version_conflict', expectedVersion: g0r.expectedVersion };
       return reject(candidate, 'G0', g0r.code, g0r.reason);
     }
@@ -289,15 +328,39 @@ export function createIngestionPipeline({ repository, registry }) {
       return reject(candidate, 'COMMIT', 'PERSIST_FAILED', err.message);
     }
     if (persisted.status === 'duplicate') {
-      return { status: 'duplicate', motionId: persisted.motionId, chainId: persisted.chainId };
+      return healMissingSnapshot(persisted.motionId, persisted.chainId)
+        || { status: 'duplicate', motionId: persisted.motionId, chainId: persisted.chainId };
     }
-    // R7：validated 后导出不可变快照（失败则整批按拒绝留痕，不产生伪成功）
+    // R7：validated 后导出不可变快照
     let snapshot = null;
     try {
       snapshot = repository.exportActionSnapshot(persisted.motionId);
     } catch (err) {
-      return reject(candidate, 'COMMIT', 'SNAPSHOT_FAILED', `快照导出失败：${err.message}`,
-        { motionId: persisted.motionId, chainId: persisted.chainId });
+      // fix-p4/H1 ① 补偿：createActionChain 已提交（motion=validated + 链入库），
+      // 不回滚也不降级——deprecated 是终态、会让有效动作永久不可用，比缺快照更糟。
+      // 仅留痕（经 Repository，对 validated 只追加 failed 学习任务、不改状态），
+      // 并返回明确的「待补导」状态，由 healMissingSnapshot 在下次 ingest 自愈。
+      try {
+        repository.recordRejectedAction(
+          {
+            semanticKey: candidate.semanticKey,
+            description: candidate.description ?? '',
+            code: 'SNAPSHOT_PENDING',
+            sourceId: candidate.sourceId ?? null,
+            modelCapabilityId: candidate.modelCapabilityId ?? null,
+            evidence: { motionId: persisted.motionId, chainId: persisted.chainId },
+          },
+          'COMMIT',
+          `快照导出失败，链已 validated 待补导：${err.message}`,
+          candidate.provenance ?? null,
+        );
+      } catch { /* 留痕失败不掩盖主失败 */ }
+      return {
+        status: 'validated_snapshot_pending',
+        motionId: persisted.motionId,
+        chainId: persisted.chainId,
+        reason: `快照导出失败，链已 validated 待补导：${err.message}`,
+      };
     }
     return {
       status: 'validated',
