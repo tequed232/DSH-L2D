@@ -266,7 +266,7 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
   position:absolute; right:14px; bottom:14px; z-index:6;
   background:var(--panel); border:1px solid var(--mg-border-strong); border-radius:var(--r-md); padding:6px;
 }
-#minimap-wrap .mm-head { font:600 9px var(--mono); letter-spacing:.1em; color:var(--ink3); margin:0 0 5px 2px; }
+#minimap-wrap .mm-head { display:flex; align-items:center; justify-content:space-between; font:600 9px var(--mono); letter-spacing:.1em; color:var(--ink3); margin:0 0 5px 2px; }
 #minimap { display:block; width:184px; height:112px; cursor:pointer; }
 #zoombar {
   position:absolute; left:50%; transform:translateX(-50%); bottom:14px; z-index:6;
@@ -279,7 +279,7 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
 #zoombar .zoom-val { font:600 10.5px var(--mono); color:var(--ink2); min-width:42px; text-align:center; }
 #zoombar .fit { width:auto; padding:0 8px; font:600 10px var(--mono); }
 #sim-panel {
-  position:absolute; left:14px; bottom:56px; z-index:6; width:250px; display:none;
+  position:absolute; right:14px; bottom:190px; z-index:6; width:250px; display:none;
   background:var(--panel); border:1px solid var(--mg-border-strong); border-radius:var(--r-md); padding:10px 12px;
 }
 #sim-panel.show { display:block; }
@@ -290,6 +290,34 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
 #sim-fill { height:100%; width:0; background:var(--accent); transition:width .25s linear; }
 #sim-step { font:11px var(--mono); color:var(--ink); margin-top:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #sim-note { font-size:10px; color:var(--ink3); margin-top:5px; line-height:1.5; }
+
+/* ---- 图层式监看浮窗（Photoshop 图层语义）：可拖动 / 可收起 / 置顶 / 叠放调序 ---- */
+.fp-drag { cursor:move; user-select:none; touch-action:none; }
+.fp-btn { border:0; background:transparent; color:var(--ink3); cursor:pointer; font-size:12px; line-height:1; padding:0 3px; }
+.fp-btn:hover { color:var(--ink); }
+#sim-panel.fp-collapsed { padding-bottom:6px; }
+#sim-panel.fp-collapsed #sim-track, #sim-panel.fp-collapsed #sim-step, #sim-panel.fp-collapsed #sim-note { display:none; }
+#sim-panel.fp-collapsed .sp-head { margin-bottom:0; }
+#minimap-wrap.fp-collapsed #minimap { display:none; }
+#minimap-wrap.fp-collapsed .mm-head { margin-bottom:0; }
+#monitor-win.fp-collapsed #monitor-frame, #monitor-win.fp-collapsed #monitor-fallback { display:none; }
+.user-hidden { display:none !important; }
+#layers-pop {
+  position:absolute; right:14px; bottom:56px; z-index:47; width:264px;
+  background:var(--panel); border:1px solid var(--mg-border-strong); border-radius:var(--r-md);
+  box-shadow:0 16px 40px rgba(0,0,0,.55); padding:6px; display:none;
+}
+#layers-pop.show { display:block; }
+#layers-pop .lp-head { padding:4px 8px 6px; font:600 9px var(--mono); letter-spacing:.1em; color:var(--ink3); }
+#layers-pop .lp-row { display:flex; align-items:center; gap:5px; padding:5px 8px; border-radius:5px; }
+#layers-pop .lp-row:hover { background:var(--surface); }
+#layers-pop .lp-name { flex:1; min-width:0; font-size:11.5px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#layers-pop .lp-btn {
+  flex:none; width:22px; height:20px; border:1px solid var(--mg-border-strong); border-radius:4px;
+  background:transparent; color:var(--ink2); cursor:pointer; font-size:11px; line-height:1; padding:0;
+  display:grid; place-items:center;
+}
+#layers-pop .lp-btn:hover { color:var(--ink); background:var(--surface); }
 
 /* ---- Inspector ---- */
 .ins-head { padding:14px; border-bottom:1px solid var(--mg-border-strong); }
@@ -422,7 +450,7 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
   #minimap-wrap { right:8px; bottom:8px; }
   #minimap { width:140px; height:88px; }
   #zoombar { bottom:8px; }
-  #sim-panel { width:210px; bottom:50px; left:8px; }
+  #sim-panel { width:210px; bottom:50px; right:8px; left:auto; }
   #status-track { width:90px; }
   .ins-section { padding:11px 10px; } .ins-head { padding:11px 10px; } .ins-actions { padding:10px; }
 }
@@ -494,18 +522,22 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
       </div>
     </div>
     <div id="sim-panel">
-      <div class="sp-head"><span class="sp-title">LOCAL SIMULATION</span><button class="sp-close" id="sim-close" title="停止">×</button></div>
+      <div class="sp-head"><span class="sp-title">LOCAL SIMULATION</span>
+        <span><button class="fp-btn" data-fp-collapse="sim-panel" title="收起/展开">—</button>
+        <button class="sp-close" id="sim-close" title="停止">×</button></span></div>
       <div id="sim-track"><div id="sim-fill"></div></div>
       <div id="sim-step">待触发</div>
       <div id="sim-note">纯本地预览：不调 LLM、不调后端、不提交 Runtime 动作队列。Graph Cache 命中不跳过播放。</div>
     </div>
-    <div id="minimap-wrap"><div class="mm-head">MINIMAP</div><canvas id="minimap" width="368" height="224"></canvas></div>
+    <div id="minimap-wrap"><div class="mm-head">MINIMAP<button class="fp-btn" data-fp-collapse="minimap-wrap" title="收起/展开">—</button></div><canvas id="minimap" width="368" height="224"></canvas></div>
     <div id="zoombar">
       <button id="zoom-out" title="缩小">−</button>
       <span class="zoom-val num" id="zoom-val">100%</span>
       <button id="zoom-in" title="放大">+</button>
       <button class="fit" id="zoom-fit" title="适配全部">FIT</button>
+      <button id="layers-btn" title="监看图层：置顶 / 隐藏 / 收起 / 调序">☰</button>
     </div>
+    <div id="layers-pop"></div>
   </section>
 
   <div class="col-resizer" id="rz-insp" role="separator" aria-orientation="vertical" aria-label="调整属性面板宽度" title="拖拽调整宽度 · 双击复位"></div>
@@ -522,8 +554,9 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
 <div id="menu-pop"></div>
 <div id="node-menu"></div>
 <div id="monitor-win">
-  <div class="mw-head"><b>LIVE2D MONITOR</b><span class="mw-src">/dsh-l2d/pet.html</span>
-    <button class="btn icon-only" id="monitor-close" title="关闭监看"><span class="ico">×</span></button></div>
+      <div class="mw-head"><b>LIVE2D MONITOR</b><span class="mw-src">/dsh-l2d/pet.html</span>
+        <button class="fp-btn" data-fp-collapse="monitor-win" title="收起/展开">—</button>
+        <button class="btn icon-only" id="monitor-close" title="关闭监看"><span class="ico">×</span></button></div>
   <iframe id="monitor-frame" title="Live2D 模型监看"></iframe>
   <div id="monitor-fallback" class="hidden"><b>宿主未在线</b><br>Live2D 监看需要宿主（或 DevServer）提供 <code>/dsh-l2d/pet.html</code>；file:// 直开或服务不可达时无法嵌入真实模型。
   动作时序预览请用顶部「模拟触发」（纯本地，不依赖宿主）。</div>
@@ -1321,6 +1354,186 @@ var Combos = {
   }
 };
 
+/* =========================================================================
+   PanelLayers：监看浮窗的图层式管理（Photoshop 图层语义）。
+   - 可拖动：面板头部为拖拽手柄，落点 clamp 在画布内，位置持久化
+   - 可收起：折叠为头部窄条（data-fp-collapse 按钮）
+   - 置顶/调序：pointerdown 点击面板即提到最上层；图层清单可 ↑↓ 调序、●/○ 显隐
+   - z 分配：order 数组 index → z = 30+i（低于右键菜单 46 与模态 60，不干扰原功能）
+   - 持久化 localStorage 'dsh-mg-panels.v1'；file:// 受限时仅内存生效
+   ========================================================================= */
+var PanelLayers = {
+  KEY: 'dsh-mg-panels.v1',
+  available: true,
+  panels: [
+    { id: 'sim-panel', name: '模拟监视 LOCAL SIM' },
+    { id: 'minimap-wrap', name: '小地图 MINIMAP' },
+    { id: 'monitor-win', name: 'Live2D 监看 MONITOR' }
+  ],
+  state: { order: ['sim-panel', 'minimap-wrap', 'monitor-win'], collapsed: {}, hidden: {}, pos: {} },
+  load: function () {
+    try {
+      var raw = localStorage.getItem(this.KEY);
+      if (raw) {
+        var s = JSON.parse(raw);
+        if (s && Array.isArray(s.order)) {
+          // 只收已知面板，顺序补齐未知缺项
+          var known = this.panels.map(function (p) { return p.id; });
+          this.state.order = s.order.filter(function (id) { return known.indexOf(id) >= 0; });
+          known.forEach(function (id) { if (this.state.order.indexOf(id) < 0) this.state.order.push(id); }, this);
+          this.state.collapsed = s.collapsed || {};
+          this.state.hidden = s.hidden || {};
+          this.state.pos = s.pos || {};
+        }
+      }
+    } catch (err) { this.available = false; }
+  },
+  save: function () {
+    try { localStorage.setItem(this.KEY, JSON.stringify(this.state)); }
+    catch (err) { this.available = false; }
+  },
+  zFor: function (id) {
+    var i = this.state.order.indexOf(id);
+    return 30 + (i < 0 ? 0 : i);
+  },
+  apply: function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.style.zIndex = this.zFor(id);
+    el.classList.toggle('fp-collapsed', !!this.state.collapsed[id]);
+    el.classList.toggle('user-hidden', !!this.state.hidden[id]);
+    var p = this.state.pos[id];
+    if (p) {
+      el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
+      el.style.right = 'auto'; el.style.bottom = 'auto';
+    }
+  },
+  applyAll: function () {
+    var self = this;
+    this.state.order.forEach(function (id) { self.apply(id); });
+  },
+  raise: function (id) {
+    var o = this.state.order;
+    if (o[o.length - 1] === id) { this.apply(id); return false; }
+    this.state.order = o.filter(function (x) { return x !== id; });
+    this.state.order.push(id);
+    this.save(); this.applyAll(); this.renderList();
+    return true;
+  },
+  toggleCollapse: function (id) {
+    this.state.collapsed[id] = !this.state.collapsed[id];
+    this.save(); this.apply(id); this.renderList();
+  },
+  toggleHidden: function (id) {
+    this.state.hidden[id] = !this.state.hidden[id];
+    this.save(); this.apply(id); this.renderList();
+  },
+  move: function (id, dir) {
+    var o = this.state.order.slice();
+    var i = o.indexOf(id), j = i + dir;
+    if (i < 0 || j < 0 || j >= o.length) return;
+    o.splice(i, 1); o.splice(j, 0, id);
+    this.state.order = o;
+    this.save(); this.applyAll(); this.renderList();
+  },
+  setPos: function (id, x, y) {
+    this.state.pos[id] = { x: Math.round(x), y: Math.round(y) };
+    this.save();
+  },
+  makeDraggable: function (id, handleSel) {
+    var el = document.getElementById(id), h = el && el.querySelector(handleSel), self = this;
+    if (!el || !h || h.dataset.fpBound) return;
+    h.dataset.fpBound = '1';
+    h.classList.add('fp-drag');
+    h.addEventListener('pointerdown', function (e) {
+      if (e.target.closest('button')) return; // 头部按钮不触发拖拽
+      self.raise(id);
+      var r = el.getBoundingClientRect(), wr = el.parentElement.getBoundingClientRect();
+      var ox = e.clientX - r.left, oy = e.clientY - r.top;
+      el.style.left = (r.left - wr.left) + 'px';
+      el.style.top = (r.top - wr.top) + 'px';
+      el.style.right = 'auto'; el.style.bottom = 'auto';
+      var last = null;
+      var move = function (ev) {
+        var x = Math.max(0, Math.min(ev.clientX - wr.left - ox, wr.width - 60));
+        var y = Math.max(0, Math.min(ev.clientY - wr.top - oy, wr.height - 30));
+        el.style.left = x + 'px'; el.style.top = y + 'px';
+        last = { x: x, y: y };
+      };
+      var up = function () {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
+        if (last) self.setPos(id, last.x, last.y);
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
+      e.preventDefault();
+    });
+    // 点击面板任意处即置顶（capture，不干扰内部点击语义）
+    el.addEventListener('pointerdown', function () { self.raise(id); }, true);
+  },
+  renderList: function () {
+    var pop = document.getElementById('layers-pop');
+    if (!pop) return;
+    var self = this;
+    var html = '<div class="lp-head">监看图层 · 顶层在前 · 拖面板头部可移动</div>';
+    this.state.order.slice().reverse().forEach(function (id) {
+      var p = null;
+      self.panels.forEach(function (x) { if (x.id === id) p = x; });
+      if (!p) return;
+      var hid = !!self.state.hidden[id], col = !!self.state.collapsed[id];
+      html += '<div class="lp-row" data-lp="' + id + '">' +
+        '<button class="lp-btn" data-act="vis" title="' + (hid ? '显示' : '隐藏') + '">' + (hid ? '○' : '●') + '</button>' +
+        '<span class="lp-name">' + esc(p.name) + '</span>' +
+        '<button class="lp-btn" data-act="top" title="置顶">⤒</button>' +
+        '<button class="lp-btn" data-act="up" title="上移一层">↑</button>' +
+        '<button class="lp-btn" data-act="down" title="下移一层">↓</button>' +
+        '<button class="lp-btn" data-act="col" title="' + (col ? '展开' : '收起') + '">' + (col ? '▢' : '—') + '</button>' +
+        '</div>';
+    });
+    pop.innerHTML = html;
+    $$('#layers-pop .lp-row').forEach(function (row) {
+      var id = row.dataset.lp;
+      row.querySelectorAll('.lp-btn').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var act = b.dataset.act;
+          if (act === 'vis') self.toggleHidden(id);
+          else if (act === 'top') self.raise(id);
+          else if (act === 'col') self.toggleCollapse(id);
+          else if (act === 'up') self.move(id, 1);   // 顶层在首行：上移一层 = z 增大
+          else if (act === 'down') self.move(id, -1);
+        });
+      });
+    });
+  },
+  toggle: function () {
+    var pop = document.getElementById('layers-pop');
+    if (!pop) return;
+    pop.classList.toggle('show');
+    if (pop.classList.contains('show')) this.renderList();
+  },
+  init: function () {
+    this.load(); this.applyAll();
+    var self = this;
+    this.makeDraggable('sim-panel', '.sp-head');
+    this.makeDraggable('minimap-wrap', '.mm-head');
+    this.makeDraggable('monitor-win', '.mw-head');
+    $$('[data-fp-collapse]').forEach(function (b) {
+      b.addEventListener('click', function () { self.toggleCollapse(b.dataset.fpCollapse); });
+    });
+    var btn = document.getElementById('layers-btn');
+    if (btn) btn.addEventListener('click', function (e) { e.stopPropagation(); self.toggle(); });
+    document.addEventListener('pointerdown', function (e) {
+      var pop = document.getElementById('layers-pop');
+      if (!pop || !pop.classList.contains('show')) return;
+      if (e.target.closest('#layers-pop') || e.target.closest('#layers-btn')) return;
+      pop.classList.remove('show');
+    });
+  }
+};
+
 var Slots = {
   memory: new Map(), available:true,
   prefix: function (modelId) { return 'mg-lab:v1:' + encodeURIComponent(modelId || '_default') + ':'; },
@@ -1362,6 +1575,7 @@ var UI = {
     this.canvas = $('#canvas'); this.world = $('#world'); this.wiresG = $('#wires-g');
     this.nodesEl = $('#nodes'); this.minimap = $('#minimap');
     this.renderLibrary(); this.bindTopbar(); this.bindCanvas(); this.bindInspector(); this.bindModal(); this.bindResizers(); this.bindContextMenus();
+    PanelLayers.init();
     this.applyViewport(); this.refreshAll();
     this.updateBadge(Validator.check(Serializer.build()));
   },
@@ -2601,6 +2815,31 @@ function runSelfTest() {
       return { ok:ok, saved:!!saved, nodes:Graph.nodes.length, edges:Graph.edges.length };
     } catch (e) { return { ok:false, error:String(e) }; }
   })();
+  // 图层式浮窗自测：置顶 → z 序更新；收起/展开；程序化拖拽 → 位置持久化
+  var panelsT = (function () {
+    try {
+      var P = PanelLayers;
+      P.raise('minimap-wrap');
+      var top1 = P.state.order[P.state.order.length - 1] === 'minimap-wrap';
+      P.toggleCollapse('minimap-wrap');
+      var col = document.getElementById('minimap-wrap').classList.contains('fp-collapsed');
+      P.toggleCollapse('minimap-wrap');
+      var uncol = !document.getElementById('minimap-wrap').classList.contains('fp-collapsed');
+      var h = document.querySelector('#sim-panel .sp-head');
+      h.dispatchEvent(new PointerEvent('pointerdown', { bubbles:true, pointerId:1, clientX:600, clientY:400, button:0 }));
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles:true, pointerId:1, clientX:500, clientY:300 }));
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles:true, pointerId:1, clientX:500, clientY:300 }));
+      var moved = !!P.state.pos['sim-panel'] && document.getElementById('sim-panel').style.top !== '';
+      P.move('sim-panel', -1);
+      var reorder = P.state.order.indexOf('sim-panel') < P.state.order.indexOf('minimap-wrap');
+      // 清理自测污染：复位顺序与位置，不留持久化痕迹
+      delete P.state.pos['sim-panel'];
+      P.state.order = ['sim-panel', 'minimap-wrap', 'monitor-win'];
+      P.save(); P.applyAll();
+      var ok = top1 && col && uncol && moved && reorder;
+      return { ok:ok, raised:top1, col:col, moved:moved, reorder:reorder };
+    } catch (e) { return { ok:false, error:String(e) }; }
+  })();
   var doc = Serializer.build();
   var result = {
     validate: v,
@@ -2613,7 +2852,8 @@ function runSelfTest() {
     cacheNote: Cache.note(),
     resizers: rz,
     contextMenus: ctx,
-    combo: comboT
+    combo: comboT,
+    panels: panelsT
   };
   $('#mg-selftest').textContent = JSON.stringify(result, null, 2);
   $('#mg-export').textContent = Serializer.exportText();
@@ -2626,6 +2866,7 @@ function runSelfTest() {
     + ' resizers-' + (rz.ok ? 'ok' : 'FAIL(rail=' + (rz.rail===true?'ok':rz.rail) + ',insp=' + (rz.insp===true?'ok':rz.insp) + ',dock=' + (rz.dock===true?'ok':rz.dock) + (rz.dockGot!==undefined ? '[' + rz.dockGot + ']' : '') + ',reset=' + (rz.reset===true?'ok':rz.reset) + (rz.error ? ',err=' + rz.error : '') + ')')
     + ' ctx-' + (ctx.ok ? 'ok' : 'FAIL(node=' + (ctx.nodeOk===true?'ok':ctx.nodeOk) + ',edge=' + (ctx.edgeOk===true?'ok':ctx.edgeOk) + (ctx.error ? ',err=' + ctx.error : '') + ')')
     + ' combo-' + (comboT.ok ? 'ok' : 'FAIL(' + (comboT.error ? 'err=' + comboT.error : 'nodes=' + comboT.nodes + '/edges=' + comboT.edges) + ')')
+    + ' panels-' + (panelsT.ok ? 'ok' : 'FAIL(' + (panelsT.error ? 'err=' + panelsT.error : 'raised=' + panelsT.raised + '/col=' + panelsT.col + '/moved=' + panelsT.moved + '/reorder=' + panelsT.reorder) + ')')
     + (rt.diff.length ? ' diff=' + rt.diff.join('|') : '');
 }
 
