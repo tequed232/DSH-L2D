@@ -186,6 +186,27 @@
     'padding:var(--dsh-space-2) var(--dsh-space-3);border-radius:var(--dsh-radius-md);font:var(--dsh-text-sm);cursor:pointer;}',
     '.l2d-menu button:hover{background:var(--dsh-hover);}',
     '.l2d-menu .l2d-menu-title{padding:var(--dsh-space-1) var(--dsh-space-3);font:var(--dsh-text-xs);color:var(--dsh-ink-muted);}',
+    '.l2d-qc{display:flex;flex-direction:column;gap:var(--dsh-space-1);padding:var(--dsh-space-1) var(--dsh-space-2) var(--dsh-space-2);}',
+    '.l2d-qc-input{box-sizing:border-box;width:100%;max-height:120px;resize:none;',
+    'padding:var(--dsh-space-2);border-radius:var(--dsh-radius-md);background:var(--dsh-surface);',
+    'color:var(--dsh-ink);font:var(--dsh-text-sm);border:1px solid var(--dsh-line);overflow-y:auto;}',
+    '.l2d-qc-input:focus{outline:none;border-color:var(--dsh-accent);}',
+    '.l2d-qc-input::placeholder{color:var(--dsh-ink-muted);}',
+    '.l2d-qc-send{align-self:flex-end;}',
+    '.l2d-qc-hint{font:var(--dsh-text-xs);color:var(--dsh-ink-muted);padding:0 var(--dsh-space-2);}',
+    '.l2d-logpanel{position:fixed;right:var(--dsh-space-3);top:var(--dsh-space-3);width:280px;height:360px;',
+    'box-sizing:border-box;display:none;flex-direction:column;pointer-events:auto;',
+    'border-radius:var(--dsh-radius-lg);background:var(--dsh-surface);color:var(--dsh-ink);',
+    'border:1px solid var(--dsh-line);box-shadow:var(--dsh-shadow-2);z-index:var(--dsh-z-panel,2147483200);}',
+    '.l2d-logpanel.open{display:flex;}',
+    '.l2d-logpanel-head{display:flex;align-items:center;justify-content:space-between;',
+    'padding:var(--dsh-space-1) var(--dsh-space-2);border-bottom:1px solid var(--dsh-line);}',
+    '.l2d-logpanel-head button{border:1px solid var(--dsh-line);background:transparent;color:var(--dsh-ink);',
+    'padding:2px var(--dsh-space-2);border-radius:var(--dsh-radius-md);font:var(--dsh-text-xs);cursor:pointer;}',
+    '.l2d-logpanel-head button:hover{background:var(--dsh-hover);}',
+    '.l2d-logpanel-body{flex:1;min-height:0;overflow-y:auto;margin:0;padding:var(--dsh-space-1) var(--dsh-space-2);',
+    'font-family:var(--dsh-font-mono);font-size:11px;line-height:1.7;}',
+    '.l2d-logline{white-space:nowrap;}',
     '.l2d-yandere-fx{position:fixed;inset:0;pointer-events:none;z-index:2147483200;',
     'background:radial-gradient(ellipse at center,rgba(0,0,0,0) 38%,rgba(45,0,14,.6) 100%);',
     'opacity:0;transition:opacity .7s;}',
@@ -578,6 +599,7 @@
     // 手动切换优先：60s 内环境层不自动改状态，避免刚点完就被覆盖
     env.manualUntil = Date.now() + 60000;
     prefs.state = next;
+    pushL2dLog({ comp: 'stage', state: next });
     persist();
     if (root) root.className = next;
     if (chipEl) chipEl.textContent = LABEL[next] || next;
@@ -585,6 +607,89 @@
   }
 
   var bubbleTimer = null;
+
+  // ---- 调试日志：环形缓冲纯函数块（自包含，单测 debug-log.test.mjs 用 vm 抽取本段真实验证） ----
+  var L2D_LOG_MAX_CHARS = 8192;
+  var L2D_LOG_MAX_AGE_MS = 30 * 60 * 1000;
+  var l2dLogEntries = [];
+  var l2dLogSeq = 0;
+
+  /** 删除 now - t > 30min 的过期条目；push 时顺带调用 */
+  function pruneL2dLog(now) {
+    var nowMs = typeof now === 'number' ? now : Date.now();
+    var keep = [];
+    for (var i = 0; i < l2dLogEntries.length; i++) {
+      var e = l2dLogEntries[i];
+      if (e && typeof e.t === 'number' && nowMs - e.t <= L2D_LOG_MAX_AGE_MS) keep.push(e);
+    }
+    l2dLogEntries = keep;
+  }
+
+  /**
+   * 追加一条日志（字段缺省补默认值），随后 prune 过期；若 JSON 总字符超
+   * L2D_LOG_MAX_CHARS 则从最旧开始丢弃（滚动覆盖）。畸形入参一律不抛——
+   * 日志是观测面，绝不能连累主流程。
+   */
+  function pushL2dLog(entry) {
+    try {
+      l2dLogSeq += 1;
+      var src = entry && typeof entry === 'object' ? entry : {};
+      var model = '—';
+      try {
+        var L = typeof window !== 'undefined' ? window.DSH_L2D : null;
+        var modelName = L && (L.modelName || L.model);
+        if (modelName) model = String(modelName);
+      } catch (err) { /* 拿不到就用 '—' */ }
+      l2dLogEntries.push({
+        t: typeof src.t === 'number' ? src.t : Date.now(),
+        comp: String(src.comp || 'overlay'),
+        state: String(src.state == null ? '' : src.state),
+        model: model,
+        action: String(src.action == null ? '' : src.action),
+        seq: l2dLogSeq,
+        skill: String(src.skill || '—'),
+      });
+      pruneL2dLog(Date.now());
+      var total = 0;
+      var i;
+      for (i = 0; i < l2dLogEntries.length; i++) {
+        try { total += JSON.stringify(l2dLogEntries[i]).length; }
+        catch (err) { total += 64; }
+      }
+      while (total > L2D_LOG_MAX_CHARS && l2dLogEntries.length > 1) {
+        var oldest = l2dLogEntries.shift();
+        try { total -= JSON.stringify(oldest).length; }
+        catch (err) { total -= 64; }
+      }
+      return l2dLogEntries.length;
+    } catch (e) {
+      return -1;
+    }
+  }
+
+  /** 纯渲染：返回行文本数组（HH:MM:SS comp state action #seq，最新在底）；面板 DOM 更新另做 */
+  function renderL2dLog() {
+    var lines = [];
+    var p = function (num) { return num < 10 ? '0' + num : String(num); };
+    for (var i = 0; i < l2dLogEntries.length; i++) {
+      var e = l2dLogEntries[i];
+      var d = new Date(typeof e.t === 'number' ? e.t : 0);
+      lines.push(
+        p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds())
+        + ' ' + e.comp + ' ' + e.state + ' ' + e.action + ' #' + e.seq
+      );
+    }
+    return lines;
+  }
+
+  if (typeof window !== 'undefined') {
+    window.DSH_L2D_LOG__ = {
+      push: pushL2dLog,
+      entries: function () { return l2dLogEntries.slice(); },
+      prune: pruneL2dLog,
+      MAX_CHARS: L2D_LOG_MAX_CHARS,
+    };
+  }
 
   // ---- 字幕准入：参数 / 模板 / JSON / 标签片段在渲染出口前一律剔除，只放行自然语言 ----
   // 以下三个标识符自包含（不引用本模块其它变量），单测用 vm 抽取本段真实实现直接验证。
@@ -625,6 +730,7 @@
     var admitted = admitCaption(text);
     if (!admitted.ok) return;
     bubbleEl.textContent = admitted.text;
+    pushL2dLog({ comp: 'overlay', action: 'say', state: String(admitted.text).slice(0, 20) });
     bubbleEl.classList.add('show');
     if (bubbleTimer) clearTimeout(bubbleTimer);
     bubbleTimer = setTimeout(function () {
@@ -1108,8 +1214,17 @@
     menuEl.innerHTML = '';
     var title = document.createElement('div');
     title.className = 'l2d-menu-title';
-    title.textContent = menuView === 'root' ? 'DSH-L2D' : menuView === 'appearance' ? '模型外观' : '面部';
+    title.textContent = menuView === 'root' ? 'DSH-L2D' : menuView === 'quickchat' ? '快捷对话' : menuView === 'appearance' ? '模型外观' : '面部';
     menuEl.appendChild(title);
+
+    if (menuView === 'quickchat') {
+      menuEl.appendChild(menuButton('← 返回', function () {
+        menuView = 'root';
+        setTimeout(buildMenu, 30);
+      }, true));
+      buildQuickChat();
+      return;
+    }
 
     if (menuView === 'appearance') {
       menuEl.appendChild(menuButton('← 返回', function () {
@@ -1198,6 +1313,135 @@
       setTimeout(buildMenu, 30);
     }));
     menuEl.appendChild(menuButton('余额 / 价格', showBalance));
+    menuEl.appendChild(menuButton('快捷对话', function () {
+      menuView = 'quickchat';
+      setTimeout(buildMenu, 30);
+    }, true));
+    menuEl.appendChild(menuButton('调试日志', toggleLogPanel, true));
+  }
+
+  // ---- 快捷对话：Enter 发送 / Shift+Enter 换行；发送成功本地经字幕准入回显并关菜单 ----
+  var qcSending = false;
+
+  function buildQuickChat() {
+    var wrap = document.createElement('div');
+    wrap.className = 'l2d-qc';
+    var input = document.createElement('textarea');
+    input.className = 'l2d-qc-input';
+    input.rows = 1;
+    input.placeholder = '想对角色说什么…';
+    var autoHeight = function () {
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+    };
+    input.addEventListener('input', autoHeight);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { closeMenu(); return; } // Esc 关菜单，其余按键不外泄
+      e.stopPropagation();
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendQuickChat(input);
+      }
+    });
+    var sendBtn = menuButton('发送', function () { sendQuickChat(input); }, true);
+    sendBtn.className = 'l2d-qc-send';
+    var hint = document.createElement('div');
+    hint.className = 'l2d-qc-hint';
+    hint.textContent = 'Enter 发送 · Shift+Enter 换行 · 最多 200 字';
+    wrap.appendChild(input);
+    wrap.appendChild(sendBtn);
+    wrap.appendChild(hint);
+    menuEl.appendChild(wrap);
+    setTimeout(function () {
+      try { input.focus(); } catch (err) { /* ignore */ }
+      autoHeight();
+    }, 40);
+  }
+
+  function sendQuickChat(input) {
+    if (qcSending) return; // 禁止并发重入
+    var text = String((input && input.value) || '').trim();
+    if (!text) return;
+    if (text.length > 200) {
+      text = text.slice(0, 200); // 与 l2d_say 的 slice(0,200) 对齐，超出前端先截断并提示
+      input.value = text;
+      var hintEl = menuEl && menuEl.querySelector('.l2d-qc-hint');
+      if (hintEl) hintEl.textContent = '太长了，已截断到 200 字';
+      say('太长了，只发前 200 字', 2200);
+    }
+    qcSending = true;
+    fetch('/dsh-l2d/ai/call', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'l2d_say', args: { text: text, holdMs: 5200 } }),
+      cache: 'no-store',
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json().catch(function () { return {}; });
+      })
+      .then(function (queued) {
+        if (!queued || typeof queued.id === 'undefined') throw new Error('no-queue-id');
+        qcSending = false;
+        if (input) input.value = '';
+        say(text, 5200); // 本地直接回显（经字幕准入）；后端消费 l2d_say 后同文再上屏一次
+        closeMenu();
+      })
+      .catch(function () {
+        qcSending = false;
+        say('发送失败，再试一次', 2200); // 失败不关菜单，保留输入便于重试
+      });
+  }
+
+  // ---- 调试日志面板：固定右上角小窗，开/关切换；关闭后缓冲继续记录 ----
+  var logPanelEl = null;
+  var logLinesEl = null;
+
+  function ensureLogPanel() {
+    if (logPanelEl) return;
+    logPanelEl = document.createElement('div');
+    logPanelEl.className = 'l2d-logpanel';
+    logPanelEl.setAttribute('aria-hidden', 'true');
+    var head = document.createElement('div');
+    head.className = 'l2d-logpanel-head';
+    var headTitle = document.createElement('span');
+    headTitle.textContent = '调试日志';
+    var clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.textContent = '清空';
+    clearBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      l2dLogEntries.length = 0;
+      renderLogPanel();
+    });
+    head.appendChild(headTitle);
+    head.appendChild(clearBtn);
+    logLinesEl = document.createElement('div');
+    logLinesEl.className = 'l2d-logpanel-body';
+    logPanelEl.appendChild(head);
+    logPanelEl.appendChild(logLinesEl);
+    document.body.appendChild(logPanelEl);
+  }
+
+  function renderLogPanel() {
+    if (!logPanelEl || !logLinesEl) return;
+    var lines = renderL2dLog();
+    logLinesEl.textContent = '';
+    for (var i = 0; i < lines.length; i++) {
+      var row = document.createElement('div');
+      row.className = 'l2d-logline';
+      row.textContent = lines[i];
+      logLinesEl.appendChild(row);
+    }
+    logLinesEl.scrollTop = logLinesEl.scrollHeight; // 最新在底自动滚动
+  }
+
+  function toggleLogPanel() {
+    ensureLogPanel();
+    var show = !logPanelEl.classList.contains('open');
+    logPanelEl.classList.toggle('open', show);
+    logPanelEl.setAttribute('aria-hidden', show ? 'false' : 'true');
+    if (show) renderLogPanel();
   }
 
   function openMenuAt(e) {
@@ -4403,6 +4647,7 @@
   function applyEnvState(next) {
     if (prefs.state === next) return;
     prefs.state = next;
+    pushL2dLog({ comp: 'stage', state: next });
     // 不写 localStorage：远离/回归是瞬态，别让下次启动卡在 away；手动切换仍由 setState 持久化
     if (root) root.className = next;
     if (chipEl) chipEl.textContent = LABEL[next] || next;
@@ -4932,6 +5177,7 @@
     /** 执行一次工具调用。callId 是 /ai/call 的队列号，动作链回执靠它写回 /ai/result。 */
     exec: function (name, args, callId) {
       var a = args || {};
+      pushL2dLog({ comp: 'ai', action: String(name || ''), state: 'exec' });
       var L = window.DSH_L2D;
       if (!L) return { ok: false, error: 'renderer-not-ready' };
 
