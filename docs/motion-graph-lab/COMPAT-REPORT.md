@@ -196,6 +196,11 @@ host /dsh-l2d/evil.html HTTP=404 ; dev /dsh-l2d/evil.html HTTP=404
 
 **Remaining Risk 已闭环**：两张真实 HTML 在两个服务上均 200、响应体与源文件逐字节一致、非白名单 404；宿主跨站 403。两个本地服务用完即停。
 
+> **版本记录（主理人要求的 sha256 口径）**：主理人 18:09 报的 sha256（124102 bytes）对应的是前端席当时的版本；前端席随后落盘了 WCAG 修订版。**终验以当前落盘版为准**：
+> - `motion-graph.html` = 126536 bytes / sha256 `6c517a8c10c597442579c70af8bafd94aac9935bc37b3054636351fbc22d4195`（18:40）
+> - `control-studio.html` = 24656 bytes / sha256 `4686f973f46e0a91685c2cff4ff51a73858245304ef51cc78e7f42d4a8923b41`（18:06）
+> 对该版本复跑结果：两服务 4 组响应体 `cmp` 字节一致 ✓、宿主跨站 `403`、dev-server 跨站 `200`（既有 cors 设计）、`evil.html` 两服务均 `404`（无通配）。若前端席继续增量修改，需按新 sha 重跑本节口径。
+
 ---
 
 ## 5. 回归基线（任务 D / E）
