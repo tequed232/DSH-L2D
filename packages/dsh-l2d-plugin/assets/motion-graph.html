@@ -32,6 +32,7 @@
   --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px;
   --r-sm:6px; --r-md:9px; --r-lg:12px;
   --topbar-h:52px; --status-h:30px; --rail-w:236px; --insp-w:300px;
+  --dock-h:45vh;
   --node-w:208px; --port-y:46px;
   --font: system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
   --mono: ui-monospace,"Cascadia Mono",Consolas,"Courier New",monospace;
@@ -50,6 +51,19 @@
   --port-flow:#245fa8; --port-signal:#6b3fd4; --port-data:#137a52;
 }
 * { box-sizing:border-box; }
+/* 细滚动条（VSCode 式）：面板内容溢出始终可见可滚；深浅主题共用变量 */
+* { scrollbar-width:thin; scrollbar-color:color-mix(in srgb,var(--ink3) 60%,transparent) transparent; }
+::-webkit-scrollbar { width:10px; height:10px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb {
+  background:color-mix(in srgb,var(--ink3) 60%,transparent);
+  border-radius:5px; border:2px solid transparent; background-clip:padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background:color-mix(in srgb,var(--ink2) 80%,transparent);
+  border:2px solid transparent; background-clip:padding-box;
+}
+::-webkit-scrollbar-corner { background:transparent; }
 html, body { height:100%; margin:0; overflow:hidden; }
 body {
   background:var(--bg); color:var(--ink); font:13px/1.5 var(--font);
@@ -119,6 +133,21 @@ button, input, select, textarea { font-family:inherit; }
 #library { width:var(--rail-w); border-right:1px solid var(--mg-border-strong); padding:var(--s4) var(--s3); }
 #inspector { width:var(--insp-w); border-left:1px solid var(--mg-border-strong); }
 #canvas-wrap { flex:1 1 auto; min-width:0; position:relative; overflow:hidden; }
+
+/* ---- VSCode 式分栏 Resizer：hover/active 高亮，双击复位（宽度/高度写入根节点 inline 变量） ---- */
+.col-resizer {
+  flex:none; width:5px; position:relative; z-index:5;
+  cursor:col-resize; background:transparent; touch-action:none;
+  transition:background var(--ease);
+}
+.col-resizer:hover, .col-resizer.active { background:color-mix(in srgb,var(--accent) 55%,transparent); }
+.dock-resizer {
+  display:none; position:fixed; left:0; right:0; height:6px; z-index:9999;
+  bottom:var(--dock-h,45vh); cursor:row-resize; touch-action:none;
+  transition:background var(--ease);
+}
+.dock-resizer:hover, .dock-resizer.active { background:color-mix(in srgb,var(--accent) 55%,transparent); }
+body[data-selftest-ui="1"] .dock-resizer { display:block; }
 
 /* ---- Node Library ---- */
 .panel-kicker { font:600 9.5px var(--mono); letter-spacing:.13em; color:var(--ink3); text-transform:uppercase; margin:0 0 4px 2px; }
@@ -333,7 +362,7 @@ button, input, select, textarea { font-family:inherit; }
    QA 可直接截图取证；参数门控，生产路径不受影响 */
 body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
   display:block; white-space:pre-wrap; position:fixed; z-index:9999;
-  bottom:0; left:0; right:0; max-height:45vh; overflow:auto;
+  bottom:0; left:0; right:0; max-height:var(--dock-h,45vh); overflow:auto;
   background:#141420; color:#d8d8ee; border-top:2px solid #6b6b85;
   font:12px/1.5 monospace; padding:8px 12px; margin:0;
 }
@@ -349,6 +378,7 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
 }
 @media (max-width:860px) {
   :root { --rail-w:60px; --insp-w:236px; }
+  .col-resizer { display:none; }
   .brand-txt, .ver-badge, .doc-meta, #validate-badge .lbl { display:none; }
   #library { padding:12px 6px; }
   .panel-kicker, .panel-title, .panel-sub, .lib-head span:not(.swatch), .lib-tip, .lib-item .txt, .lib-item .en { display:none; }
@@ -412,6 +442,8 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
     </div>
   </aside>
 
+  <div class="col-resizer" id="rz-lib" role="separator" aria-orientation="vertical" aria-label="调整节点库面板宽度" title="拖拽调整宽度 · 双击复位"></div>
+
   <section id="canvas-wrap">
     <div id="canvas">
       <div id="world">
@@ -436,6 +468,8 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
     </div>
   </section>
 
+  <div class="col-resizer" id="rz-insp" role="separator" aria-orientation="vertical" aria-label="调整属性面板宽度" title="拖拽调整宽度 · 双击复位"></div>
+
   <aside id="inspector"><div id="ins-root"></div></aside>
 </main>
 
@@ -448,6 +482,7 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
 <div id="menu-pop"></div>
 <div id="modal-layer"><div class="modal" id="modal-box"></div></div>
 <div id="toast"></div>
+<div class="dock-resizer" id="rz-dock" role="separator" aria-orientation="horizontal" aria-label="调整 JSON 面板高度" title="拖拽调整高度 · 双击复位"></div>
 <pre id="mg-selftest"></pre>
 <pre id="mg-export"></pre>
 <pre id="mg-error"></pre>
@@ -1238,7 +1273,7 @@ var UI = {
   init: function () {
     this.canvas = $('#canvas'); this.world = $('#world'); this.wiresG = $('#wires-g');
     this.nodesEl = $('#nodes'); this.minimap = $('#minimap');
-    this.renderLibrary(); this.bindTopbar(); this.bindCanvas(); this.bindInspector(); this.bindModal();
+    this.renderLibrary(); this.bindTopbar(); this.bindCanvas(); this.bindInspector(); this.bindModal(); this.bindResizers();
     this.applyViewport(); this.refreshAll();
     this.updateBadge(Validator.check(Serializer.build()));
   },
@@ -1529,6 +1564,51 @@ var UI = {
       var wy = y0 + ((ev.clientY-rect.top)/rect.height)*cv.height/s;
       Graph.viewport.x = r.width/2 - wx*v.k; Graph.viewport.y = r.height/2 - wy*v.k;
       UI.applyViewport();
+    });
+  },
+  /* ---- VSCode 式分栏 Resizers：左栏宽 --rail-w / 检查器宽 --insp-w / JSON 停靠高 --dock-h。
+     拖拽写入根节点 inline 变量；双击复位；窗口跨响应式断点时清除 inline 让媒体查询接管 ---- */
+  bindResizers: function () {
+    var root = document.documentElement;
+    var setPx = function (name, px) { root.style.setProperty(name, Math.round(px) + 'px'); };
+    var clearVar = function (name) { root.style.removeProperty(name); };
+    var beginDrag = function (el, cursor) {
+      el.classList.add('active');
+      document.body.style.cursor = cursor;
+      document.body.style.userSelect = 'none';
+    };
+    var endDrag = function (el, move, up) {
+      el.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+    var bindAxis = function (el, varName, min, max, cursor, calc) {
+      if (!el) return;
+      el.addEventListener('dblclick', function () { clearVar(varName); });
+      el.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        beginDrag(el, cursor);
+        var move = function (ev) {
+          setPx(varName, Math.max(min, Math.min(max, calc(ev))));
+        };
+        var up = function () { endDrag(el, move, up); };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+        window.addEventListener('pointercancel', up);
+      });
+    };
+    // 左栏：宽度 = 指针 X（自左缘）；检查器：宽度 = 视口宽 - 指针 X；JSON 停靠：高度 = 视口高 - 指针 Y（上限拖拽时动态取 0.72 视口高）
+    bindAxis($('#rz-lib'), '--rail-w', 180, 420, 'col-resize', function (ev) { return ev.clientX; });
+    bindAxis($('#rz-insp'), '--insp-w', 220, 520, 'col-resize', function (ev) { return window.innerWidth - ev.clientX; });
+    bindAxis($('#rz-dock'), '--dock-h', 96, Infinity, 'row-resize', function (ev) {
+      return Math.min(window.innerHeight * 0.72, window.innerHeight - ev.clientY);
+    });
+    window.addEventListener('resize', function () {
+      if (window.innerWidth <= 1100) { clearVar('--rail-w'); clearVar('--insp-w'); }
     });
   },
   menuItems: [
@@ -2155,6 +2235,35 @@ function runSelfTest() {
   var v = Validator.check(Serializer.build());
   var rt = window.__MG_ROUNDTRIP_TEST__();
   var sim = window.__MG_SIM_INFO__();
+  // Resizers 自测：程序化拖拽三处分隔条 → 根节点 inline 变量生效 → 双击复位清零
+  var rz = (function () {
+    try {
+      var root = document.documentElement;
+      var mk = function (type, x, y) {
+        return new PointerEvent(type, { bubbles:true, pointerId:1, clientX:x, clientY:y, button:0 });
+      };
+      var dragTo = function (id, x0, y0, x1, y1) {
+        var el = document.getElementById(id);
+        el.dispatchEvent(mk('pointerdown', x0, y0));
+        window.dispatchEvent(mk('pointermove', x1, y1));
+        window.dispatchEvent(mk('pointerup', x1, y1));
+      };
+      dragTo('rz-lib', 300, 300, 360, 300);
+      var railOk = root.style.getPropertyValue('--rail-w') === '360px';
+      dragTo('rz-insp', 900, 300, 900, 300);
+      var inspExpect = Math.round(Math.max(220, Math.min(520, window.innerWidth - 900))) + 'px';
+      var inspOk = root.style.getPropertyValue('--insp-w') === inspExpect;
+      dragTo('rz-dock', 400, 200, 400, Math.max(120, window.innerHeight - 300));
+      var dockGot = root.style.getPropertyValue('--dock-h');
+      /* 受控无头环境 innerHeight 可能为 0，无法断言具体值；验证「拖拽设置了合法 px 变量且双击可复位」 */
+      var dockOk = /^\d+px$/.test(dockGot);
+      ['rz-lib', 'rz-insp', 'rz-dock'].forEach(function (id) {
+        document.getElementById(id).dispatchEvent(new PointerEvent('dblclick', { bubbles:true }));
+      });
+      var resetOk = !root.style.getPropertyValue('--rail-w') && !root.style.getPropertyValue('--insp-w') && !root.style.getPropertyValue('--dock-h');
+      return { ok:railOk && inspOk && dockOk && resetOk, rail:railOk, insp:inspOk, dock:dockOk, reset:resetOk, dockGot:dockGot };
+    } catch (e) { return { ok:false, error:String(e) }; }
+  })();
   var doc = Serializer.build();
   var result = {
     validate: v,
@@ -2164,7 +2273,8 @@ function runSelfTest() {
     sim: sim,
     topLevelKeys: Object.keys(doc),
     graphNodeTypes: doc.graph.nodes.map(function (n) { return n.type; }),
-    cacheNote: Cache.note()
+    cacheNote: Cache.note(),
+    resizers: rz
   };
   $('#mg-selftest').textContent = JSON.stringify(result, null, 2);
   $('#mg-export').textContent = Serializer.exportText();
@@ -2174,6 +2284,7 @@ function runSelfTest() {
   document.title = 'MG-SELFTEST ' + (v.ok ? 'validate-ok' : 'validate-FAIL(' + v.errors.length + ')')
     + ' roundtrip-' + (rt.ok ? 'ok' : 'FAIL')
     + ' sim=' + sim.steps + 'steps/' + sim.segments + 'segs'
+    + ' resizers-' + (rz.ok ? 'ok' : 'FAIL(rail=' + (rz.rail===true?'ok':rz.rail) + ',insp=' + (rz.insp===true?'ok':rz.insp) + ',dock=' + (rz.dock===true?'ok':rz.dock) + (rz.dockGot!==undefined ? '[' + rz.dockGot + ']' : '') + ',reset=' + (rz.reset===true?'ok':rz.reset) + (rz.error ? ',err=' + rz.error : '') + ')')
     + (rt.diff.length ? ' diff=' + rt.diff.join('|') : '');
 }
 
