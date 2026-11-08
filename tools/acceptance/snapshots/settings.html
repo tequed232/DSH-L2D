@@ -1168,6 +1168,72 @@
         }
       }
       /* ===== END STUDIO ADAPT v1 ===== */
+
+      /* ===== BEGIN NODEGRAPH UI v1 ===== */
+      /* Node-graph card controls (styles only). Tokens come from the marked block above. */
+      .ng-file {
+        height: var(--studio-control-h-sm);
+        max-width: 240px;
+        padding: 4px 8px;
+        border: 1px solid var(--studio-line-strong);
+        border-radius: var(--studio-radius-sm);
+        background: var(--studio-surface-sunken);
+        color: var(--studio-ink);
+        font: var(--studio-text-xs);
+      }
+      .ng-file::file-selector-button {
+        height: var(--studio-control-h-sm);
+        margin-right: 8px;
+        border: none;
+        border-radius: var(--studio-radius-sm);
+        background: var(--studio-surface-2);
+        color: var(--studio-ink);
+        font: var(--studio-text-label);
+        cursor: pointer;
+      }
+      .ng-errors {
+        margin: var(--dsh-space-2) 0 0;
+        padding: var(--dsh-space-2) var(--dsh-space-3);
+        border: 1px solid var(--studio-danger);
+        border-radius: var(--studio-radius-sm);
+        color: var(--studio-danger);
+        font: var(--studio-text-xs);
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      .ng-list {
+        margin: var(--dsh-space-3) 0 0;
+        border-top: 1px solid var(--studio-line);
+      }
+      .ng-item {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--dsh-space-2) var(--dsh-space-3);
+        padding: var(--dsh-space-2) 0;
+        border-bottom: 1px solid var(--studio-line);
+        font: var(--studio-text-sm);
+        min-width: 0;
+      }
+      .ng-item .ng-name {
+        font: var(--studio-text-label);
+        color: var(--studio-ink);
+        max-width: 220px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ng-item .ng-meta {
+        flex: 1 1 auto;
+        min-width: 0;
+        font: var(--studio-text-xs);
+        color: var(--studio-ink-3);
+        word-break: break-all;
+      }
+      .ng-item .chip { flex: none; }
+      .ng-item .chip[data-state='ok'] { color: var(--studio-ok); border-color: var(--studio-ok); }
+      .ng-item .chip[data-state='error'] { color: var(--studio-danger); border-color: var(--studio-danger); }
+      /* ===== END NODEGRAPH UI v1 ===== */
     </style>
   </head>
   <body>
@@ -1245,6 +1311,23 @@
           <button class="btn studio-btn" type="button" id="formBtn">模型形态变化</button>
           <span class="hint" id="formMsg"></span>
         </div>
+      </section>
+
+      <section class="card studio-card" id="sec-nodegraph">
+        <div class="sec-head"><span class="sec-no">06</span><h2>节点图动作编排</h2></div>
+        <p class="sec-desc">节点图与 LLM 通道互斥；分享 JSON 导入即用。</p>
+        <div class="modes" id="ngModes" role="radiogroup" aria-label="执行通道模式">
+          <label class="mode-opt"><input type="radio" name="motionMode" value="nodegraph" />节点图 + LLM 辅助</label>
+          <label class="mode-opt"><input type="radio" name="motionMode" value="llm" />纯 LLM 通道</label>
+        </div>
+        <div class="dev-actions">
+          <input type="file" id="ngFile" accept=".json" class="ng-file" />
+          <button class="btn studio-btn" type="button" id="ngImportBtn">导入节点图</button>
+          <button class="btn studio-btn" type="button" id="ngRefreshBtn">刷新列表</button>
+          <span class="hint" id="ngMsg"></span>
+        </div>
+        <div class="ng-errors" id="ngErrors" hidden></div>
+        <div class="ng-list" id="ngList"></div>
       </section>
 
       <noscript>
@@ -2287,6 +2370,263 @@
           };
         }
 
+        // ---- Node-graph orchestration card (contract: docs/nodegraph/SPEC.md v1) ----
+        function bindNodegraph() {
+          var NG_API = {
+            mode: '/dsh-l2d/motion-mode',
+            list: '/dsh-l2d/nodegraphs',
+            imp: '/dsh-l2d/nodegraphs/import',
+            exp: '/dsh-l2d/nodegraphs/export',
+            run: '/dsh-l2d/nodegraphs/run'
+          }
+          var MODE_LABEL = { nodegraph: '节点图 + LLM 辅助', llm: '纯 LLM 通道' };
+          var radios = document.querySelectorAll('input[name="motionMode"]');
+          var fileInput = $('ngFile');
+          var importBtn = $('ngImportBtn');
+          var refreshBtn = $('ngRefreshBtn');
+          var msg = $('ngMsg');
+          var errorsBox = $('ngErrors');
+          var list = $('ngList');
+          var importing = false;
+
+          function say(text, isError) {
+            msg.textContent = text;
+            msg.className = 'hint' + (isError ? ' is-error' : '');
+          }
+
+          function setChecked(mode) {
+            for (var i = 0; i < radios.length; i++) {
+              var r = radios[i];
+              r.checked = r.value === mode;
+              var label = r.closest ? r.closest('.mode-opt') : null;
+              if (label) label.classList[r.checked ? 'add' : 'remove']('is-checked');
+            }
+          }
+
+          function loadMode() {
+            fetchJson(NG_API.mode).then(function (res) {
+              if (res.ok && res.data && (res.data.mode === 'nodegraph' || res.data.mode === 'llm')) {
+                setChecked(res.data.mode);
+              } else {
+                setChecked('llm'); // SPEC §3: state file missing defaults to llm
+                if (!res.ok) say('模式读取失败（' + res.error + '），已按默认「纯 LLM 通道」显示', true);
+              }
+            });
+          }
+
+          function saveMode(mode) {
+            say('正在切换…', false);
+            fetch(NG_API.mode, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ mode: mode }),
+              cache: 'no-store'
+            })
+              .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+              })
+              .then(function (d) {
+                var m = d && (d.mode === 'nodegraph' || d.mode === 'llm') ? d.mode : mode;
+                setChecked(m);
+                say('已切换 · 当前模式：' + (MODE_LABEL[m] || m), false);
+              })
+              .catch(function (err) {
+                say('切换失败：' + reason(err) + '（路由未接入时会 404）', true);
+                loadMode(); // roll the radio back to the authoritative state
+              });
+          }
+
+          for (var ri = 0; ri < radios.length; ri++) {
+            (function (r) {
+              r.addEventListener('change', function () {
+                if (r.checked) saveMode(r.value);
+              });
+            })(radios[ri]);
+          }
+
+          function badge(valid) {
+            var chip = document.createElement('span');
+            chip.className = 'chip';
+            if (valid === true) { chip.setAttribute('data-state', 'ok'); chip.textContent = '可用'; }
+            else if (valid === false) { chip.setAttribute('data-state', 'error'); chip.textContent = '不可用'; }
+            else { chip.textContent = '加载中'; }
+            return chip;
+          }
+
+          function exportOne(name) {
+            var a = document.createElement('a');
+            a.href = NG_API.exp + '?name=' + encodeURIComponent(name || '');
+            a.download = (name || 'nodegraph') + '.json';
+            document.body.appendChild(a);
+            a.click();
+            if (a.remove) a.remove();
+          }
+
+          var running = false;
+
+          function runOne(name, btn) {
+            if (running) return; // no concurrent re-entry
+            running = true;
+            var oldLabel = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '运行中…';
+            say('正在运行节点图「' + (name || '') + '」…（渲染端最长等待 12 秒）', false);
+            fetch(NG_API.run + '?name=' + encodeURIComponent(name || ''), {
+              method: 'POST',
+              cache: 'no-store'
+            })
+              .then(function (res) {
+                return res.json().catch(function () {
+                  return { ok: false, error: 'HTTP ' + res.status + '（返回非 JSON）' };
+                }).then(function (d) { d.__status = res.status; return d; });
+              })
+              .then(function (d) {
+                var s = d && d.__status;
+                if (s === 409) {
+                  // mode-blocked: prompt the original message and guide the user back
+                  say((d && d.message) || '纯 LLM 模式下节点图不执行，请先切换到节点图模式', true);
+                  return;
+                }
+                if (!d || d.ok !== true) {
+                  if (d && d.reason === 'timeout') say('渲染端未就绪（模型未连接），已停止执行', true);
+                  else say('运行失败：' + ((d && (d.message || d.error)) || 'HTTP ' + s) + '（路由未接入时会 404）', true);
+                  return;
+                }
+                if (d.status === 'completed') {
+                  say('已执行 ' + (d.completedSegments != null ? d.completedSegments : '?') + ' 段 / 剩余 ' + (d.remainingSegments != null ? d.remainingSegments : '?') + ' 段', false);
+                } else if (d.status === 'stopped') {
+                  if (d.reason === 'timeout') say('渲染端未就绪（模型未连接），已停止执行', true);
+                  else say('执行已停止：' + (d.message || d.reason || '未知原因'), true);
+                } else {
+                  say('运行返回未知状态：' + (d.status || '—'), true);
+                }
+              })
+              .catch(function (err) {
+                say('运行失败：' + reason(err) + '（路由未接入时会 404）', true);
+              })
+              .then(function () {
+                running = false;
+                if (btn) { btn.disabled = false; btn.textContent = oldLabel; }
+              });
+          }
+          function renderList(items) {
+            list.textContent = '';
+            if (!items || !items.length) {
+              var empty = document.createElement('p');
+              empty.className = 'empty';
+              empty.textContent = '还没有导入任何节点图。';
+              list.appendChild(empty);
+              return;
+            }
+            for (var i = 0; i < items.length; i++) {
+              (function (item) {
+                var row = document.createElement('div');
+                row.className = 'ng-item';
+                var name = document.createElement('span');
+                name.className = 'ng-name';
+                name.textContent = (item && item.name) || '—';
+                var meta = document.createElement('span');
+                meta.className = 'ng-meta';
+                meta.textContent = (item && item.modelId ? item.modelId : '—')
+                  + ' · ' + (item && item.bindingMode === 'strict' ? 'strict' : 'any');
+                var exportBtn = document.createElement('button');
+                exportBtn.type = 'button';
+                exportBtn.className = 'btn studio-btn';
+                exportBtn.textContent = '导出';
+                exportBtn.addEventListener('click', function () { exportOne(item && item.name); });
+                var runBtn = document.createElement('button');
+                runBtn.type = 'button';
+                runBtn.className = 'btn studio-btn';
+                runBtn.textContent = '运行';
+                runBtn.addEventListener('click', function () { runOne(item && item.name, runBtn); });
+                row.appendChild(name);
+                row.appendChild(meta);
+                row.appendChild(badge(item && item.valid));
+                row.appendChild(runBtn);
+                row.appendChild(exportBtn);
+                list.appendChild(row);
+              })(items[i]);
+            }
+          }
+
+          function loadList() {
+            fetchJson(NG_API.list).then(function (res) {
+              if (res.ok && res.data && res.data.ok !== false) renderList(res.data.items || []);
+              else renderList(null);
+            });
+          }
+
+          refreshBtn.addEventListener('click', function () {
+            refreshBtn.disabled = true;
+            say('正在读取列表…', false);
+            fetchJson(NG_API.list)
+              .then(function (res) {
+                if (res.ok && res.data && res.data.ok !== false) {
+                  renderList(res.data.items || []);
+                  say('已刷新 · ' + timeStr(), false);
+                } else {
+                  renderList(null);
+                  say('列表读取失败：' + (res.error || '返回为空') + '（路由未接入时会 404）', true);
+                }
+              })
+              .then(function () { refreshBtn.disabled = false; });
+          });
+
+          importBtn.addEventListener('click', function () {
+            if (importing) return; // no concurrent re-entry
+            var file = fileInput.files && fileInput.files[0];
+            if (!file) { say('请先选择 .json 文件', true); return; }
+            importing = true;
+            importBtn.disabled = true;
+            say('正在导入…', false);
+            errorsBox.hidden = true;
+            errorsBox.textContent = '';
+            var reader = new FileReader();
+            reader.onload = function () {
+              fetch(NG_API.imp, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: String(reader.result || ''),
+                cache: 'no-store'
+              })
+                .then(function (res) {
+                  return res.json().catch(function () {
+                    return { ok: false, errors: ['HTTP ' + res.status + '（返回非 JSON）'] };
+                  });
+                })
+                .then(function (d) {
+                  if (d && d.ok) {
+                    say('已导入 · ' + timeStr(), false);
+                    fileInput.value = '';
+                    loadList();
+                  } else {
+                    var errs = (d && d.errors) || ['导入失败：' + ((d && d.error) || '未知原因')];
+                    say('导入失败：校验未通过（' + errs.length + ' 项）', true);
+                    errorsBox.textContent = errs.join('\n');
+                    errorsBox.hidden = false;
+                  }
+                })
+                .catch(function (err) {
+                  say('导入失败：' + reason(err) + '（路由未接入时会 404）', true);
+                })
+                .then(function () {
+                  importing = false;
+                  importBtn.disabled = false;
+                });
+            };
+            reader.onerror = function () {
+              importing = false;
+              importBtn.disabled = false;
+              say('导入失败：文件读取错误', true);
+            };
+            reader.readAsText(file);
+          });
+
+          loadMode();
+          loadList();
+        }
+
         window.addEventListener('error', function (event) {
           showAlert('脚本错误：' + (event && event.message ? event.message : '未知'));
         });
@@ -2299,6 +2639,7 @@
         mount();
         bindDev();
         bindFormChange();
+        bindNodegraph();
         loadAll();
         refreshReadouts();
         window.setInterval(refreshReadouts, 6000);
