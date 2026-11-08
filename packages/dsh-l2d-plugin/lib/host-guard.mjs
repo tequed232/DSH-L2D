@@ -8,6 +8,8 @@
  *     keyframes 由渲染端按轨道时长自动认领，posture 的 post 相 acquire 语义由渲染端终审）
  *   - `own:true` 只登记物理输出（R10b）：非物理 id 忽略不算错误，`ignored` 清单随回执带出
  *   - 未索引表情 / 未索引动作组（静态名单 ∪ 运行时 model3 索引；Idle 明确拒绝）
+ *   - 节点图模式互斥（docs/nodegraph/SPEC.md §3）：options.mode==='nodegraph' 时拒绝
+ *     l2d_act / l2d_emote（纯 LLM 整链编排），单步原语放行作 LLM 辅助底层通道
  *
  * 失败语义（重要）：
  *   - 参数名守卫**不 fail-open**：口型名单是代码里的静态事实，模型文件读不到也照样拒；
@@ -332,6 +334,13 @@ export function guardAiCall(request = {}, options = {}) {
   const ignored = [];
 
   if (!ALLOWED_SET.has(name)) return deny('unknown-tool', name, 'unknown tool: ' + name);
+
+  // 节点图模式互斥（docs/nodegraph/SPEC.md §3）：mode==='nodegraph' 时拦截纯 LLM
+  // 编排类整链工具；单步原语（set_expression/play_motion 等）不拦。mode 缺省或
+  // 'llm' 时与既有行为完全一致（现状兼容）。
+  if (options.mode === 'nodegraph' && (name === 'l2d_act' || name === 'l2d_emote')) {
+    return deny('mode-blocked', name, 'mode-blocked: ' + name + '（节点图模式下 LLM 整链编排被互斥拦截）');
+  }
 
   // 口型：任何以参数名为键的工具，入参出现即拒（递归，含嵌套/数组形式）。
   if (PARAM_KEYED_TOOLS.has(name)) {

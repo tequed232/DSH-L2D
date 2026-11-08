@@ -25,6 +25,15 @@ import { createWorkspaceAgentBridge } from './workspace-agent.mjs';
 import { createReverseLog } from './reverse-log.mjs';
 import { normalizePresencePayload, readEnvState, writeEnvState } from './env-state.mjs';
 import { createModelIndexCache, guardAiCall, discoverModelFiles } from './host-guard.mjs';
+import {
+  readMotionMode,
+  writeMotionMode,
+  listNodegraphs,
+  saveNodegraph,
+  loadNodegraph,
+  runNodegraph,
+  createInboxActExecutor,
+} from './nodegraph.mjs';
 import { isReservedParam } from './param-guards.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
 import { ageSummaryState, isActionTool, legacyAgentState, summarizeSession } from './session-events.mjs';
@@ -981,6 +990,15 @@ export function apply(root, config = {}) {
     // 读不到时守卫 fail-open（物理输出判定放行），由渲染端兜底，绝不 500。
     const aiIndexCache = createModelIndexCache(MODEL_DIR);
 
+    // 节点图执行入口（docs/nodegraph/SPEC.md §4 第 4 行）的单批下发回调：
+    // 复用 aiInbox 的 l2d_act 既有下发链路（与 /ai/call 同一入口函数，不另开一套），
+    // 回执经 shapeActReceipt 成 MCP 同一形状。不经过 guardAiCall——互斥门禁只管
+    // /ai/call 的 LLM 入口，不拦节点通道自身（互斥由 runNodegraph 的 409 兜住另一半）。
+    const nodegraphExecutor = createInboxActExecutor({
+      call: (name, args) => aiInbox.call(name, args),
+      read: (id) => aiInbox.read(id),
+    });
+
     // W1：前台进程采集默认关（设置 workspaceForeground=true 才启动）；关闭即停并清空采样。
     const foregroundCollector = createForegroundProcessCollector({ intervalMs: 2000 });
     try {
@@ -1048,7 +1066,12 @@ export function apply(root, config = {}) {
         // 模型索引读不到时守卫 fail-open（物理输出判定放行），渲染端仍会再拦一次。
         let guarded;
         try {
-          guarded = guardAiCall({ name, args: body.args || {} }, { index: aiIndexCache.get() });
+          guarded = guardAiCall({ name, args: body.args || {} }, {
+            index: aiIndexCache.get(),
+            // 节点图模式互斥（docs/nodegraph/SPEC.md §3）：mode 文件缺失/损坏时 readMotionMode
+            // 回 'llm'，与现状行为一致；本地小文件同步读，无缓存一致性风险。
+            mode: readMotionMode().mode,
+          });
         } catch (err) {
           // 守卫自身异常不得影响指令通道：记录后放行，交给渲染端校验。
           diag('ai/call guard error: ' + String((err && err.message) || err));
@@ -1118,6 +1141,149 @@ export function apply(root, config = {}) {
         }
         sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true }), 'utf8'));
       });
+    });
+
+    // ---------------------- 节点图动作编排通道（docs/nodegraph/SPEC.md §4） ----------------------
+    // 分享图存取与模式互斥。与 /ai/call 同一守卫风格：跨站拒、方法限、body 上限断开。
+    route('/dsh-l2d/nodegraphs', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') {
+        return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      }
+      try {
+        const listed = listNodegraphs();
+        sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(listed), 'utf8'));
+      } catch (err) {
+        // 读目录异常不 500：回空列表带 errors，前端可降级展示。
+        sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({
+          ok: false,
+          items: [],
+          errors: [String((err && err.message) || err)],
+        }), 'utf8'));
+      }
+    });
+
+    route('/dsh-l2d/nodegraphs/import', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'POST') {
+        return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      }
+      // 分享 JSON 全文上传；256KB 上限（120 节点图的宽松裕量），超限直接断开。
+      const chunks = [];
+      req.on('data', (c) => {
+        chunks.push(c);
+        if (chunks.reduce((n, b) => n + b.length, 0) > 256 * 1024) req.destroy();
+      });
+      req.on('end', () => {
+        let doc;
+        try {
+          doc = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        } catch {
+          return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['body 不是合法 JSON'] }), 'utf8'));
+        }
+        try {
+          // saveNodegraph 内部先整体校验后原子写：重名覆盖前校验，失败原文件不动（SPEC §4）。
+          const saved = saveNodegraph(doc);
+          if (!saved.ok) {
+            return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: saved.errors }), 'utf8'));
+          }
+          sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, name: saved.name }), 'utf8'));
+        } catch (err) {
+          sendBuffer(res, 500, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: [String((err && err.message) || err)] }), 'utf8'));
+        }
+      });
+    });
+
+    route('/dsh-l2d/nodegraphs/export', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') {
+        return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      }
+      let name = '';
+      try {
+        name = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('name') || '');
+      } catch {
+        name = '';
+      }
+      if (!name) {
+        return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['name required'] }), 'utf8'));
+      }
+      const raw = loadNodegraph(name);
+      if (raw === null) {
+        return sendBuffer(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['nodegraph not found: ' + name] }), 'utf8'));
+      }
+      // JSON 原文回发（分享用），不再重新序列化。
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(raw, 'utf8'));
+    });
+
+    route('/dsh-l2d/motion-mode', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method === 'GET') {
+        const state = readMotionMode();
+        return sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({
+          ok: true,
+          mode: state.mode,
+          updatedAt: state.updatedAt,
+          available: state.available,
+        }), 'utf8'));
+      }
+      if (req.method !== 'POST') {
+        return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET or POST'));
+      }
+      const chunks = [];
+      req.on('data', (c) => {
+        chunks.push(c);
+        if (chunks.reduce((n, b) => n + b.length, 0) > 4 * 1024) req.destroy();
+      });
+      req.on('end', () => {
+        let body = {};
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
+        } catch {
+          body = {};
+        }
+        try {
+          const state = writeMotionMode(body.mode);
+          sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({
+            ok: true,
+            mode: state.mode,
+            updatedAt: state.updatedAt,
+          }), 'utf8'));
+        } catch (err) {
+          sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: [String((err && err.message) || err)] }), 'utf8'));
+        }
+      });
+    });
+
+    // 节点图执行入口（SPEC §4 第 4 行，14:50 定案）：导入的图回传动作给模型。
+    // 传输面与 /ai/call 同级防护（回环 + 跨站栅栏 + POST 限）；业务面不经过 guardAiCall，
+    // 互斥由 runNodegraph 内部兜住另一半（llm 模式 409 mode-blocked）。
+    route('/dsh-l2d/nodegraphs/run', (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'POST') {
+        return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      }
+      let name = '';
+      try {
+        name = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('name') || '');
+      } catch {
+        name = '';
+      }
+      if (!name) {
+        return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['name required'] }), 'utf8'));
+      }
+      (async () => {
+        try {
+          const result = await runNodegraph(name, nodegraphExecutor);
+          // runNodegraph 约定：ok:false 且 status 为数字 → 该数字即 HTTP 状态码；
+          // 正常执行回 executeActionSequence 原样（含 receipts/completedSegments/remainingSegments），200。
+          const httpStatus = result && result.ok === false && typeof result.status === 'number' ? result.status : 200;
+          sendBuffer(res, httpStatus, MIME['.json'], Buffer.from(JSON.stringify(result), 'utf8'));
+        } catch (err) {
+          sendBuffer(res, 500, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: [String((err && err.message) || err)] }), 'utf8'));
+        }
+      })();
     });
 
     // ------------------------------------------------------ 桌宠独立窗页面

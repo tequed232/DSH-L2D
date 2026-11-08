@@ -17,6 +17,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAiInbox } from '../../packages/dsh-l2d-plugin/lib/ai-inbox.mjs';
+import {
+  readMotionMode,
+  writeMotionMode,
+  listNodegraphs,
+  saveNodegraph,
+  loadNodegraph,
+  runNodegraph,
+  createInboxActExecutor,
+} from '../../packages/dsh-l2d-plugin/lib/nodegraph.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
@@ -159,6 +168,14 @@ function resolveInside(baseDir, relRaw) {
 
 /** AI 指令队列：与 DSH 插件宿主共用 ai-inbox，回执语义保持一致 */
 const aiInbox = createAiInbox();
+
+// 节点图执行入口（SPEC §4 第 4 行）的单批下发回调：与插件宿主同一份实现
+//（nodegraph.createInboxActExecutor），走本进程 aiInbox 的 l2d_act 下发链路；
+// 无 renderer 时按 forward 语义超时回 {ok:false, reason:'timeout', id}，不挂起不崩溃。
+const nodegraphExecutor = createInboxActExecutor({
+  call: (name, args) => aiInbox.call(name, args),
+  read: (id) => aiInbox.read(id),
+});
 const AI_ALLOWED = new Set([
   'l2d_set_expression',
   'l2d_play_motion',
@@ -463,6 +480,123 @@ const server = http.createServer(async (req, res) => {
         return send(res, 400, 'text/plain; charset=utf-8', Buffer.from(saved.reason || 'id required'), false);
       }
       return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true }), 'utf8'));
+    });
+  }
+
+  // ---------------------- 节点图动作编排通道（docs/nodegraph/SPEC.md §4） ----------------------
+  // 与插件路由同语义；$DSH_HOME 同源解析（nodegraph.mjs 内部）。
+  if (urlPath === '/nodegraphs') {
+    if (req.method !== 'GET') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'), false);
+    try {
+      const listed = listNodegraphs();
+      return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(listed), 'utf8'));
+    } catch (err) {
+      return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({
+        ok: false,
+        items: [],
+        errors: [String((err && err.message) || err)],
+      }), 'utf8'));
+    }
+  }
+
+  if (urlPath === '/nodegraphs/import') {
+    if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'), false);
+    if (!writeGuard(req, res)) return;
+    const chunks = [];
+    let total = 0;
+    req.on('data', (c) => {
+      total += c.length;
+      if (total > 256 * 1024) {
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      let doc;
+      try {
+        doc = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      } catch {
+        return send(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['body 不是合法 JSON'] }), 'utf8'));
+      }
+      try {
+        const saved = saveNodegraph(doc);
+        if (!saved.ok) {
+          return send(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: saved.errors }), 'utf8'));
+        }
+        return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, name: saved.name }), 'utf8'));
+      } catch (err) {
+        return send(res, 500, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: [String((err && err.message) || err)] }), 'utf8'));
+      }
+    });
+    return;
+  }
+
+  if (urlPath === '/nodegraphs/export') {
+    if (req.method !== 'GET') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'), false);
+    let name = '';
+    try {
+      name = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('name') || '');
+    } catch {
+      name = '';
+    }
+    if (!name) {
+      return send(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['name required'] }), 'utf8'));
+    }
+    const raw = loadNodegraph(name);
+    if (raw === null) {
+      return send(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['nodegraph not found: ' + name] }), 'utf8'));
+    }
+    return send(res, 200, MIME['.json'], Buffer.from(raw, 'utf8'));
+  }
+
+  // 节点图执行入口（SPEC §4 第 4 行，14:50 定案）。与插件宿主同语义：
+  // runNodegraph 内部兜互斥另一半（llm 模式 409 mode-blocked）；POST 走 writeGuard。
+  // 无 renderer 消费时 execute 按 forward 语义在预算内超时，返回明确错误不挂起。
+  if (urlPath === '/nodegraphs/run') {
+    if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'), false);
+    if (!writeGuard(req, res)) return;
+    let name = '';
+    try {
+      name = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('name') || '');
+    } catch {
+      name = '';
+    }
+    if (!name) {
+      return send(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['name required'] }), 'utf8'));
+    }
+    try {
+      const result = await runNodegraph(name, nodegraphExecutor);
+      const httpStatus = result && result.ok === false && typeof result.status === 'number' ? result.status : 200;
+      return send(res, httpStatus, MIME['.json'], Buffer.from(JSON.stringify(result), 'utf8'));
+    } catch (err) {
+      return send(res, 500, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: [String((err && err.message) || err)] }), 'utf8'));
+    }
+  }
+
+  if (urlPath === '/motion-mode') {
+    if (req.method === 'GET') {
+      const state = readMotionMode();
+      return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({
+        ok: true,
+        mode: state.mode,
+        updatedAt: state.updatedAt,
+        available: state.available,
+      }), 'utf8'));
+    }
+    if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET or POST'), false);
+    if (!writeGuard(req, res)) return;
+    return readJsonBody(req, res, (body) => {
+      try {
+        const state = writeMotionMode(body.mode);
+        return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({
+          ok: true,
+          mode: state.mode,
+          updatedAt: state.updatedAt,
+        }), 'utf8'));
+      } catch (err) {
+        return send(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: [String((err && err.message) || err)] }), 'utf8'));
+      }
     });
   }
 
