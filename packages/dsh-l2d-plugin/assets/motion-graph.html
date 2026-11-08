@@ -322,17 +322,37 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
 #status-counts b { color:var(--ink); font-weight:600; }
 
 /* ---- Menus / modals / toast ---- */
-#menu-pop {
-  position:absolute; right:14px; top:calc(var(--topbar-h) - 4px); z-index:40; width:246px;
+#menu-pop, #node-menu {
+  position:fixed; z-index:40; width:246px;
   background:var(--panel); border:1px solid var(--mg-border-strong); border-radius:var(--r-md);
   box-shadow:0 16px 40px rgba(0,0,0,.55); padding:6px; display:none;
 }
-#menu-pop.show { display:block; }
-#menu-pop .mi { display:flex; align-items:center; gap:9px; width:100%; padding:8px 9px;
+#menu-pop { right:14px; top:calc(var(--topbar-h) - 4px); }
+#menu-pop.show, #node-menu.show { display:block; }
+#menu-pop .mi, #node-menu .mi { display:flex; align-items:center; gap:9px; width:100%; padding:8px 9px;
   background:transparent; border:0; border-radius:5px; color:var(--ink); font-size:12px; text-align:left; cursor:pointer; }
-#menu-pop .mi:hover { background:var(--surface); }
-#menu-pop .mi .g { color:var(--ink3); font:10px var(--mono); margin-left:auto; }
-#menu-pop .sep { height:1px; background:var(--line-soft); margin:5px 3px; }
+#menu-pop .mi:hover, #node-menu .mi:hover { background:var(--surface); }
+#menu-pop .mi .g, #node-menu .mi .g { color:var(--ink3); font:10px var(--mono); margin-left:auto; }
+#menu-pop .sep, #node-menu .sep { height:1px; background:var(--line-soft); margin:5px 3px; }
+#node-menu { z-index:46; }
+
+/* ---- Live2D 监看窗口：iframe 宿主 /dsh-l2d/pet.html；宿主不在线时降级说明 ---- */
+#monitor-win {
+  position:fixed; right:16px; top:calc(var(--topbar-h) + 12px); z-index:44;
+  width:440px; height:min(560px, calc(100vh - var(--topbar-h) - var(--status-h) - 24px));
+  display:none; flex-direction:column;
+  background:var(--panel); border:1px solid var(--mg-border-strong); border-radius:var(--r-md);
+  box-shadow:0 16px 40px rgba(0,0,0,.55); overflow:hidden;
+}
+#monitor-win.show { display:flex; }
+#monitor-win .mw-head {
+  display:flex; align-items:center; gap:8px; flex:none; padding:7px 10px;
+  border-bottom:1px solid var(--mg-border-strong);
+}
+#monitor-win .mw-head b { flex:1; min-width:0; font:600 10px var(--mono); letter-spacing:.1em; color:var(--ink2); }
+#monitor-win .mw-head .mw-src { font:9px var(--mono); color:var(--ink3); white-space:nowrap; }
+#monitor-win iframe { flex:1; min-height:0; width:100%; border:0; background:var(--bg); }
+#monitor-fallback { padding:16px 14px; font-size:11.5px; color:var(--ink2); line-height:1.75; }
 #modal-layer { position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.62); display:none; align-items:center; justify-content:center; }
 #modal-layer.show { display:flex; }
 .modal { width:min(700px,92vw); max-height:86vh; overflow:auto; background:var(--panel);
@@ -417,6 +437,7 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
   </div>
   <div class="top-actions">
     <button class="btn" id="btn-sim" title="模拟动作触发（纯本地预览）"><span class="ico">▶</span><span class="lbl">模拟触发</span></button>
+    <button class="btn" id="btn-monitor" title="Live2D 监看：宿主在线时显示真实模型执行画面"><span class="ico">◉</span><span class="lbl">监看</span></button>
     <button class="btn" id="btn-validate" title="结构校验"><span class="ico">✓</span><span class="lbl">结构校验</span></button>
     <button class="btn" id="btn-export" title="导出 JSON"><span class="ico">⇩</span><span class="lbl">导出</span></button>
     <button class="btn" id="btn-import" title="导入 JSON"><span class="ico">⇧</span><span class="lbl">导入</span></button>
@@ -480,6 +501,14 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
 </footer>
 
 <div id="menu-pop"></div>
+<div id="node-menu"></div>
+<div id="monitor-win">
+  <div class="mw-head"><b>LIVE2D MONITOR</b><span class="mw-src">/dsh-l2d/pet.html</span>
+    <button class="btn icon-only" id="monitor-close" title="关闭监看"><span class="ico">×</span></button></div>
+  <iframe id="monitor-frame" title="Live2D 模型监看"></iframe>
+  <div id="monitor-fallback" class="hidden"><b>宿主未在线</b><br>Live2D 监看需要宿主（或 DevServer）提供 <code>/dsh-l2d/pet.html</code>；file:// 直开或服务不可达时无法嵌入真实模型。
+  动作时序预览请用顶部「模拟触发」（纯本地，不依赖宿主）。</div>
+</div>
 <div id="modal-layer"><div class="modal" id="modal-box"></div></div>
 <div id="toast"></div>
 <div class="dock-resizer" id="rz-dock" role="separator" aria-orientation="horizontal" aria-label="调整 JSON 面板高度" title="拖拽调整高度 · 双击复位"></div>
@@ -1273,7 +1302,7 @@ var UI = {
   init: function () {
     this.canvas = $('#canvas'); this.world = $('#world'); this.wiresG = $('#wires-g');
     this.nodesEl = $('#nodes'); this.minimap = $('#minimap');
-    this.renderLibrary(); this.bindTopbar(); this.bindCanvas(); this.bindInspector(); this.bindModal(); this.bindResizers();
+    this.renderLibrary(); this.bindTopbar(); this.bindCanvas(); this.bindInspector(); this.bindModal(); this.bindResizers(); this.bindContextMenus();
     this.applyViewport(); this.refreshAll();
     this.updateBadge(Validator.check(Serializer.build()));
   },
@@ -1543,6 +1572,8 @@ var UI = {
   /* ---- Top bar / menu ---- */
   bindTopbar: function () {
     $('#btn-sim').addEventListener('click', function () { RuntimeCtl.toggle(); });
+    $('#btn-monitor').addEventListener('click', function () { UI.toggleMonitor(); });
+    $('#monitor-close').addEventListener('click', function () { UI.toggleMonitor(false); });
     $('#btn-validate').addEventListener('click', function () { UI.openValidation(); });
     $('#btn-export').addEventListener('click', function () { UI.openExport(); });
     $('#btn-import').addEventListener('click', function () { UI.openImport(); });
@@ -1611,6 +1642,101 @@ var UI = {
       if (window.innerWidth <= 1100) { clearVar('--rail-w'); clearVar('--insp-w'); }
     });
   },
+  /* ---- 右键菜单：节点（删除/复制/禁用/属性）与连线（删除/选中）——替代浏览器默认菜单 ---- */
+  bindContextMenus: function () {
+    var self = this;
+    this.canvas.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      var nodeEl = e.target.closest ? e.target.closest('.node') : null;
+      var edgeEl = e.target.closest ? e.target.closest('g[data-edge]') : null;
+      self.toggleNodeMenu(false);
+      if (nodeEl) {
+        var n = Graph.byId(nodeEl.dataset.id);
+        if (!n) return;
+        if (!Graph.selection.has(n.id)) { Graph.selection = new Set([n.id]); Graph.selectedEdge = null; }
+        self.renderNodes(); self.renderInspector();
+        self.openNodeMenu(n, e.clientX, e.clientY);
+      } else if (edgeEl) {
+        Graph.selectedEdge = edgeEl.dataset.edge; Graph.selection.clear();
+        self.refreshAll();
+        self.openEdgeMenu(Graph.selectedEdge, e.clientX, e.clientY);
+      } else {
+        self.toggleMenu(true);
+      }
+    });
+  },
+  toggleNodeMenu: function (force) {
+    var pop = $('#node-menu');
+    var show = force === undefined ? pop.classList.contains('show') : !!force;
+    pop.classList.toggle('show', show);
+  },
+  openNodeMenu: function (n, x, y) {
+    var pop = $('#node-menu');
+    var self = this;
+    pop.innerHTML =
+      '<button class="mi" data-act="del" style="color:var(--danger)">删除节点<span class="g">Del</span></button>' +
+      '<button class="mi" data-act="dup">复制节点<span class="g">Ctrl+C/V</span></button>' +
+      '<button class="mi" data-act="toggle">' + (n.disabled ? '启用节点' : '禁用节点') + '</button>' +
+      '<div class="sep"></div>' +
+      '<button class="mi" data-act="inspect">在属性面板查看</button>';
+    $$('#node-menu .mi').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var act = b.dataset.act;
+        self.toggleNodeMenu(false);
+        if (act === 'del') { Graph.removeNodes([n.id]); self.refreshAll(); self.status('节点已删除'); }
+        else if (act === 'dup') { self.copySelection(); self.paste(); }
+        else if (act === 'toggle') {
+          n.disabled = !n.disabled; Cache.invalidate(); self.refreshAll();
+          self.status(n.disabled ? '节点已禁用（导出时跳过）' : '节点已启用');
+        }
+        else if (act === 'inspect') { Graph.selection = new Set([n.id]); Graph.selectedEdge = null; self.refreshAll(); }
+      });
+    });
+    pop.classList.add('show');
+    var mw = pop.offsetWidth, mh = pop.offsetHeight;
+    pop.style.left = Math.max(8, Math.min(x, window.innerWidth - mw - 8)) + 'px';
+    pop.style.top = Math.max(8, Math.min(y, window.innerHeight - mh - 8)) + 'px';
+  },
+  openEdgeMenu: function (edgeId, x, y) {
+    var pop = $('#node-menu');
+    var self = this;
+    pop.innerHTML =
+      '<button class="mi" data-act="del" style="color:var(--danger)">删除连线<span class="g">Del</span></button>' +
+      '<button class="mi" data-act="sel">选中连线</button>';
+    $$('#node-menu .mi').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var act = b.dataset.act;
+        self.toggleNodeMenu(false);
+        if (act === 'del') { Graph.removeEdge(edgeId); self.refreshAll(); self.status('连线已删除'); }
+        else if (act === 'sel') { self.status('已选中连线 ' + edgeId + ' · 按 Delete 删除'); }
+      });
+    });
+    pop.classList.add('show');
+    var mw = pop.offsetWidth, mh = pop.offsetHeight;
+    pop.style.left = Math.max(8, Math.min(x, window.innerWidth - mw - 8)) + 'px';
+    pop.style.top = Math.max(8, Math.min(y, window.innerHeight - mh - 8)) + 'px';
+  },
+
+  /* ---- Live2D 监看窗口：宿主在线时 iframe /dsh-l2d/pet.html 显示真实模型 ---- */
+  _monitorTimer:null,
+  toggleMonitor: function (force) {
+    var win = $('#monitor-win'), frame = $('#monitor-frame'), fb = $('#monitor-fallback');
+    var show = force === undefined ? !win.classList.contains('show') : !!force;
+    if (this._monitorTimer) { clearTimeout(this._monitorTimer); this._monitorTimer = null; }
+    if (!show) { win.classList.remove('show'); return; }
+    win.classList.add('show');
+    var self = this;
+    // 可达性探测：file:// 直开或宿主不在线时降级说明，不展示空白/404 iframe
+    fetch('/dsh-l2d/pet.html', { method:'HEAD' }).then(function (r) {
+      if (r.ok) { frame.src = '/dsh-l2d/pet.html?monitor=1'; fb.classList.add('hidden'); }
+      else { frame.removeAttribute('src'); fb.classList.remove('hidden'); }
+    }).catch(function () {
+      frame.removeAttribute('src');
+      fb.classList.remove('hidden');
+      self.status('Live2D 监看不可达：宿主未在线（本地预览用模拟触发）');
+    });
+  },
+
   menuItems: [
     { label:'自动布局', act:'layout' }, { label:'适配视图 (Ctrl+0)', act:'fit' },
     { label:'恢复默认示例图', act:'demo' }, { sep:true },
@@ -1690,6 +1816,7 @@ var UI = {
     });
     document.addEventListener('click', function (e) {
       if (!e.target.closest('#btn-menu') && !e.target.closest('#menu-pop')) UI.toggleMenu(false);
+      if (!e.target.closest('#node-menu')) UI.toggleNodeMenu(false);
     });
     document.addEventListener('keydown', function (e) { UI.onKey(e); });
     window.addEventListener('dragover', function (e) { if (e.dataTransfer && e.dataTransfer.types.indexOf('Files') >= 0) e.preventDefault(); });
@@ -1828,7 +1955,7 @@ var UI = {
     var tag = (e.target.tagName || '').toLowerCase();
     var typing = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
     var mod = e.ctrlKey || e.metaKey;
-    if (e.key === 'Escape') { UI.closeModal(); UI.toggleMenu(false); UI.cancelGestures(); return; }
+    if (e.key === 'Escape') { UI.closeModal(); UI.toggleMenu(false); UI.toggleNodeMenu(false); UI.cancelGestures(); return; }
     if (typing) return;
     if (mod && e.key.toLowerCase() === 'c') { UI.copySelection(); e.preventDefault(); return; }
     if (mod && e.key.toLowerCase() === 'v') { UI.paste(); e.preventDefault(); return; }
@@ -2264,6 +2391,31 @@ function runSelfTest() {
       return { ok:railOk && inspOk && dockOk && resetOk, rail:railOk, insp:inspOk, dock:dockOk, reset:resetOk, dockGot:dockGot };
     } catch (e) { return { ok:false, error:String(e) }; }
   })();
+  // 右键菜单自测：节点右键 → 删除生效；连线右键 → 删除生效
+  var ctx = (function () {
+    try {
+      var n = Graph.byId('n_expr');
+      if (!n) return { ok:false, error:'no node' };
+      var el = document.querySelector('.node[data-id="' + n.id + '"]');
+      if (!el) return { ok:false, error:'no el' };
+      el.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, cancelable:true, clientX:400, clientY:300, button:2 }));
+      var menuShown = $('#node-menu').classList.contains('show');
+      var delBtn = $('#node-menu .mi[data-act="del"]');
+      if (!delBtn) return { ok:false, error:'no del btn', menuShown:menuShown };
+      var cnt0 = Graph.nodes.length;
+      delBtn.click();
+      var nodeOk = menuShown && !Graph.byId(n.id) && Graph.nodes.length === cnt0 - 1;
+      var edgeEl = document.querySelector('g[data-edge="e1"] .wire-hit') || document.querySelector('g[data-edge="e1"]');
+      if (!edgeEl) return { ok:nodeOk, nodeOk:nodeOk, error:'no edge el' };
+      edgeEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, cancelable:true, clientX:400, clientY:300, button:2 }));
+      var edgeMenuShown = $('#node-menu').classList.contains('show');
+      var delEdge = $('#node-menu .mi[data-act="del"]');
+      var edges0 = Graph.edges.length;
+      if (delEdge) delEdge.click();
+      var edgeOk = edgeMenuShown && Graph.edges.length === edges0 - 1;
+      return { ok:nodeOk && edgeOk, nodeOk:nodeOk, edgeOk:edgeOk };
+    } catch (e) { return { ok:false, error:String(e) }; }
+  })();
   var doc = Serializer.build();
   var result = {
     validate: v,
@@ -2274,7 +2426,8 @@ function runSelfTest() {
     topLevelKeys: Object.keys(doc),
     graphNodeTypes: doc.graph.nodes.map(function (n) { return n.type; }),
     cacheNote: Cache.note(),
-    resizers: rz
+    resizers: rz,
+    contextMenus: ctx
   };
   $('#mg-selftest').textContent = JSON.stringify(result, null, 2);
   $('#mg-export').textContent = Serializer.exportText();
@@ -2285,6 +2438,7 @@ function runSelfTest() {
     + ' roundtrip-' + (rt.ok ? 'ok' : 'FAIL')
     + ' sim=' + sim.steps + 'steps/' + sim.segments + 'segs'
     + ' resizers-' + (rz.ok ? 'ok' : 'FAIL(rail=' + (rz.rail===true?'ok':rz.rail) + ',insp=' + (rz.insp===true?'ok':rz.insp) + ',dock=' + (rz.dock===true?'ok':rz.dock) + (rz.dockGot!==undefined ? '[' + rz.dockGot + ']' : '') + ',reset=' + (rz.reset===true?'ok':rz.reset) + (rz.error ? ',err=' + rz.error : '') + ')')
+    + ' ctx-' + (ctx.ok ? 'ok' : 'FAIL(node=' + (ctx.nodeOk===true?'ok':ctx.nodeOk) + ',edge=' + (ctx.edgeOk===true?'ok':ctx.edgeOk) + (ctx.error ? ',err=' + ctx.error : '') + ')')
     + (rt.diff.length ? ' diff=' + rt.diff.join('|') : '');
 }
 

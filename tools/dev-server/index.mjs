@@ -49,6 +49,8 @@ const PUBLIC_DIR = path.join(HERE, 'public');
 const STUDIO_HTML_ROUTES = new Map([
   ['/motion-graph.html', path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'assets', 'motion-graph.html')],
   ['/control-studio.html', path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'assets', 'control-studio.html')],
+  // MG-LAB 监看窗口数据源：与真机宿主 /dsh-l2d/pet.html 同语义（lib/pet.html）
+  ['/pet.html', path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'lib', 'pet.html')],
 ]);
 
 const MIME = {
@@ -369,8 +371,8 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, MIME['.html'], buf);
   }
 
-  // MG-LAB：/dsh-l2d/motion-graph.html 与 /dsh-l2d/control-studio.html
-  // （前缀已在 :242 剥离）。仅命中上面白名单 Map 的两条精确路径，其余仍走末尾 404。
+  // MG-LAB：/dsh-l2d/motion-graph.html 与 /dsh-l2d/control-studio.html、/dsh-l2d/pet.html（监看）
+  // （前缀已在 :242 剥离）。仅命中上面白名单 Map 的精确路径，其余仍走末尾 404。
   if (STUDIO_HTML_ROUTES.has(urlPath)) {
     const buf = readIfExists(STUDIO_HTML_ROUTES.get(urlPath));
     if (!buf) {

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-08T13:22:33.468Z",
+  "generatedAt": "2026-11-08T13:47:47.444Z",
   "files": {
     "apps/stage-web/src/components/ChatArea.vue": {
       "ids": [],
@@ -1212,6 +1212,10 @@
           1
         ],
         [
+          "20) {\r\n        clearInterval(timer);\r\n      }\r\n    }, 250);\r\n    return false;\r\n  }\r\n\r\n  function openPanel() {\r\n    if (!panelEl) return;\r\n    panelOpen = true;\r\n    applyPanelPrefs(); // 打开时恢复/夹取位置尺寸（视口可能已变）\r\n    panelEl.classList.add('open');\r\n  }\r\n\r\n  function togglePanel() {\r\n    if (panelOpen) closePanel();\r\n    else openPanel();\r\n  }\r\n\r\n  // ------------------------------------------------ 浮动窗口（响应式升级版）\r\n  // 几何偏好存 localStorage（非设置数据，不进宿主 settings.json），300ms 防抖写入。\r\n  // 结构：{ maximized, geometry:{x,y,w,h}, previousGeometry, collapsed }\r\n  // 四档断点：≥1200 桌面浮动 / 768-1199 紧凑 / 480-767 窄窗 / ≤479 全屏（去小窗形态）。\r\n  // 拖拽全程 clamp 视口内；最大化/吸附前的几何独立存 previousGeometry，还原时按\r\n  // 当前视口重新 clamp，绝不把旧坐标直接还原进已缩小的视口。\r\n  var PANEL_PREFS_KEY = 'dsh-l2d-panel-prefs';\r\n  var PANEL_MIN_W = 480;\r\n  var PANEL_MIN_H = 360;\r\n  var PANEL_DEFAULT_W = 860;\r\n  var PANEL_DEFAULT_H = 620;\r\n  var PANEL_SNAP_EDGE = 16;\r\n  var panelPrefsSaveTimer = 0;\r\n  var panelGeom = null;      // 当前几何（border-box px），单一事实源\r\n  var panelPrevGeom = null;  // 最大化/吸附前几何\r\n  var panelSnapped = null;   // 运行时吸附态：'left'|'right'|null（不入盘）\r\n  var panelLastTap = 0;      // 标题栏双击判定\r\n  var snapGhostEl = null;\r\n\r\n  function panelMode() {\r\n    var vw = window.innerWidth;\r\n    if (vw",
+          1
+        ],
+        [
           "200) {\r\n      text = text.slice(0, 200); // 与 l2d_say 的 slice(0,200) 对齐，超出前端先截断并提示\r\n      input.value = text;\r\n      var hintEl = menuEl && menuEl.querySelector('.l2d-qc-hint');\r\n      if (hintEl) hintEl.textContent = '太长了，已截断到 200 字';\r\n      say('太长了，只发前 200 字', 2200);\r\n    }\r\n    qcSending = true;\r\n    fetch('/dsh-l2d/ai/call', {\r\n      method: 'POST',\r\n      headers: { 'Content-Type': 'application/json' },\r\n      body: JSON.stringify({ name: 'l2d_say', args: { text: text, holdMs: 5200 } }),\r\n      cache: 'no-store',\r\n    })\r\n      .then(function (r) {\r\n        if (!r.ok) throw new Error('HTTP ' + r.status);\r\n        return r.json().catch(function () { return {}; });\r\n      })\r\n      .then(function (queued) {\r\n        if (!queued || typeof queued.id === 'undefined') throw new Error('no-queue-id');\r\n        qcSending = false;\r\n        if (input) input.value = '';\r\n        say(text, 5200); // 本地直接回显（经字幕准入）；后端消费 l2d_say 后同文再上屏一次\r\n        closeMenu();\r\n      })\r\n      .catch(function () {\r\n        qcSending = false;\r\n        say('发送失败，再试一次', 2200); // 失败不关菜单，保留输入便于重试\r\n      });\r\n  }\r\n\r\n  // ---- 调试日志面板：固定右上角小窗，开/关切换；关闭后缓冲继续记录 ----\r\n  var logPanelEl = null;\r\n  var logLinesEl = null;\r\n\r\n  function ensureLogPanel() {\r\n    if (logPanelEl) return;\r\n    logPanelEl = document.createElement('div');\r\n    logPanelEl.className = 'l2d-logpanel';\r\n    logPanelEl.setAttribute('aria-hidden', 'true');\r\n    var head = document.createElement('div');\r\n    head.className = 'l2d-logpanel-head';\r\n    var headTitle = document.createElement('span');\r\n    headTitle.textContent = '调试日志';\r\n    var clearBtn = document.createElement('button');\r\n    clearBtn.type = 'button';\r\n    clearBtn.textContent = '清空';\r\n    clearBtn.addEventListener('click', function (e) {\r\n      e.stopPropagation();\r\n      l2dLogEntries.length = 0;\r\n      renderLogPanel();\r\n    });\r\n    head.appendChild(headTitle);\r\n    head.appendChild(clearBtn);\r\n    logLinesEl = document.createElement('div');\r\n    logLinesEl.className = 'l2d-logpanel-body';\r\n    logPanelEl.appendChild(head);\r\n    logPanelEl.appendChild(logLinesEl);\r\n    document.body.appendChild(logPanelEl);\r\n  }\r\n\r\n  function renderLogPanel() {\r\n    if (!logPanelEl || !logLinesEl) return;\r\n    var lines = renderL2dLog();\r\n    logLinesEl.textContent = '';\r\n    for (var i = 0; i",
           1
         ],
@@ -1644,10 +1648,6 @@
           1
         ],
         [
-          "标签：loadScriptOnce 见到同 id 标签会直接返回，\r\n    //      否则拿到的仍是页面加载时的旧 bundle（改了渲染包后点按钮却不生效的原因）。\r\n    //      注意：这里只能换渲染包；overlay.js 本身的改动仍需要 F5 整页刷新。\r\n    try {\r\n      var stale = document.getElementById('dsh-l2d-renderer');\r\n      if (stale && stale.parentNode) stale.parentNode.removeChild(stale);\r\n    } catch (err) { /* ignore */ }\r\n    if (canvasEl) {\r\n      canvasEl.style.display = '';\r\n      canvasEl.classList.remove('dragging');\r\n    }\r\n    if (imgEl) {\r\n      imgEl.style.display = 'none';\r\n      imgEl.removeAttribute('src');\r\n    }\r\n    // 3) 重挂（initRenderer 里会重新走 Core/渲染包加载与 mount）\r\n    // P0 修复：同步重置恢复状态机计数，清掉未到期的重试定时器\r\n    L2D_RECOVERY.attempts = 0;\r\n    L2D_RECOVERY.modelDisabled = false;\r\n    clearL2DRetryTimer();\r\n    initRenderer();\r\n    say('已强制刷新', 1800);\r\n  }\r\n  try { window.__DSH_L2D_FORCE_REFRESH__ = forceRefreshState; } catch (err) { /* ignore */ }\r\n\r\n  function closePanel() {\r\n    if (!panelEl) return;\r\n    panelOpen = false;\r\n    panelEl.classList.remove('open');\r\n  }\r\n\r\n  function openPanel() {\r\n    if (!panelEl) return;\r\n    panelOpen = true;\r\n    applyPanelPrefs(); // 打开时恢复/夹取位置尺寸（视口可能已变）\r\n    panelEl.classList.add('open');\r\n  }\r\n\r\n  function togglePanel() {\r\n    if (panelOpen) closePanel();\r\n    else openPanel();\r\n  }\r\n\r\n  // ------------------------------------------------ 浮动窗口（响应式升级版）\r\n  // 几何偏好存 localStorage（非设置数据，不进宿主 settings.json），300ms 防抖写入。\r\n  // 结构：{ maximized, geometry:{x,y,w,h}, previousGeometry, collapsed }\r\n  // 四档断点：≥1200 桌面浮动 / 768-1199 紧凑 / 480-767 窄窗 / ≤479 全屏（去小窗形态）。\r\n  // 拖拽全程 clamp 视口内；最大化/吸附前的几何独立存 previousGeometry，还原时按\r\n  // 当前视口重新 clamp，绝不把旧坐标直接还原进已缩小的视口。\r\n  var PANEL_PREFS_KEY = 'dsh-l2d-panel-prefs';\r\n  var PANEL_MIN_W = 480;\r\n  var PANEL_MIN_H = 360;\r\n  var PANEL_DEFAULT_W = 860;\r\n  var PANEL_DEFAULT_H = 620;\r\n  var PANEL_SNAP_EDGE = 16;\r\n  var panelPrefsSaveTimer = 0;\r\n  var panelGeom = null;      // 当前几何（border-box px），单一事实源\r\n  var panelPrevGeom = null;  // 最大化/吸附前几何\r\n  var panelSnapped = null;   // 运行时吸附态：'left'|'right'|null（不入盘）\r\n  var panelLastTap = 0;      // 标题栏双击判定\r\n  var snapGhostEl = null;\r\n\r\n  function panelMode() {\r\n    var vw = window.innerWidth;\r\n    if (vw",
-          1
-        ],
-        [
           "桌宠模式（悬停零触发 · 点击只摸头）",
           1
         ],
@@ -1950,7 +1950,7 @@
       "events": [
         [
           "click",
-          3
+          4
         ],
         [
           "keydown",
@@ -1963,7 +1963,11 @@
       ],
       "texts": [
         [
-          "';\r\n\r\n  var MENU_ITEMS = [\r\n    { group: 'appearance', label: '外观' },\r\n    { group: 'behavior', label: '行为与联动' },\r\n    { group: 'account', label: '账户与余额' },\r\n    { label: '参数监视台', href: '/dsh-l2d/test.html' }\r\n  ];\r\n\r\n  var btn = null;\r\n  var menu = null;\r\n  var ro = null;\r\n  var tries = 0;\r\n\r\n  function ensureStyle() {\r\n    if (document.getElementById('dsh-se-style')) return;\r\n    var s = document.createElement('style');\r\n    s.id = 'dsh-se-style';\r\n    s.textContent = STYLE;\r\n    document.head.appendChild(s);\r\n  }\r\n\r\n  function findSidebar() {\r\n    var cands = ['.sidebar', '[class*=\"sidebar\" i]', 'aside'];\r\n    for (var i = 0; i",
+          "';\r\n\r\n  /* 新设置页分区直达：副标题说明每个分区管什么；返回路径 = 抽屉「完成」/ Esc / 新窗口打开 */\r\n  /* URL 运行时探测：真机 /dsh-l2d/settings，DevServer /settings，file:// 独立页 /dsh-l2d/settings.html */\r\n  var SETTINGS_URL_CANDS = ['/dsh-l2d/settings', '/settings', '/dsh-l2d/settings.html'];\r\n  var MENU_ITEMS = [\r\n    { sec: 'display', label: '显示与布局', sub: '桌宠形态 · 模型缩放 · 自动显隐' },\r\n    { sec: 'model', label: '角色与模型', sub: '资源状态 · 能力画像' },\r\n    { sec: 'behavior', label: '情绪与行为', sub: '自主动作 · 戳一戳 · 说话风格' },\r\n    { sec: 'performance', label: '动画与性能', sub: '刷新间隔 · 音效 · 传感器 · 余额刷新' },\r\n    { sec: 'nodegraph', label: '动作编排', sub: '节点图编辑器 · 槽位导入导出' },\r\n    { sec: 'dev', label: '开发者工具', sub: '版本信息 · 能力重扫 · 参数监视台' },\r\n    { href: '/dsh-l2d/test.html', label: '参数监视台', sub: '独立页：实时参数只读监控' }\r\n  ];\r\n\r\n  var btn = null;\r\n  var menu = null;\r\n  var ro = null;\r\n  var tries = 0;\r\n\r\n  function esc(s) {\r\n    return String(s).replace(/[&",
+          1
+        ],
+        [
+          "';\r\n        el.addEventListener('click', function () {\r\n          closeMenu();\r\n          SettingsWindowManager.open(item.sec);\r\n        });\r\n      }\r\n      menu.appendChild(el);\r\n    });\r\n    // Esc / 外点关闭；ArrowUp/Down 在菜单项间移动焦点\r\n    menu.addEventListener('keydown', function (e) {\r\n      var items = menu.querySelectorAll('button, a');\r\n      var idx = Array.prototype.indexOf.call(items, document.activeElement);\r\n      if (e.key === 'Escape') { e.stopPropagation(); closeMenu(); if (btn) btn.focus(); }\r\n      else if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0]).focus(); }\r\n      else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1]).focus(); }\r\n    });\r\n    document.body.appendChild(menu);\r\n    return menu;\r\n  }\r\n\r\n  function openMenu() {\r\n    if (!btn) return;\r\n    var m = buildMenu();\r\n    var r = btn.getBoundingClientRect();\r\n    m.classList.add('open');\r\n    // 定位在按钮上方，右对齐；clamp 进视口\r\n    var mw = m.offsetWidth;\r\n    var mh = m.offsetHeight;\r\n    var x = Math.min(Math.max(8, r.right - mw), window.innerWidth - mw - 8);\r\n    var y = r.top - mh - 8;\r\n    if (y",
           1
         ],
         [
@@ -1971,11 +1975,27 @@
           1
         ],
         [
-          "120) return el;\r\n      }\r\n    }\r\n    return null;\r\n  }\r\n\r\n  function findFooter(sidebar) {\r\n    return sidebar.querySelector('.sidebar-footer, [class*=\"sidebar-footer\" i], [class*=\"footer\" i]');\r\n  }\r\n\r\n  function buildMenu() {\r\n    if (menu) return menu;\r\n    menu = document.createElement('div');\r\n    menu.className = 'dsh-se-menu';\r\n    menu.setAttribute('role', 'menu');\r\n    menu.setAttribute('aria-label', '设置分组');\r\n    var title = document.createElement('div');\r\n    title.className = 'dsh-se-menu-title';\r\n    title.textContent = '设置';\r\n    menu.appendChild(title);\r\n    MENU_ITEMS.forEach(function (item) {\r\n      var el;\r\n      if (item.href) {\r\n        el = document.createElement('a');\r\n        el.setAttribute('role', 'menuitem');\r\n        el.setAttribute('href', item.href);\r\n        el.setAttribute('target', '_blank');\r\n        el.setAttribute('rel', 'noopener');\r\n        el.textContent = item.label;\r\n        el.addEventListener('click', function () {\r\n          closeMenu();\r\n        });\r\n      } else {\r\n        el = document.createElement('button');\r\n        el.type = 'button';\r\n        el.setAttribute('role', 'menuitem');\r\n        el.textContent = item.label;\r\n        el.addEventListener('click', function () {\r\n          closeMenu();\r\n          SettingsWindowManager.open(item.group);\r\n        });\r\n      }\r\n      menu.appendChild(el);\r\n    });\r\n    // Esc / 外点关闭；ArrowUp/Down 在菜单项间移动焦点\r\n    menu.addEventListener('keydown', function (e) {\r\n      var items = menu.querySelectorAll('button, a');\r\n      var idx = Array.prototype.indexOf.call(items, document.activeElement);\r\n      if (e.key === 'Escape') { e.stopPropagation(); closeMenu(); if (btn) btn.focus(); }\r\n      else if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0]).focus(); }\r\n      else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1]).focus(); }\r\n    });\r\n    document.body.appendChild(menu);\r\n    return menu;\r\n  }\r\n\r\n  function openMenu() {\r\n    if (!btn) return;\r\n    var m = buildMenu();\r\n    var r = btn.getBoundingClientRect();\r\n    m.classList.add('open');\r\n    // 定位在按钮上方，右对齐；clamp 进视口\r\n    var mw = m.offsetWidth;\r\n    var mh = m.offsetHeight;\r\n    var x = Math.min(Math.max(8, r.right - mw), window.innerWidth - mw - 8);\r\n    var y = r.top - mh - 8;\r\n    if (y",
+          "120) return el;\r\n      }\r\n    }\r\n    return null;\r\n  }\r\n\r\n  function findFooter(sidebar) {\r\n    return sidebar.querySelector('.sidebar-footer, [class*=\"sidebar-footer\" i], [class*=\"footer\" i]');\r\n  }\r\n\r\n  function buildMenu() {\r\n    if (menu) return menu;\r\n    menu = document.createElement('div');\r\n    menu.className = 'dsh-se-menu';\r\n    menu.setAttribute('role', 'menu');\r\n    menu.setAttribute('aria-label', '设置分组');\r\n    var title = document.createElement('div');\r\n    title.className = 'dsh-se-menu-title';\r\n    title.textContent = '设置 · 分区直达';\r\n    menu.appendChild(title);\r\n    var hint = document.createElement('div');\r\n    hint.className = 'dsh-se-menu-hint';\r\n    hint.textContent = '改动即时保存 · 关闭面板即返回宿主';\r\n    menu.appendChild(hint);\r\n    MENU_ITEMS.forEach(function (item) {\r\n      var el;\r\n      var inner = '",
           1
         ],
         [
-          "20) {\r\n          clearInterval(timer);\r\n        }\r\n      }, 250);\r\n      return false;\r\n    },\r\n    close: function () {\r\n      var ui = window.DSH_L2D_UI;\r\n      if (ui && ui.settings && ui.settings.close) ui.settings.close();\r\n    },\r\n    focus: function () {\r\n      var ui = window.DSH_L2D_UI;\r\n      if (ui && ui.settings && ui.settings.isOpen && ui.settings.isOpen()) ui.settings.focus();\r\n    }\r\n  };\r\n  window.DSH_L2D_SettingsWindowManager = SettingsWindowManager;\r\n\r\n  function mount(sidebar) {\r\n    if (btn && document.body.contains(btn)) return true;\r\n    ensureStyle();\r\n    var footer = findFooter(sidebar);\r\n\r\n    btn = document.createElement('button');\r\n    btn.type = 'button';\r\n    btn.className = 'dsh-se-btn';\r\n    btn.setAttribute('aria-haspopup', 'menu');\r\n    btn.setAttribute('aria-expanded', 'false');\r\n    btn.title = '设置';\r\n    btn.innerHTML = GEAR_SVG + '",
+          "= SETTINGS_URL_CANDS.length) return cb(null);\r\n        var url = SETTINGS_URL_CANDS[i++];\r\n        fetch(url, { method:'HEAD' }).then(function (r) {\r\n          if (r.ok) { self.resolvedUrl = url; cb(url); } else tryNext();\r\n        }).catch(function () { tryNext(); });\r\n      })();\r\n    },\r\n    ensureDrawer: function () {\r\n      if (this.drawer) return this.drawer;\r\n      var wrap = document.createElement('div');\r\n      wrap.className = 'dsh-se-drawer';\r\n      wrap.setAttribute('role', 'dialog');\r\n      wrap.setAttribute('aria-label', 'DSH-L2D 设置');\r\n      var head = document.createElement('div');\r\n      head.className = 'dsh-se-drawer-head';\r\n      var title = document.createElement('b');\r\n      title.textContent = '设置 · DSH-L2D';\r\n      var pop = document.createElement('a');\r\n      pop.setAttribute('href', SETTINGS_URL_CANDS[0]);\r\n      pop.setAttribute('target', '_blank');\r\n      pop.setAttribute('rel', 'noopener');\r\n      pop.textContent = '新窗口打开';\r\n      this.popLink = pop;\r\n      var done = document.createElement('button');\r\n      done.type = 'button';\r\n      done.className = 'primary';\r\n      done.textContent = '完成';\r\n      done.addEventListener('click', function () { SettingsWindowManager.close(); });\r\n      head.appendChild(title);\r\n      head.appendChild(pop);\r\n      head.appendChild(done);\r\n      var frame = document.createElement('iframe');\r\n      frame.setAttribute('title', '设置页');\r\n      wrap.appendChild(head);\r\n      wrap.appendChild(frame);\r\n      document.body.appendChild(wrap);\r\n      this.drawer = wrap;\r\n      this.iframe = frame;\r\n      return wrap;\r\n    },\r\n    open: function (sec) {\r\n      this.ensureDrawer();\r\n      var self = this;\r\n      var hash = sec ? '#sec-' + sec : '';\r\n      this.resolveUrl(function (url) {\r\n        if (!url) return; // 全部不可达（file:// 独立打开等）：抽屉保持空白，不伪造内容\r\n        if (self.popLink) self.popLink.setAttribute('href', url + hash);\r\n        try {\r\n          if (self.iframe.src && self.iframe.src.indexOf(url) === 0 && self.iframe.contentWindow.location.href) {\r\n            self.iframe.contentWindow.location.hash = sec ? 'sec-' + sec : '';\r\n          } else {\r\n            self.iframe.src = url + hash;\r\n          }\r\n        } catch (e) {\r\n          self.iframe.src = url + hash;\r\n        }\r\n      });\r\n      this.drawer.classList.add('open');\r\n    },\r\n    close: function () {\r\n      if (this.drawer) this.drawer.classList.remove('open');\r\n    },\r\n    isOpen: function () {\r\n      return !!(this.drawer && this.drawer.classList.contains('open'));\r\n    },\r\n    focus: function () {\r\n      if (this.drawer && !this.isOpen()) this.drawer.classList.add('open');\r\n    }\r\n  };\r\n  window.DSH_L2D_SettingsWindowManager = SettingsWindowManager;\r\n\r\n  function mount(sidebar) {\r\n    if (btn && document.body.contains(btn)) return true;\r\n    ensureStyle();\r\n    var footer = findFooter(sidebar);\r\n\r\n    btn = document.createElement('button');\r\n    btn.type = 'button';\r\n    btn.className = 'dsh-se-btn';\r\n    btn.setAttribute('aria-haspopup', 'menu');\r\n    btn.setAttribute('aria-expanded', 'false');\r\n    btn.title = '设置';\r\n    btn.innerHTML = GEAR_SVG + '",
+          1
+        ],
+        [
+          "DSH-L2D 设置",
+          1
+        ],
+        [
+          "刷新间隔 · 音效 · 传感器 · 余额刷新",
+          1
+        ],
+        [
+          "动作编排",
+          1
+        ],
+        [
+          "动画与性能",
           1
         ],
         [
@@ -1983,23 +2003,75 @@
           1
         ],
         [
-          "外观",
+          "完成",
           1
         ],
         [
-          "行为与联动",
+          "开发者工具",
+          1
+        ],
+        [
+          "情绪与行为",
+          1
+        ],
+        [
+          "改动即时保存 · 关闭面板即返回宿主",
+          1
+        ],
+        [
+          "新窗口打开",
+          1
+        ],
+        [
+          "显示与布局",
+          1
+        ],
+        [
+          "桌宠形态 · 模型缩放 · 自动显隐",
+          1
+        ],
+        [
+          "版本信息 · 能力重扫 · 参数监视台",
+          1
+        ],
+        [
+          "独立页：实时参数只读监控",
+          1
+        ],
+        [
+          "自主动作 · 戳一戳 · 说话风格",
+          1
+        ],
+        [
+          "节点图编辑器 · 槽位导入导出",
+          1
+        ],
+        [
+          "角色与模型",
           1
         ],
         [
           "设置",
-          3
+          2
+        ],
+        [
+          "设置 · DSH-L2D",
+          1
+        ],
+        [
+          "设置 · 分区直达",
+          1
         ],
         [
           "设置分组",
           1
         ],
         [
-          "账户与余额",
+          "设置页",
+          1
+        ],
+        [
+          "资源状态 · 能力画像",
           1
         ]
       ]
