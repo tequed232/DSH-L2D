@@ -10,11 +10,14 @@
       body {
         margin: 0;
         height: 100%;
-        background-color: var(--dsh-bg);
-        background-image: repeating-conic-gradient(var(--dsh-surface) 0% 25%, var(--dsh-surface-raised) 0% 50%);
+        background-color: var(--studio-bg, #0d0f13);
+        background-image: repeating-conic-gradient(
+          var(--studio-surface, #141821) 0% 25%,
+          var(--studio-surface-2, #1c2230) 0% 50%
+        );
         background-size: 24px 24px;
-        font: var(--dsh-text-sm);
-        color: var(--dsh-ink);
+        font: var(--studio-text-sm, 400 13px/1.5 system-ui);
+        color: var(--studio-ink, #e9ecf3);
         overflow: hidden;
       }
       #stage {
@@ -25,6 +28,15 @@
       }
       canvas {
         display: block;
+      }
+      @media (max-width: 1023px) {
+        html, body { background-size: 20px 20px; }
+      }
+      @media (max-width: 719px) {
+        html, body { background-size: 16px 16px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html, body, canvas { transition: none !important; animation: none !important; }
       }
     </style>
   </head>
