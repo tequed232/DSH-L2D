@@ -494,7 +494,7 @@
     gear.textContent = '\u2699';
     gear.addEventListener('click', function (e) {
       e.stopPropagation();
-      togglePanel();
+      openSettingsDrawer();
     });
 
     // P0-PiP：failed 态唯一页内元素（48×48 徽标）。点击 = user gesture，
@@ -529,7 +529,6 @@
     document.body.appendChild(menuEl);
     document.body.appendChild(panelEl);
 
-    buildPanel();
     loadSettings();
     initRenderer();
 
@@ -1343,7 +1342,7 @@
       return;
     }
 
-    menuEl.appendChild(menuButton('设置', openPanel));
+    menuEl.appendChild(menuButton('设置', function () { openSettingsDrawer(); }));
     menuEl.appendChild(menuButton('对话', function () {
       var agent = window.__DSH_L2D_AGENT__ || {};
       var text = trimChatText(agent.lastAssistantText, 70) || '我在听，你说吧～';
@@ -1606,14 +1605,21 @@
     cycleBodyType: cycleBodyType,
     zoneAt: zoneAt,
     settings: {
-      open: function (group) {
-        if (!panelOpen) openPanel();
-        if (group) focusPanelGroup(group);
-        else focusPanelWindow();
+      // 旧内嵌面板已退役（Settings-UI.md §8.3）：设置入口统一改向新设置页抽屉。
+      // 保留 API 形状（open(group)/close/focus/isOpen），group 语义 = 新页分区 sec-*。
+      open: function (group) { openSettingsDrawer(group); },
+      close: function () {
+        var m = window.DSH_L2D_SettingsWindowManager;
+        if (m && m.close) m.close();
       },
-      close: function () { closePanel(); },
-      focus: function () { if (panelOpen) focusPanelWindow(); },
-      isOpen: function () { return panelOpen; },
+      focus: function () {
+        var m = window.DSH_L2D_SettingsWindowManager;
+        if (m && m.focus) m.focus();
+      },
+      isOpen: function () {
+        var m = window.DSH_L2D_SettingsWindowManager;
+        return !!(m && m.isOpen && m.isOpen());
+      },
     },
     // 动作池读库（UI-FLOAT ⑤）调试/自动化钩子：不进 AI 工具白名单
     pokeRandom: pokeRandom,
@@ -3589,6 +3595,29 @@
     if (!panelEl) return;
     panelOpen = false;
     panelEl.classList.remove('open');
+  }
+
+  /* 旧内嵌面板已退役（Settings-UI.md §8.3）：所有设置入口改向新设置页抽屉。
+    buildPanel 调用已摘除，两套入口不得并存。
+    旧面板 DOM 不再构建；openPanel/closePanel/panelOpen 机制保留为防御壳（无入口可达）。 */
+  function openSettingsDrawer(group) {
+    var mgr = window.DSH_L2D_SettingsWindowManager;
+    if (mgr && mgr.open) {
+      mgr.open(group);
+      return true;
+    }
+    // settings-entry 注入晚于点击（SPA 时序）：短重试，放弃时安静失败不扰动宿主
+    var n = 0;
+    var timer = setInterval(function () {
+      var m = window.DSH_L2D_SettingsWindowManager;
+      if (m && m.open) {
+        clearInterval(timer);
+        m.open(group);
+      } else if (++n > 20) {
+        clearInterval(timer);
+      }
+    }, 250);
+    return false;
   }
 
   function openPanel() {

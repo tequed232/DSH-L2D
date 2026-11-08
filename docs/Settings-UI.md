@@ -134,8 +134,13 @@ node server.js          # http://127.0.0.1:7860/dsh-l2d/settings.html
 node server-broken.js   # http://127.0.0.1:7861/dsh-l2d/settings.html
 ```
 
-## 八、接手时要做的
+## 八、接手时要做的（2026-11-08 晚全部落地）
 
-1. 在 `index.js` 里加一条静态路由，把 `assets/settings.html` 发到宿主地址（`settings.json` / `status.json` 已有，不用动）。
-2. 若要能力画像，补 `/dsh-l2d/capability.json` 与 `/dsh-l2d/capability/rescan`；页面已按契约写好，无需改动。
-3. 旧面板摘掉时，把 `overlay.js` 的 `buildPanel()` 及其 14 个控件一并删除，避免两套入口同时存在。
+1. ✅ 已完成：宿主静态路由 `GET /dsh-l2d/settings` 发 `assets/settings.html`（`lib/index.js`）。
+2. ✅ 已完成：`/dsh-l2d/capability.json` 与 `/dsh-l2d/capability/rescan` 路由已接入。
+3. ✅ 已完成（本轮）：**新设置页覆盖旧面板**——三处旧入口（角色齿轮 ⚙ / 右键菜单「设置」/ 侧栏设置二级菜单）全部改向新设置页：
+   - `settings-entry.js` 二级菜单重做为六分区直达（两行式：标题 + 分区说明），点击打开**右侧抽屉 iframe** 加载新设置页 `#sec-xxx` 锚点；URL 运行时探测（真机 `/dsh-l2d/settings`、DevServer `/settings`）。
+   - 返回路径明确：抽屉标题栏「完成」按钮 / Esc；「新窗口打开」提供独立标签页出口。
+   - `overlay.js` 的 `buildPanel()` 调用摘除（`DSH_L2D_UI.settings.{open,close,focus,isOpen}` 转发抽屉管理器）；旧面板机制代码保留为不可达防御壳，待下次大清理物理删除。
+   - `settings.html` 增加 `#sec-xxx` 锚点直达（hashchange 滚动 + 卡片描边高亮）；DevServer 补 `/pet.html` 与 `/settings` 同语义路由。
+   - 「账户与余额」不再作为独立菜单项：余额悬浮于角色（miniBadge/price），刷新间隔在「动画与性能」分区。

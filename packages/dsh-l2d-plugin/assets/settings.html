@@ -317,6 +317,13 @@
 }
 /* ===== END STUDIO TOKENS v1 ===== */
 
+      /* 锚点直达：抽屉/外链 #sec-xxx 定位（页面自身样式区，不入令牌块以免破坏四处一致） */
+      .card.studio-card { scroll-margin-top: var(--studio-toolbar-h, 48px); }
+      .studio-card.hash-flash {
+        border-color: var(--studio-accent);
+        box-shadow: 0 0 0 2px var(--studio-accent-soft);
+      }
+
       :root {
         color-scheme: dark;
         --dsh-font-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
@@ -2655,6 +2662,22 @@
         document.addEventListener('visibilitychange', function () {
           if (!document.hidden) refreshReadouts();
         });
+
+        /* 分区锚点直达：settings-entry 抽屉与外链用 #sec-xxx 指定落点。
+           滚动到对应卡片并短暂描边；hashchange 支持同页切锚（抽屉已开时改 hash 不重载） */
+        var hashTimer = null;
+        function applyHashTarget() {
+          var id = (window.location.hash || '').replace(/^#/, '');
+          if (!id) return;
+          var el = document.getElementById(id);
+          if (!el) return;
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          el.classList.add('hash-flash');
+          if (hashTimer) window.clearTimeout(hashTimer);
+          hashTimer = window.setTimeout(function () { el.classList.remove('hash-flash'); }, 1600);
+        }
+        window.addEventListener('hashchange', applyHashTarget);
+        applyHashTarget();
       })();
     </script>
   </body>
