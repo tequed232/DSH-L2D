@@ -58,3 +58,85 @@ select {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ===== BEGIN STUDIO ADAPT v1 ===== */
+/* Editor-surface adaptation. Tokens come from ./ui-tokens.css (marked block). */
+:root {
+  --dsh-bg: var(--studio-bg);
+  --dsh-surface: var(--studio-surface);
+  --dsh-surface-raised: var(--studio-surface-2);
+  --dsh-surface-sunken: var(--studio-surface-sunken);
+  --dsh-ink: var(--studio-ink);
+  --dsh-ink-muted: var(--studio-ink-2);
+  --dsh-line: var(--studio-line);
+  --dsh-line-strong: var(--studio-line-strong);
+  --dsh-accent: var(--studio-accent);
+  --dsh-on-accent: var(--studio-on-accent);
+  --dsh-accent-soft: var(--studio-accent-soft);
+  --dsh-on-accent-soft: var(--studio-accent-soft-ink);
+  --dsh-hover: var(--studio-hover);
+  --dsh-ok: var(--studio-ok);
+  --dsh-warn: var(--studio-warn);
+  --dsh-danger: var(--studio-danger);
+  --dsh-radius-sm: var(--studio-radius-xs);
+  --dsh-radius-md: var(--studio-radius-sm);
+  --dsh-radius-lg: var(--studio-radius-md);
+  --dsh-control-sm: var(--studio-control-h-sm);
+  --dsh-text-xs: var(--studio-text-xs);
+  --dsh-text-sm: var(--studio-text-sm);
+  --dsh-text-md: var(--studio-text-md);
+  --dsh-text-label: var(--studio-text-label);
+  --dsh-text-lg: var(--studio-text-lg);
+  --dsh-text-xl: var(--studio-text-xl);
+}
+
+body {
+  background: var(--studio-bg);
+  color: var(--studio-ink);
+  font: var(--studio-text-md);
+}
+:focus-visible { outline: none; box-shadow: var(--studio-focus-ring); }
+::selection { background: var(--studio-selected); color: var(--studio-ink); }
+::-webkit-scrollbar-thumb { background: var(--studio-line-strong); }
+
+button, input, select, textarea, [role='button'] {
+  transition: background var(--studio-transition-fast), border-color var(--studio-transition-fast),
+    color var(--studio-transition-fast), box-shadow var(--studio-transition-fast),
+    transform var(--studio-transition-fast);
+}
+button:hover:not(:disabled), [role='button']:hover:not(:disabled) { background: var(--studio-hover); }
+button:active:not(:disabled), [role='button']:active:not(:disabled) {
+  transform: translateY(1px); background: var(--studio-active);
+}
+button:disabled, input:disabled, select:disabled, textarea:disabled, [data-state='disabled'] {
+  opacity: var(--studio-state-disabled-opacity); cursor: not-allowed;
+}
+[data-state='loading'] { cursor: progress; }
+[data-state='error'] { border-color: var(--studio-danger); color: var(--studio-danger); }
+[data-state='success'] { border-color: var(--studio-ok); color: var(--studio-ok); }
+[data-state='selected'], [data-state='active'] {
+  background: var(--studio-selected); box-shadow: inset 2px 0 0 var(--studio-accent);
+}
+
+@media (max-width: 1439px) { :root { --studio-gutter: 12px; } }
+@media (max-width: 1023px) { body { font: var(--studio-text-sm); } }
+@media (max-width: 719px) {
+  body { font: var(--studio-text-sm); }
+  html, body, #app { overflow: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  button, input, select, textarea, [role='button'] { transition: none !important; }
+}
+
+/* Bridge pass 2: depth, motion and control rhythm. */
+:root {
+  --dsh-shadow-1: var(--studio-shadow-1);
+  --dsh-shadow-2: var(--studio-shadow-2);
+  --dsh-shadow-3: var(--studio-shadow-3);
+  --dsh-scrim: var(--studio-scrim);
+  --dsh-disabled-opacity: var(--studio-state-disabled-opacity);
+  --dsh-dur-fast: 100ms;
+  --dsh-dur: 160ms;
+  --dsh-control-md: var(--studio-control-h);
+}
+/* ===== END STUDIO ADAPT v1 ===== */
