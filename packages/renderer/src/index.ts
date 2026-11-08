@@ -51,6 +51,11 @@ import {
 
 let sub: LAppSubdelegate | null = null;
 let model: LAppModel | null = null;
+/** 当前尝试加载的模型文件名（model3.json basename），供 overlay 日志等自省展示；未加载为 ''。 */
+let modelLabel = '';
+// 具名导出（live binding）：overlay 日志以 `L.modelName || L.model` 读模型名；
+// renderer-contract 要求 overlay 依赖的每个成员都必须具名导出，而非只挂在 default api 上。
+export { modelLabel as modelName, modelLabel as model };
 let rafId = 0;
 let started = false;
 let lastError = '';
@@ -344,6 +349,8 @@ export async function mount(canvas: HTMLCanvasElement, opts: MountOptions): Prom
   };
   window.addEventListener('dsh:l2d:model-error', onEarlyModelError);
   model = mgr.loadModelUrl(dir, file);
+  // 模型名与 model 变量同生命周期：开始加载即记录（旧实例已在 mount 开头 destroy）。
+  modelLabel = String(file || '');
 
   // 拉一份 model3.json：表情名与动作组清单从这里来，供 getCapabilities() 自省
   modelSetting = null;
@@ -2190,6 +2197,7 @@ export async function destroy(): Promise<void> {
     /* ignore */
   }
   model = null;
+  modelLabel = '';
   try {
     sub?.release();
   } catch {
@@ -2539,6 +2547,13 @@ const api = {
   destroy,
   isReady,
   getInfo,
+  // 模型名自省：getter 形式避免 api 字面量创建时把 '' 快照冻结；与具名导出同源 modelLabel。
+  get modelName() {
+    return modelLabel;
+  },
+  get model() {
+    return modelLabel;
+  },
 };
 export default api;
 
