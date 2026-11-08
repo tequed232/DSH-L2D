@@ -82,6 +82,9 @@ const TEST_FILE = path.join(PKG_ROOT, 'assets', 'test.html');
 const TOKENS_FILE = path.join(PKG_ROOT, 'assets', 'ui-tokens.css');
 const OVERLAY_CSS_FILE = path.join(PKG_ROOT, 'assets', 'overlay.css');
 const SETTINGS_HTML_FILE = path.join(PKG_ROOT, 'assets', 'settings.html');
+// MG-LAB Control Studio 静态页：路径常量在模块加载期拼好，请求 URL 不参与文件名构造。
+const MOTION_GRAPH_HTML_FILE = path.join(PKG_ROOT, 'assets', 'motion-graph.html');
+const CONTROL_STUDIO_HTML_FILE = path.join(PKG_ROOT, 'assets', 'control-studio.html');
 const CAPABILITY_DIR = path.join(L2D_ROOT, 'tools', 'capability-scan');
 const CAPABILITY_SCAN = path.join(CAPABILITY_DIR, 'scan.mjs');
 const PET_HTML_FILE = path.join(PKG_ROOT, 'lib', 'pet.html');
@@ -1465,6 +1468,21 @@ export function apply(root, config = {}) {
       if (!buf) return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('settings.html missing'));
       sendBuffer(res, 200, 'text/html; charset=utf-8', buf);
     });
+
+    // MG-LAB Control Studio 两张静态页：严格两条 exact 白名单，禁止开放
+    // assets/*.html 通配（URL 参与文件名拼接会有目录穿越风险）。与其他页面路由
+    // 复用同一套 isCrossSite 同源门禁 + readIfExists + sendBuffer，末尾 404 兜底不变。
+    for (const [routePath, htmlFile] of [
+      ['/dsh-l2d/motion-graph.html', MOTION_GRAPH_HTML_FILE],
+      ['/dsh-l2d/control-studio.html', CONTROL_STUDIO_HTML_FILE],
+    ]) {
+      route(routePath, (req, res) => {
+        if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+        const buf = readIfExists(htmlFile);
+        if (!buf) return sendBuffer(res, 404, 'text/html; charset=utf-8', Buffer.from('studio page missing'));
+        sendBuffer(res, 200, 'text/html; charset=utf-8', buf);
+      });
+    }
 
     // 能力画像（E0）：扫描产物只读返回，供设置页与调试面板使用
     route('/dsh-l2d/capability.json', (req, res) => {

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-08T06:51:15.290Z",
+  "generatedAt": "2026-11-08T09:59:04.110Z",
   "files": {
     "apps/stage-web/src/components/ChatArea.vue": {
       "ids": [],
@@ -816,6 +816,10 @@
         [
           "/dsh-l2d/test.html",
           1
+        ],
+        [
+          "motion-graph.html",
+          1
         ]
       ],
       "dataAttrs": [],
@@ -875,6 +879,10 @@
         ],
         [
           "情绪与行为",
+          1
+        ],
+        [
+          "打开 Motion Graph Lab",
           1
         ],
         [

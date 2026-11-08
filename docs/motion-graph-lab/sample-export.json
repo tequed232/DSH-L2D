@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "kind": "dsh-l2d-nodegraph",
+  "name": "挥手打招呼",
+  "modelBinding": {
+    "modelId": "大肥鱼",
+    "modelHash": "",
+    "bindingMode": "any"
+  },
+  "graph": {
+    "roots": [
+      "n_expr",
+      "n_look"
+    ],
+    "nodes": [
+      {
+        "id": "n_expr",
+        "type": "expression",
+        "name": "兔牙",
+        "next": [
+          "n_delay"
+        ]
+      },
+      {
+        "id": "n_look",
+        "type": "look",
+        "x": 0,
+        "y": 0.05,
+        "next": [
+          "n_motion"
+        ]
+      },
+      {
+        "id": "n_delay",
+        "type": "delay",
+        "delayMs": 200,
+        "next": [
+          "n_motion"
+        ]
+      },
+      {
+        "id": "n_motion",
+        "type": "motion",
+        "name": "竖手指打开",
+        "closeMotion": "竖手指关闭",
+        "closeAfterMs": 1800,
+        "next": []
+      }
+    ]
+  },
+  "segments": [
+    {
+      "priority": "NORMAL",
+      "chain": [
+        {
+          "kind": "expression",
+          "name": "兔牙"
+        },
+        {
+          "kind": "motion",
+          "name": "竖手指打开",
+          "closeMotion": "竖手指关闭",
+          "closeAfterMs": 1800,
+          "delayMs": 200
+        },
+        {
+          "kind": "look",
+          "x": 0,
+          "y": 0.05
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "dshVersion": "0.5.0",
+    "editor": {
+      "version": 1,
+      "name": "挥手打招呼",
+      "docPriority": "NORMAL",
+      "nodes": [
+        {
+          "id": "n_ws",
+          "type": "workspace",
+          "label": "Workspace State",
+          "pos": { "x": 60, "y": 170 },
+          "props": { "priority": "NORMAL", "cooldownMs": 0, "execState": "idle", "modelWhitelist": "", "portType": "flow", "disabled": false, "state": "attention" },
+          "disabled": false
+        },
+        {
+          "id": "n_gate",
+          "type": "gate",
+          "label": "Condition Gate",
+          "pos": { "x": 300, "y": 170 },
+          "props": { "priority": "NORMAL", "cooldownMs": 0, "execState": "idle", "modelWhitelist": "", "portType": "flow", "disabled": false, "expr": "state == attention" },
+          "disabled": false
+        },
+        {
+          "id": "n_expr",
+          "type": "expression",
+          "label": "Expression · 兔牙",
+          "pos": { "x": 540, "y": 70 },
+          "props": { "priority": "NORMAL", "cooldownMs": 0, "execState": "idle", "modelWhitelist": "", "portType": "flow", "disabled": false, "name": "兔牙", "clear": false, "stepDelayMs": 0 },
+          "disabled": false
+        },
+        {
+          "id": "n_look",
+          "type": "look",
+          "label": "Look At",
+          "pos": { "x": 540, "y": 270 },
+          "props": { "priority": "NORMAL", "cooldownMs": 0, "execState": "idle", "modelWhitelist": "", "portType": "flow", "disabled": false, "x": 0, "y": 0.05, "stepDelayMs": 0 },
+          "disabled": false
+        },
+        {
+          "id": "n_delay",
+          "type": "delay",
+          "label": "Delay 200ms",
+          "pos": { "x": 790, "y": 70 },
+          "props": { "priority": "NORMAL", "cooldownMs": 0, "execState": "idle", "modelWhitelist": "", "portType": "flow", "disabled": false, "delayMs": 200 },
+          "disabled": false
+        },
+        {
+          "id": "n_motion",
+          "type": "motion",
+          "label": "Motion · 竖手指打开",
+          "pos": { "x": 1020, "y": 170 },
+          "props": { "priority": "NORMAL", "cooldownMs": 0, "execState": "idle", "modelWhitelist": "", "portType": "flow", "disabled": false, "name": "竖手指打开", "closeMotion": "竖手指关闭", "closeAfterMs": 1800, "stepDelayMs": 0 },
+          "disabled": false
+        }
+      ],
+      "edges": [
+        { "id": "e1", "from": "n_ws", "to": "n_gate" },
+        { "id": "e2", "from": "n_gate", "to": "n_expr" },
+        { "id": "e3", "from": "n_gate", "to": "n_look" },
+        { "id": "e4", "from": "n_expr", "to": "n_delay" },
+        { "id": "e5", "from": "n_delay", "to": "n_motion" },
+        { "id": "e6", "from": "n_look", "to": "n_motion" }
+      ],
+      "viewport": { "x": 30, "y": 80, "k": 0.85 },
+      "cachePolicy": "graph-cache-only; playback-never-skipped"
+    }
+  }
+}

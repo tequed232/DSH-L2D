@@ -42,6 +42,15 @@ const CORE_FILE =
 const RENDERER_FILE = path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'assets', 'renderer.js');
 const PUBLIC_DIR = path.join(HERE, 'public');
 
+// MG-LAB Control Studio 静态页：严格显式白名单，只有这两条 URL 可达。
+// 刻意不开 assets/*.html 通用映射——URL 一旦参与文件名拼接就有目录穿越风险；
+// 这里 value 是预先拼好的绝对路径，req.url 只作 Map 查找键，不参与 path.join。
+// 与真机宿主 lib/index.js 保持同一组路径语义。
+const STUDIO_HTML_ROUTES = new Map([
+  ['/motion-graph.html', path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'assets', 'motion-graph.html')],
+  ['/control-studio.html', path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'assets', 'control-studio.html')],
+]);
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -357,6 +366,16 @@ const server = http.createServer(async (req, res) => {
       path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'assets', 'settings.html'),
     );
     if (!buf) return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('settings.html missing'));
+    return send(res, 200, MIME['.html'], buf);
+  }
+
+  // MG-LAB：/dsh-l2d/motion-graph.html 与 /dsh-l2d/control-studio.html
+  // （前缀已在 :242 剥离）。仅命中上面白名单 Map 的两条精确路径，其余仍走末尾 404。
+  if (STUDIO_HTML_ROUTES.has(urlPath)) {
+    const buf = readIfExists(STUDIO_HTML_ROUTES.get(urlPath));
+    if (!buf) {
+      return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('studio page missing: ' + urlPath));
+    }
     return send(res, 200, MIME['.html'], buf);
   }
 

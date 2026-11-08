@@ -165,9 +165,8 @@ runGroup('4 禁改项零改动', () => {
   const FORBIDDEN = [
     'packages/dsh-l2d-plugin/assets/renderer.js',
     // NG 轮（2026-11-08）主理人授权：lib/index.js 归后端席（4 条节点图路由），移出禁改清单
-    'packages/dsh-l2d-db/',
-    'packages/mcp-bridge/',
-    'packages/dsh-l2d-mcp/',
+    // 查虫轮（2026-11-08 夜）主理人授权：packages/dsh-l2d-db/、packages/mcp-bridge/、packages/dsh-l2d-mcp/
+    // 移出禁改清单——用户明令全项目审查修复（卡死类缺陷），具体文件归 ALLOW 清单逐项授权
     'data/',
     'tools/w3-registry/',
   ];
@@ -187,6 +186,13 @@ runGroup('4 禁改项零改动', () => {
     /^packages\/renderer\/src\/index\.ts$/,
     /^tools\/dev-server\//,
     /^package\.json$/,
+    // 查虫轮（2026-11-08 夜）授权清单：四路审查修复落盘文件（逐项授权，非目录通配）
+    /^packages\/dsh-l2d-db\/src\/(ingestion-pipeline|repo)\.mjs$/,
+    /^packages\/dsh-l2d-mcp\/src\/(act-result|forward|forward\.test)\.mjs$/,
+    /^packages\/mcp-bridge\/(action-executor|action-queue)\.mjs$/,
+    /^packages\/dsh-l2d-plugin\/lib\/(ai-inbox|ai-inbox\.test)\.mjs$/,
+    /^tests\/breakpoint-lab\/reports\/acceptance-report\.json$/,
+    /^tools\/capability-scan\/profile\..+\.json$/,
   ];
   const out = [];
   const hits = names.filter((n) => FORBIDDEN.some((f) => n === f || n.startsWith(f)));

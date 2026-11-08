@@ -1,0 +1,2201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>DSH-L2D Motion Graph · Demo v0.1</title>
+<!--
+  Motion Graph Lab · 单文件零依赖原型 (MG-FRONTEND)
+  契约: docs/motion-graph-lab/CONTRACT.md v1 (§1 视觉 / §4 导出 / §5 六功能 / §6 验收 / §8 架构决策)
+  许可: GPL-3.0 红线 —— 仅借鉴 DAG 拓扑排序 / 工作流序列化 / 节点定义驱动 Inspector 的「思想」，
+        全部代码为独立实现，未复制、改写或嵌入 ComfyUI / React Flow / n8n 任何源码。
+  运行: 双击 file:// 即可打开；不引用 /dsh-l2d/ 资源、不引 CDN、不连任何服务器。
+  状态分层 (§8.2): Graph / NodeDef / Binding / Capability / Runtime / Cache / Preferences 七个独立模块对象。
+-->
+<style>
+/* ===========================================================================
+   01 · 设计 tokens（契约 §1 深色色板；语义色 + 布局节奏，组件内不散落十六进制）
+   =========================================================================== */
+:root {
+  color-scheme: dark;
+  --bg:#0b0b10; --panel:#15151d; --card:#1b1b26; --surface:#20202c;
+  --line:#2b2b3a; --line-soft:#23232f;
+  /* WCAG 2.1 SC 1.4.11：承载信息的结构性边框 ≥3:1（#6b6b85 on #15151d ≈3.29:1） */
+  --mg-border-strong:#6b6b85;
+  --mg-focus-outer:#7c5cff; --mg-focus-inner:#f2f2f7;
+  --ink:#f2f2f7; --ink2:#8b8b9e; --ink3:#5c5c72;
+  --event:#ff9a45; --logic:#a78bfa; --action:#3ddc97;
+  --preview:#6aa8ff; --accent:#7c5cff;
+  --ok:#3ddc97; --warn:#ff9a45; --danger:#ff6b61;
+  --port-flow:#6aa8ff; --port-signal:#a78bfa; --port-data:#3ddc97;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px;
+  --r-sm:6px; --r-md:9px; --r-lg:12px;
+  --topbar-h:52px; --status-h:30px; --rail-w:236px; --insp-w:300px;
+  --node-w:208px; --port-y:46px;
+  --font: system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+  --mono: ui-monospace,"Cascadia Mono",Consolas,"Courier New",monospace;
+  --ease: 160ms cubic-bezier(.2,0,0,1);
+}
+/* 浅色主题（明暗主题分别设计明度映射；契约主基调仍为深色） */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg:#f4f3f0; --panel:#ffffff; --card:#ffffff; --surface:#eeece7;
+  --line:#d5d2ca; --line-soft:#e7e4dd;
+  --mg-border-strong:#5a5a70; --mg-focus-inner:#171717;
+  --ink:#171717; --ink2:#5d5a55; --ink3:#8a867e;
+  --event:#c2570d; --logic:#6b3fd4; --action:#137a52;
+  --preview:#245fa8; --accent:#5b34d6;
+  --ok:#137a52; --warn:#c2570d; --danger:#c62c22;
+  --port-flow:#245fa8; --port-signal:#6b3fd4; --port-data:#137a52;
+}
+* { box-sizing:border-box; }
+html, body { height:100%; margin:0; overflow:hidden; }
+body {
+  background:var(--bg); color:var(--ink); font:13px/1.5 var(--font);
+  -webkit-font-smoothing:antialiased;
+}
+button, input, select, textarea { font-family:inherit; }
+/* focus-visible 双环：内 #f2f2f7 + 外 #7c5cff（WCAG 修订 §1） */
+:focus-visible {
+  outline:2px solid var(--mg-focus-outer); outline-offset:3px;
+  box-shadow:0 0 0 2px var(--mg-focus-inner);
+}
+.num { font-variant-numeric:tabular-nums; font-family:var(--mono); }
+.hidden { display:none !important; }
+
+/* ===========================================================================
+   02 · 骨架：顶栏 / 三栏 / 状态条
+   =========================================================================== */
+#topbar {
+  height:var(--topbar-h); display:flex; align-items:center; gap:var(--s4);
+  padding:0 var(--s4); background:var(--panel); border-bottom:1px solid var(--mg-border-strong);
+  position:relative; z-index:20;
+}
+.brand { display:flex; align-items:center; gap:10px; flex:none; min-width:0; }
+.brand-mark { width:26px; height:26px; flex:none; color:var(--accent); }
+.brand-txt { font-size:13.5px; font-weight:600; letter-spacing:.01em; white-space:nowrap; }
+.brand-txt b { font-weight:700; color:var(--accent); }
+.ver-badge {
+  font:600 10px/1 var(--mono); letter-spacing:.04em; color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 14%, transparent);
+  border:1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  padding:5px 7px; border-radius:var(--r-sm); white-space:nowrap;
+}
+.doc-meta { display:flex; align-items:center; gap:8px; flex:none; }
+.doc-meta label { display:flex; align-items:center; gap:6px; font:500 9px var(--mono); letter-spacing:.1em; color:var(--ink3); }
+.doc-meta input {
+  width:118px; background:var(--bg); border:1px solid var(--mg-border-strong); border-radius:var(--r-sm);
+  color:var(--ink); padding:5px 8px; font-size:11.5px; outline:none;
+}
+.doc-meta input:focus { border-color:var(--accent); }
+.top-actions { display:flex; align-items:center; gap:6px; margin-left:auto; flex:none; }
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  background:var(--surface); border:1px solid var(--mg-border-strong); color:var(--ink);
+  border-radius:var(--r-sm); padding:6px 10px; font-size:12px; line-height:1.2;
+  cursor:pointer; white-space:nowrap; transition:background var(--ease),border-color var(--ease);
+}
+.btn:hover { background:color-mix(in srgb,var(--ink) 9%,var(--surface)); border-color:color-mix(in srgb,var(--ink) 24%,var(--line)); }
+.btn:active { transform:translateY(1px); }
+.btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+.btn.primary:hover { filter:brightness(1.12); }
+.btn.ghost { background:transparent; }
+.btn.danger { color:var(--danger); border-color:color-mix(in srgb,var(--danger) 45%,var(--line)); }
+.btn .ico { font-size:13px; line-height:1; }
+.btn.icon-only { width:32px; padding:6px 0; }
+#validate-badge {
+  display:inline-flex; align-items:center; gap:6px; flex:none;
+  font:600 10.5px var(--mono); padding:6px 9px; border-radius:var(--r-sm);
+  border:1px solid var(--mg-border-strong); background:var(--surface); color:var(--ink2);
+  cursor:pointer; white-space:nowrap;
+}
+#validate-badge.ok { color:var(--ok); border-color:color-mix(in srgb,var(--ok) 45%,var(--line)); background:color-mix(in srgb,var(--ok) 10%,var(--surface)); }
+#validate-badge.bad { color:var(--danger); border-color:color-mix(in srgb,var(--danger) 45%,var(--line)); background:color-mix(in srgb,var(--danger) 10%,var(--surface)); }
+#validate-badge .dot { width:7px; height:7px; border-radius:50%; background:currentColor; flex:none; }
+
+#main { display:flex; height:calc(100% - var(--topbar-h) - var(--status-h)); min-height:0; }
+#library, #inspector { flex:none; background:var(--panel); overflow-y:auto; overflow-x:hidden; min-width:0; }
+#library { width:var(--rail-w); border-right:1px solid var(--mg-border-strong); padding:var(--s4) var(--s3); }
+#inspector { width:var(--insp-w); border-left:1px solid var(--mg-border-strong); }
+#canvas-wrap { flex:1 1 auto; min-width:0; position:relative; overflow:hidden; }
+
+/* ---- Node Library ---- */
+.panel-kicker { font:600 9.5px var(--mono); letter-spacing:.13em; color:var(--ink3); text-transform:uppercase; margin:0 0 4px 2px; }
+.panel-title { font-size:14px; font-weight:650; margin:0 0 4px 2px; }
+.panel-sub { font-size:10.5px; color:var(--ink2); margin:0 0 18px 2px; line-height:1.5; }
+.lib-group { margin-bottom:16px; }
+.lib-head { display:flex; align-items:center; gap:7px; padding:0 6px 7px; font:600 9.5px var(--mono); letter-spacing:.1em; color:var(--ink2); }
+.lib-head .swatch { width:9px; height:9px; border-radius:2px; background:var(--gc); flex:none; }
+.lib-head .count { margin-left:auto; color:var(--ink3); }
+.lib-item {
+  display:flex; align-items:center; gap:9px; padding:7px 9px; margin-bottom:3px;
+  border:1px solid transparent; border-radius:7px; cursor:grab; user-select:none;
+  transition:background var(--ease),border-color var(--ease);
+}
+.lib-item:hover { background:var(--surface); border-color:var(--mg-border-strong); }
+.lib-item:active { cursor:grabbing; }
+.lib-item .glyph { width:22px; height:22px; flex:none; border-radius:5px; display:grid; place-items:center;
+  color:var(--gc); background:color-mix(in srgb,var(--gc) 14%,transparent); }
+.lib-item .glyph svg { width:14px; height:14px; }
+.lib-item .txt { font-size:12px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lib-item .en { margin-left:auto; font:500 9px var(--mono); color:var(--ink3); white-space:nowrap; }
+.lib-tip { border-top:1px solid var(--line-soft); padding-top:12px; margin-top:16px; font-size:10.5px; color:var(--ink2); line-height:1.65; }
+.lib-tip kbd { font:10px var(--mono); background:var(--surface); border:1px solid var(--mg-border-strong); border-radius:3px; padding:1px 4px; color:var(--ink); }
+.legend-row { display:flex; align-items:center; gap:7px; margin-top:6px; }
+.legend-row i { width:8px; height:8px; border-radius:50%; display:inline-block; }
+
+/* ---- Graph Canvas ---- */
+#canvas {
+  position:absolute; inset:0; overflow:hidden; touch-action:none; cursor:default;
+  background-color:var(--bg);
+  background-image:radial-gradient(circle, color-mix(in srgb,var(--ink) 16%,transparent) 1px, transparent 1.1px);
+  background-size:22px 22px; background-position:0 0;
+}
+#canvas.panning { cursor:grabbing; }
+#canvas.linking { cursor:crosshair; }
+#world { position:absolute; left:0; top:0; width:0; height:0; transform-origin:0 0; }
+#wires { position:absolute; left:-3000px; top:-3000px; width:8000px; height:8000px; overflow:visible; pointer-events:none; }
+#nodes { position:absolute; left:0; top:0; width:0; height:0; }
+.wire-line { fill:none; stroke:var(--wc); stroke-width:2; opacity:.72; }
+.wire-hit { fill:none; stroke:transparent; stroke-width:16; pointer-events:stroke; cursor:pointer; }
+.wire.is-selected .wire-line { stroke-width:3.2; opacity:1; }
+.wire.is-flowing .wire-line { stroke-dasharray:6 8; animation:wireflow .55s linear infinite; stroke-width:2.6; opacity:1; }
+.wire.is-disabled .wire-line { stroke-dasharray:3 5; opacity:.3; }
+@keyframes wireflow { to { stroke-dashoffset:-28; } }
+.wire-particle { fill:#fff; filter:drop-shadow(0 0 4px var(--wc)); }
+#temp-wire { fill:none; stroke:var(--preview); stroke-width:2; stroke-dasharray:5 5; opacity:.9; }
+
+/* ---- Node card ---- */
+.node {
+  position:absolute; width:var(--node-w); background:var(--card);
+  border:1px solid var(--mg-border-strong); border-radius:var(--r-md);
+  box-shadow:0 6px 18px rgba(0,0,0,.32); user-select:none; cursor:grab;
+  transition:box-shadow var(--ease),border-color var(--ease),opacity var(--ease);
+}
+.node:active { cursor:grabbing; }
+.node-band { height:4px; border-radius:8px 8px 0 0; background:var(--nc); }
+.node-head { display:flex; align-items:center; gap:8px; padding:9px 10px 5px; }
+.node-icon { width:26px; height:26px; flex:none; border-radius:6px; display:grid; place-items:center;
+  color:var(--nc); background:color-mix(in srgb,var(--nc) 15%,transparent); }
+.node-icon svg { width:15px; height:15px; }
+.node-name { min-width:0; flex:1; }
+.node-title { font-size:12.5px; font-weight:600; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.node-type { font:500 9px/1.3 var(--mono); letter-spacing:.07em; color:var(--ink2); text-transform:uppercase; }
+.node-flag { font:600 9px var(--mono); color:var(--ink3); border:1px solid var(--mg-border-strong); border-radius:4px; padding:2px 4px; flex:none; }
+.node-body { padding:1px 10px 8px; }
+.node-preview { font:11px var(--mono); color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.node-foot { display:flex; justify-content:space-between; align-items:center; gap:6px;
+  padding:6px 10px; border-top:1px solid var(--line-soft); font:500 9px var(--mono); color:var(--ink3); }
+.node-foot .pill { border:1px solid var(--mg-border-strong); border-radius:4px; padding:1px 5px; }
+.node.selected { border-color:var(--mg-border-strong); box-shadow:0 0 0 2px var(--accent),0 10px 26px rgba(0,0,0,.45); }
+.node.executing { border-color:var(--nc); box-shadow:0 0 0 2px var(--nc),0 0 26px -4px var(--nc); }
+/* 禁用节点：NEVER 语义 —— 灰化 + 不参与编译 + 下游连线按断开处理 */
+.node.disabled { opacity:.42; filter:grayscale(.7); }
+.node.disabled .node-band { background:var(--ink3); }
+.node.disabled .node-flag { color:var(--ink); border-color:var(--mg-border-strong); }
+/* 端口：常显但低对比；in 圆形 / out 方圆形（形状差异，颜色不是唯一区分手段） */
+.port {
+  position:absolute; width:14px; height:14px; top:39px;
+  background:var(--pc); border:2px solid var(--mg-border-strong); opacity:.62; z-index:3;
+  cursor:crosshair; transition:opacity var(--ease),transform var(--ease),box-shadow var(--ease);
+}
+.port.in { left:-8px; border-radius:50%; }
+.port.out { right:-8px; border-radius:4px; }
+.node:hover .port, .port.hot { opacity:1; transform:scale(1.18); }
+/* 拖线时高亮全部可连接（同色）端口，不匹配端口变暗 */
+#canvas.linking .port.match { opacity:1; transform:scale(1.26); box-shadow:0 0 0 3px color-mix(in srgb,var(--pc) 45%,transparent); }
+#canvas.linking .port.dim { opacity:.16; }
+.port.in::after, .port.out::after { content:""; position:absolute; inset:-7px; }
+.wire-label { font:9px var(--mono); fill:var(--ink2); paint-order:stroke; stroke:var(--bg); stroke-width:3px;
+  stroke-linejoin:round; pointer-events:none; user-select:none; }
+#marquee { position:absolute; display:none; border:1px solid var(--accent);
+  background:color-mix(in srgb,var(--accent) 14%,transparent); pointer-events:none; z-index:5; }
+
+/* ---- Canvas overlays ---- */
+#canvas-hint {
+  position:absolute; left:14px; top:12px; z-index:4; pointer-events:none;
+  font:10px/1.7 var(--mono); color:var(--ink3);
+  background:color-mix(in srgb,var(--panel) 80%,transparent); border:1px solid var(--mg-border-strong);
+  border-radius:var(--r-sm); padding:7px 10px;
+}
+#canvas-hint b { color:var(--ink2); font-weight:600; }
+#minimap-wrap {
+  position:absolute; right:14px; bottom:14px; z-index:6;
+  background:var(--panel); border:1px solid var(--mg-border-strong); border-radius:var(--r-md); padding:6px;
+}
+#minimap-wrap .mm-head { font:600 9px var(--mono); letter-spacing:.1em; color:var(--ink3); margin:0 0 5px 2px; }
+#minimap { display:block; width:184px; height:112px; cursor:pointer; }
+#zoombar {
+  position:absolute; left:50%; transform:translateX(-50%); bottom:14px; z-index:6;
+  display:flex; align-items:center; gap:4px; padding:4px;
+  background:var(--panel); border:1px solid var(--mg-border-strong); border-radius:var(--r-md);
+}
+#zoombar button { width:28px; height:26px; border:1px solid transparent; background:transparent;
+  color:var(--ink); border-radius:5px; cursor:pointer; font-size:14px; line-height:1; }
+#zoombar button:hover { background:var(--surface); border-color:var(--mg-border-strong); }
+#zoombar .zoom-val { font:600 10.5px var(--mono); color:var(--ink2); min-width:42px; text-align:center; }
+#zoombar .fit { width:auto; padding:0 8px; font:600 10px var(--mono); }
+#sim-panel {
+  position:absolute; left:14px; bottom:56px; z-index:6; width:250px; display:none;
+  background:var(--panel); border:1px solid var(--mg-border-strong); border-radius:var(--r-md); padding:10px 12px;
+}
+#sim-panel.show { display:block; }
+#sim-panel .sp-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+#sim-panel .sp-title { font:600 10px var(--mono); letter-spacing:.1em; color:var(--accent); }
+#sim-panel .sp-close { border:0; background:transparent; color:var(--ink3); cursor:pointer; font-size:15px; }
+#sim-track { height:5px; background:var(--surface); border-radius:3px; overflow:hidden; }
+#sim-fill { height:100%; width:0; background:var(--accent); transition:width .25s linear; }
+#sim-step { font:11px var(--mono); color:var(--ink); margin-top:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#sim-note { font-size:10px; color:var(--ink3); margin-top:5px; line-height:1.5; }
+
+/* ---- Inspector ---- */
+.ins-head { padding:14px; border-bottom:1px solid var(--mg-border-strong); }
+.ins-head .kicker { font:600 9.5px var(--mono); letter-spacing:.13em; color:var(--ink3); }
+.ins-head h2 { margin:4px 0 2px; font-size:15px; font-weight:650; }
+.ins-head p { margin:0; font-size:10.5px; color:var(--ink2); line-height:1.5; }
+.ins-section { padding:13px 14px; border-bottom:1px solid var(--mg-border-strong); }
+.ins-section h3 { margin:0 0 10px; font:600 9.5px var(--mono); letter-spacing:.12em; color:var(--ink2); text-transform:uppercase; }
+.field { margin-bottom:10px; }
+.field:last-child { margin-bottom:0; }
+.field > label { display:block; font-size:11px; color:var(--ink2); margin-bottom:4px; }
+.field input[type=text], .field input[type=number], .field select, .field textarea {
+  width:100%; background:var(--bg); border:1px solid var(--mg-border-strong); border-radius:var(--r-sm);
+  color:var(--ink); padding:6px 8px; font-size:12px; outline:none;
+}
+.field input:focus, .field select:focus { border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 22%,transparent); }
+.field input[readonly] { color:var(--ink3); background:var(--surface); }
+.field .hint { font-size:10px; color:var(--ink3); margin-top:4px; line-height:1.45; }
+.check-row { display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--ink); cursor:pointer; }
+.check-row input { accent-color:var(--accent); width:14px; height:14px; }
+.ins-note { font-size:10.5px; color:var(--ink3); line-height:1.6; padding:11px 14px; }
+.stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.stat { background:var(--bg); border:1px solid var(--mg-border-strong); border-radius:var(--r-sm); padding:8px 10px; }
+.stat .v { font:600 16px var(--mono); color:var(--ink); }
+.stat .k { font:9px var(--mono); color:var(--ink3); letter-spacing:.08em; }
+.err-list { margin:0; padding:0; list-style:none; }
+.err-list li { font-size:11px; color:var(--danger); padding:6px 8px; margin-bottom:5px;
+  background:color-mix(in srgb,var(--danger) 9%,transparent); border-left:2px solid var(--danger); border-radius:3px; word-break:break-word; }
+.warn-list li { color:var(--warn); background:color-mix(in srgb,var(--warn) 8%,transparent); border-left-color:var(--warn); }
+.ok-banner { font-size:12px; color:var(--ok); padding:9px 10px; border:1px solid color-mix(in srgb,var(--ok) 40%,var(--line));
+  border-radius:var(--r-sm); background:color-mix(in srgb,var(--ok) 9%,transparent); }
+.ins-actions { display:flex; flex-wrap:wrap; gap:6px; padding:12px 14px; }
+
+/* ---- Status bar ---- */
+#statusbar {
+  height:var(--status-h); display:flex; align-items:center; gap:var(--s4); padding:0 var(--s4);
+  background:var(--panel); border-top:1px solid var(--mg-border-strong); font:10.5px var(--mono); color:var(--ink2);
+}
+#status-text { flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#status-track { width:180px; height:5px; background:var(--surface); border-radius:3px; overflow:hidden; flex:none; }
+#status-fill { height:100%; width:0; background:var(--accent); transition:width .25s linear; }
+#status-counts { flex:none; white-space:nowrap; }
+#status-counts b { color:var(--ink); font-weight:600; }
+
+/* ---- Menus / modals / toast ---- */
+#menu-pop {
+  position:absolute; right:14px; top:calc(var(--topbar-h) - 4px); z-index:40; width:246px;
+  background:var(--panel); border:1px solid var(--mg-border-strong); border-radius:var(--r-md);
+  box-shadow:0 16px 40px rgba(0,0,0,.55); padding:6px; display:none;
+}
+#menu-pop.show { display:block; }
+#menu-pop .mi { display:flex; align-items:center; gap:9px; width:100%; padding:8px 9px;
+  background:transparent; border:0; border-radius:5px; color:var(--ink); font-size:12px; text-align:left; cursor:pointer; }
+#menu-pop .mi:hover { background:var(--surface); }
+#menu-pop .mi .g { color:var(--ink3); font:10px var(--mono); margin-left:auto; }
+#menu-pop .sep { height:1px; background:var(--line-soft); margin:5px 3px; }
+#modal-layer { position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.62); display:none; align-items:center; justify-content:center; }
+#modal-layer.show { display:flex; }
+.modal { width:min(700px,92vw); max-height:86vh; overflow:auto; background:var(--panel);
+  border:1px solid var(--mg-border-strong); border-radius:var(--r-lg); padding:18px 20px; box-shadow:0 24px 70px rgba(0,0,0,.6); }
+.modal h2 { margin:0 0 4px; font-size:16px; font-weight:650; }
+.modal .sub { margin:0 0 14px; font-size:11px; color:var(--ink2); line-height:1.6; }
+.modal textarea { width:100%; height:270px; resize:vertical; background:var(--bg); color:var(--ink);
+  border:1px solid var(--mg-border-strong); border-radius:var(--r-sm); padding:10px; font:11px/1.55 var(--mono); outline:none; }
+.modal textarea:focus { border-color:var(--accent); }
+.modal-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; margin-top:13px; }
+.modal-section { border-top:1px solid var(--line-soft); margin-top:14px; padding-top:13px; }
+.slot-list { display:flex; flex-direction:column; gap:6px; max-height:230px; overflow:auto; }
+.slot-row { display:flex; align-items:center; gap:8px; background:var(--bg); border:1px solid var(--mg-border-strong); border-radius:var(--r-sm); padding:8px 10px; }
+.slot-row .sn { flex:1; min-width:0; font:11.5px var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.slot-row .sd { font:9.5px var(--mono); color:var(--ink3); flex:none; }
+.drop-zone { border:1px dashed var(--mg-border-strong); border-radius:var(--r-sm); padding:16px; text-align:center;
+  font-size:11.5px; color:var(--ink2); margin-top:10px; }
+.drop-zone.hot { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,transparent); }
+#toast { position:fixed; right:16px; bottom:46px; z-index:80; max-width:380px;
+  background:var(--surface); border:1px solid var(--mg-border-strong); border-left:3px solid var(--accent);
+  border-radius:var(--r-sm); padding:10px 14px; font-size:12px; line-height:1.5;
+  opacity:0; transform:translateY(8px); pointer-events:none; transition:opacity .2s,transform .2s; }
+#toast.show { opacity:1; transform:none; }
+#toast.err { border-left-color:var(--danger); } #toast.ok { border-left-color:var(--ok); }
+#mg-selftest, #mg-export { display:none; }
+/* ?selftest 模式下揭示结果面板：固定覆盖层（应用是 100vh 固定布局，文档流内元素永远在视口外），
+   QA 可直接截图取证；参数门控，生产路径不受影响 */
+body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
+  display:block; white-space:pre-wrap; position:fixed; z-index:9999;
+  bottom:0; left:0; right:0; max-height:45vh; overflow:auto;
+  background:#141420; color:#d8d8ee; border-top:2px solid #6b6b85;
+  font:12px/1.5 monospace; padding:8px 12px; margin:0;
+}
+
+/* ===========================================================================
+   03 · 响应式：1100 / 860 两档；无溢出、无遮挡
+   =========================================================================== */
+@media (max-width:1100px) {
+  :root { --rail-w:200px; --insp-w:264px; }
+  .doc-meta input { width:92px; }
+  .top-actions .btn .lbl { display:none; }
+  .top-actions .btn { padding:6px 9px; }
+}
+@media (max-width:860px) {
+  :root { --rail-w:60px; --insp-w:236px; }
+  .brand-txt, .ver-badge, .doc-meta, #validate-badge .lbl { display:none; }
+  #library { padding:12px 6px; }
+  .panel-kicker, .panel-title, .panel-sub, .lib-head span:not(.swatch), .lib-tip, .lib-item .txt, .lib-item .en { display:none; }
+  .lib-head { justify-content:center; padding:4px 0 8px; }
+  .lib-item { justify-content:center; padding:7px 0; }
+  .lib-item .glyph { width:26px; height:26px; }
+  #canvas-hint { display:none; }
+  #minimap-wrap { right:8px; bottom:8px; }
+  #minimap { width:140px; height:88px; }
+  #zoombar { bottom:8px; }
+  #sim-panel { width:210px; bottom:50px; left:8px; }
+  #status-track { width:90px; }
+  .ins-section { padding:11px 10px; } .ins-head { padding:11px 10px; } .ins-actions { padding:10px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  *, *::before, *::after { animation-duration:.001ms !important; animation-iteration-count:1 !important;
+    transition-duration:.001ms !important; }
+}
+</style>
+</head>
+<body>
+
+<header id="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8">
+      <rect x="1" y="1" width="9" height="9" rx="1.5"/><rect x="16" y="16" width="9" height="9" rx="1.5"/>
+      <rect x="16" y="1" width="9" height="9" rx="1.5" opacity=".45"/>
+      <path d="M10 5.5h6M5.5 10v6c0 3 3 5.5 6 5.5h4.5"/>
+    </svg>
+    <span class="brand-txt">DSH-L2D <b>Motion Graph</b></span>
+    <span class="ver-badge">Demo v0.1</span>
+  </div>
+  <div class="doc-meta">
+    <label>NAME <input id="doc-name" type="text" value="挥手打招呼" spellcheck="false"></label>
+    <label>MODEL <input id="doc-model" type="text" value="大肥鱼" spellcheck="false"></label>
+  </div>
+  <div class="top-actions">
+    <button class="btn" id="btn-sim" title="模拟动作触发（纯本地预览）"><span class="ico">▶</span><span class="lbl">模拟触发</span></button>
+    <button class="btn" id="btn-validate" title="结构校验"><span class="ico">✓</span><span class="lbl">结构校验</span></button>
+    <button class="btn" id="btn-export" title="导出 JSON"><span class="ico">⇩</span><span class="lbl">导出</span></button>
+    <button class="btn" id="btn-import" title="导入 JSON"><span class="ico">⇧</span><span class="lbl">导入</span></button>
+    <button class="btn icon-only" id="btn-menu" title="更多"><span class="ico">⋯</span></button>
+  </div>
+  <div id="validate-badge" title="点击查看校验详情"><span class="dot"></span><span class="lbl">未校验</span></div>
+</header>
+
+<main id="main">
+  <aside id="library">
+    <p class="panel-kicker">NODE LIBRARY</p>
+    <h1 class="panel-title">节点库</h1>
+    <p class="panel-sub">拖入画布，或单击追加节点。设计层辅助节点仅存于 meta.editor。</p>
+    <div id="lib-groups"></div>
+    <div class="lib-tip">
+      <b>操作</b><br>
+      空白拖拽平移 · 滚轮缩放<br>
+      <kbd>Shift</kbd> + 拖拽框选 · <kbd>Del</kbd> 删除<br>
+      <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd> 复制粘贴 · <kbd>Ctrl</kbd>+<kbd>0</kbd> 适配
+      <div class="legend-row"><i style="background:var(--port-flow)"></i> 执行流 flow（同色才可连）</div>
+      <div class="legend-row"><i style="background:var(--port-signal)"></i> 信号 signal</div>
+      <div class="legend-row"><i style="background:var(--port-data)"></i> 数据 data</div>
+    </div>
+  </aside>
+
+  <section id="canvas-wrap">
+    <div id="canvas">
+      <div id="world">
+        <svg id="wires" xmlns="http://www.w3.org/2000/svg"><g id="wires-g" transform="translate(3000,3000)"></g></svg>
+        <div id="nodes"></div>
+      </div>
+      <div id="marquee"></div>
+    </div>
+    <div id="canvas-hint"><b>GRAPH CANVAS</b> · DFS 前序编译 / 每 8 步一段<br>22px 点阵网格 · 拖拽端口连线 · 单击连线可选中删除</div>
+    <div id="sim-panel">
+      <div class="sp-head"><span class="sp-title">LOCAL SIMULATION</span><button class="sp-close" id="sim-close" title="停止">×</button></div>
+      <div id="sim-track"><div id="sim-fill"></div></div>
+      <div id="sim-step">待触发</div>
+      <div id="sim-note">纯本地预览：不调 LLM、不调后端、不提交 Runtime 动作队列。Graph Cache 命中不跳过播放。</div>
+    </div>
+    <div id="minimap-wrap"><div class="mm-head">MINIMAP</div><canvas id="minimap" width="368" height="224"></canvas></div>
+    <div id="zoombar">
+      <button id="zoom-out" title="缩小">−</button>
+      <span class="zoom-val num" id="zoom-val">100%</span>
+      <button id="zoom-in" title="放大">+</button>
+      <button class="fit" id="zoom-fit" title="适配全部">FIT</button>
+    </div>
+  </section>
+
+  <aside id="inspector"><div id="ins-root"></div></aside>
+</main>
+
+<footer id="statusbar">
+  <span id="status-text">就绪 · 已载入默认示例图</span>
+  <div id="status-track"><div id="status-fill"></div></div>
+  <span id="status-counts">节点 <b id="c-nodes">0</b> · 连线 <b id="c-edges">0</b> · 段 <b id="c-segs">0</b></span>
+</footer>
+
+<div id="menu-pop"></div>
+<div id="modal-layer"><div class="modal" id="modal-box"></div></div>
+<div id="toast"></div>
+<pre id="mg-selftest"></pre>
+<pre id="mg-export"></pre>
+<pre id="mg-error"></pre>
+
+<script>
+(function () {
+'use strict';
+/* =========================================================================
+   Motion Graph Lab — 七个独立状态模块对象（契约 §8.2「禁止一个巨型组件」）
+   Graph / NodeDef / Binding / Capability / Runtime / Cache / Preferences
+   另有四个无状态服务对象：Compiler / Validator / Serializer / Slots
+   ========================================================================= */
+
+var $ = function (sel) { return document.querySelector(sel); };
+var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
+var clamp = function (v, a, b) { return Math.min(b, Math.max(a, v)); };
+var deep = function (o) { return JSON.parse(JSON.stringify(o)); };
+var esc = function (s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c];
+  });
+};
+var NODE_W = 208, PORT_Y = 46, NODE_H = 96, DOT = 22;
+
+/* 线性功能图标（自绘 SVG path，非装饰性堆砌、无 Emoji） */
+var ICON_PATHS = {
+  trigger:'M13 2 4 14h6l-1 8 9-12h-6z',
+  workspace:'M3 4h18v16H3z M3 9h18 M7 6.5h.01 M10 6.5h.01',
+  condition:'M12 3v6 M12 9l-5 5 M12 9l5 5 M4 17h6 M14 17h6',
+  gate:'M3 6h7 M3 18h7 M10 6v12 M14 8h6v8h-6z',
+  delay:'M12 6v6l4 2 M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20',
+  motion:'M5 20V9 M12 20V4 M19 20v-8 M3 20h18',
+  expression:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20 M8.5 10h.01 M15.5 10h.01 M8 15c2 2 6 2 8 0',
+  pose:'M12 3.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4 M6 20l6-6 6 6 M5 12h14',
+  look:'M2 12s4-6 10-6 10 6 10 6-4 6-10 6-10-6-10-6 M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6'
+};
+function icon(key, size) {
+  var s = size || 16;
+  return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" fill="none" stroke="currentColor" '+
+    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+
+    (ICON_PATHS[key] || ICON_PATHS.workspace)+'"/></svg>';
+}
+
+/* -------------------------------------------------------------------------
+   Capability：模型事实 / 校验常量。白名单照抄 choreography.mjs + action-sequence.mjs
+   契约 §4 规则 10 —— Inspector 只能用这两份白名单，禁止自由输入任意表情/动作名。
+   ------------------------------------------------------------------------- */
+var Capability = {
+  expressions: ['兔牙','加载','单片眼镜','圈圈眼','屑','流泪','爱心眼','脱鞋','脸红','钢盆',
+    '裙长切换','黑框眼镜','黑脸','＞＜','体型1','体型2','默认体型','前倾','尾巴开关','流冷汗','胸口衣服'],
+  motionGroups: ['抚胸手打开','抚胸手关闭','竖手指打开','竖手指关闭','狗尾巴草打开','狗尾巴草关闭'],
+  pairedCloses: { '抚胸手打开':'抚胸手关闭', '竖手指打开':'竖手指关闭', '狗尾巴草打开':'狗尾巴草关闭' },
+  poseValues: ['rest','finger','grass','chest'],
+  stepKinds: ['expression','motion','pose','look'],
+  nodeTypes: ['expression','motion','pose','look','delay'],
+  nodeAllowedKeys: ['id','type','name','clear','closeMotion','closeAfterMs','delayMs','pose','x','y','next'],
+  stepKeys: ['kind','name','clear','closeMotion','closeAfterMs','delayMs','pose','x','y','group','mode','timeoutMs'],
+  topKeys: ['schemaVersion','kind','name','modelBinding','graph','segments','meta'],
+  bindingKeys: ['modelId','modelHash','bindingMode'],
+  priorities: ['BACKGROUND','NORMAL','FORCE'],
+  execStates: ['idle','running','done','blocked'],
+  maxSegments: 15, maxStepsPerSegment: 8, maxBubble: 40, maxLifeMs: 10000, maxGraphNodes: 120
+};
+
+/* -------------------------------------------------------------------------
+   NodeDef：节点定义（分组 / 端口 / 参数声明）驱动 Inspector 动态生成控件。
+   gtype = 导出到 graph.nodes 的类型；null 表示设计层辅助节点，只存 meta.editor。
+   ------------------------------------------------------------------------- */
+var NodeDef = {
+  groups: [
+    { key:'event',  label:'事件节点', en:'EVENT',  color:'var(--event)',  items:['trigger','workspace'] },
+    { key:'logic',  label:'逻辑节点', en:'LOGIC',  color:'var(--logic)',  items:['condition','gate','delay'] },
+    { key:'action', label:'动作节点', en:'ACTION', color:'var(--action)', items:['motion','expression','pose','look'] }
+  ],
+  portTypes: [
+    { key:'flow',   label:'执行流 flow',   color:'var(--port-flow)' },
+    { key:'signal', label:'信号 signal',   color:'var(--port-signal)' },
+    { key:'data',   label:'数据 data',     color:'var(--port-data)' }
+  ],
+  defs: {
+    trigger:    { label:'Trigger',          cn:'触发器',       group:'event',  gtype:null,         icon:'trigger' },
+    workspace:  { label:'Workspace State', cn:'工作区状态',   group:'event',  gtype:null,         icon:'workspace' },
+    condition:  { label:'Condition',       cn:'条件判断',     group:'logic',  gtype:null,         icon:'condition' },
+    gate:       { label:'Condition Gate',  cn:'条件门',       group:'logic',  gtype:null,         icon:'gate' },
+    delay:      { label:'Delay',           cn:'延时',         group:'logic',  gtype:'delay',      icon:'delay' },
+    motion:     { label:'Motion',          cn:'动作组',       group:'action', gtype:'motion',     icon:'motion' },
+    expression: { label:'Expression',      cn:'表情',         group:'action', gtype:'expression', icon:'expression' },
+    pose:       { label:'Pose',            cn:'姿势',         group:'action', gtype:'pose',       icon:'pose' },
+    look:       { label:'Look At',         cn:'视线',         group:'action', gtype:'look',       icon:'look' }
+  },
+  portColor: function (key) {
+    for (var i=0;i<this.portTypes.length;i++) if (this.portTypes[i].key===key) return this.portTypes[i].color;
+    return 'var(--port-flow)';
+  },
+  groupColor: function (type) {
+    var g = this.defs[type] && this.defs[type].group;
+    for (var i=0;i<this.groups.length;i++) if (this.groups[i].key===g) return this.groups[i].color;
+    return 'var(--preview)';
+  },
+  isCompilable: function (type) { return !!(this.defs[type] && this.defs[type].gtype); },
+  gtype: function (type) { return this.defs[type] ? this.defs[type].gtype : null; },
+  defaults: function (type) {
+    switch (type) {
+      case 'expression': return { name:Capability.expressions[0], clear:false, stepDelayMs:0 };
+      case 'motion':     return { name:Capability.motionGroups[2], closeMotion:Capability.pairedCloses[Capability.motionGroups[2]], closeAfterMs:1800, stepDelayMs:0 };
+      case 'pose':       return { poseRight:'rest', poseLeft:'', stepDelayMs:0 };
+      case 'look':       return { x:0, y:0.05, stepDelayMs:0 };
+      case 'delay':      return { delayMs:200 };
+      case 'gate':       return { expr:'state == attention' };
+      case 'condition':  return { expr:'idle == false' };
+      case 'workspace':  return { state:'attention' };
+      case 'trigger':    return { event:'on_user_message' };
+      default:           return {};
+    }
+  },
+  /* 通用字段（契约 §5.3）：设计层元数据，只存 meta.editor，不写入 graph.nodes 白名单字段 */
+  commonFields: function () { return [
+    { key:'label',          label:'节点标题',       kind:'text' },
+    { key:'priority',       label:'执行优先级',     kind:'select', options:Capability.priorities,
+      hint:'影响导出 segments 的段优先级（合法值 BACKGROUND/NORMAL/FORCE）' },
+    { key:'cooldownMs',     label:'冷却时间 ms',    kind:'number', min:0, max:600000, step:1,
+      hint:'设计层标注 · 不写入导出动作字段' },
+    { key:'execState',      label:'执行状态',       kind:'select', options:Capability.execStates,
+      hint:'设计层标注 · 本地模拟不修改该值' },
+    { key:'modelWhitelist', label:'模型白名单',     kind:'text',
+      hint:'逗号分隔 · 设计层标注，仅存 meta.editor' },
+    { key:'portType',       label:'端口类型',       kind:'select', options:['flow','signal','data'],
+      hint:'同色端口才可连线；改色后已有连线不自动断开' },
+    { key:'disabled',       label:'禁用节点（不参与编译）', kind:'checkbox' }
+  ]; },
+  /* 类型专属字段声明 —— Inspector 由此动态生成控件 */
+  fields: function (type) {
+    switch (type) {
+      case 'expression': return [
+        { key:'name', label:'表情名', kind:'select', options:Capability.expressions,
+          hint:'MODEL_EXPRESSIONS 白名单（21 项），禁止自由输入' },
+        { key:'clear', label:'清除表情 clear', kind:'checkbox' },
+        { key:'stepDelayMs', label:'步前延时 delayMs', kind:'number', min:0, max:5000, step:10 }
+      ];
+      case 'motion': return [
+        { key:'name', label:'动作组', kind:'select', options:Capability.motionGroups,
+          hint:'MODEL_MOTION_GROUPS 白名单（6 项）' },
+        { key:'closeMotion', label:'收招动作（自动配对）', kind:'readonly',
+          hint:'PAIRED_CLOSES 自动派生，不可手填以保证校验通过' },
+        { key:'closeAfterMs', label:'收招延迟 ms', kind:'number', min:300, max:12000, step:100 },
+        { key:'stepDelayMs', label:'步前延时 delayMs', kind:'number', min:0, max:5000, step:10 }
+      ];
+      case 'pose': return [
+        { key:'poseRight', label:'右手 right', kind:'select', options:[''].concat(Capability.poseValues) },
+        { key:'poseLeft',  label:'左手 left',  kind:'select', options:[''].concat(Capability.poseValues) },
+        { key:'stepDelayMs', label:'步前延时 delayMs', kind:'number', min:0, max:5000, step:10 }
+      ];
+      case 'look': return [
+        { key:'x', label:'视线 x (-1~1)', kind:'number', min:-1, max:1, step:0.01 },
+        { key:'y', label:'视线 y (-1~1)', kind:'number', min:-1, max:1, step:0.01 },
+        { key:'stepDelayMs', label:'步前延时 delayMs', kind:'number', min:0, max:5000, step:10 }
+      ];
+      case 'delay': return [
+        { key:'delayMs', label:'延时 ms (0 < n ≤ 5000)', kind:'number', min:1, max:5000, step:10,
+          hint:'delay 不是 step，编译时累加并入下一动作节点的 delayMs' }
+      ];
+      case 'gate':      return [{ key:'expr', label:'条件表达式（设计层）', kind:'text', hint:'仅存 meta.editor，不进 graph.nodes' }];
+      case 'condition': return [{ key:'expr', label:'判定条件（设计层）', kind:'text', hint:'仅存 meta.editor' }];
+      case 'workspace': return [{ key:'state', label:'工作区状态（设计层）', kind:'text' }];
+      case 'trigger':   return [{ key:'event', label:'事件名（设计层）', kind:'text' }];
+      default: return [];
+    }
+  },
+  /* 节点正文预览 */
+  preview: function (n) {
+    var p = n.props || {};
+    switch (n.type) {
+      case 'expression': return (p.clear ? 'clear · ' : '') + (p.name || '—');
+      case 'motion':     return (p.name || '—') + (p.closeMotion ? ' → ' + p.closeMotion : '');
+      case 'pose':       return 'right:' + (p.poseRight || '—') + '  left:' + (p.poseLeft || '—');
+      case 'look':       return 'x:' + p.x + '  y:' + p.y;
+      case 'delay':      return 'wait ' + (p.delayMs || 0) + ' ms';
+      case 'gate':       return p.expr || '—';
+      case 'condition':  return p.expr || '—';
+      case 'workspace':  return 'state = ' + (p.state || '—');
+      case 'trigger':    return p.event || '—';
+      default: return '';
+    }
+  }
+};
+
+/* -------------------------------------------------------------------------
+   Binding：文档身份 + 模型绑定（§4 规则 8）
+   ------------------------------------------------------------------------- */
+var Binding = {
+  name:'挥手打招呼', modelId:'大肥鱼', modelHash:'', bindingMode:'any', docPriority:'NORMAL',
+  toJSON: function () { return { modelId:this.modelId, modelHash:this.modelHash, bindingMode:this.bindingMode }; },
+  fromDoc: function (mb) {
+    mb = mb || {};
+    this.modelId = typeof mb.modelId === 'string' ? mb.modelId : '';
+    this.modelHash = typeof mb.modelHash === 'string' ? mb.modelHash : '';
+    this.bindingMode = mb.bindingMode === 'strict' ? 'strict' : 'any';
+    this.name = typeof mb.__name === 'string' ? mb.__name : this.name;
+  }
+};
+
+/* -------------------------------------------------------------------------
+   Graph：纯设计层视图（节点 / 连线 / 视口 / 选择）。坐标只存在于这里。
+   ------------------------------------------------------------------------- */
+var Graph = {
+  nodes:[], edges:[], viewport:{ x:30, y:80, k:0.85 },
+  selection:new Set(), selectedEdge:null, seq:0, clipboard:null,
+  uid: function (p) { this.seq += 1; return p + '_' + this.seq.toString(36) + '_' + Math.floor(Math.random()*1296).toString(36); },
+  byId: function (id) { for (var i=0;i<this.nodes.length;i++) if (this.nodes[i].id===id) return this.nodes[i]; return null; },
+  active: function (id) { var n=this.byId(id); return !!n && !n.disabled; },
+  addNode: function (type, pos, opts) {
+    opts = opts || {};
+    var common = { priority:'NORMAL', cooldownMs:0, execState:'idle', modelWhitelist:'', portType:'flow', disabled:false };
+    var props = Object.assign(common, NodeDef.defaults(type));
+    if (opts.props) props = Object.assign(props, opts.props);
+    var n = { id:opts.id || this.uid('n'), type:type,
+      label:opts.label || (NodeDef.defs[type] ? NodeDef.defs[type].label : type),
+      pos:{ x:Math.round(pos.x), y:Math.round(pos.y) }, props:props, disabled:!!opts.disabled };
+    if (opts.props && opts.props.disabled !== undefined) n.disabled = !!opts.props.disabled;
+    this.nodes.push(n); return n;
+  },
+  removeNodes: function (ids) {
+    var s = new Set(ids);
+    this.nodes = this.nodes.filter(function (n) { return !s.has(n.id); });
+    this.edges = this.edges.filter(function (e) { return !s.has(e.from) && !s.has(e.to); });
+    this.selection.clear(); this.selectedEdge = null;
+  },
+  addEdge: function (from, to, id) {
+    for (var i=0;i<this.edges.length;i++) if (this.edges[i].from===from && this.edges[i].to===to) return null;
+    var e = { id:id || this.uid('e'), from:from, to:to };
+    this.edges.push(e); return e;
+  },
+  removeEdge: function (id) { this.edges = this.edges.filter(function (e) { return e.id!==id; }); if (this.selectedEdge===id) this.selectedEdge=null; },
+  clear: function () { this.nodes=[]; this.edges=[]; this.selection.clear(); this.selectedEdge=null; },
+  snapshot: function () {
+    return {
+      nodes: this.nodes.map(function (n) {
+        return { id:n.id, type:n.type, label:n.label, pos:{ x:n.pos.x, y:n.pos.y },
+          props:Object.assign({}, n.props), disabled:!!n.disabled };
+      }),
+      edges: this.edges.map(function (e) { return { id:e.id, from:e.from, to:e.to }; }),
+      viewport: { x:this.viewport.x, y:this.viewport.y, k:this.viewport.k }
+    };
+  },
+  restore: function (s) {
+    this.nodes = (s.nodes||[]).map(function (n) {
+      return { id:n.id, type:n.type, label:n.label || (NodeDef.defs[n.type] ? NodeDef.defs[n.type].label : n.type),
+        pos:{ x:Number(n.pos && n.pos.x)||0, y:Number(n.pos && n.pos.y)||0 },
+        props:Object.assign({}, n.props||{}), disabled:!!n.disabled };
+    });
+    this.edges = (s.edges||[]).map(function (e) { return { id:e.id, from:e.from, to:e.to }; });
+    var v = s.viewport || {};
+    this.viewport = { x:Number(v.x)||0, y:Number(v.y)||0, k:Number(v.k)||1 };
+    this.selection.clear(); this.selectedEdge=null;
+  },
+  bounds: function () {
+    if (!this.nodes.length) return { x0:0, y0:0, x1:800, y1:500 };
+    var x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+    for (var i=0;i<this.nodes.length;i++) {
+      var p=this.nodes[i].pos;
+      x0=Math.min(x0,p.x); y0=Math.min(y0,p.y); x1=Math.max(x1,p.x+NODE_W); y1=Math.max(y1,p.y+NODE_H);
+    }
+    return { x0:x0,y0:y0,x1:x1,y1:y1 };
+  }
+};
+
+/* -------------------------------------------------------------------------
+   Cache：Graph Cache 只缓存「编译结果」，绝不缓存动作执行结果（契约 §8.3 铁律）。
+   命中不跳过实际播放；导入时派生态一律丢弃重验（§4 规则 12）。
+   ------------------------------------------------------------------------- */
+var Cache = {
+  key:'', value:null, hits:0, misses:0,
+  get: function (key, build) {
+    if (this.key===key && this.value) { this.hits+=1; return { hit:true, data:this.value }; }
+    this.misses+=1; this.value=build(); this.key=key;
+    return { hit:false, data:this.value };
+  },
+  invalidate: function () { this.key=''; this.value=null; },
+  note: function () { return 'Graph Cache 仅缓存编译结果 · 命中不跳过实际播放（HIT ' + this.hits + ' / MISS ' + this.misses + '）'; },
+  derivedKeys: ['cacheStatus','lastValidatedAt','resolvedBinding','validation','compiled','runtimeState','executionState','cacheHit']
+};
+
+/* -------------------------------------------------------------------------
+   Runtime：本地模拟预览。只决定「何时按什么条件提交动作」的可视化，
+   不执行动作、不调 MCP/FIFO/Host Guard、不复用执行结果（契约 §8.2 / §8.3）。
+   ------------------------------------------------------------------------- */
+var Runtime = {
+  running:false, index:0, timer:null, sequence:[], flowEdges:new Set(), activeNode:null, cacheHit:false,
+  stop: function () {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer=null; this.running=false; this.flowEdges.clear(); this.activeNode=null;
+  }
+};
+
+/* -------------------------------------------------------------------------
+   Preferences：外观 / 动效 / 网格。独立于图状态。
+   ------------------------------------------------------------------------- */
+var Preferences = {
+  theme:'dark',
+  reducedMotion: (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || false,
+  showGrid:true, snap:false,
+  shortcuts:[
+    ['Ctrl / ⌘ + C','复制选中节点'], ['Ctrl / ⌘ + V','粘贴节点'], ['Delete / Backspace','删除选中'],
+    ['Ctrl / ⌘ + A','全选节点'], ['Ctrl / ⌘ + 0','适配画布'], ['Escape','取消 / 关闭'],
+    ['Shift + 拖拽','框选'], ['滚轮','缩放'], ['空白拖拽','平移']
+  ]
+};
+
+/* -------------------------------------------------------------------------
+   Compiler：编译规则照抄 nodegraph.mjs L315 compileGraphToSegments
+   DFS 前序 / 跳过辅助节点 / delay 累加并入下一动作节点 / 每 8 步一段。
+   额外：跳过 disabled 节点；设计层辅助节点穿透（next 指向下游第一个可编译节点）。
+   ------------------------------------------------------------------------- */
+var Compiler = {
+  /* 设计层 → 导出用 graph（只含 5 类可编译节点，字段严格白名单，绝不写坐标） */
+  graphNode: function (n) {
+    var p = n.props || {}, t = NodeDef.gtype(n.type), o = { id:n.id, type:t };
+    switch (t) {
+      case 'expression':
+        o.name = String(p.name == null ? '' : p.name);
+        if (p.clear === true) o.clear = true;
+        break;
+      case 'motion':
+        o.name = String(p.name == null ? '' : p.name);
+        if (p.closeMotion) {
+          o.closeMotion = String(p.closeMotion);
+          if (p.closeAfterMs !== undefined && p.closeAfterMs !== '') o.closeAfterMs = Number(p.closeAfterMs);
+        }
+        break;
+      case 'pose':
+        o.pose = {};
+        if (p.poseRight) o.pose.right = String(p.poseRight);
+        if (p.poseLeft) o.pose.left = String(p.poseLeft);
+        break;
+      case 'look':
+        o.x = Number(p.x) || 0; o.y = Number(p.y) || 0;
+        break;
+      case 'delay':
+        o.delayMs = Number(p.delayMs) || 0;
+        break;
+    }
+    if (t !== 'delay' && Number(p.stepDelayMs) > 0) o.delayMs = Number(p.stepDelayMs);
+    return o;
+  },
+  /* 穿透辅助节点：返回从 id 出发沿设计层边遇到的第一批「可编译」节点 */
+  downstream: function (id, adj, byId) {
+    var out = [], seen = new Set([id]), queue = (adj[id] || []).slice(), guard = 0;
+    while (queue.length && guard++ < 1024) {
+      var cur = queue.shift();
+      if (seen.has(cur)) continue;
+      seen.add(cur);
+      var n = byId.get(cur);
+      if (!n || n.disabled) continue;
+      if (NodeDef.isCompilable(n.type)) { out.push(cur); continue; }  // 遇到第一个动作节点即停
+      var nx = adj[cur] || [];
+      for (var i=0;i<nx.length;i++) if (!seen.has(nx[i])) queue.push(nx[i]);
+    }
+    return Array.from(new Set(out));
+  },
+  compile: function () {
+    var byId = new Map();
+    Graph.nodes.forEach(function (n) { byId.set(n.id, n); });
+    var adj = {};
+    Graph.edges.forEach(function (e) {
+      if (!Graph.active(e.from) || !Graph.active(e.to)) return;
+      if (!adj[e.from]) adj[e.from] = [];
+      adj[e.from].push(e.to);
+    });
+    var comp = Graph.nodes.filter(function (n) { return NodeDef.isCompilable(n.type) && !n.disabled; });
+    var nextMap = new Map();
+    comp.forEach(function (n) { nextMap.set(n.id, Compiler.downstream(n.id, adj, byId)); });
+
+    var indeg = new Map(); comp.forEach(function (n) { indeg.set(n.id, 0); });
+    nextMap.forEach(function (arr) { arr.forEach(function (t) { if (indeg.has(t)) indeg.set(t, indeg.get(t)+1); }); });
+    var roots = comp.filter(function (n) { return indeg.get(n.id) === 0; }).map(function (n) { return n.id; });
+    if (!roots.length && comp.length) roots = [comp[0].id];
+
+    var graph = {
+      roots: roots,
+      nodes: comp.map(function (n) {
+        var g = Compiler.graphNode(n); g.next = (nextMap.get(n.id) || []).slice(); return g;
+      })
+    };
+
+    /* DFS 前序（显式栈 + seen 集合 + 深度上限，杜绝死循环） */
+    var gb = new Map(); graph.nodes.forEach(function (n) { gb.set(n.id, n); });
+    var order = [], seen = new Set();
+    function visit(start) {
+      var stack = [[start, 0]];
+      if (seen.has(start) || !gb.has(start)) return;
+      while (stack.length) {
+        if (stack.length > 256) return;                 // 深度上限
+        var top = stack[stack.length-1], id = top[0];
+        if (seen.has(id)) { stack.pop(); continue; }
+        if (top[1] === 0) { seen.add(id); order.push(id); }
+        var nx = gb.get(id).next || [];
+        if (top[1] < nx.length) {
+          var t = nx[top[1]];
+          top[1] += 1;
+          if (!seen.has(t) && gb.has(t)) stack.push([t, 0]);
+        } else { stack.pop(); }
+      }
+    }
+    roots.forEach(visit);
+    Array.from(gb.keys()).forEach(function (id) { if (!seen.has(id)) visit(id); });
+
+    /* delay 累加并入下一动作节点；末端丢弃（与 compileGraphToSegments 一致） */
+    var pendingDelay = 0, steps = [], stepSources = [], stepPriorities = [];
+    for (var i=0;i<order.length;i++) {
+      var node = gb.get(order[i]);
+      if (!node || node.type === 'delay') { pendingDelay += Number(node && node.delayMs) || 0; continue; }
+      var step = { kind:node.type };
+      if (node.type === 'expression') {
+        step.name = node.name; if (node.clear === true) step.clear = true;
+      } else if (node.type === 'motion') {
+        step.name = node.name;
+        if (node.closeMotion) {
+          step.closeMotion = node.closeMotion;
+          if (node.closeAfterMs !== undefined) step.closeAfterMs = node.closeAfterMs;
+        }
+      } else if (node.type === 'pose') {
+        step.pose = {};
+        if (node.pose && node.pose.right !== undefined) step.pose.right = node.pose.right;
+        if (node.pose && node.pose.left !== undefined) step.pose.left = node.pose.left;
+      } else if (node.type === 'look') {
+        step.x = Number(node.x); step.y = Number(node.y);
+      }
+      var d = (Number(node.delayMs) || 0) + pendingDelay;
+      if (d > 0) step.delayMs = Math.round(d);
+      pendingDelay = 0;
+      steps.push(step);
+      stepSources.push(node.id);
+      var src = byId.get(node.id);
+      stepPriorities.push(src && Capability.priorities.indexOf(src.props.priority) >= 0 ? src.props.priority : Binding.docPriority);
+    }
+
+    /* 每 8 步一段；优先级变化也起新段（合法值，且默认 NORMAL 时与后端编译完全一致） */
+    var segments = [], cur = null;
+    for (var j=0;j<steps.length;j++) {
+      var pr = stepPriorities[j] || 'NORMAL';
+      if (!cur || cur.priority !== pr || cur.chain.length >= Capability.maxStepsPerSegment) {
+        cur = { priority:pr, chain:[] }; segments.push(cur);
+      }
+      cur.chain.push(steps[j]);
+    }
+    return { graph:graph, segments:segments, steps:steps, stepSources:stepSources, order:order };
+  },
+  /* graphKey：仅用于 Graph Cache 键，不含任何执行态/缓存派生字段 */
+  key: function () {
+    return JSON.stringify({ n:Graph.snapshot().nodes, e:Graph.edges, b:Binding.toJSON(), name:Binding.name, p:Binding.docPriority });
+  }
+};
+
+/* -------------------------------------------------------------------------
+   Serializer：导出严格 7 字段；meta.editor 存完整设计层视图（§4 规则 11）
+   ------------------------------------------------------------------------- */
+var Serializer = {
+  build: function () {
+    var c = Cache.get(Compiler.key(), function () { return Compiler.compile(); }).data;
+    var snap = Graph.snapshot();
+    return {
+      schemaVersion: 1,
+      kind: 'dsh-l2d-nodegraph',
+      name: Binding.name || '未命名动作图',
+      modelBinding: Binding.toJSON(),
+      graph: deep(c.graph),
+      segments: deep(c.segments),
+      meta: {
+        dshVersion: '0.5.0',
+        editor: {
+          version: 1,
+          name: Binding.name, docPriority: Binding.docPriority,
+          nodes: snap.nodes, edges: snap.edges, viewport: snap.viewport,
+          /* 执行规则 / 布局分离：graph + segments 为规则，本对象仅为布局与标注 */
+          cachePolicy: 'graph-cache-only; playback-never-skipped'
+        }
+      }
+    };
+  },
+  exportText: function () { return JSON.stringify(this.build(), null, 2); },
+  /* 导入优先读 meta.editor；文件内缓存/校验派生字段一律丢弃并重新校验（§4 规则 12） */
+  scrub: function (ed) {
+    var clean = deep(ed);
+    Cache.derivedKeys.forEach(function (k) { delete clean[k]; });
+    (clean.nodes || []).forEach(function (n) {
+      if (!n.props) return;
+      Cache.derivedKeys.forEach(function (k) { delete n.props[k]; });
+    });
+    return clean;
+  },
+  linearView: function (doc) {
+    var g = doc.graph;
+    if (!g && Array.isArray(doc.segments)) {
+      var steps = [];
+      doc.segments.forEach(function (s) { (s.chain||[]).forEach(function (st) { steps.push(st); }); });
+      g = { roots: steps.length ? ['v1'] : [], nodes: steps.map(function (st, i) {
+        return { id:'v'+(i+1), type:st.kind, next: i+1<steps.length ? ['v'+(i+2)] : [] };
+      }) };
+      /* 把 step 字段回填到 graph 节点形状 */
+      steps.forEach(function (st, i) {
+        var n = g.nodes[i];
+        if (st.name !== undefined) n.name = st.name;
+        if (st.clear !== undefined) n.clear = st.clear;
+        if (st.closeMotion !== undefined) n.closeMotion = st.closeMotion;
+        if (st.closeAfterMs !== undefined) n.closeAfterMs = st.closeAfterMs;
+        if (st.delayMs !== undefined) n.delayMs = st.delayMs;
+        if (st.pose !== undefined) n.pose = st.pose;
+        if (st.x !== undefined) n.x = st.x;
+        if (st.y !== undefined) n.y = st.y;
+      });
+    }
+    var nodes = (g && g.nodes) || [];
+    Graph.clear();
+    nodes.forEach(function (n, i) {
+      var type = Capability.nodeTypes.indexOf(n.type) >= 0 ? n.type : 'expression';
+      var p = Object.assign({ priority:'NORMAL', cooldownMs:0, execState:'idle', modelWhitelist:'', portType:'flow', disabled:false }, NodeDef.defaults(type));
+      if (n.name !== undefined) p.name = n.name;
+      if (n.clear !== undefined) p.clear = n.clear;
+      if (n.closeMotion !== undefined) p.closeMotion = n.closeMotion;
+      if (n.closeAfterMs !== undefined) p.closeAfterMs = n.closeAfterMs;
+      if (n.delayMs !== undefined) { if (type==='delay') p.delayMs = n.delayMs; else p.stepDelayMs = n.delayMs; }
+      if (n.pose) { p.poseRight = n.pose.right || ''; p.poseLeft = n.pose.left || ''; }
+      if (n.x !== undefined) p.x = n.x; if (n.y !== undefined) p.y = n.y;
+      Graph.addNode(type, { x:80 + (i%6)*260, y:120 + Math.floor(i/6)*170 }, { id:n.id, props:p, label:NodeDef.defs[type].label });
+    });
+    nodes.forEach(function (n) {
+      (n.next||[]).forEach(function (t) { if (Graph.byId(t)) Graph.addEdge(n.id, t); });
+    });
+    Graph.viewport = { x:30, y:60, k:0.9 };
+  },
+  import: function (text) {
+    var doc;
+    try { doc = JSON.parse(text); }
+    catch (err) { return { ok:false, errors:['JSON 解析失败：' + (err && err.message || err)] }; }
+    /* 导入重验：不信任文件内缓存状态 */
+    var chk = Validator.check(doc);
+    if (!chk.ok) return { ok:false, errors:chk.errors };
+    var ed = doc.meta && doc.meta.editor;
+    if (ed && Array.isArray(ed.nodes)) {
+      var clean = this.scrub(ed);
+      Graph.restore(clean);
+      Binding.name = clean.name || doc.name || '未命名动作图';
+      Binding.docPriority = Capability.priorities.indexOf(clean.docPriority) >= 0 ? clean.docPriority : 'NORMAL';
+    } else {
+      this.linearView(doc);
+      Binding.name = doc.name || '未命名动作图';
+    }
+    Binding.fromDoc(doc.modelBinding || {});
+    Cache.invalidate();                  // 缓存派生状态不随文件恢复
+    Runtime.stop();
+    return { ok:true, errors:[] };
+  }
+};
+
+/* -------------------------------------------------------------------------
+   Validator：本地结构校验（复刻 validateNodegraph / validateGraph / validateActionSequence）
+   无环 / roots 可达 / 悬空 next / 必填字段 / 段步上限 / 顶层字段白名单
+   ------------------------------------------------------------------------- */
+var Validator = {
+  isPlain: function (v) { return !!v && typeof v === 'object' && !Array.isArray(v); },
+  estimateLifeMs: function (chain) {
+    var cursor = 0, life = 400;
+    for (var i=0;i<chain.length;i++) {
+      var s = chain[i] || {};
+      cursor += Math.max(0, Number(s.delayMs) || 0);
+      life = Math.max(life, cursor + 1800);
+      if (s.closeMotion) life = Math.max(life, cursor + (Number(s.closeAfterMs) || 6000) + 200);
+    }
+    return life;
+  },
+  checkGraph: function (graph, errors) {
+    if (!this.isPlain(graph)) { errors.push('graph 必须是对象'); return; }
+    var roots = graph.roots, nodes = graph.nodes;
+    if (!Array.isArray(roots) || !roots.length) errors.push('graph.roots 不能为空');
+    if (!Array.isArray(nodes) || !nodes.length) { errors.push('graph.nodes 不能为空'); return; }
+    if (nodes.length > Capability.maxGraphNodes) errors.push('graph.nodes 最多 ' + Capability.maxGraphNodes + ' 个');
+    Object.keys(graph).forEach(function (k) {
+      if (k !== 'roots' && k !== 'nodes') errors.push('graph 未知字段 ' + k);
+    });
+    var byId = new Map();
+    nodes.forEach(function (node, i) {
+      var at = 'graph.nodes[' + i + ']';
+      if (!Validator.isPlain(node)) { errors.push(at + ' 必须是对象'); return; }
+      if (typeof node.id !== 'string' || !node.id) { errors.push(at + '.id 必须是非空字符串'); return; }
+      if (byId.has(node.id)) { errors.push(at + ' id 重复：' + node.id); return; }
+      if (Capability.nodeTypes.indexOf(node.type) < 0) { errors.push(at + ' type 不受支持：' + String(node.type)); return; }
+      Object.keys(node).forEach(function (k) {
+        if (Capability.nodeAllowedKeys.indexOf(k) < 0) errors.push(at + ' 未知字段 ' + k);
+      });
+      if ((node.type === 'expression' || node.type === 'motion') && (typeof node.name !== 'string' || !node.name)) {
+        errors.push(at + ' ' + node.type + ' 缺 name');
+      }
+      if (node.type === 'pose') {
+        if (!Validator.isPlain(node.pose) || (node.pose.right === undefined && node.pose.left === undefined)) {
+          errors.push(at + ' pose 需要 {right/left} 至少一侧');
+        } else {
+          ['right','left'].forEach(function (side) {
+            if (node.pose[side] !== undefined && Capability.poseValues.indexOf(node.pose[side]) < 0) {
+              errors.push(at + ' pose.' + side + ' 非法：' + String(node.pose[side]));
+            }
+          });
+        }
+      }
+      if (node.type === 'look' && (!Number.isFinite(Number(node.x)) || !Number.isFinite(Number(node.y)))) {
+        errors.push(at + ' look 需要 x/y 数字');
+      }
+      if (node.type === 'delay') {
+        var d = Number(node.delayMs);
+        if (!Number.isFinite(d) || d <= 0 || d > 5000) errors.push(at + ' delay 需要 0 < delayMs <= 5000');
+      } else if (node.delayMs !== undefined) {
+        var d2 = Number(node.delayMs);
+        if (!Number.isFinite(d2) || d2 < 0 || d2 > 5000) errors.push(at + ' delayMs 必须是 0~5000 的数字');
+      }
+      if (node.next !== undefined && !Array.isArray(node.next)) errors.push(at + '.next 必须是数组');
+      byId.set(node.id, node);
+    });
+    if (errors.length) return;
+    byId.forEach(function (node, id) {
+      (Array.isArray(node.next) ? node.next : []).forEach(function (t) {
+        if (!byId.has(t)) errors.push('节点 ' + id + ' 的 next 引用不存在：' + t);
+      });
+    });
+    (Array.isArray(roots) ? roots : []).forEach(function (r) { if (!byId.has(r)) errors.push('roots 引用不存在：' + r); });
+    if (errors.length) return;
+
+    /* 三色 DFS 环检测：显式栈 + 深度上限 */
+    var color = new Map(); Array.from(byId.keys()).forEach(function (id) { color.set(id, 0); });
+    var cyclic = false;
+    Array.from(byId.keys()).forEach(function (start) {
+      if (cyclic || color.get(start) !== 0) return;
+      color.set(start, 1);
+      var stack = [[start, 0]];
+      while (stack.length && !cyclic) {
+        if (stack.length > 256) { errors.push('graph 深度超过上限 256'); cyclic = true; break; }
+        var top = stack[stack.length-1], id = top[0], nx = byId.get(id).next || [];
+        if (top[1] < nx.length) {
+          var t = nx[top[1]]; top[1] += 1;
+          var c = color.get(t);
+          if (c === 1) { errors.push('graph 存在环：' + id + ' → ' + t); cyclic = true; break; }
+          if (c === 0 && byId.has(t)) { color.set(t, 1); stack.push([t, 0]); }
+        } else { color.set(id, 2); stack.pop(); }
+      }
+    });
+    if (cyclic) return;
+
+    /* roots 可达全部节点（BFS + visited） */
+    var reach = new Set(), queue = [];
+    (Array.isArray(roots) ? roots : []).forEach(function (r) {
+      if (byId.has(r) && !reach.has(r)) { reach.add(r); queue.push(r); }
+    });
+    var guard = 0;
+    while (queue.length && guard++ < 4096) {
+      var cur = queue.shift(), nx2 = byId.get(cur).next || [];
+      for (var i=0;i<nx2.length;i++) if (byId.has(nx2[i]) && !reach.has(nx2[i])) { reach.add(nx2[i]); queue.push(nx2[i]); }
+    }
+    Array.from(byId.keys()).forEach(function (id) { if (!reach.has(id)) errors.push('节点不可从 roots 到达：' + id); });
+  },
+  checkStep: function (step, at, errors) {
+    if (!this.isPlain(step)) { errors.push(at + ' 不是对象'); return; }
+    Object.keys(step).forEach(function (k) { if (Capability.stepKeys.indexOf(k) < 0) errors.push(at + ' 未知字段 ' + k); });
+    if (Capability.stepKinds.indexOf(step.kind) < 0) { errors.push(at + ' kind 非法：' + String(step.kind)); return; }
+    if (step.delayMs !== undefined && !(typeof step.delayMs === 'number' && Number.isFinite(step.delayMs) && step.delayMs >= 0 && step.delayMs <= 5000)) {
+      errors.push(at + ' delayMs 必须是 0~5000 的数字');
+    }
+    var numRange = function (v, a, b) { return typeof v === 'number' && Number.isFinite(v) && v >= a && v <= b; };
+    if (step.kind === 'expression') {
+      if (step.clear === true) { /* clear 跳过 name 校验 */ }
+      else if (Capability.expressions.indexOf(step.name) < 0) errors.push(at + ' 表情名不存在：' + String(step.name));
+    }
+    if (step.kind === 'motion') {
+      if (Capability.motionGroups.indexOf(step.name) < 0) errors.push(at + ' 动作组不存在或不允许手动播：' + String(step.name));
+      var pair = Capability.pairedCloses[step.name];
+      if (step.closeMotion !== undefined) {
+        if (!pair) errors.push(at + ' 这个动作没有关闭配对，不能写 closeMotion');
+        else if (step.closeMotion !== pair) errors.push(at + ' closeMotion 必须是 ' + pair + '，实际 ' + step.closeMotion);
+        if (step.closeAfterMs !== undefined && !numRange(step.closeAfterMs, 300, 12000)) errors.push(at + ' closeAfterMs 必须是 300~12000 的数字');
+      }
+    }
+    if (step.kind === 'pose') {
+      if (!this.isPlain(step.pose) || !Object.keys(step.pose).length) errors.push(at + ' pose 至少给一侧');
+      else Object.keys(step.pose).forEach(function (k) {
+        if (k !== 'right' && k !== 'left') errors.push(at + ' pose 未知侧 ' + k);
+        else if (Capability.poseValues.indexOf(step.pose[k]) < 0) errors.push(at + ' pose.' + k + ' 取值非法：' + String(step.pose[k]));
+      });
+    }
+    if (step.kind === 'look') {
+      if (!numRange(step.x, -1, 1)) errors.push(at + ' look.x 必须是 -1~1 的数字');
+      if (!numRange(step.y, -1, 1)) errors.push(at + ' look.y 必须是 -1~1 的数字');
+    }
+    if (step.timeoutMs !== undefined) {
+      if (!numRange(step.timeoutMs, 0, 8000)) errors.push(at + ' timeoutMs 必须是 0~8000 的数字');
+      else if (step.group === undefined) errors.push(at + ' timeoutMs 必须同时给 group');
+    }
+    if (step.mode === 'parallel' && step.group === undefined) errors.push(at + ' mode=parallel 必须同时给 group');
+    if (step.name !== undefined && typeof step.name !== 'string') errors.push(at + ' name 必须是字符串');
+  },
+  checkSegments: function (segments, errors) {
+    if (!Array.isArray(segments) || !segments.length) { errors.push('segments 不能为空'); return; }
+    if (segments.length > Capability.maxSegments) errors.push('segments 最多 ' + Capability.maxSegments + ' 段');
+    segments.slice(0, Capability.maxSegments).forEach(function (seg, si) {
+      var at = 'segments[' + si + ']';
+      if (!Validator.isPlain(seg)) { errors.push(at + ' 必须是对象'); return; }
+      Object.keys(seg).forEach(function (k) { if (['chain','priority','bubble'].indexOf(k) < 0) errors.push(at + ' 未知字段 ' + k); });
+      if (Capability.priorities.indexOf(seg.priority || 'NORMAL') < 0) errors.push(at + '.priority 非法');
+      if (seg.bubble !== undefined && (typeof seg.bubble !== 'string' || seg.bubble.length > Capability.maxBubble)) {
+        errors.push(at + '.bubble 最多 ' + Capability.maxBubble + ' 字符');
+      }
+      if (!Array.isArray(seg.chain) || !seg.chain.length) { errors.push(at + '.chain 不能为空'); return; }
+      if (seg.chain.length > Capability.maxStepsPerSegment) errors.push(at + '.chain 最多 ' + Capability.maxStepsPerSegment + ' 步');
+      seg.chain.slice(0, Capability.maxStepsPerSegment).forEach(function (step, i) {
+        Validator.checkStep(step, at + '.chain[' + i + ']', errors);
+      });
+      var life = Validator.estimateLifeMs(seg.chain);
+      if (life > Capability.maxLifeMs) errors.push(at + ' 估算时长 ' + life + 'ms 超过上限 ' + Capability.maxLifeMs + 'ms');
+    });
+  },
+  check: function (doc) {
+    var errors = [], warnings = [];
+    if (!this.isPlain(doc)) return { ok:false, errors:['分享 JSON 必须是对象'], warnings:warnings };
+    Object.keys(doc).forEach(function (k) {
+      if (Capability.topKeys.indexOf(k) < 0) errors.push('未知顶层字段 ' + k);
+    });
+    if (doc.schemaVersion !== 1) errors.push('schemaVersion 必须是 1，收到：' + String(doc.schemaVersion));
+    if (doc.kind !== 'dsh-l2d-nodegraph') errors.push('kind 必须是 dsh-l2d-nodegraph，收到：' + String(doc.kind));
+    if (typeof doc.name !== 'string' || !doc.name.trim()) errors.push('name 必须是非空字符串');
+    var mb = this.isPlain(doc.modelBinding) ? doc.modelBinding : {};
+    Object.keys(mb).forEach(function (k) { if (Capability.bindingKeys.indexOf(k) < 0) errors.push('modelBinding 未知字段 ' + k); });
+    var mode = mb.bindingMode === undefined ? 'any' : mb.bindingMode;
+    if (['strict','any'].indexOf(mode) < 0) errors.push('modelBinding.bindingMode 必须是 strict 或 any');
+    if (mode === 'strict' && !mb.modelId && !mb.modelHash) errors.push('bindingMode=strict 需要至少提供 modelId 或 modelHash');
+    if (doc.graph === undefined && doc.segments === undefined) errors.push('graph 与 segments 至少提供一个');
+    if (doc.graph !== undefined) this.checkGraph(doc.graph, errors);
+    if (doc.segments !== undefined) this.checkSegments(doc.segments, errors);
+
+    /* 设计层警告（不阻断）：异色连线 / 禁用节点 */
+    Graph.edges.forEach(function (e) {
+      var a = Graph.byId(e.from), b = Graph.byId(e.to);
+      if (!a || !b) return;
+      if (a.props.portType !== b.props.portType) warnings.push('异色连线：' + a.label + ' (' + a.props.portType + ') → ' + b.label + ' (' + b.props.portType + ')');
+    });
+    var disabled = Graph.nodes.filter(function (n) { return n.disabled; }).length;
+    if (disabled) warnings.push(disabled + ' 个节点已禁用，不参与编译（graph 中已省略）');
+    return { ok:errors.length === 0, errors:errors, warnings:warnings };
+  }
+};
+
+/* -------------------------------------------------------------------------
+   Slots：localStorage 按 modelId 分槽，每个模型可存多个 JSON 互不覆盖（§5.6）
+   file:// 下 localStorage 可能受限 → try/catch 降级为内存 Map。
+   ------------------------------------------------------------------------- */
+var Slots = {
+  memory: new Map(), available:true,
+  prefix: function (modelId) { return 'mg-lab:v1:' + encodeURIComponent(modelId || '_default') + ':'; },
+  all: function () {
+    var out = [], p = this.prefix(Binding.modelId);
+    try {
+      for (var i=0;i<localStorage.length;i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(p) === 0) out.push({ slot:decodeURIComponent(k.slice(p.length)), raw:localStorage.getItem(k) });
+      }
+    } catch (err) { this.available = false; }
+    this.memory.forEach(function (v, k) { if (k.indexOf(p) === 0) out.push({ slot:k.slice(p.length), raw:v }); });
+    var seen = {}; return out.filter(function (x) { if (seen[x.slot]) return false; seen[x.slot]=1; return true; }).sort(function (a,b) { return a.slot < b.slot ? -1 : 1; });
+  },
+  save: function (slot, text) {
+    var key = this.prefix(Binding.modelId) + encodeURIComponent(slot);
+    try { localStorage.setItem(key, text); } catch (err) { this.available = false; this.memory.set(key, text); }
+  },
+  load: function (slot) {
+    var key = this.prefix(Binding.modelId) + encodeURIComponent(slot);
+    try { var v = localStorage.getItem(key); if (v != null) return v; } catch (err) { this.available = false; }
+    return this.memory.get(key) || null;
+  },
+  del: function (slot) {
+    var key = this.prefix(Binding.modelId) + encodeURIComponent(slot);
+    try { localStorage.removeItem(key); } catch (err) { /* ignore */ }
+    this.memory.delete(key);
+  }
+};
+
+/* =========================================================================
+   UI · 渲染层（无递归；所有遍历用 visited / 深度上限）
+   ========================================================================= */
+var UI = {
+  canvas:null, world:null, wiresG:null, nodesEl:null, minimap:null,
+  drag:null, link:null, marquee:null, lastValidation:null,
+
+  init: function () {
+    this.canvas = $('#canvas'); this.world = $('#world'); this.wiresG = $('#wires-g');
+    this.nodesEl = $('#nodes'); this.minimap = $('#minimap');
+    this.renderLibrary(); this.bindTopbar(); this.bindCanvas(); this.bindInspector(); this.bindModal();
+    this.applyViewport(); this.refreshAll();
+    this.updateBadge(Validator.check(Serializer.build()));
+  },
+
+  /* ---- Node Library ---- */
+  renderLibrary: function () {
+    var html = '';
+    NodeDef.groups.forEach(function (g) {
+      html += '<div class="lib-group"><div class="lib-head" style="--gc:'+g.color+'">'+
+        '<span class="swatch"></span><span>'+esc(g.label)+' / '+esc(g.en)+'</span>'+
+        '<span class="count">'+g.items.length+'</span></div>';
+      g.items.forEach(function (t) {
+        var d = NodeDef.defs[t];
+        html += '<div class="lib-item" draggable="true" data-type="'+t+'" title="'+esc(d.label+' · '+d.cn)+'" '+
+          'style="--gc:'+g.color+'"><span class="glyph">'+icon(d.icon,14)+'</span>'+
+          '<span class="txt">'+esc(d.label)+'</span><span class="en">'+esc(d.cn)+'</span></div>';
+      });
+      html += '</div>';
+    });
+    $('#lib-groups').innerHTML = html;
+    $$('.lib-item').forEach(function (el) {
+      el.addEventListener('dragstart', function (ev) {
+        ev.dataTransfer.setData('text/plain', el.dataset.type);
+        ev.dataTransfer.effectAllowed = 'copy';
+      });
+      el.addEventListener('click', function () { UI.appendNode(el.dataset.type); });
+    });
+  },
+  appendNode: function (type) {
+    var c = this.canvas.getBoundingClientRect();
+    var n = (Graph.nodes.length % 6);
+    var pos = { x:(c.width*0.42 - Graph.viewport.x)/Graph.viewport.k + n*26,
+                y:(c.height*0.38 - Graph.viewport.y)/Graph.viewport.k + n*22 };
+    var node = Graph.addNode(type, pos);
+    Graph.selection = new Set([node.id]); Graph.selectedEdge = null;
+    this.refreshAll(); this.toast('已追加节点 ' + NodeDef.defs[type].label, 'ok');
+  },
+
+  /* ---- Viewport ---- */
+  applyViewport: function () {
+    var v = Graph.viewport;
+    this.world.style.transform = 'translate('+v.x+'px,'+v.y+'px) scale('+v.k+')';
+    this.canvas.style.backgroundSize = (DOT*v.k)+'px '+(DOT*v.k)+'px';
+    this.canvas.style.backgroundPosition = v.x+'px '+v.y+'px';
+    this.canvas.style.backgroundImage = Preferences.showGrid
+      ? 'radial-gradient(circle, color-mix(in srgb, var(--ink) 16%, transparent) 1px, transparent 1.1px)' : 'none';
+    $('#zoom-val').textContent = Math.round(v.k*100) + '%';
+    this.renderMinimap();
+  },
+  toWorld: function (clientX, clientY) {
+    var r = this.canvas.getBoundingClientRect(), v = Graph.viewport;
+    return { x:(clientX - r.left - v.x)/v.k, y:(clientY - r.top - v.y)/v.k };
+  },
+  zoomAt: function (factor, sx, sy) {
+    var v = Graph.viewport, nk = clamp(v.k*factor, 0.35, 2.2);
+    var wx = (sx - v.x)/v.k, wy = (sy - v.y)/v.k;
+    v.x = sx - wx*nk; v.y = sy - wy*nk; v.k = nk;
+    this.applyViewport();
+  },
+  fitView: function () {
+    var b = Graph.bounds(), r = this.canvas.getBoundingClientRect(), pad = 46;
+    var k = clamp(Math.min((r.width - pad*2)/Math.max(1,b.x1-b.x0), (r.height - pad*2)/Math.max(1,b.y1-b.y0)), 0.35, 1.4);
+    Graph.viewport.k = k;
+    Graph.viewport.x = (r.width - (b.x1-b.x0)*k)/2 - b.x0*k;
+    Graph.viewport.y = (r.height - (b.y1-b.y0)*k)/2 - b.y0*k;
+    this.applyViewport();
+  },
+
+  /* ---- Nodes ---- */
+  renderNodes: function () {
+    var html = '';
+    Graph.nodes.forEach(function (n) {
+      var d = NodeDef.defs[n.type] || NodeDef.defs.workspace;
+      var gc = NodeDef.groupColor(n.type), pc = NodeDef.portColor(n.props.portType);
+      var cls = 'node' + (Graph.selection.has(n.id) ? ' selected' : '') +
+        (n.disabled ? ' disabled' : '') + (Runtime.activeNode === n.id ? ' executing' : '');
+      var flag = n.disabled ? 'OFF' : (NodeDef.isCompilable(n.type) ? d.label.toUpperCase().slice(0,4) : 'AUX');
+      html += '<div class="'+cls+'" data-id="'+esc(n.id)+'" style="left:'+n.pos.x+'px;top:'+n.pos.y+'px;--nc:'+gc+';--pc:'+pc+'">'+
+        '<div class="node-band"></div>'+
+        '<div class="node-head"><span class="node-icon">'+icon(d.icon,15)+'</span>'+
+        '<span class="node-name"><span class="node-title">'+esc(n.label)+'</span>'+
+        '<span class="node-type">'+esc(d.label)+'</span></span>'+
+        '<span class="node-flag">'+esc(flag)+'</span></div>'+
+        '<div class="node-body"><div class="node-preview">'+esc(NodeDef.preview(n))+'</div></div>'+
+        '<div class="node-foot"><span>IN · '+esc(n.props.portType)+'</span>'+
+        '<span class="pill">'+esc(n.props.priority)+'</span><span>OUT</span></div>'+
+        '<span class="port in" data-port="in" title="输入端口"></span>'+
+        '<span class="port out" data-port="out" title="输出端口（拖出连线）"></span></div>';
+    });
+    this.nodesEl.innerHTML = html;
+  },
+  renderWires: function () {
+    var html = '';
+    Graph.edges.forEach(function (e) {
+      var a = Graph.byId(e.from), b = Graph.byId(e.to);
+      if (!a || !b) return;
+      var x1 = a.pos.x + NODE_W, y1 = a.pos.y + PORT_Y, x2 = b.pos.x, y2 = b.pos.y + PORT_Y;
+      var dx = Math.max(52, Math.abs(x2-x1)*0.45);
+      var d = 'M '+x1+' '+y1+' C '+(x1+dx)+' '+y1+', '+(x2-dx)+' '+y2+', '+x2+' '+y2;
+      var col = NodeDef.portColor(a.props.portType);
+      var sel = Graph.selectedEdge === e.id, flow = Runtime.flowEdges.has(e.id);
+      var dis = a.disabled || b.disabled;
+      var cls = 'wire' + (sel?' is-selected':'') + (flow?' is-flowing':'') + (dis?' is-disabled':'');
+      html += '<g class="'+cls+'" data-edge="'+esc(e.id)+'" style="--wc:'+col+'">'+
+        '<path class="wire-line" d="'+d+'"></path>';
+      if (flow && !Preferences.reducedMotion) {
+        html += '<circle class="wire-particle" r="3"><animateMotion dur="0.85s" repeatCount="indefinite" path="'+d+'"></animateMotion></circle>';
+      }
+      html += '<path class="wire-hit" d="'+d+'"></path></g>';
+    });
+    if (this.link) {
+      var s = this.link.start, c = this.link.cur;
+      var d2 = 'M '+s.x+' '+s.y+' C '+(s.x+60)+' '+s.y+', '+(c.x-60)+' '+c.y+', '+c.x+' '+c.y;
+      html += '<path id="temp-wire" d="'+d2+'"></path>';
+    }
+    this.wiresG.innerHTML = html;
+  },
+  renderMinimap: function () {
+    var cv = this.minimap, ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
+    ctx.clearRect(0,0,W,H);
+    var b = Graph.bounds(), r = this.canvas.getBoundingClientRect(), v = Graph.viewport;
+    var vx0 = -v.x/v.k, vy0 = -v.y/v.k, vx1 = (r.width-v.x)/v.k, vy1 = (r.height-v.y)/v.k;
+    var x0 = Math.min(b.x0, vx0)-40, y0 = Math.min(b.y0, vy0)-40;
+    var x1 = Math.max(b.x1, vx1)+40, y1 = Math.max(b.y1, vy1)+40;
+    var s = Math.min(W/(x1-x0), H/(y1-y0));
+    var tx = function (x) { return (x-x0)*s; }, ty = function (y) { return (y-y0)*s; };
+    var css = getComputedStyle(document.documentElement);
+    var line = css.getPropertyValue('--line').trim() || '#2b2b3a';
+    ctx.strokeStyle = line; ctx.lineWidth = 1;
+    Graph.edges.forEach(function (e) {
+      var a = Graph.byId(e.from), b2 = Graph.byId(e.to); if (!a || !b2) return;
+      ctx.beginPath(); ctx.moveTo(tx(a.pos.x+NODE_W), ty(a.pos.y+PORT_Y)); ctx.lineTo(tx(b2.pos.x), ty(b2.pos.y+PORT_Y)); ctx.stroke();
+    });
+    var palette = { event:'#ff9a45', logic:'#a78bfa', action:'#3ddc97' };
+    Graph.nodes.forEach(function (n) {
+      ctx.fillStyle = palette[NodeDef.defs[n.type].group] || '#6aa8ff';
+      ctx.globalAlpha = n.disabled ? .28 : (Graph.selection.has(n.id) ? 1 : .72);
+      ctx.fillRect(tx(n.pos.x), ty(n.pos.y), Math.max(3,NODE_W*s), Math.max(2,NODE_H*s));
+    });
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = css.getPropertyValue('--accent').trim() || '#7c5cff';
+    ctx.lineWidth = 2; ctx.strokeRect(tx(vx0), ty(vy0), (vx1-vx0)*s, (vy1-vy0)*s);
+  },
+
+  /* ---- Inspector（由 NodeDef 字段声明动态生成） ---- */
+  fieldHTML: function (f, val) {
+    var h = '<div class="field"><label>'+esc(f.label)+'</label>';
+    var id = 'data-prop="'+esc(f.key)+'"';
+    if (f.kind === 'select') {
+      h += '<select '+id+'>';
+      (f.options||[]).forEach(function (o) {
+        h += '<option value="'+esc(o)+'"'+(String(val)===String(o)?' selected':'')+'>'+esc(o === '' ? '（不设置）' : o)+'</option>';
+      });
+      h += '</select>';
+    } else if (f.kind === 'checkbox') {
+      h += '<label class="check-row"><input type="checkbox" '+id+(val?' checked':'')+'> 启用</label>';
+    } else if (f.kind === 'readonly') {
+      h += '<input type="text" value="'+esc(val || '（无配对）')+'" readonly>';
+    } else if (f.kind === 'number') {
+      h += '<input type="number" '+id+' value="'+esc(val)+'"'+
+        (f.min!==undefined?' min="'+f.min+'"':'')+(f.max!==undefined?' max="'+f.max+'"':'')+
+        ' step="'+(f.step||1)+'">';
+    } else {
+      h += '<input type="text" '+id+' value="'+esc(val)+'" spellcheck="false">';
+    }
+    if (f.hint) h += '<div class="hint">'+esc(f.hint)+'</div>';
+    return h + '</div>';
+  },
+  renderInspector: function () {
+    var root = $('#ins-root'), html = '';
+    var sel = Array.from(Graph.selection).map(function (id) { return Graph.byId(id); }).filter(Boolean);
+    var chk = Validator.check(Serializer.build());
+    this.lastValidation = chk;
+    var c = Cache.get(Compiler.key(), function () { return Compiler.compile(); }).data;
+
+    if (sel.length === 1) {
+      var n = sel[0], d = NodeDef.defs[n.type];
+      html += '<div class="ins-head"><div class="kicker">INSPECTOR / NODE</div>'+
+        '<h2>'+esc(n.label)+'</h2><p>'+esc(d.label+' · '+d.cn)+' · '+esc(n.type)+'<br>'+
+        (NodeDef.isCompilable(n.type) ? '编译类型 graph.type = '+esc(NodeDef.gtype(n.type)) : '设计层辅助节点 · 不进 graph.nodes')+'</p></div>';
+      html += '<div class="ins-section"><h3>类型专属字段</h3>';
+      NodeDef.fields(n.type).forEach(function (f) { html += UI.fieldHTML(f, n.props[f.key]); });
+      html += '</div><div class="ins-section"><h3>通用字段 · 设计层</h3>';
+      var common = NodeDef.commonFields();
+      common.forEach(function (f) {
+        var val = f.key === 'disabled' ? n.disabled : (f.key === 'label' ? n.label : n.props[f.key]);
+        html += UI.fieldHTML(f, val);
+      });
+      html += '<div class="hint">坐标 x='+n.pos.x+' y='+n.pos.y+' 仅存 meta.editor.pos，不写入 graph.nodes</div></div>';
+      html += '<div class="ins-actions">'+
+        '<button class="btn" data-act="disable">'+ (n.disabled?'启用节点':'禁用节点') +'</button>'+
+        '<button class="btn" data-act="dup">复制</button>'+
+        '<button class="btn danger" data-act="del">删除</button></div>';
+    } else if (sel.length > 1) {
+      html += '<div class="ins-head"><div class="kicker">INSPECTOR / MULTI</div><h2>已选 '+sel.length+' 个节点</h2>'+
+        '<p>批量操作。属性编辑请单选节点。</p></div>'+
+        '<div class="ins-actions"><button class="btn" data-act="dup">复制选中</button>'+
+        '<button class="btn" data-act="disable-all">全部禁用</button>'+
+        '<button class="btn danger" data-act="del-all">删除选中</button></div>';
+    } else {
+      html += '<div class="ins-head"><div class="kicker">INSPECTOR / DOCUMENT</div><h2>'+esc(Binding.name)+'</h2>'+
+        '<p>文档设置与图统计。单击画布节点编辑其属性。</p></div>';
+      html += '<div class="ins-section"><h3>文档与绑定</h3>'+
+        UI.fieldHTML({key:'__name',label:'图名称 name',kind:'text'}, Binding.name)+
+        UI.fieldHTML({key:'__model',label:'模型 modelId',kind:'text'}, Binding.modelId)+
+        UI.fieldHTML({key:'__mode',label:'绑定模式 bindingMode',kind:'select',options:['any','strict'],
+          hint:'strict 时至少提供 modelId 或 modelHash'}, Binding.bindingMode)+
+        UI.fieldHTML({key:'__prio',label:'默认执行优先级',kind:'select',options:Capability.priorities}, Binding.docPriority)+
+        '</div>';
+      html += '<div class="ins-section"><h3>图统计</h3><div class="stat-grid">'+
+        '<div class="stat"><div class="v num">'+Graph.nodes.length+'</div><div class="k">DESIGN NODES</div></div>'+
+        '<div class="stat"><div class="v num">'+Graph.edges.length+'</div><div class="k">EDGES</div></div>'+
+        '<div class="stat"><div class="v num">'+c.graph.nodes.length+'</div><div class="k">GRAPH NODES</div></div>'+
+        '<div class="stat"><div class="v num">'+c.segments.length+'</div><div class="k">SEGMENTS</div></div>'+
+        '</div><div class="hint" style="margin-top:9px">辅助节点 '+ (Graph.nodes.length - c.graph.nodes.length) +
+        ' 个只存 meta.editor；segments 为执行真源。</div></div>';
+      html += '<div class="ins-section"><h3>校验结果</h3>'+UI.validationHTML(chk)+'</div>';
+      html += '<div class="ins-note">'+esc(Cache.note())+'<br>导出顶层 7 字段 · graph.nodes 仅 5 类 · 坐标只存 meta.editor.pos</div>';
+      html += '<div class="ins-actions"><button class="btn" data-act="layout">自动布局</button>'+
+        '<button class="btn" data-act="fit">适配视图</button>'+
+        '<button class="btn" data-act="clear">清空画布</button></div>';
+    }
+    root.innerHTML = html;
+  },
+  validationHTML: function (chk) {
+    if (chk.ok) {
+      return '<div class="ok-banner">✓ 通过校验 · ' + chk.warnings.length + ' 条提示</div>' +
+        (chk.warnings.length ? '<ul class="err-list warn-list" style="margin-top:9px">' +
+          chk.warnings.map(function (w) { return '<li>'+esc(w)+'</li>'; }).join('') + '</ul>' : '');
+    }
+    return '<div class="ok-banner" style="color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--line));'+
+      'background:color-mix(in srgb,var(--danger) 9%,transparent)">✕ ' + chk.errors.length + ' 项错误</div>'+
+      '<ul class="err-list" style="margin-top:9px">'+chk.errors.map(function (e) { return '<li>'+esc(e)+'</li>'; }).join('')+'</ul>'+
+      (chk.warnings.length ? '<ul class="err-list warn-list" style="margin-top:9px">'+chk.warnings.map(function (w) { return '<li>'+esc(w)+'</li>'; }).join('')+'</ul>' : '');
+  },
+  updateBadge: function (chk) {
+    var el = $('#validate-badge');
+    el.className = chk.ok ? 'ok' : 'bad';
+    el.querySelector('.lbl').textContent = chk.ok ? '通过校验' : (chk.errors.length + ' 项错误');
+    this.lastValidation = chk;
+  },
+  renderStatus: function () {
+    var c = Cache.get(Compiler.key(), function () { return Compiler.compile(); }).data;
+    $('#c-nodes').textContent = Graph.nodes.length;
+    $('#c-edges').textContent = Graph.edges.length;
+    $('#c-segs').textContent = c.segments.length;
+  },
+  refreshAll: function () {
+    Cache.invalidate();
+    this.renderNodes(); this.renderWires(); this.renderMinimap();
+    this.renderInspector(); this.renderStatus();
+    this.updateBadge(Validator.check(Serializer.build()));
+    $('#doc-name').value = Binding.name; $('#doc-model').value = Binding.modelId;
+  },
+  status: function (text, pct) {
+    $('#status-text').textContent = text;
+    if (pct !== undefined) { $('#status-fill').style.width = clamp(pct,0,100)+'%'; $('#sim-fill').style.width = clamp(pct,0,100)+'%'; }
+  },
+  toastTimer:null,
+  toast: function (msg, kind) {
+    var el = $('#toast');
+    el.textContent = msg; el.className = 'show' + (kind ? ' '+kind : '');
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(function () { el.className = ''; }, 3200);
+  },
+
+  /* ---- Top bar / menu ---- */
+  bindTopbar: function () {
+    $('#btn-sim').addEventListener('click', function () { RuntimeCtl.toggle(); });
+    $('#btn-validate').addEventListener('click', function () { UI.openValidation(); });
+    $('#btn-export').addEventListener('click', function () { UI.openExport(); });
+    $('#btn-import').addEventListener('click', function () { UI.openImport(); });
+    $('#btn-menu').addEventListener('click', function (e) { e.stopPropagation(); UI.toggleMenu(); });
+    $('#validate-badge').addEventListener('click', function () { UI.openValidation(); });
+    $('#doc-name').addEventListener('input', function (e) { Binding.name = e.target.value || '未命名动作图'; Cache.invalidate(); UI.updateBadge(Validator.check(Serializer.build())); });
+    $('#doc-model').addEventListener('input', function (e) { Binding.modelId = e.target.value; Cache.invalidate(); UI.updateBadge(Validator.check(Serializer.build())); });
+    $('#zoom-in').addEventListener('click', function () { var r=UI.canvas.getBoundingClientRect(); UI.zoomAt(1.2, r.width/2, r.height/2); });
+    $('#zoom-out').addEventListener('click', function () { var r=UI.canvas.getBoundingClientRect(); UI.zoomAt(1/1.2, r.width/2, r.height/2); });
+    $('#zoom-fit').addEventListener('click', function () { UI.fitView(); });
+    $('#sim-close').addEventListener('click', function () { RuntimeCtl.stop(); });
+    $('#minimap').addEventListener('click', function (ev) {
+      var cv = UI.minimap, rect = cv.getBoundingClientRect();
+      var b = Graph.bounds(), r = UI.canvas.getBoundingClientRect(), v = Graph.viewport;
+      var vx0=-v.x/v.k, vy0=-v.y/v.k, vx1=(r.width-v.x)/v.k, vy1=(r.height-v.y)/v.k;
+      var x0=Math.min(b.x0,vx0)-40, y0=Math.min(b.y0,vy0)-40, x1=Math.max(b.x1,vx1)+40, y1=Math.max(b.y1,vy1)+40;
+      var s=Math.min(cv.width/(x1-x0), cv.height/(y1-y0));
+      var wx = x0 + ((ev.clientX-rect.left)/rect.width)*cv.width/s;
+      var wy = y0 + ((ev.clientY-rect.top)/rect.height)*cv.height/s;
+      Graph.viewport.x = r.width/2 - wx*v.k; Graph.viewport.y = r.height/2 - wy*v.k;
+      UI.applyViewport();
+    });
+  },
+  menuItems: [
+    { label:'自动布局', act:'layout' }, { label:'适配视图 (Ctrl+0)', act:'fit' },
+    { label:'恢复默认示例图', act:'demo' }, { sep:true },
+    { label:'保存槽位（按 modelId）', act:'slots' },
+    { label:'导出 JSON', act:'export' }, { label:'导入 JSON', act:'import' },
+    { sep:true },
+    { label:'切换浅/深色主题', act:'theme' }, { label:'切换点阵网格', act:'grid' },
+    { label:'键盘快捷键', act:'keys' }, { label:'校验详情', act:'validate' },
+    { sep:true }, { label:'清空画布', act:'clear', danger:true }
+  ],
+  toggleMenu: function (force) {
+    var pop = $('#menu-pop'), show = force === undefined ? !pop.classList.contains('show') : force;
+    if (show) {
+      pop.innerHTML = UI.menuItems.map(function (m, i) {
+        return m.sep ? '<div class="sep"></div>' :
+          '<button class="mi" data-mi="'+i+'"'+(m.danger?' style="color:var(--danger)"':'')+'>'+esc(m.label)+'</button>';
+      }).join('');
+      $$('#menu-pop .mi').forEach(function (b) {
+        b.addEventListener('click', function () { UI.menuAction(UI.menuItems[Number(b.dataset.mi)].act); UI.toggleMenu(false); });
+      });
+    }
+    pop.classList.toggle('show', show);
+  },
+  menuAction: function (act) {
+    switch (act) {
+      case 'layout': Layout.run(); break;
+      case 'fit': UI.fitView(); break;
+      case 'demo': Demo.load(); break;
+      case 'slots': UI.openSlots(); break;
+      case 'export': UI.openExport(); break;
+      case 'import': UI.openImport(); break;
+      case 'validate': UI.openValidation(); break;
+      case 'theme':
+        Preferences.theme = Preferences.theme === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', Preferences.theme);
+        UI.renderMinimap(); UI.toast('已切换'+(Preferences.theme==='dark'?'深色':'浅色')+'主题'); break;
+      case 'grid': Preferences.showGrid = !Preferences.showGrid; UI.applyViewport(); break;
+      case 'keys': UI.openKeys(); break;
+      case 'clear':
+        Graph.clear(); UI.refreshAll(); UI.status('画布已清空'); UI.toast('画布已清空'); break;
+    }
+  },
+
+  /* ---- Canvas pointer interactions ---- */
+  bindCanvas: function () {
+    var cv = this.canvas;
+    cv.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      var r = cv.getBoundingClientRect();
+      UI.zoomAt(Math.exp(-e.deltaY*0.0013), e.clientX-r.left, e.clientY-r.top);
+    }, { passive:false });
+    cv.addEventListener('dragover', function (e) {
+      e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
+    });
+    cv.addEventListener('drop', function (e) {
+      e.preventDefault();
+      if (e.dataTransfer.files && e.dataTransfer.files.length) { IO.readFile(e.dataTransfer.files[0]); return; }
+      var t = e.dataTransfer.getData('text/plain');
+      if (NodeDef.defs[t]) {
+        var w = UI.toWorld(e.clientX, e.clientY);
+        var n = Graph.addNode(t, { x:w.x-NODE_W/2, y:w.y-PORT_Y });
+        Graph.selection = new Set([n.id]); Graph.selectedEdge = null;
+        UI.refreshAll(); UI.toast('已拖入节点 ' + NodeDef.defs[t].label, 'ok');
+      } else if (t && t.indexOf('{') >= 0) { IO.applyText(t); }
+    });
+    cv.addEventListener('pointerdown', function (e) { UI.onPointerDown(e); });
+    cv.addEventListener('pointermove', function (e) { UI.onPointerMove(e); });
+    cv.addEventListener('pointerup', function (e) { UI.onPointerUp(e); });
+    cv.addEventListener('pointercancel', function () { UI.cancelGestures(); });
+    cv.addEventListener('click', function (e) {
+      var g = e.target.closest ? e.target.closest('g[data-edge]') : null;
+      if (g) {
+        Graph.selectedEdge = g.dataset.edge; Graph.selection.clear();
+        UI.renderWires(); UI.renderNodes(); UI.renderInspector();
+        UI.status('已选中连线 ' + g.dataset.edge + ' · 按 Delete 删除');
+      }
+    });
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('#btn-menu') && !e.target.closest('#menu-pop')) UI.toggleMenu(false);
+    });
+    document.addEventListener('keydown', function (e) { UI.onKey(e); });
+    window.addEventListener('dragover', function (e) { if (e.dataTransfer && e.dataTransfer.types.indexOf('Files') >= 0) e.preventDefault(); });
+    window.addEventListener('drop', function (e) {
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length && !e.target.closest('#canvas')) {
+        e.preventDefault(); IO.readFile(e.dataTransfer.files[0]);
+      }
+    });
+    window.addEventListener('resize', function () { UI.renderMinimap(); });
+  },
+  onPointerDown: function (e) {
+    if (e.button !== 0 && e.button !== 1) return;
+    var nodeEl = e.target.closest ? e.target.closest('.node') : null;
+    var portEl = e.target.closest ? e.target.closest('.port') : null;
+    var edgeEl = e.target.closest ? e.target.closest('g[data-edge]') : null;
+    if (portEl && nodeEl && portEl.dataset.port === 'out') {
+      var n = Graph.byId(nodeEl.dataset.id);
+      if (!n) return;
+      this.link = { from:n.id, start:{ x:n.pos.x+NODE_W, y:n.pos.y+PORT_Y }, cur:{ x:n.pos.x+NODE_W, y:n.pos.y+PORT_Y } };
+      this.canvas.classList.add('linking');
+      this.canvas.setPointerCapture(e.pointerId);
+      this.renderWires();
+      e.preventDefault(); return;
+    }
+    if (nodeEl) {
+      var id = nodeEl.dataset.id, nd = Graph.byId(id);
+      if (!nd) return;
+      if (e.shiftKey) {
+        if (Graph.selection.has(id)) Graph.selection.delete(id); else Graph.selection.add(id);
+      } else if (!Graph.selection.has(id)) {
+        Graph.selection = new Set([id]);
+      }
+      Graph.selectedEdge = null;
+      this.drag = { kind:'node', ids:Array.from(Graph.selection), start:this.toWorld(e.clientX,e.clientY),
+        origin:{}, moved:false };
+      this.drag.ids.forEach(function (k) { var q = Graph.byId(k); if (q) UI.drag.origin[k] = { x:q.pos.x, y:q.pos.y }; });
+      this.canvas.setPointerCapture(e.pointerId);
+      this.renderNodes(); this.renderWires(); this.renderInspector();
+      e.preventDefault(); return;
+    }
+    if (edgeEl) return;   // 交给 click 处理选中
+    /* 空白：Shift 框选，否则平移 */
+    Graph.selectedEdge = null;
+    if (e.shiftKey) {
+      var r = this.canvas.getBoundingClientRect();
+      this.marquee = { x0:e.clientX-r.left, y0:e.clientY-r.top, x1:e.clientX-r.left, y1:e.clientY-r.top, add:e.ctrlKey||e.metaKey };
+      this.canvas.setPointerCapture(e.pointerId);
+    } else {
+      this.drag = { kind:'pan', sx:e.clientX, sy:e.clientY, ox:Graph.viewport.x, oy:Graph.viewport.y, moved:false };
+      this.canvas.classList.add('panning');
+      this.canvas.setPointerCapture(e.pointerId);
+      Graph.selection.clear(); this.renderNodes(); this.renderInspector();
+    }
+    e.preventDefault();
+  },
+  onPointerMove: function (e) {
+    if (this.link) {
+      this.link.cur = this.toWorld(e.clientX, e.clientY);
+      this.renderWires(); return;
+    }
+    if (this.drag && this.drag.kind === 'node') {
+      var w = this.toWorld(e.clientX, e.clientY), d = this.drag;
+      var dx = w.x - d.start.x, dy = w.y - d.start.y;
+      if (Math.abs(dx) + Math.abs(dy) > 1) d.moved = true;
+      d.ids.forEach(function (id) {
+        var n = Graph.byId(id), o = d.origin[id]; if (!n || !o) return;
+        n.pos.x = Math.round(o.x + dx); n.pos.y = Math.round(o.y + dy);
+        var el = UI.nodesEl.querySelector('.node[data-id="'+CSS.escape(id)+'"]');
+        if (el) { el.style.left = n.pos.x+'px'; el.style.top = n.pos.y+'px'; }
+      });
+      this.renderWires(); this.renderMinimap(); return;
+    }
+    if (this.drag && this.drag.kind === 'pan') {
+      var d2 = this.drag;
+      Graph.viewport.x = d2.ox + (e.clientX-d2.sx); Graph.viewport.y = d2.oy + (e.clientY-d2.sy);
+      d2.moved = true; this.applyViewport(); return;
+    }
+    if (this.marquee) {
+      var r = this.canvas.getBoundingClientRect();
+      this.marquee.x1 = e.clientX-r.left; this.marquee.y1 = e.clientY-r.top;
+      var m = $('#marquee'), x = Math.min(this.marquee.x0,this.marquee.x1), y = Math.min(this.marquee.y0,this.marquee.y1);
+      m.style.display = 'block'; m.style.left = x+'px'; m.style.top = y+'px';
+      m.style.width = Math.abs(this.marquee.x1-this.marquee.x0)+'px';
+      m.style.height = Math.abs(this.marquee.y1-this.marquee.y0)+'px';
+    }
+  },
+  onPointerUp: function (e) {
+    if (this.link) {
+      var targetEl = document.elementFromPoint(e.clientX, e.clientY);
+      var nodeEl = targetEl && targetEl.closest ? targetEl.closest('.node') : null;
+      if (nodeEl) UI.finishLink(nodeEl.dataset.id);
+      else UI.toast('连线未落到节点输入端口，已取消');
+      this.link = null; this.canvas.classList.remove('linking'); this.renderWires();
+    }
+    if (this.marquee) {
+      var q = this.marquee, v = Graph.viewport;
+      var x0 = (Math.min(q.x0,q.x1)-v.x)/v.k, y0 = (Math.min(q.y0,q.y1)-v.y)/v.k;
+      var x1 = (Math.max(q.x0,q.x1)-v.x)/v.k, y1 = (Math.max(q.y0,q.y1)-v.y)/v.k;
+      if (!q.add) Graph.selection.clear();
+      Graph.nodes.forEach(function (n) {
+        if (n.pos.x < x1 && n.pos.x+NODE_W > x0 && n.pos.y < y1 && n.pos.y+NODE_H > y0) Graph.selection.add(n.id);
+      });
+      $('#marquee').style.display = 'none'; this.marquee = null;
+      this.renderNodes(); this.renderInspector();
+      UI.status('框选 ' + Graph.selection.size + ' 个节点');
+    }
+    if (this.drag) {
+      if (this.drag.kind === 'node' && this.drag.moved) { Cache.invalidate(); UI.status('节点已移动 · 坐标写入 meta.editor'); }
+      if (this.drag.kind === 'pan') this.canvas.classList.remove('panning');
+      this.drag = null;
+      this.renderInspector(); this.updateBadge(Validator.check(Serializer.build()));
+    }
+    try { this.canvas.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  },
+  cancelGestures: function () {
+    this.link = null; this.drag = null; this.marquee = null;
+    this.canvas.classList.remove('linking','panning');
+    $('#marquee').style.display = 'none'; this.renderWires();
+  },
+  finishLink: function (toId) {
+    var from = this.link.from, a = Graph.byId(from), b = Graph.byId(toId);
+    if (!a || !b || from === toId) { this.toast('无效连线', 'err'); return; }
+    if (a.props.portType !== b.props.portType) {
+      this.toast('端口类型不同（' + a.props.portType + ' ↔ ' + b.props.portType + '）：同色才可连', 'err'); return;
+    }
+    /* 重连替换：目标输入端口原有连线先移除 */
+    var removed = 0;
+    Graph.edges = Graph.edges.filter(function (e) { if (e.to === toId) { removed++; return false; } return true; });
+    var e = Graph.addEdge(from, toId);
+    if (!e) { this.toast('该连线已存在'); return; }
+    Cache.invalidate();
+    this.toast(removed ? ('重连替换：移除 ' + removed + ' 条旧连线') : '已建立连线', 'ok');
+    this.refreshAll();
+  },
+  onKey: function (e) {
+    var tag = (e.target.tagName || '').toLowerCase();
+    var typing = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
+    var mod = e.ctrlKey || e.metaKey;
+    if (e.key === 'Escape') { UI.closeModal(); UI.toggleMenu(false); UI.cancelGestures(); return; }
+    if (typing) return;
+    if (mod && e.key.toLowerCase() === 'c') { UI.copySelection(); e.preventDefault(); return; }
+    if (mod && e.key.toLowerCase() === 'v') { UI.paste(); e.preventDefault(); return; }
+    if (mod && e.key.toLowerCase() === 'a') { Graph.selection = new Set(Graph.nodes.map(function(n){return n.id;})); Graph.selectedEdge=null; UI.renderNodes(); UI.renderInspector(); e.preventDefault(); return; }
+    if (mod && e.key === '0') { UI.fitView(); e.preventDefault(); return; }
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (Graph.selectedEdge) { Graph.removeEdge(Graph.selectedEdge); UI.refreshAll(); UI.status('连线已删除'); }
+      else if (Graph.selection.size) { Graph.removeNodes(Array.from(Graph.selection)); UI.refreshAll(); UI.status('节点已删除'); }
+      e.preventDefault();
+    }
+  },
+  copySelection: function () {
+    var ids = Array.from(Graph.selection);
+    if (!ids.length) { this.toast('未选中节点'); return; }
+    var s = new Set(ids);
+    Graph.clipboard = {
+      nodes: ids.map(function (id) { var n = Graph.byId(id); return n ? deep(n) : null; }).filter(Boolean),
+      edges: Graph.edges.filter(function (e) { return s.has(e.from) && s.has(e.to); }).map(deep)
+    };
+    this.toast('已复制 ' + Graph.clipboard.nodes.length + ' 个节点');
+  },
+  paste: function () {
+    var cb = Graph.clipboard;
+    if (!cb || !cb.nodes.length) { this.toast('剪贴板为空'); return; }
+    var map = {}, added = [];
+    cb.nodes.forEach(function (n) {
+      var id = Graph.uid('n'); map[n.id] = id;
+      var q = Graph.addNode(n.type, { x:n.pos.x+34, y:n.pos.y+34 },
+        { id:id, label:n.label, props:deep(n.props), disabled:n.disabled });
+      added.push(q.id);
+    });
+    cb.edges.forEach(function (e) { if (map[e.from] && map[e.to]) Graph.addEdge(map[e.from], map[e.to]); });
+    Graph.selection = new Set(added); Graph.selectedEdge = null;
+    this.refreshAll(); this.toast('已粘贴 ' + added.length + ' 个节点', 'ok');
+  },
+
+  /* ---- Inspector event delegation ---- */
+  bindInspector: function () {
+    var root = $('#ins-root');
+    var handler = function (e) {
+      var el = e.target, k = el.dataset && el.dataset.prop;
+      if (k) {
+        var sel = Array.from(Graph.selection).map(function (id) { return Graph.byId(id); }).filter(Boolean);
+        if (k.indexOf('__') === 0) {
+          if (k === '__name') { Binding.name = el.value || '未命名动作图'; $('#doc-name').value = Binding.name; }
+          else if (k === '__model') { Binding.modelId = el.value; $('#doc-model').value = Binding.modelId; }
+          else if (k === '__mode') Binding.bindingMode = el.value;
+          else if (k === '__prio') Binding.docPriority = el.value;
+          Cache.invalidate(); UI.updateBadge(Validator.check(Serializer.build())); UI.renderStatus(); return;
+        }
+        if (sel.length !== 1) return;
+        var n = sel[0];
+        if (k === 'label') n.label = el.value || NodeDef.defs[n.type].label;
+        else if (k === 'disabled') n.disabled = el.checked;
+        else if (el.type === 'checkbox') n.props[k] = el.checked;
+        else if (el.type === 'number') n.props[k] = el.value === '' ? '' : Number(el.value);
+        else n.props[k] = el.value;
+        /* motion 的 closeMotion 由白名单自动派生，杜绝非法配对 */
+        if (n.type === 'motion' && k === 'name') n.props.closeMotion = Capability.pairedCloses[el.value] || '';
+        Cache.invalidate();
+        UI.renderNodes(); UI.renderStatus();
+        UI.updateBadge(Validator.check(Serializer.build()));
+        if (e.type === 'change') UI.renderInspector();
+        return;
+      }
+      var act = el.dataset && el.dataset.act;
+      if (!act) return;
+      var ids = Array.from(Graph.selection);
+      if (act === 'disable') { var n0 = Graph.byId(ids[0]); if (n0) { n0.disabled = !n0.disabled; UI.refreshAll(); } }
+      else if (act === 'disable-all') { ids.forEach(function(id){var n=Graph.byId(id);if(n)n.disabled=true;}); UI.refreshAll(); }
+      else if (act === 'dup') { UI.copySelection(); UI.paste(); }
+      else if (act === 'del' || act === 'del-all') { Graph.removeNodes(ids); UI.refreshAll(); UI.status('节点已删除'); }
+      else if (act === 'layout') Layout.run();
+      else if (act === 'fit') UI.fitView();
+      else if (act === 'clear') { Graph.clear(); UI.refreshAll(); UI.status('画布已清空'); }
+    };
+    root.addEventListener('input', handler);
+    root.addEventListener('change', handler);
+    root.addEventListener('click', function (e) { if (e.target.dataset && e.target.dataset.act) handler(e); });
+  },
+
+  /* ---- Modals ---- */
+  closeModal: function () { $('#modal-layer').classList.remove('show'); $('#modal-box').innerHTML = ''; },
+  openModal: function (html) {
+    $('#modal-box').innerHTML = html; $('#modal-layer').classList.add('show');
+    $$('#modal-box [data-close]').forEach(function (b) { b.addEventListener('click', UI.closeModal); });
+  },
+  openValidation: function () {
+    var chk = Validator.check(Serializer.build());
+    this.updateBadge(chk);
+    this.openModal('<h2>结构校验</h2><p class="sub">复刻 validateNodegraph / validateGraph / validateActionSequence 的本地校验器。'+
+      '检查：顶层 7 字段白名单、无环、roots 可达、悬空 next、必填字段、段步上限、'+
+      'expression/motion 名称白名单、pose/look 取值域、总时长上限。</p>'+
+      this.validationHTML(chk)+
+      '<div class="modal-section"><div class="sub" style="margin:0">当前导出文档顶层字段：<code>'+
+      esc(Object.keys(Serializer.build()).join(', '))+'</code></div></div>'+
+      '<div class="modal-actions"><button class="btn" data-close>关闭</button></div>');
+  },
+  openExport: function () {
+    var chk = Validator.check(Serializer.build());
+    var text = Serializer.exportText();
+    if (!chk.ok) this.toast('导出仍会生成，但当前文档有 ' + chk.errors.length + ' 项校验错误', 'err');
+    this.openModal('<h2>导出 JSON · Schema v1</h2><p class="sub">顶层严格 7 字段；graph.nodes 只允许 5 类；'+
+      '坐标与辅助节点完整存于 meta.editor。' + (chk.ok ? '校验：<b style="color:var(--ok)">通过</b>' : '校验：<b style="color:var(--danger)">'+chk.errors.length+' 项错误</b>')+'</p>'+
+      '<textarea id="export-text" readonly spellcheck="false">'+esc(text)+'</textarea>'+
+      '<div class="modal-actions">'+
+      '<button class="btn" id="exp-copy">复制到剪贴板</button>'+
+      '<button class="btn" id="exp-slot">保存到槽位</button>'+
+      '<button class="btn primary" id="exp-download">下载 .json</button>'+
+      '<button class="btn" data-close>关闭</button></div>');
+    $('#exp-copy').addEventListener('click', function () { IO.copy(text); });
+    $('#exp-download').addEventListener('click', function () { IO.download(text); });
+    $('#exp-slot').addEventListener('click', function () { UI.closeModal(); UI.openSlots(true); });
+  },
+  openImport: function () {
+    this.openModal('<h2>导入 JSON</h2><p class="sub">支持文件选择、拖拽文件到画布、粘贴文本。'+
+      '优先读 meta.editor 还原完整画布；无 meta.editor 时用 graph/segments 反推线性视图。'+
+      '文件内缓存/校验派生字段一律丢弃并重新校验。</p>'+
+      '<div class="modal-actions" style="justify-content:flex-start"><button class="btn" id="imp-file">选择文件…</button>'+
+      '<input type="file" id="imp-file-input" accept=".json,application/json,text/plain" class="hidden"></div>'+
+      '<div class="drop-zone" id="imp-drop">或将 .json 文件拖到此处 / 画布</div>'+
+      '<div class="modal-section"><div class="field"><label>粘贴 JSON 文本</label>'+
+      '<textarea id="imp-text" spellcheck="false" placeholder="{ &quot;schemaVersion&quot;: 1, ... }"></textarea></div>'+
+      '<div class="modal-actions"><button class="btn primary" id="imp-apply">从文本导入</button>'+
+      '<button class="btn" data-close>取消</button></div></div>');
+    var fi = $('#imp-file-input');
+    $('#imp-file').addEventListener('click', function () { fi.click(); });
+    fi.addEventListener('change', function () { if (fi.files[0]) IO.readFile(fi.files[0]); });
+    $('#imp-apply').addEventListener('click', function () { IO.applyText($('#imp-text').value); });
+    var dz = $('#imp-drop');
+    dz.addEventListener('dragover', function (e) { e.preventDefault(); dz.classList.add('hot'); });
+    dz.addEventListener('dragleave', function () { dz.classList.remove('hot'); });
+    dz.addEventListener('drop', function (e) {
+      e.preventDefault(); dz.classList.remove('hot');
+      if (e.dataTransfer.files[0]) IO.readFile(e.dataTransfer.files[0]);
+      else IO.applyText(e.dataTransfer.getData('text/plain'));
+    });
+  },
+  openSlots: function (presave) {
+    var items = Slots.all();
+    var html = '<h2>本地槽位 · modelId = '+esc(Binding.modelId || '(空)')+'</h2>'+
+      '<p class="sub">按 modelId 分槽：每个模型可分别保存多个 JSON，互不覆盖。'+
+      (Slots.available ? '当前使用 localStorage。' : 'localStorage 不可用，已降级为内存槽位（刷新即失效）。')+'</p>'+
+      '<div class="modal-section" style="border-top:0;margin-top:0;padding-top:0"><div class="field">'+
+      '<label>保存当前图为槽位</label><div style="display:flex;gap:8px">'+
+      '<input type="text" id="slot-name" value="'+esc(Binding.name)+'" spellcheck="false">'+
+      '<button class="btn primary" id="slot-save">保存</button></div>'+
+      '<div class="hint">键：mg-lab:v1:&lt;modelId&gt;:&lt;槽名&gt;</div></div></div>'+
+      '<div class="modal-section"><h3 style="font:600 10px var(--mono);color:var(--ink2);margin:0 0 10px">已存槽位 ('+items.length+')</h3>'+
+      '<div class="slot-list">'+ (items.length ? items.map(function (it, i) {
+        var when = ''; try { when = JSON.parse(it.raw).name || ''; } catch (err) { when = ''; }
+        return '<div class="slot-row"><span class="sn">'+esc(it.slot)+'</span><span class="sd">'+esc(when)+'</span>'+
+          '<button class="btn" data-load="'+i+'">载入</button><button class="btn danger" data-del="'+i+'">删除</button></div>';
+      }).join('') : '<div class="sub" style="margin:0">暂无槽位</div>') + '</div></div>'+
+      '<div class="modal-actions"><button class="btn" data-close>关闭</button></div>';
+    this.openModal(html);
+    var list = items;
+    $('#slot-save').addEventListener('click', function () {
+      var s = $('#slot-name').value.trim() || Binding.name;
+      Slots.save(s, Serializer.exportText());
+      UI.toast('已保存到槽位 ' + s, 'ok'); UI.openSlots();
+    });
+    $$('#modal-box [data-load]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var raw = list[Number(b.dataset.load)].raw;
+        UI.closeModal(); IO.applyText(raw, true);
+      });
+    });
+    $$('#modal-box [data-del]').forEach(function (b) {
+      b.addEventListener('click', function () { Slots.del(list[Number(b.dataset.del)].slot); UI.toast('槽位已删除'); UI.openSlots(); });
+    });
+    if (presave) { /* 从导出面板跳转：聚焦槽名输入 */ setTimeout(function(){ var s=$('#slot-name'); if(s) s.focus(); },0); }
+  },
+  openKeys: function () {
+    this.openModal('<h2>键盘快捷键</h2><p class="sub">全部为本地交互，不触发任何网络请求。</p>'+
+      '<div class="slot-list">'+Preferences.shortcuts.map(function (p) {
+        return '<div class="slot-row"><span class="sn">'+esc(p[0])+'</span><span class="sd">'+esc(p[1])+'</span></div>';
+      }).join('')+'</div><div class="modal-actions"><button class="btn" data-close>关闭</button></div>');
+  },
+  bindModal: function () {
+    $('#modal-layer').addEventListener('click', function (e) { if (e.target.id === 'modal-layer') UI.closeModal(); });
+  }
+};
+
+/* -------------------------------------------------------------------------
+   IO：下载 / 复制 / 文件读取 / 应用导入文本
+   ------------------------------------------------------------------------- */
+var IO = {
+  download: function (text) {
+    try {
+      var blob = new Blob([text], { type:'application/json;charset=utf-8' });
+      var url = URL.createObjectURL(blob), a = document.createElement('a');
+      var safe = String(Binding.name || 'motion-graph').replace(/[\\/:*?"<>|]/g,'_').slice(0,64);
+      a.href = url; a.download = safe + '.json';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      UI.toast('已下载 ' + a.download, 'ok');
+    } catch (err) { UI.toast('下载失败：' + err.message, 'err'); }
+  },
+  copy: function (text) {
+    var done = function () { UI.toast('已复制 JSON 到剪贴板', 'ok'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { IO.copyFallback(text, done); });
+    } else IO.copyFallback(text, done);
+  },
+  copyFallback: function (text, done) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta); done();
+    } catch (err) { UI.toast('复制失败，请在文本框中手动选择复制', 'err'); }
+  },
+  readFile: function (file) {
+    var reader = new FileReader();
+    reader.onload = function () { IO.applyText(String(reader.result), true); };
+    reader.onerror = function () { UI.toast('文件读取失败', 'err'); };
+    reader.readAsText(file, 'utf-8');
+  },
+  applyText: function (text, closeFirst) {
+    if (!text || !text.trim()) { UI.toast('导入内容为空', 'err'); return; }
+    var res = Serializer.import(text);
+    if (!res.ok) {
+      UI.toast('导入失败：' + res.errors.length + ' 项错误（详见校验）', 'err');
+      UI.openModal('<h2>导入失败</h2><p class="sub">文档未通过导入重验，画布保持不变（不信任文件内缓存状态）。</p>'+
+        '<ul class="err-list">'+res.errors.map(function (e) { return '<li>'+esc(e)+'</li>'; }).join('')+'</ul>'+
+        '<div class="modal-actions"><button class="btn" data-close>关闭</button></div>');
+      return;
+    }
+    if (closeFirst) UI.closeModal();
+    UI.refreshAll();
+    UI.status('导入成功 · ' + Graph.nodes.length + ' 节点 / ' + Graph.edges.length + ' 连线');
+    UI.toast('导入成功：已还原完整画布（meta.editor 优先）', 'ok');
+  }
+};
+
+/* -------------------------------------------------------------------------
+   Layout：自动布局（分层 BFS，visited + 深度上限，杜绝环导致死循环）
+   ------------------------------------------------------------------------- */
+var Layout = {
+  run: function () {
+    if (!Graph.nodes.length) { UI.toast('画布为空'); return; }
+    var byId = new Map(); Graph.nodes.forEach(function (n) { byId.set(n.id, n); });
+    var indeg = new Map(), adj = {};
+    Graph.nodes.forEach(function (n) { indeg.set(n.id, 0); adj[n.id] = []; });
+    Graph.edges.forEach(function (e) {
+      if (!byId.has(e.from) || !byId.has(e.to)) return;
+      adj[e.from].push(e.to); indeg.set(e.to, (indeg.get(e.to)||0)+1);
+    });
+    var layer = new Map(), queue = [], guard = 0;
+    Graph.nodes.forEach(function (n) { if ((indeg.get(n.id)||0) === 0) { layer.set(n.id, 0); queue.push(n.id); } });
+    while (queue.length && guard++ < 4096) {
+      var cur = queue.shift(), l = layer.get(cur);
+      (adj[cur]||[]).forEach(function (t) {
+        var nt = Math.max(layer.get(t) === undefined ? 0 : layer.get(t), l+1);
+        if (nt > 32) return;                       // 深度上限
+        if (layer.get(t) === undefined || nt > layer.get(t)) {
+          layer.set(t, nt);
+          if (queue.indexOf(t) < 0) queue.push(t);
+        }
+      });
+    }
+    Graph.nodes.forEach(function (n) { if (!layer.has(n.id)) layer.set(n.id, 0); });
+    var cols = {};
+    Graph.nodes.forEach(function (n) {
+      var l = layer.get(n.id); if (!cols[l]) cols[l] = 0;
+      n.pos.x = 70 + l*268; n.pos.y = 70 + cols[l]*150; cols[l] += 1;
+    });
+    Cache.invalidate(); UI.refreshAll(); UI.fitView();
+    UI.toast('自动布局完成', 'ok');
+  }
+};
+
+/* -------------------------------------------------------------------------
+   RuntimeCtl：本地模拟。按 segments 顺序高亮节点 + 执行态发光 + 连线粒子 + 状态条推进。
+   纯本地；Graph Cache 命中只复用编译结果，绝不跳过任何一步播放（§8.3）。
+   ------------------------------------------------------------------------- */
+var RuntimeCtl = {
+  pathEdges: function (from, to) {
+    var found = [], seen = new Set(), queue = [[from, []]], guard = 0;
+    while (queue.length && guard++ < 2048) {
+      var item = queue.shift(), cur = item[0], path = item[1];
+      if (cur === to) return path;
+      if (seen.has(cur)) continue;
+      seen.add(cur);
+      Graph.edges.forEach(function (e) {
+        if (e.from === cur && !seen.has(e.to)) queue.push([e.to, path.concat([e.id])]);
+      });
+    }
+    return found;
+  },
+  toggle: function () { if (Runtime.running) this.stop(); else this.start(); },
+  stop: function () {
+    Runtime.stop(); UI.renderNodes(); UI.renderWires();
+    $('#sim-panel').classList.remove('show');
+    UI.status('模拟已停止', 0);
+  },
+  start: function () {
+    if (Runtime.running) return;
+    var r = Cache.get(Compiler.key(), function () { return Compiler.compile(); });
+    Runtime.cacheHit = r.hit;
+    var c = r.data;
+    if (!c.steps.length) { UI.toast('没有可模拟的动作步（请先添加动作节点）', 'err'); return; }
+    Runtime.stop();
+    Runtime.running = true; Runtime.index = 0;
+    Runtime.sequence = c.steps.map(function (s, i) { return { step:s, nodeId:c.stepSources[i] }; });
+    $('#sim-panel').classList.add('show');
+    $('#sim-note').textContent = 'Graph Cache ' + (r.hit ? 'HIT（复用编译结果）' : 'MISS（重新编译）') +
+      ' · 播放不跳过任何一步 · 不调 LLM / 后端 / Runtime 队列';
+    UI.status('本地模拟开始 · ' + Runtime.sequence.length + ' 步 / ' + c.segments.length + ' 段', 0);
+    this.tick();
+  },
+  tick: function () {
+    if (!Runtime.running) return;
+    var seq = Runtime.sequence;
+    if (Runtime.index >= seq.length) {
+      Runtime.stop(); UI.renderNodes(); UI.renderWires();
+      $('#sim-step').textContent = '✓ 播放完成 · ' + seq.length + ' / ' + seq.length;
+      UI.status('模拟完成 · ' + seq.length + ' 步全部播放（缓存命中未跳过）', 100);
+      UI.toast('模拟完成 · ' + Cache.note(), 'ok');
+      return;
+    }
+    var cur = seq[Runtime.index], next = seq[Runtime.index+1];
+    Runtime.activeNode = cur.nodeId;
+    Runtime.flowEdges = new Set();
+    if (next) this.pathEdges(cur.nodeId, next.nodeId).forEach(function (id) { Runtime.flowEdges.add(id); });
+    else if (Runtime.index === 0) {
+      /* 首步：从设计层事件根节点连到首个动作节点 */
+      Graph.nodes.forEach(function (n) {
+        if (NodeDef.isCompilable(n.type)) return;
+        var hasIn = Graph.edges.some(function (e) { return e.to === n.id; });
+        if (!hasIn) UI.pathEdgesCached(n.id, cur.nodeId).forEach(function (id) { Runtime.flowEdges.add(id); });
+      });
+    }
+    UI.renderNodes(); UI.renderWires();
+    var t = cur.step, label = t.kind + (t.name ? ' · ' + t.name : (t.pose ? ' · ' + JSON.stringify(t.pose) : (t.x !== undefined ? ' · x'+t.x+' y'+t.y : '')));
+    $('#sim-step').textContent = (Runtime.index+1) + ' / ' + seq.length + ' · ' + label;
+    var pct = ((Runtime.index+1)/seq.length)*100;
+    UI.status('模拟 ' + (Runtime.index+1) + ' / ' + seq.length + ' · ' + label, pct);
+    Runtime.index += 1;
+    Runtime.timer = setTimeout(function () { RuntimeCtl.tick(); }, Preferences.reducedMotion ? 220 : 780);
+  }
+};
+/* 复用路径查找（避免重复实现） */
+UI.pathEdgesCached = function (from, to) { return RuntimeCtl.pathEdges(from, to); };
+
+/* -------------------------------------------------------------------------
+   Demo：默认示例图（Workspace State → Condition Gate → Expression / Look At
+   → Delay → Motion），打开即有内容可演示；全部名称落在模型白名单内，导出必过校验。
+   ------------------------------------------------------------------------- */
+var Demo = {
+  load: function () {
+    Graph.clear(); Graph.seq = 0;
+    var w  = Graph.addNode('workspace',  { x:60,  y:170 }, { id:'n_ws',  label:'Workspace State', props:{ state:'attention' } });
+    var g  = Graph.addNode('gate',       { x:300, y:170 }, { id:'n_gate',label:'Condition Gate',  props:{ expr:'state == attention' } });
+    var e  = Graph.addNode('expression', { x:540, y:70  }, { id:'n_expr',label:'Expression · 兔牙' });
+    var l  = Graph.addNode('look',       { x:540, y:270 }, { id:'n_look',label:'Look At' });
+    var d  = Graph.addNode('delay',      { x:790, y:70  }, { id:'n_delay',label:'Delay 200ms', props:{ delayMs:200 } });
+    var m  = Graph.addNode('motion',     { x:1020,y:170 }, { id:'n_motion',label:'Motion · 竖手指打开' });
+    Graph.edges = [
+      { id:'e1', from:w.id, to:g.id }, { id:'e2', from:g.id, to:e.id }, { id:'e3', from:g.id, to:l.id },
+      { id:'e4', from:e.id, to:d.id }, { id:'e5', from:d.id, to:m.id }, { id:'e6', from:l.id, to:m.id }
+    ];
+    Graph.viewport = { x:30, y:80, k:0.85 };
+    Graph.selection.clear(); Graph.selectedEdge = null;
+    Binding.name = '挥手打招呼'; Binding.modelId = '大肥鱼'; Binding.bindingMode = 'any'; Binding.docPriority = 'NORMAL';
+    Cache.invalidate();
+    UI.applyViewport(); UI.refreshAll();
+    UI.status('已恢复默认示例图 · 可立即导出 / 模拟 / 校验');
+    UI.toast('默认示例图已载入', 'ok');
+  }
+};
+
+/* =========================================================================
+   测试钩子：供无头浏览器 eval / --dump-dom 抽取，全部本地、无网络
+   ========================================================================= */
+window.__MG_READY__ = false;
+window.__MG_EXPORT_TEST__ = function () { return Serializer.exportText(); };
+window.__MG_VALIDATE_TEST__ = function () { return Validator.check(Serializer.build()); };
+window.__MG_STATE__ = function () { return Graph.snapshot(); };
+window.__MG_ROUNDTRIP_TEST__ = function () {
+  var before = Graph.snapshot();
+  var json = Serializer.exportText();
+  Graph.clear();
+  var imp = Serializer.import(json);
+  var after = Graph.snapshot();
+  var diffs = [];
+  if (before.nodes.length !== after.nodes.length) diffs.push('nodeCount');
+  if (before.edges.length !== after.edges.length) diffs.push('edgeCount');
+  if (JSON.stringify(before.nodes) !== JSON.stringify(after.nodes)) diffs.push('nodes');
+  if (JSON.stringify(before.edges) !== JSON.stringify(after.edges)) diffs.push('edges');
+  if (JSON.stringify(before.viewport) !== JSON.stringify(after.viewport)) diffs.push('viewport');
+  return { ok:imp.ok && diffs.length === 0, importOk:imp.ok, importErrors:imp.errors,
+    nodeCountBefore:before.nodes.length, nodeCountAfter:after.nodes.length,
+    edgeCountBefore:before.edges.length, edgeCountAfter:after.edges.length,
+    viewportBefore:before.viewport, viewportAfter:after.viewport, diff:diffs, json:json };
+};
+window.__MG_SIM_INFO__ = function () {
+  var c = Compiler.compile();
+  return { steps:c.steps.length, segments:c.segments.length, order:c.order,
+    priorities:c.segments.map(function (s) { return s.priority; }) };
+};
+function runSelfTest() {
+  var v = Validator.check(Serializer.build());
+  var rt = window.__MG_ROUNDTRIP_TEST__();
+  var sim = window.__MG_SIM_INFO__();
+  var doc = Serializer.build();
+  var result = {
+    validate: v,
+    roundtrip: { ok:rt.ok, importOk:rt.importOk, nodeCountBefore:rt.nodeCountBefore,
+      nodeCountAfter:rt.nodeCountAfter, edgeCountBefore:rt.edgeCountBefore,
+      edgeCountAfter:rt.edgeCountAfter, diff:rt.diff },
+    sim: sim,
+    topLevelKeys: Object.keys(doc),
+    graphNodeTypes: doc.graph.nodes.map(function (n) { return n.type; }),
+    cacheNote: Cache.note()
+  };
+  $('#mg-selftest').textContent = JSON.stringify(result, null, 2);
+  $('#mg-export').textContent = Serializer.exportText();
+  document.body.setAttribute('data-selftest', 'done');
+  document.body.setAttribute('data-selftest-ui', '1');
+  // 标签页标题输出摘要：自动化 QA 无需读隐藏 DOM 即可判定（tab_title 一步取证）
+  document.title = 'MG-SELFTEST ' + (v.ok ? 'validate-ok' : 'validate-FAIL(' + v.errors.length + ')')
+    + ' roundtrip-' + (rt.ok ? 'ok' : 'FAIL')
+    + ' sim=' + sim.steps + 'steps/' + sim.segments + 'segs'
+    + (rt.diff.length ? ' diff=' + rt.diff.join('|') : '');
+}
+
+/* =========================================================================
+   Boot
+   ========================================================================= */
+window.addEventListener('error', function (ev) {
+  var el = document.getElementById('mg-error');
+  if (el) el.textContent = String((ev && ev.message) || ev) + ' @ ' + String((ev && ev.filename || '') + ':' + (ev && ev.lineno || ''));
+});
+function boot() {
+  document.documentElement.setAttribute('data-theme', Preferences.theme);
+  UI.init();        // 先建立 DOM 引用与事件绑定，再装配数据
+  Demo.load();      // 默认示例图（UI 引用已就绪）
+  window.__MG_READY__ = true;
+  if (new URLSearchParams(window.location.search).has('selftest')) {
+    setTimeout(runSelfTest, 60);
+  }
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
+})();
+</script>
+</body>
+</html>
