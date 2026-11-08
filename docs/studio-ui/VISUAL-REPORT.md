@@ -50,3 +50,43 @@
 ## 6. 结论
 
 **PASS_WITH_WARNINGS** —— 三尺寸 × 三页面无溢出/无遮挡/层级清晰/状态一致；功能入口零回归（指纹 + 截图双证据）。警告项：浅色主题与真实宿主浮层未现场截图（§5.1、§5.2），stage-web 运行时验证待构建后补录（§5.3）。
+
+---
+
+## 7. 增补：visual-qa 席位恢复后实测（2026-11-08 14:20–15:05，Edge 扩展交互实测）
+
+> 席位通道恢复，本节为**真实浏览器交互实测**（browser_id=2 Edge 扩展，非无头），并覆盖节点图动作编排联调（dev-server 5300，本席按授权后台启动 `pnpm dev:server`）。
+
+### 7.1 新增截图（本席本会话，真实浏览器产生）
+
+| 文件 | URL | 尺寸(clip) | 时间 | 所验内容 |
+|---|---|---|---|---|
+| `visual/settings-5300-studio-top-1440x900-dark.png` | 127.0.0.1:5300/dsh-l2d/settings | 1440×900 | 14:54 | 新版 studio 双列布局：01/02 卡片、01–05 分区侧栏、底部状态条；**disabled**（独立窗口·仅桌面版灰化）、**selected**（面板内嵌）现场证据 |
+| `visual/settings-5300-nodegraph-card-1200x760-dark.png` | 同上 #sec-nodegraph | 1200×760 | 14:54 | **06 节点图动作编排**卡片全景：模式互斥 radio、选择文件/导入节点图/刷新列表、「已刷新·14:52:14」状态提示、列表「挥手测试 · 大肥鱼 · any」+ 绿色「可用」徽章 + 导出按钮 |
+
+另 `_qa_crop/survey-form-btn.png`（= §1 中 formbtn-error 同源副本，Phase 4 派单命名）。测量口径：浏览器控制器**无 viewport API**，WxH 为 clip 裁剪区域尺寸而非窗口尺寸，响应式断点未真实触发；所有截图为真实浏览器产物，无伪造。
+
+### 7.2 节点图动作编排联调实测（dev-server 5300）
+
+| # | 步骤 | 结果 |
+|---|---|---|
+| 1 | 5300 原无监听（后端重启窗口期）→ 本席后台 `pnpm dev:server` | 启动成功：`/` 200，模型目录/Core/渲染包 OK |
+| 2 | 打开 `/dsh-l2d/settings` 滚动至 06 卡片 | 卡片渲染正常（`settings-5300-nodegraph-card` 截图）；DOM 确认 radio×2、file input、导入/刷新列表/导出按钮全可交互（`disabled="false"`） |
+| 3 | 模式互斥：点击「节点图 + LLM 辅助」radio | **PASS**：DOM `motionMode[nodegraph] checked="true"` 翻转；前端 `saveMode` POST 落库（`updatedAt` 06:58:26 → 07:01:48 两次写入）；GET `/dsh-l2d/motion-mode` 回读 `mode:"nodegraph", available:true`（available 随导入联动 true）。注：首次点击未生效系测试工具 DOM 快照过期（node_id 漂移），重试成功——工具因素非产品缺陷 |
+| 4 | 导入合法 JSON（与前端 readAsText→JSON body 同构的 curl raw 提交） | **PASS**：200 `{"ok":true,"name":"挥手测试"}` |
+| 5 | 导入坏 JSON（缺 schemaVersion） | **PASS**：400 + 四条校验错误 `["schemaVersion 必须是 1，收到：undefined","graph.roots 不能为空","graph.nodes 不能为空","segments 不能为空"]`（error 态证据） |
+| 6 | 列表与导出 | **PASS**：页面列表渲染「挥手测试 · 大肥鱼 · any · 可用」+ 导出按钮（截图）；curl `GET /nodegraphs/export?name=挥手测试` → 200 完整 JSON（schemaVersion 1 / 大肥鱼 / any） |
+| 7 | LLM 通道基座探测 | `POST /dsh-l2d/ai/call` → 400 `unknown tool: capability_rescan`（端点存活；工具名待开发席提供清单后复测） |
+
+### 7.3 增补未验证范围（在 §5 基础上）
+
+- **D-宿主**：3080 宿主全程无监听进程（netstat 确认）——宿主主页面 Live2D 渲染、右键菜单 9 项、快捷对话（textarea 自适应/Enter 发送）、字幕准入（纯参数不显示/混合只显普通文本）、调试日志面板（HH:MM:SS 行格式/清空）、既有菜单回归观察**未实测**；overlay.js 代码层确认 9 项菜单存在。
+- **D-overlay静态**：5300 无 avatar.png（404）→ overlay「渲染未就绪」，`overModelRightClick` 无命中区，两次右键实测菜单未弹出（`overlaytest-5300-reload` 截图）。
+- **D-形态按钮**：「模型形态变化」在 dev-server 返回 HTTP 400（无宿主 AI 通道的环境差异）；「正在切换…→已切换·当前形态：体型1」需 3080 恢复后复验。
+- **D-fileUI**：file input 依赖 OS 文件对话框，CUA 工具无法安全操作 → 导入 UI 端到端未走通（后端已由 curl 等价验证，前端为同构提交路径）。
+- **D-下载**：浏览器点击导出的下载落盘未验证（curl 已证路由与内容）。
+- **D-浅色**：同 §5.1，工具无法切换系统色彩偏好。
+
+### 7.4 增补结论
+
+维持 **PASS_WITH_WARNINGS**：可实测范围（设置页 studio 视觉、05 三操作项顺序与文案、06 节点图模式互斥/导入校验/列表/导出全链路、渲染调试台模型渲染）全部通过且证据齐备；宿主 3080 相关的浮层交互、浅色主题、精确断点三类需宿主恢复后复验。

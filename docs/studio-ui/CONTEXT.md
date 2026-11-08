@@ -1,7 +1,7 @@
 # Control Studio 界面样式适配 · 上下文与进度看板
 
 > 维护者：`context-keeper`（固定角色，全程不换岗；本轮由席位 5 `arcana-intel-researcher` 兼任）
-> 建立：2026-11-08 13:16 · 最近巡检：2026-11-08 13:20（第 2 次：主理人 Q1–Q4 裁定转发触发）· 裁定登记：2026-11-08 13:20（D7–D11，见 DECISIONS.md）
+> 建立：2026-11-08 13:16 · 最近巡检：2026-11-08 14:53（第 3 次：快照口径裁定 + 看板补写授权触发）· 裁定登记：2026-11-08 14:53（D12–D13，见 DECISIONS.md）
 > 唯一规格真源：`docs/studio-ui/DESIGN-SPEC.md` v1（2026-11-08 13:10）
 > 授权：本角色**仅可写** `CONTEXT.md` 与 `DECISIONS.md`；禁止写任何代码/样式文件，禁止创建团队。
 > 纪律：所有结论标注证据（文件路径 / 命令输出）；未落盘即写「未落盘」，不臆测、不虚报进度。
@@ -38,12 +38,14 @@
 | `docs/studio-ui/CONTEXT.md` | 本文件（上下文 / 看板 / 风险 / 验收证据索引 / 环境） | 本次建立，13:20 已更新 |
 | `docs/studio-ui/DECISIONS.md` | 决策日志（D1–D6 抄录 + D7–D11 裁定登记 + 后续决策空位） | 本次建立，13:20 已更新 |
 | `docs/studio-ui/preview-server.mjs` | **只读静态预览服务**（端口 5400、零依赖、不改任何现有源码；visual-qa 主用入口，见 §9） | 已落盘 3207 B |
-| `docs/studio-ui/consistency.test.mjs` | regression-guard 产出（一致性断言） | **未落盘** |
-| `docs/studio-ui/ACCEPTANCE.md` | regression-guard 产出 | **未落盘** |
-| `docs/studio-ui/VISUAL-REPORT.md` | visual-qa 产出 | **未落盘** |
-| `docs/studio-ui/visual/*.png` | visual-qa 产出（三尺寸截图） | **未落盘（目录不存在）** |
+| `docs/studio-ui/consistency.test.mjs` | regression-guard 产出（一致性断言；快照组口径见 D12） | 已落盘 11995 B（14:53） |
+| `docs/studio-ui/ACCEPTANCE.md` | regression-guard 产出 | 已落盘 12498 B（14:53） |
+| `docs/studio-ui/VISUAL-REPORT.md` | visual-qa 产出 | 已落盘 4831 B（14:53） |
+| `docs/studio-ui/visual/*.png` | visual-qa 产出（三尺寸截图） | 已落盘 **21 张** png（14:53 实测） |
+| `docs/nodegraph/SPEC.md` | NG 轮（节点图动作编排）契约：分享 JSON 格式、模式互斥、分工与路由定义 | 已落盘 7491 B |
+| `lib/nodegraph.mjs` / `nodegraph.test.mjs` | NG 轮后端产出（schema 校验+图编译+模式状态文件；node:assert 测试） | 已落盘 21993 B / 16880 B（**未提交**） |
 
-（证据：`ls -la docs/studio-ui` 与落盘检查脚本输出，13:16 / 13:20 两次；13:20 新增：`visual/` 目录已建但为空（0 文件），截图仍未落盘）
+（证据：`ls -la docs/studio-ui` 与落盘检查脚本输出，13:16 / 13:20 / 14:53 三次；14:53：样式轮 5 commit 已入 `fbb2331` 系列，`visual/` 21 张 png、三份 MD 报告与 NG 轮文件均已落盘）
 
 ## 4. 文件所有权矩阵（严禁交叉）
 
@@ -64,51 +66,55 @@
 
 ## 5. 任务看板
 
-> 数据来源：`TaskList` 输出（13:20 复核）+ 落盘巡检（13:16 / 13:20）。**进度以文件系统实测为准，不以席次口头回传为准。**
+> 数据来源：`TaskList` 输出 + 落盘巡检（13:16 / 13:20 / 14:53）。**进度以文件系统实测为准，不以席次口头回传为准；主理人独立核验的结论标注「主理人核验」。**
 
-| 席次 / 任务 | Task ID | 应产出 | 状态（13:20） |
+| 席次 / 任务 | Task ID | 应产出 | 状态（14:53） |
 |---|---|---|---|
-| `context-keeper`（本席） | #17 | CONTEXT.md / DECISIONS.md 全程维护 | 进行中（两份文档已建立并完成第 2 次巡检更新） |
-| `settings-restyler` | #18 | 设置页 + stage-web 编辑器化样式、快照与**内联令牌块（Q3 裁定归本席）** | in_progress；产出文件**未落盘** |
-| `overlay-restyler` | #19 | 宿主侧栏菜单 + 浮层/面板/气泡/状态胶囊/快捷对话/日志窗 | in_progress；产出文件**未落盘** |
-| `regression-guard` | #20 | `consistency.test.mjs`、`ACCEPTANCE.md` | in_progress（主理人已把 `arcana-backend-engineer` 改派本席）；**未落盘** |
-| `visual-qa` | #21 | `visual/*.png`、`VISUAL-REPORT.md` | in_progress；`visual/` 空目录已建、截图与报告**未落盘** |
-| 主理人（终审） | #22 | 终审、分组 commit 推送、最终报告 | 待办 |
+| `context-keeper`（本席） | #17 | CONTEXT.md / DECISIONS.md 全程维护 | 进行中（第 3 次巡检 + 本轮看板补写完成） |
+| `apps-restyler`（原 settings-restyler）+ `overlay-restyler` | #18 / #19 | 设置页 + stage-web 组件样式、快照与内联令牌块；宿主侧栏与浮层样式 | **样式轮已完结并提交**：`fbb2331` 系列 5 commit（3c9bfdf 令牌真源与验收工具链 / 165edcb settings.html 重排版与快照同步 / a3b3f07 浮层与设置入口 / 304ae76 stage-web 与 whale-workspace 组件 / fbb2331 终审报告与截图）；14:53 `git log` 实测 |
+| `regression-guard` | #20 | `consistency.test.mjs`、`ACCEPTANCE.md` | 已落盘（11995 B / 12498 B）；主理人重跑 **9 PASS / 1 WARN / 0 FAIL**（指纹基线已刷新为功能轮版本，removed=0 / changed=0）；NG 轮追加断言在途（主理人核验） |
+| `visual-qa` | #21 | `visual/*.png`、`VISUAL-REPORT.md` | 已落盘：**21 张 png** + VISUAL-REPORT.md（4831 B，随 `fbb2331` 提交） |
+| NG 轮（节点图动作编排）· frontend | — | 节点图 UI / 导入导出 | **PASS_WITH_WARNINGS**（主理人核验） |
+| NG 轮 · backend | — | `lib/nodegraph.mjs`（21993 B）、`nodegraph.test.mjs`（16880 B）、`host-guard.mjs`（+9）、`lib/index.js`（+119/−1）、`renderer/index.ts`（+15）、`dev-server/index.mjs`（+100） | **PASS**（主理人核验逐一落盘）；**NG-RUN 执行路由在途**；以上改动**未提交**（14:53 `git status` 实测） |
+| NG 轮 · intel（本席兼任） | — | 节点图执行链路交叉验证 | **已回传**（6 项定位 + host-guard 16 项白名单口径纠正） |
+| NG 轮 · browser-tester | — | 双通道联调实测 | **在途** |
+| 主理人（终审） | #22 | 终审、分组 commit 推送、最终报告 | NG 轮改动待分组提交 |
 | **17:00 验收节点** | — | 见 §7 验收清单 | 未到 |
 | **16:30 全席一致性核对** | — | 本席向 `team-lead` 回传结构化核对报告 | 未到（强制复核项见 §7） |
-| 上一阶段遗留 | #12/#13/#14 | SQL 映射 / bridge 重构 / 全链路测试 | **已冻结并标记 deleted**（Q1 裁定，13:20 `TaskList` 复核：三项均已不在列表） |
+| 上一阶段遗留 | #12/#13/#14 | SQL 映射 / bridge 重构 / 全链路测试 | **已冻结并标记 deleted**（Q1 裁定，13:20 `TaskList` 复核确认） |
 
-**巡检实测（13:20 复核，命令输出为证）**：
-- 令牌标记块四处（Q4 定义）：①真源 / ②副本1 / ③副本2 三处 **sha256(忽略CR) = `ef2e53b01e76`、len=16159 完全一致**；③为 CRLF、①②为 LF（符合 `sync-tokens.mjs:28-37` 的 EOL 保持语义）。**④ `assets/settings.html` 内联块与快照仍「无完整标记块」**（BEGIN/END 皆未命中）→ Q3 裁定归 settings-restyler 的在途工作，按 Q4 裁定当前记 WARN，16:30 复核若仍缺则升级 FAIL。
-- `git diff --cached --name-only`：**空输出**（13:20 实测）→ Q2 复核通过，`profile.大肥鱼.dsl2d.2048.json` **未被暂存**。
-- `git status --short`：仍为 4 个已改文件（两处 `ui-tokens.css` 各 +304 主理人同步、`overlay.js` +248 阶段 2 未提交成果、`profile.*.json` ±2 历史遗留）+ 未跟踪目录；与 13:16 一致，无新增越界改动。
-- `git diff --stat`：4 files changed, 856 insertions(+), 2 deletions(-)。
-- 环境实测：5400 八条路由全 200 且 `cache-control: no-store`；5300 五条 200、`/dsh-l2d/test.html` 404；3080 实测 `curl` 返回 `000`（详见 §9）。
-- `visual/` 目录已由 visual-qa 建立但为空（0 文件）；`consistency.test.mjs` / `ACCEPTANCE.md` / `VISUAL-REPORT.md` 仍**未落盘**。
+**巡检实测（14:53 复核，命令输出为证）**：
+- 样式轮已提交：`git log` 顶部 5 条 `feat(studio-ui)` commit（3c9bfdf / 165edcb / a3b3f07 / 304ae76 / fbb2331）+ `34495b1`（阶段 2 成果补提交，R2 解除）。
+- 令牌五处（D10 口径）：真源 / 副本1 / 副本2 / settings.html 内联 / **快照** hash 全部 `ef2e53b01e76`（13:20 缺的 ④ 已补齐）。
+- **快照一致 PASS（D12 口径复现）**：主 2607 行 / 快照 2599 行，动态扣除主文件首个含「退役过渡」注释块（第 2–9 行，8 行，保留 doctype）后 2599 行比对 **0 差异**；本席 13:29 的「快照不一致」判定为**口径误报**（缺扣除步骤），已由主理人裁定排除（D12）。
+- `consistency.test.mjs` 组 3 同口径 PASS（主理人重跑 9 PASS / 1 WARN / 0 FAIL）。
+- NG 轮工作树（未提交）：10 文件修改 +882/−5（含 `lib/index.js` +119、`host-guard.mjs` +9、`renderer/index.ts` +15、`dev-server/index.mjs` +100）+ `nodegraph.mjs` / `nodegraph.test.mjs` 未跟踪——均为 NG 轮授权改动（`docs/nodegraph/SPEC.md:63` 分工），非越界。
+- 禁改目录复核（dsh-l2d-db / mcp-bridge / dsh-l2d-mcp / renderer.js / data / w3-registry）：**零 diff**；暂存区空（Q2/R9 复核通过）。
+- 环境实测（14:53）：5400 预览服**已停**（`000`，随服务器清理下线，D13）；5300 调试服仍 `200`；3080 `000`。
 
 ## 6. 风险清单
 
 | # | 风险 | 证据 | 建议处置 |
 |---|---|---|---|
 | R1 | 两份原型 ZIP 不可读，规格靠文档正文推导，存在与真实原型偏差 | `DESIGN-SPEC.md:16-19` | 最终报告如实标注；后续补齐原型只改 `studio-tokens.css` + 重跑同步 |
-| R2 | `overlay.js` 含**未提交的**「右键快捷对话 + 调试日志窗口」实现（+248 行），`overlay-restyler` 仅被授权改 STYLE_TEXT，误覆盖会丢失成果且破坏 §6.3 | `git diff --stat`、`DESIGN-SPEC.md:59`、`baseline/functional-fingerprint.json` 中 overlay.js 已含 `admitCaption` / `l2d-qc` / `l2d-logpanel` 文案 | overlay-restyler 动手前先确认基线；本席巡检持续监控 `overlay.js` 的 diff 范围 |
-| R3 | settings.html 与其快照**尚无内联令牌块**，而「四处一致」是验收硬约束（§6.5） | 13:16 / 13:20 两次标记块巡检（两处 BEGIN/END 均未命中） | **Q3 已裁定**：由 settings-restyler（#18）逐字复制真源标记块插入 `<style>`、保持 CRLF；`sync-tokens.mjs` targets 不扩展以避免并发竞态；快照通过「忽略 CR 后逐行一致」间接保证。**Q4 已裁定**：当前属在途工作记 WARN，**16:30 复核若仍缺则升级 FAIL 并上报** |
+| R2 | ~~overlay.js 未提交成果可能被误覆盖~~ **已解除**：阶段 2 成果已随 `34495b1 feat(plugin): 右键快捷对话输入框 + 调试日志窗口` 正式提交（14:53 `git log` 实测） | `git log` 14:53 | 关闭 |
+| R3 | ~~内联令牌块缺失~~ **已解除**：样式轮完结后真源/副本1/副本2/内联/快照五处 hash 全 `ef2e53b01e76`（14:53 实测） | 14:53 标记块巡检 | **已彻底关闭（14:55 主理人确认）**；快照比对口径定案见 D12（忽略 CR + 动态扣除「退役过渡」注释块） |
 | R4 | `tools/capability-scan/profile.大肥鱼.dsl2d.2048.json` 出现 ±2 行改动，不在任何席所有权矩阵内 | `git status --short` 13:16 / 13:20 | **Q2 已裁定**：确认为历史遗留无关改动，不纳入本轮任何分组 commit；升级登记为 R9 |
 | R5 | 任务系统 #12/#13/#14 曾与 D5「本轮不续跑」并存 | `TaskList` 13:16 / 13:20 | **Q1 已裁定并已冻结**：主理人将三项标记 deleted、本轮不续跑、无文件交集；`arcana-backend-engineer` 已改派 regression-guard 并要求放弃七步重构。**16:30 若 `packages/dsh-l2d-db/**` 或 `packages/mcp-bridge/**` 出现任何 diff，立即作为 FAIL 级风险上报** |
 | R6 | 副本2 为 CRLF、其余为 LF；`consistency.test.mjs` 若按逐字比对（含 CR）会误报不一致 | 13:16 / 13:20 令牌巡检 / `DESIGN-SPEC.md:60` | **Q4 已裁定**：四处 = ①真源 ②`packages/.../assets/ui-tokens.css` ③`apps/.../styles/ui-tokens.css` ④`settings.html` 内联块；断言一律先 `.replace(/\r/g,'')` 再逐字比较；在途缺失记 WARN 不记 FAIL |
-| R7 | 时间窗紧：13:16 建立上下文 → 16:30 全席一致性核对 → 17:00 验收；当前四席产出文件全部未落盘 | 落盘巡检 + `DESIGN-SPEC.md:73-79` | 按 30 分钟节奏巡检，及时暴露阻塞 |
+| R7 | 时间窗：14:53 样式轮已提交、NG 轮在途（NG-RUN 执行路由 + browser-tester 联调）→ 16:30 核对 → 17:00 验收 | 落盘巡检 + `DESIGN-SPEC.md:73-79` | 继续按 30 分钟节奏巡检，重点盯 NG 轮未提交改动的分组提交与暂存纪律（R9） |
 | R8 | 功能基线含 overlay.js 的完整中文字符串字面量（含 JS 代码片段），`fingerprint.mjs` 的提取规则对内联字符串敏感；样式适配若不小心触碰 `<script>` 内容会造成指纹漂移 | `functional-fingerprint.json`（overlay.js 段）、`fingerprint.mjs:83-89` | regression-guard 断言按基线比对；本席巡检关注非样式类改动 |
 | R9 | 分组 commit 若使用 `git add -A` / `git add .`，会把 `profile.*.json`（Q2 历史遗留）与 `_qa_crop/` 等无关未跟踪项混入 | 主理人 Q2 裁定（13:20）；13:20 `git status --short` 显示多项 `??` 未跟踪 | **主理人裁定**：最终提交只用「显式文件白名单 git add」，禁止 `git add -A` / `git add .`；16:30 复核 `git diff --cached --name-only` 不含该文件（13:20 已实测为空、通过） |
-| R10 | 3080 宿主不可用、5300 的 `/dsh-l2d/test.html` 为 404；visual-qa 若误用旧入口会漏测「参数监视台」页面 | 13:20 curl 实测（见 §9） | visual-qa 统一以 **5400 preview-server** 为主用入口；参数监视台视觉核对必须走 5400 |
+| R10 | 环境收紧：**5400 预览服已随服务器清理下线**（14:53 实测 `000`，D13）、3080 不可用；5300 保留（`/dsh-l2d/test.html` 404） | 14:53 curl 实测（见 §9）；14:55 主理人裁定 | **5300 为本地联调服务，按裁定保留至终审，终审后由主理人停掉**；样式轮视觉验收已完成（21 png）；NG 轮联调若需「参数监视台」页面需重启 preview-server |
 
 ## 7. 验收证据索引
 
 | 验收项（`DESIGN-SPEC.md:73-79`） | 证据来源 / 命令 | 当前状态 |
 |---|---|---|
 | 既有测试全绿（`test:core` 关键单测、`test:chain15` 5 组、`pnpm typecheck`） | `package.json` scripts；`tests/chain-15/run.mjs`；由 regression-guard 执行 | 待产出 |
-| `consistency.test.mjs` 全绿（令牌四处一致、功能入口/文案零漂移、禁改项零改动、快照一致） | `docs/studio-ui/consistency.test.mjs` + `baseline/functional-fingerprint.json` + `fingerprint.mjs` | **未落盘** |
-| 三尺寸截图（1440×900 / 1024×768 / 720×900）、深浅主题、无溢出遮挡 | `docs/studio-ui/visual/*.png`、`VISUAL-REPORT.md` | **未落盘** |
-| 交付物齐备（8 项） | `ls docs/studio-ui` | **5/8 已落盘**：DESIGN-SPEC.md / studio-tokens.css / sync-tokens.mjs / CONTEXT.md / DECISIONS.md；待 3/8：ACCEPTANCE.md / VISUAL-REPORT.md / visual/*.png（`visual/` 空目录已建） |
+| `consistency.test.mjs` 全绿（令牌四处一致、功能入口/文案零漂移、禁改项零改动、快照一致） | `docs/studio-ui/consistency.test.mjs` + `baseline/functional-fingerprint.json` + `fingerprint.mjs` | **已落盘并跑通**：主理人重跑 **9 PASS / 1 WARN / 0 FAIL**（指纹基线已刷新为功能轮版本，removed=0 / changed=0 严格验证后写入） |
+| 三尺寸截图（1440×900 / 1024×768 / 720×900）、深浅主题、无溢出遮挡 | `docs/studio-ui/visual/*.png`、`VISUAL-REPORT.md` | **已落盘**：21 张 png + VISUAL-REPORT.md（4831 B，随 `fbb2331` 提交） |
+| 交付物齐备（8 项） | `ls docs/studio-ui` | **8/8 已落盘**：DESIGN-SPEC / studio-tokens / sync-tokens / CONTEXT / DECISIONS / ACCEPTANCE / VISUAL-REPORT / visual（21 png） |
 | 分组 commit 并推送 GitHub，四层可追溯 | 主理人 #22 | 待办 |
 | 功能零漂移基线 | `docs/studio-ui/baseline/functional-fingerprint.json`（generatedAt 2026-11-08T05:14:27Z） | 已固化 |
 
@@ -125,7 +131,7 @@
 
 1. `git diff --cached --name-only` **不含** `tools/capability-scan/profile.大肥鱼.dsl2d.2048.json`（Q2；13:20 预检已通过）。
 2. `packages/dsh-l2d-db/**` 与 `packages/mcp-bridge/**` **零 diff**，出现任何 diff 即 FAIL 级上报（Q1）。
-3. 令牌四处（①②③④）一致；断言先 `.replace(/\r/g,'')` 再逐字比较（Q4）。④ `settings.html` 内联块若仍缺 → 由 WARN **升级 FAIL 并上报**（Q4）。
+3. 令牌四处（①②③④）一致——**14:53 已实测含 ④ 与快照五处全 `ef2e53b01e76`**；断言先 `.replace(/\r/g,'')` 再逐字比较（Q4）；快照按 **D12 口径**（忽略 CR + 动态扣除「退役过渡」注释块）。
 4. `consistency.test.mjs` / `ACCEPTANCE.md` / `VISUAL-REPORT.md` / `visual/*.png` 落盘情况与内容；各席越界改动核查。
 
 **本席可用巡检命令（只读）**：`ls -la docs/studio-ui`、`git status --short`、`git diff --stat`、标记块哈希比对脚本（见 §5）、`node docs/studio-ui/fingerprint.mjs`（输出当前指纹，与基线比对，不写文件）。
@@ -141,12 +147,12 @@
 | 功能指纹 | `fingerprint.mjs` 从源码提取的 id/href/data-*/事件/中文文案集合；样式适配不应改变它，是「零功能改动」的机器可验证基线 |
 | 九态 | 控件统一状态语义：idle / hover / active / focus-visible / selected / disabled / loading / error / success（`DESIGN-SPEC.md:27`） |
 | 四档响应式 | ≥1440 全展开；1024–1439 Inspector 收窄；720–1023 导航轨 64px 图标条 + Inspector 抽屉；<720 单栏 + 导航抽屉（`DESIGN-SPEC.md:29`） |
-| 快照 | `tools/acceptance/snapshots/settings.html`，与 `assets/settings.html` 忽略 CR 后须逐行一致（§6.4） |
+| 快照 | `tools/acceptance/snapshots/settings.html`；比对口径（D12）：忽略 CR + 动态扣除主文件首个含「退役过渡」的 `<!-- -->` 注释块（当前 8 行，保留 doctype）后逐行一致 |
 | context-keeper | 本角色：唯一长期持有全团上下文、仅维护 CONTEXT.md / DECISIONS.md，不替他席做技术决策 |
 | D1–D6 | 主理人在 `DESIGN-SPEC.md §9` 裁定的六条决策，抄录于 `DECISIONS.md` |
 | 16:30 / 17:00 | 全席一致性核对节点 / 用户指定的一次性验收节点（D6） |
 
-## 9. 环境与预览服务（13:20 补记）
+## 9. 环境与预览服务（13:20 建立 / 14:53 复测）
 
 > 所有 URL 结论均来自本席 13:20 `curl` 实测（命令输出为证），非转述；服务可用性会随时间变化，每次巡检需重测。
 
@@ -154,10 +160,12 @@
 |---|---|---|---|
 | 3080 宿主 | — | `curl http://127.0.0.1:3080/` 返回 `000`（连接未建立） | **不可用，不要依赖**。主理人称「仍 502」，本席实测为连接层 `000` 而非 HTTP 502——口径差异如实记录，但「不可用」结论一致 |
 | 5300 本地调试服 | `node tools/dev-server/index.mjs --port 5300`（主理人已恢复） | `/`、`/dsh-l2d/settings`、`/dsh-l2d/ui-tokens.css`、`/dsh-l2d/overlay.css`、`/dsh-l2d/overlay.js` = **200**；`/dsh-l2d/test.html` = **404** | 可用但**不覆盖参数监视台** |
-| 5400 预览服 | `node docs/studio-ui/preview-server.mjs --port 5400`（主理人新增） | `/`、`/dsh-l2d/settings`、`/dsh-l2d/test.html`、`/dsh-l2d/pet.html`、`/dsh-l2d/overlay-test.html`、`/dsh-l2d/ui-tokens.css`、`/dsh-l2d/overlay.css`、`/dsh-l2d/overlay.js` **八条全部 200**；`GET /dsh-l2d/settings` 响应头实测 `cache-control: no-store` | **visual-qa 主用入口**；样式落盘后刷新即生效 |
+| 5400 预览服 | `node docs/studio-ui/preview-server.mjs --port 5400`（主理人新增） | 13:20：八条路由全 200 + `cache-control: no-store`；**14:53 复测 `000`（已随服务器清理下线，D13）** | 样式轮视觉验收主用入口（已完成 21 png）；现**不可用** |
 
 - `preview-server.mjs` 契约（原文已读）：零依赖、仅监听 `127.0.0.1`、不改动任何现有源码（`:1-8, 65-67`）；映射 `/dsh-l2d/<file>` → `assets/<file>`，找不到回退 `lib/<file>`（`:54-61`）；`overlay-test.html` 特例从 `tools/dev-server/public/` 读取（`:56-59`）；所有文件响应带 `cache-control: no-store`（`:63`）。
 - **5300 与 5400 差异解释**：5400 的 `/dsh-l2d/test.html` 为 200，因 preview-server 从 `assets/` 直接读取该文件（`:60`）；5300 dev-server 未映射该路由故 404。→ 参数监视台 / 渲染自检页的视觉验收**必须走 5400**。
+- **14:53 复测**：5400 `000`（已下线）、5300 `200`、3080 `000`。主理人告知「服务器已按用户指令清理（测试痕迹零残留，本地-only 生效）」（D13）；5300 仍在与「清理」表述的出入如实记录，不臆测。
+- **14:55 裁定（主理人）**：**5300 保留**——它是本地开发调试台（`pnpm dev-server`），为实测席联调在用；清理范围是**云服务器（121.40.125.77）上的测试残留**，本地开发环境不在清理范围。终审后由主理人停掉。
 
 ---
 
@@ -167,4 +175,6 @@
 |---|---|---|---|
 | 2026-11-08 13:16 | 首次建立 | 三处令牌块 hash 一致（`ef2e53b01e76`）；settings.html 及快照无内联块；四席产出文件全部未落盘；`overlay.js` +248 未提交成果在册；发现 R4 来源未明改动 | 本文件 §5 |
 | 2026-11-08 13:20 | 主理人转发 Q1–Q4 逐项裁定 + 环境变更 | 核实 #12/#13/#14 确已 deleted、#18–#21 全部 in_progress；暂存区为空（Q2 复核通过）；四处令牌块 ①②③ 一致、④ 仍缺；`visual/` 空目录已建；5400 八路由全 200 + no-store、5300 test.html 404、3080 实测 000；登记 D7–D11 与 R9/R10、补记 §9 环境节与验收工具清单 | 本文件 §5 / §7 / §9；`DECISIONS.md` 第二、三部分 |
+| 2026-11-08 13:29 | 紧急定位派单（只读，禁改文件） | 完成节点图执行链路 6 项定位并回传（含 host-guard 白名单 16 项口径纠正）；发现「主 2320 vs 快照 2312 行忽略 CR 不一致」上报待裁定 | SendMessage 回传；`DECISIONS.md` D12 |
+| 2026-11-08 14:53 | 主理人裁定快照误报 + 授权补写看板 | **D12 口径复现 PASS**（动态扣除「退役过渡」注释块后 2599 行 0 差异）；样式轮 `fbb2331` 系列 5 commit 确认；令牌五处 hash 全 `ef2e53b01e76`；NG 轮文件落盘确认（nodegraph.mjs 21993 B / test 16880 B / host-guard +9 / index.js +119 / dev-server +100，未提交）；visual 21 png + 三份报告已落盘；5400 已下线（000）、5300 保留（14:55 裁定至终审）；禁改目录零 diff、暂存区空；R2 解除（34495b1 已补提交）、R3 彻底关闭 | 本文件 §5 / §7 / §9；`DECISIONS.md` D12–D13 |
 | _待 16:30_ | 全席一致性核对 | 按 §7「16:30 强制复核项」执行并回传结构化报告 | — |

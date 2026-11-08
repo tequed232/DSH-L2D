@@ -164,7 +164,7 @@ runGroup('4 禁改项零改动', () => {
   const names = changedFiles();
   const FORBIDDEN = [
     'packages/dsh-l2d-plugin/assets/renderer.js',
-    'packages/dsh-l2d-plugin/lib/index.js',
+    // NG 轮（2026-11-08）主理人授权：lib/index.js 归后端席（4 条节点图路由），移出禁改清单
     'packages/dsh-l2d-db/',
     'packages/mcp-bridge/',
     'packages/dsh-l2d-mcp/',
@@ -182,6 +182,11 @@ runGroup('4 禁改项零改动', () => {
     /^packages\/dsh-l2d-plugin\/lib\/overlay\.js$/,
     /^packages\/dsh-l2d-plugin\/assets\/test\.html$/,
     /^apps\//,
+    // NG 轮（2026-11-08 节点图动作编排）授权清单：后端席所有权 + 主理人 scripts 更新
+    /^packages\/dsh-l2d-plugin\/lib\/(nodegraph\.mjs|nodegraph\.test\.mjs|host-guard\.mjs|index\.js)$/,
+    /^packages\/renderer\/src\/index\.ts$/,
+    /^tools\/dev-server\//,
+    /^package\.json$/,
   ];
   const out = [];
   const hits = names.filter((n) => FORBIDDEN.some((f) => n === f || n.startsWith(f)));
