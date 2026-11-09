@@ -10,11 +10,11 @@ var PanelLayers = {
   KEY: 'dsh-mg-panels.v1',
   available: true,
   panels: [
-    { id: 'sim-panel', name: '模拟监视 LOCAL SIM' },
-    { id: 'minimap-wrap', name: '小地图 MINIMAP' },
-    { id: 'monitor-win', name: 'Live2D 监看 MONITOR' },
-    { id: 'exec-console', name: '执行监视 CONSOLE' },
-    { id: 'json-preview', name: 'JSON 预览 PREVIEW' }
+    { id: 'sim-panel', name: 'layer.sim' },
+    { id: 'minimap-wrap', name: 'layer.minimap' },
+    { id: 'monitor-win', name: 'layer.monitor' },
+    { id: 'exec-console', name: 'layer.console' },
+    { id: 'json-preview', name: 'layer.json' }
   ],
   state: { order: ['sim-panel', 'minimap-wrap', 'monitor-win', 'exec-console', 'json-preview'], collapsed: {}, hidden: {}, pos: {} },
   load: function () {
@@ -124,19 +124,19 @@ var PanelLayers = {
     var pop = document.getElementById('layers-pop');
     if (!pop) return;
     var self = this;
-    var html = '<div class="lp-head">监看图层 · 顶层在前 · 拖面板头部可移动</div>';
+    var html = '<div class="lp-head">' + esc(tr('layer.head')) + '</div>';
     this.state.order.slice().reverse().forEach(function (id) {
       var p = null;
       self.panels.forEach(function (x) { if (x.id === id) p = x; });
       if (!p) return;
       var hid = !!self.state.hidden[id], col = !!self.state.collapsed[id];
       html += '<div class="lp-row" data-lp="' + id + '">' +
-        '<button class="lp-btn" data-act="vis" title="' + (hid ? '显示' : '隐藏') + '">' + (hid ? '○' : '●') + '</button>' +
-        '<span class="lp-name">' + esc(p.name) + '</span>' +
-        '<button class="lp-btn" data-act="top" title="置顶">⤒</button>' +
-        '<button class="lp-btn" data-act="up" title="上移一层">↑</button>' +
-        '<button class="lp-btn" data-act="down" title="下移一层">↓</button>' +
-        '<button class="lp-btn" data-act="col" title="' + (col ? '展开' : '收起') + '">' + (col ? '▢' : '—') + '</button>' +
+        '<button class="lp-btn" data-act="vis" title="' + esc(tr(hid ? 'layer.show' : 'layer.hide')) + '" aria-label="' + esc(tr(hid ? 'layer.show' : 'layer.hide')) + '">' + (hid ? '○' : '●') + '</button>' +
+        '<span class="lp-name">' + esc(tr(p.name)) + '</span>' +
+        '<button class="lp-btn" data-act="top" title="' + esc(tr('layer.top')) + '" aria-label="' + esc(tr('layer.top')) + '">⤒</button>' +
+        '<button class="lp-btn" data-act="up" title="' + esc(tr('layer.up')) + '" aria-label="' + esc(tr('layer.up')) + '">↑</button>' +
+        '<button class="lp-btn" data-act="down" title="' + esc(tr('layer.down')) + '" aria-label="' + esc(tr('layer.down')) + '">↓</button>' +
+        '<button class="lp-btn" data-act="col" title="' + esc(tr(col ? 'common.expand' : 'common.collapseOnly')) + '" aria-label="' + esc(tr(col ? 'common.expand' : 'common.collapseOnly')) + '">' + (col ? '▢' : '—') + '</button>' +
         '</div>';
     });
     pop.innerHTML = html;

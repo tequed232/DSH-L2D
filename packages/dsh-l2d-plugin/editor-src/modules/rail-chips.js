@@ -10,8 +10,9 @@
 var RailChips = {
   KEY: 'dsh-mg-rail-chips.v1',
   defs: {
-    lib:  { panel:'library',   resizer:'rz-lib',  label:'库',   side:'left',  name:'节点库' },
-    insp: { panel:'inspector', resizer:'rz-insp', label:'属性', side:'right', name:'属性栏' }
+    /* label / name / expand 为 I18n 词条键，显示时取当前界面语言 */
+    lib:  { panel:'library',   resizer:'rz-lib',  label:'rail.libChip',  side:'left',  name:'rail.lib',  expand:'rail.expandLib' },
+    insp: { panel:'inspector', resizer:'rz-insp', label:'rail.inspChip', side:'right', name:'rail.insp', expand:'rail.expandInsp' }
   },
   pos: {},
   load: function () {
@@ -38,21 +39,34 @@ var RailChips = {
         chip.id = 'rail-chip-' + kind;
         chip.type = 'button';
         chip.className = 'rail-chip';
-        chip.textContent = d.label;
-        chip.title = '展开' + d.name;
         document.body.appendChild(chip);
         this.bindChip(chip, kind);
       }
+      this.labelChip(chip, kind);
       this.placeChip(chip, kind);
       chip.style.display = 'inline-flex';
-      UI.status(d.name + '已收起：悬浮「' + d.label + '」chip 可拖动 / 单击恢复');
+      UI.status(tr('rail.collapsed', { name:tr(d.name), chip:tr(d.label) }));
     } else {
       panel.style.display = '';
       var rz2 = document.getElementById(d.resizer); if (rz2) rz2.style.display = '';
       if (btn) btn.style.display = '';
       if (chip && chip.parentNode) chip.parentNode.removeChild(chip);
-      UI.status(d.name + '已展开');
+      UI.status(tr('rail.expanded', { name:tr(d.name) }));
     }
+  },
+  labelChip: function (chip, kind) {
+    var d = this.defs[kind];
+    chip.textContent = tr(d.label);
+    chip.title = tr(d.expand);
+    chip.setAttribute('aria-label', tr(d.expand));
+  },
+  /* 界面语言切换后刷新已存在的悬浮 chip 文字 */
+  relabel: function () {
+    var self = this;
+    Object.keys(this.defs).forEach(function (kind) {
+      var chip = document.getElementById('rail-chip-' + kind);
+      if (chip) { self.labelChip(chip, kind); self.placeChip(chip, kind); }
+    });
   },
   placeChip: function (chip, kind) {
     var w = chip.offsetWidth || 56, h = chip.offsetHeight || 26;
