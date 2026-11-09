@@ -60,7 +60,8 @@
 | ① | lib/nodegraph.mjs、lib/choreography.mjs、lib/nodegraph.test.mjs | NE-01 contract |
 | ② | assets/motion-graph.html、assets/settings.html、tools/acceptance/snapshots/settings.html、docs/studio-ui/baseline/functional-fingerprint.json | NE-01 editor+settings、NE-03 UI |
 | ③ | lib/index.js、lib/nodegraph-runs.mjs、lib/nodegraph-runs.test.mjs | NE-02 runtime |
-| ④ | docs/motion-graph-lab/NE-STABILIZATION-PLAN.md、docs/motion-graph-lab/ACCEPTANCE-NE-STABILIZATION.md | docs |
+| ④ | docs/motion-graph-lab/NE-STABILIZATION-PLAN.md、ACCEPTANCE-NE-STABILIZATION.md | docs |
+| ⑤ | assets/motion-graph.html（BUILD:SPLIT 标记）、editor-src/**（template+modules+README）、tools/motion-graph-build.mjs | NE-04 拆分基线 |
 
 ## 三、测试执行（终审复跑真实输出）
 
