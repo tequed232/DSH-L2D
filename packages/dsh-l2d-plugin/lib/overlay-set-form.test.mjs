@@ -118,6 +118,9 @@ test('缺 L.setParameter：form-unavailable，不改 prefs', () => {
 test('切换过程抛异常：form-unavailable，不抛出', () => {
   const sb = makeSandbox({ bodyType: 0, throwOnSwitch: true });
   assert.deepEqual(sb.exec('l2d_set_form', { index: 2 }), { ok: false, reason: 'form-unavailable' });
+  assert.equal(sb.prefs.bodyType, 0);
+  // setBodyType 先 persist 一次，回滚再 persist 一次。
+  assert.equal(sb.log.persists, 2);
 });
 
 test('l2d_change_form 分支保持原样（仍走 cycleBodyType 单向 +1）', () => {

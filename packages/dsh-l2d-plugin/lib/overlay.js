@@ -5550,11 +5550,19 @@
             try {
               setBodyType(setIdx);
             } catch (err) {
+              // setBodyType 已先写 prefs 再写 Clothes2。写入抛错时回滚记录再落盘，
+              // 否则回执是失败，下次同目标会被误判成 already-current。
+              prefs.bodyType = setBefore;
+              persist();
               return { ok: false, reason: 'form-unavailable' };
             }
             // 以 prefs.bodyType 实际值复核，未到目标即判失败（不以"调用过"当成功）。
             var setAfter = Math.max(0, Math.min(2, Number(prefs.bodyType) || 0));
-            if (setAfter !== setIdx) return { ok: false, reason: 'form-unavailable' };
+            if (setAfter !== setIdx) {
+              prefs.bodyType = setBefore;
+              persist();
+              return { ok: false, reason: 'form-unavailable' };
+            }
             var setItem = BODY_TYPES[setAfter] || BODY_TYPES[0];
             return { ok: true, form: { index: setAfter, label: setItem.label } };
           }
