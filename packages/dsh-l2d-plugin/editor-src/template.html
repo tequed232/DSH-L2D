@@ -128,7 +128,7 @@ button, input, select, textarea { font-family:inherit; }
 #validate-badge.bad { color:var(--danger); border-color:color-mix(in srgb,var(--danger) 45%,var(--line)); background:color-mix(in srgb,var(--danger) 10%,var(--surface)); }
 #validate-badge .dot { width:7px; height:7px; border-radius:50%; background:currentColor; flex:none; }
 
-#main { display:flex; height:calc(100% - var(--topbar-h) - var(--status-h)); min-height:0; }
+#main { display:flex; height:calc(100% - var(--topbar-h) - var(--status-h)); min-height:0; position:relative; }
 /* 节点库内容溢出时可上下滚动（工作区式平滑滚动，滚动条全局细样式可见）；指南已迁画布顶部 */
 #library, #inspector { flex:none; background:var(--panel); overflow-y:auto; overflow-x:hidden; min-width:0; scroll-behavior:smooth; }
 #library { width:var(--rail-w); border-right:1px solid var(--mg-border-strong); padding:var(--s4) var(--s3); }
@@ -176,10 +176,37 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
   font:12px/1 var(--mono); cursor:pointer; display:grid; place-items:center; padding:0;
 }
 .lib-item .combo-del:hover { color:var(--danger); border-color:var(--danger); }
+/* 预设库「+ 存当前」小按钮（lib-head 内，combo-del 同风格的迷你按钮） */
+.preset-add {
+  flex:none; height:18px; padding:0 6px; border-radius:4px;
+  border:1px solid var(--mg-border-strong); background:transparent; color:var(--ink2);
+  font:600 9px/1 var(--mono); letter-spacing:.04em; cursor:pointer; display:grid; place-items:center;
+}
+.preset-add:hover { color:var(--ok); border-color:color-mix(in srgb,var(--ok) 55%,var(--line)); }
 
-/* ---- 画布顶部操作指南（原节点库 lib-tip 迁入，无需滚动完整可见） ---- */
+/* ---- 三栏收起：分栏边缘折叠按钮（锚在 #main 上，不随面板内容滚动）+ 收起态悬浮 chip ---- */
+.rail-collapse {
+  position:absolute; top:50%; margin-top:-10px; z-index:7;
+  width:20px; height:20px; padding:0; display:grid; place-items:center;
+  border:1px solid var(--mg-border-strong); border-radius:4px;
+  background:var(--panel); color:var(--ink3); cursor:pointer; font:600 12px/1 var(--mono);
+}
+.rail-collapse:hover { color:var(--ink); background:var(--surface); border-color:var(--ink2); }
+#lib-collapse { left:calc(var(--rail-w) - 10px); }
+#insp-collapse { right:calc(var(--insp-w) - 10px); }
+.rail-chip {
+  position:fixed; z-index:52; display:none; align-items:center; max-width:80px; height:26px; padding:0 10px;
+  background:var(--panel); border:1px solid var(--mg-border-strong); border-radius:13px;
+  color:var(--ink2); font:600 11px/1 var(--font); white-space:nowrap;
+  cursor:grab; user-select:none; touch-action:none; box-shadow:0 4px 14px rgba(0,0,0,.4);
+}
+.rail-chip:active { cursor:grabbing; }
+.rail-chip:hover { color:var(--ink); border-color:var(--ink2); }
+
+/* ---- 画布顶部操作指南（原节点库 lib-tip 迁入，无需滚动完整可见）
+   z 下沉为 1：节点(.node)在 #world 内自然层叠于其上，不再被指南条遮挡 ---- */
 #canvas-hint {
-  position:absolute; left:14px; right:14px; top:12px; z-index:4; pointer-events:none;
+  position:absolute; left:14px; right:14px; top:12px; z-index:1; pointer-events:none;
   font:10px/1.8 var(--mono); color:var(--ink3);
   background:color-mix(in srgb,var(--panel) 82%,transparent); border:1px solid var(--mg-border-strong);
   border-radius:var(--r-sm); padding:8px 12px;
@@ -189,6 +216,22 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
 #canvas-hint kbd { font:10px var(--mono); background:var(--surface); border:1px solid var(--mg-border-strong); border-radius:3px; padding:1px 4px; color:var(--ink); }
 #canvas-hint .legend { display:inline-flex; align-items:center; gap:5px; }
 #canvas-hint .legend i { width:8px; height:8px; border-radius:50%; display:inline-block; }
+/* 指南条收起小按钮（唯一 pointer-events:auto 处）+ 收起态小标签 chip */
+#hint-toggle {
+  position:absolute; top:5px; right:5px; pointer-events:auto;
+  width:18px; height:18px; padding:0; display:grid; place-items:center;
+  border:1px solid var(--mg-border-strong); border-radius:4px;
+  background:var(--surface); color:var(--ink3); cursor:pointer; font:600 11px/1 var(--mono);
+}
+#hint-toggle:hover { color:var(--ink); border-color:var(--ink2); }
+#hint-chip {
+  position:absolute; left:14px; top:12px; z-index:2; display:none;
+  pointer-events:auto; cursor:pointer; user-select:none;
+  font:600 10px/1.4 var(--mono); color:var(--ink2); white-space:nowrap;
+  background:color-mix(in srgb,var(--panel) 88%,transparent);
+  border:1px solid var(--mg-border-strong); border-radius:var(--r-sm); padding:4px 9px;
+}
+#hint-chip:hover { color:var(--ink); }
 .lib-tip { border-top:1px solid var(--line-soft); padding-top:12px; margin-top:16px; font-size:10.5px; color:var(--ink2); line-height:1.65; }
 .lib-tip kbd { font:10px var(--mono); background:var(--surface); border:1px solid var(--mg-border-strong); border-radius:3px; padding:1px 4px; color:var(--ink); }
 .legend-row { display:flex; align-items:center; gap:7px; margin-top:6px; }
@@ -479,6 +522,7 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
   .lib-item { justify-content:center; padding:7px 0; }
   .lib-item .glyph { width:26px; height:26px; }
   #canvas-hint { display:none; }
+  #hint-chip { display:none !important; }
   #minimap-wrap { right:8px; bottom:8px; }
   #minimap { width:140px; height:88px; }
   #zoombar { bottom:8px; }
@@ -521,12 +565,14 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
 </header>
 
 <main id="main">
+  <button class="rail-collapse" id="lib-collapse" title="收起节点库（画布扩宽，悬浮 chip 可拖动/恢复）">&laquo;</button>
   <aside id="library">
     <p class="panel-kicker">NODE LIBRARY</p>
     <h1 class="panel-title">节点库</h1>
     <p class="panel-sub">拖入画布，或单击追加节点。设计层辅助节点仅存于 meta.editor。</p>
     <div id="lib-groups"></div>
     <div id="lib-combos"></div>
+    <div id="lib-presets"></div>
   </aside>
 
   <div class="col-resizer" id="rz-lib" role="separator" aria-orientation="vertical" aria-label="调整节点库面板宽度" title="拖拽调整宽度 · 双击复位"></div>
@@ -540,9 +586,11 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
       <div id="marquee"></div>
     </div>
     <div id="canvas-hint">
+      <button id="hint-toggle" title="收起操作指南（可从「操作指南 ?」小标签恢复）">?</button>
+      <div class="hint-body">
       <div class="hint-row"><b>GRAPH CANVAS</b> · DFS 前序编译 / 每 8 步一段 · 22px 点阵网格 · 拖拽端口连线 · 单击连线选中删除 · 右键节点可删除/复制/禁用</div>
       <div class="hint-row"><b>操作</b>
-        <span>空白拖拽 平移</span><span>滚轮 缩放</span>
+        <span>空白左键拖拽 框选</span><span>中键拖拽 平移</span><span>滚轮 缩放</span>
         <span><kbd>Shift</kbd>+拖拽 框选</span><span><kbd>Del</kbd> 删除</span>
         <span><kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd> 复制粘贴</span>
         <span><kbd>Ctrl</kbd>+<kbd>0</kbd> 适配</span>
@@ -553,7 +601,9 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
         <span class="legend"><i style="background:var(--port-signal)"></i>信号 signal</span>
         <span class="legend"><i style="background:var(--port-data)"></i>数据 data</span>
       </div>
+      </div>
     </div>
+    <div id="hint-chip" title="展开操作指南">操作指南 ?</div>
     <div id="sim-panel">
       <div class="sp-head"><span class="sp-title">LOCAL SIMULATION</span>
         <span><button class="fp-btn" data-fp-collapse="sim-panel" title="收起/展开">—</button>
@@ -582,6 +632,7 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
 
   <div class="col-resizer" id="rz-insp" role="separator" aria-orientation="vertical" aria-label="调整属性面板宽度" title="拖拽调整宽度 · 双击复位"></div>
 
+  <button class="rail-collapse" id="insp-collapse" title="收起属性栏（画布扩宽，悬浮 chip 可拖动/恢复）">&raquo;</button>
   <aside id="inspector"><div id="ins-root"></div></aside>
 </main>
 
@@ -906,9 +957,9 @@ var Preferences = {
   reducedMotion: (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || false,
   showGrid:true, snap:false,
   shortcuts:[
-    ['Ctrl / ⌘ + C','复制选中节点'], ['Ctrl / ⌘ + V','粘贴节点'], ['Delete / Backspace','删除选中'],
-    ['Ctrl / ⌘ + A','全选节点'], ['Ctrl / ⌘ + 0','适配画布'], ['Escape','取消 / 关闭'],
-    ['Shift + 拖拽','框选'], ['滚轮','缩放'], ['空白拖拽','平移']
+    ['空白左键拖拽','框选（替换选择）'], ['Shift + 拖拽','框选'], ['中键拖拽','平移'],
+    ['滚轮','缩放'], ['Ctrl / ⌘ + C','复制选中节点'], ['Ctrl / ⌘ + V','粘贴节点'], ['Delete / Backspace','删除选中'],
+    ['Ctrl / ⌘ + A','全选节点'], ['Ctrl / ⌘ + 0','适配画布'], ['Escape','取消 / 关闭']
   ]
 };
 
@@ -1360,6 +1411,148 @@ var Validator = {
 <!-- BUILD:END panel-layers -->
 
 /* =========================================================================
+   HintBar：画布顶部操作指南条的收起/展开（本轮交互改造 ①）。
+   - 收起：条体隐藏，仅剩「操作指南 ?」小 chip（position:absolute left:14 top:12）
+   - 状态持久化 localStorage 'dsh-mg-hint-collapsed.v1'（file:// 受限时静默降级）
+   ========================================================================= */
+var HintBar = {
+  KEY: 'dsh-mg-hint-collapsed.v1',
+  collapsed: false,
+  init: function () {
+    try { this.collapsed = localStorage.getItem(this.KEY) === '1'; } catch (err) { /* file:// 降级 */ }
+    this.apply();
+    var self = this;
+    var t = document.getElementById('hint-toggle');
+    if (t) t.addEventListener('click', function () { self.collapsed = true; self.persist(); self.apply(); });
+    var chip = document.getElementById('hint-chip');
+    if (chip) chip.addEventListener('click', function () { self.collapsed = false; self.persist(); self.apply(); });
+  },
+  persist: function () { try { localStorage.setItem(this.KEY, this.collapsed ? '1' : '0'); } catch (err) { /* ignore */ } },
+  apply: function () {
+    var bar = document.getElementById('canvas-hint'), chip = document.getElementById('hint-chip');
+    if (!bar || !chip) return;
+    bar.classList.toggle('hidden', this.collapsed);
+    /* chip 基础样式 display:none，用 inline display 显式揭示（.hidden 只用于条体） */
+    chip.style.display = this.collapsed ? 'block' : 'none';
+  }
+};
+
+/* =========================================================================
+   RailChips：三栏可收起（本轮交互改造 ②）。
+   - #library / #inspector 收起 → display:none（flex 兄弟，#canvas-wrap 自动扩宽）
+   - 对应 col-resizer 同步隐藏；生成一个小悬浮 chip（固定定位、可拖动、位置持久化）
+   - chip 单击 → 恢复该栏（拖拽结束的 click 被抑制，不误触发）
+   - 位置持久化 localStorage 'dsh-mg-rail-chips.v1'；chip 尺寸 ≤80×28px，初始贴原栏边缘
+   - JSON 预览（#mg-export）仅 selftest 模式存在（display:none → body[data-selftest-ui] 揭示），
+     正常模式无此窗口，故无需收起能力（调查结论见 selftest 报告）。
+   ========================================================================= */
+var RailChips = {
+  KEY: 'dsh-mg-rail-chips.v1',
+  defs: {
+    lib:  { panel:'library',   resizer:'rz-lib',  label:'库',   side:'left',  name:'节点库' },
+    insp: { panel:'inspector', resizer:'rz-insp', label:'属性', side:'right', name:'属性栏' }
+  },
+  pos: {},
+  load: function () {
+    try {
+      var raw = localStorage.getItem(this.KEY);
+      if (raw) { var s = JSON.parse(raw); if (s && typeof s === 'object') this.pos = s; }
+    } catch (err) { /* file:// 降级 */ }
+  },
+  save: function () {
+    try { localStorage.setItem(this.KEY, JSON.stringify(this.pos)); } catch (err) { /* ignore */ }
+  },
+  toggle: function (kind, force) {
+    var d = this.defs[kind]; if (!d) return;
+    var panel = document.getElementById(d.panel);
+    var collapse = force === undefined ? panel.style.display !== 'none' : !!force;
+    var btn = document.getElementById(kind === 'lib' ? 'lib-collapse' : 'insp-collapse');
+    var chip = document.getElementById('rail-chip-' + kind);
+    if (collapse) {
+      panel.style.display = 'none';
+      var rz = document.getElementById(d.resizer); if (rz) rz.style.display = 'none';
+      if (btn) btn.style.display = 'none';
+      if (!chip) {
+        chip = document.createElement('button');
+        chip.id = 'rail-chip-' + kind;
+        chip.type = 'button';
+        chip.className = 'rail-chip';
+        chip.textContent = d.label;
+        chip.title = '展开' + d.name;
+        document.body.appendChild(chip);
+        this.bindChip(chip, kind);
+      }
+      this.placeChip(chip, kind);
+      chip.style.display = 'inline-flex';
+      UI.status(d.name + '已收起：悬浮「' + d.label + '」chip 可拖动 / 单击恢复');
+    } else {
+      panel.style.display = '';
+      var rz2 = document.getElementById(d.resizer); if (rz2) rz2.style.display = '';
+      if (btn) btn.style.display = '';
+      if (chip && chip.parentNode) chip.parentNode.removeChild(chip);
+      UI.status(d.name + '已展开');
+    }
+  },
+  placeChip: function (chip, kind) {
+    var w = chip.offsetWidth || 56, h = chip.offsetHeight || 26;
+    var saved = this.pos[kind], x, y;
+    if (saved && typeof saved.x === 'number' && typeof saved.y === 'number') {
+      x = saved.x; y = saved.y;
+    } else if (this.defs[kind].side === 'left') {
+      x = 8; y = 64;
+    } else {
+      x = Math.max(8, window.innerWidth - w - 8); y = 64;
+    }
+    x = clamp(x, 0, Math.max(0, window.innerWidth - w));
+    y = clamp(y, 0, Math.max(0, window.innerHeight - h));
+    chip.style.left = x + 'px'; chip.style.top = y + 'px';
+  },
+  bindChip: function (chip, kind) {
+    var self = this;
+    var drag = null;   /* { ox, oy, moved } */
+    chip.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      var r = chip.getBoundingClientRect();
+      drag = { sx: e.clientX, sy: e.clientY, ox: e.clientX - r.left, oy: e.clientY - r.top, moved: false };
+      var move = function (ev) {
+        if (!drag) return;
+        if (Math.abs(ev.clientX - drag.sx) + Math.abs(ev.clientY - drag.sy) > 4) drag.moved = true;
+        if (!drag.moved) return;
+        chip.style.left = clamp(ev.clientX - drag.ox, 0, Math.max(0, window.innerWidth - chip.offsetWidth)) + 'px';
+        chip.style.top = clamp(ev.clientY - drag.oy, 0, Math.max(0, window.innerHeight - chip.offsetHeight)) + 'px';
+      };
+      var up = function () {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
+        if (drag && drag.moved) {
+          self.pos[kind] = { x: Math.round(parseFloat(chip.style.left) || 0), y: Math.round(parseFloat(chip.style.top) || 0) };
+          self.save();
+          self._suppressClick = true;   /* 拖拽结束的 click 不触发展开 */
+        }
+        drag = null;
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
+      e.preventDefault();
+    });
+    chip.addEventListener('click', function () {
+      if (self._suppressClick) { self._suppressClick = false; return; }
+      self.toggle(kind, false);
+    });
+  },
+  init: function () {
+    this.load();
+    var self = this;
+    var lc = document.getElementById('lib-collapse');
+    if (lc) lc.addEventListener('click', function () { self.toggle('lib', true); });
+    var ic = document.getElementById('insp-collapse');
+    if (ic) ic.addEventListener('click', function () { self.toggle('insp', true); });
+  }
+};
+
+/* =========================================================================
    ExecConsole：执行监视控制台（NE-03 编辑器侧浮窗）。
    数据源：window.__MG_EXEC_PUSH__(record) 全局钩子，由宿主（设置页运行节点图）注入回执。
    record 形如 { executionId, name, status, startedAt,
@@ -1459,6 +1652,8 @@ var UI = {
     this.renderLibrary(); this.bindTopbar(); this.bindCanvas(); this.bindInspector(); this.bindModal(); this.bindResizers(); this.bindContextMenus();
     PanelLayers.init();
     ExecConsole.init();
+    HintBar.init();
+    RailChips.init();
     this.applyViewport(); this.refreshAll();
     this.updateBadge(Validator.check(Serializer.build()));
   },
@@ -1487,6 +1682,7 @@ var UI = {
       el.addEventListener('click', function () { UI.appendNode(el.dataset.type); });
     });
     this.renderCombos();
+    this.renderPresets();
   },
 
   /* ---- 组合事件：库内分组渲染 / 选区保存 / 实例化 ---- */
@@ -1603,6 +1799,65 @@ var UI = {
     var inp = $('#combo-name');
     inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') $('#combo-save').click(); });
     inp.focus();
+  },
+  /* ---- 预设库 / PRESETS：Slots（按 modelId 分槽）作为内置节点预设选择库 ----
+     数据源 = Slots.list()；每项单击 = 载入整图（直接载入 + toast 说明，无模态）；
+     「+ 存当前」复用现有保存槽位流程（openSlots 的 name 输入模态）；删除与 combo-del 同款交互 */
+  renderPresets: function () {
+    var box = $('#lib-presets');
+    if (!box) return;
+    var list = Slots.all();
+    var head = '<div class="lib-group"><div class="lib-head" style="--gc:var(--preview)"><span class="swatch"></span><span>预设库 / PRESETS</span>' +
+      '<span class="count">' + list.length + '</span>' +
+      '<button class="preset-add" id="preset-add" title="保存当前画布为预设（按 modelId 存入槽位）">+ 存当前</button></div>';
+    var html = head;
+    if (!list.length) {
+      html += '<p class="panel-sub" style="margin:4px 2px 0">暂无预设：点「+ 存当前」把整张画布存为可复用预设，随后一键载入。</p></div>';
+      box.innerHTML = html;
+      var addBtn0 = $('#preset-add');
+      if (addBtn0) addBtn0.addEventListener('click', function () { UI.openSlots(true); });
+      return;
+    }
+    var html = head;
+    list.forEach(function (it) {
+      var meta = '?';
+      try {
+        var doc = JSON.parse(it.raw);
+        var ed = doc.meta && doc.meta.editor;
+        var cnt = ed && Array.isArray(ed.nodes) ? ed.nodes.length
+          : (doc.graph && Array.isArray(doc.graph.nodes) ? doc.graph.nodes.length : 0);
+        meta = cnt + 'N · ' + String(doc.name || '');
+      } catch (err) { /* 保留 '?' */ }
+      html += '<div class="lib-item preset-item" data-preset="' + esc(it.slot) + '" title="' + esc(it.slot) + ' · 单击载入（当前画布将被替换）">' +
+        '<span class="glyph" style="--gc:var(--preview)">' + icon('workspace', 14) + '</span>' +
+        '<span class="txt">' + esc(it.slot) + '</span>' +
+        '<span class="en">' + esc(meta) + '</span>' +
+        '<button class="combo-del" data-del-preset="' + esc(it.slot) + '" title="删除预设">×</button></div>';
+    });
+    html += '</div>';
+    box.innerHTML = html;
+    $$('#lib-presets .preset-item').forEach(function (el) {
+      el.addEventListener('click', function (e) {
+        if (e.target.closest('.combo-del') || e.target.closest('.preset-add')) return;
+        UI.loadPreset(el.dataset.preset);
+      });
+    });
+    $$('#lib-presets .combo-del').forEach(function (b) {
+      b.addEventListener('click', function () {
+        Slots.del(b.dataset.delPreset);
+        UI.renderPresets();
+        UI.toast('预设「' + b.dataset.delPreset + '」已删除');
+      });
+    });
+    var add = $('#preset-add');
+    if (add) add.addEventListener('click', function () { UI.openSlots(true); });
+  },
+  loadPreset: function (slot) {
+    var raw = Slots.load(slot);
+    if (!raw) { this.toast('预设不存在或已被删除', 'err'); return; }
+    IO.applyText(raw, true);
+    this.toast('已载入预设「' + slot + '」· 当前画布已替换（编辑器无撤销 undo，建议先存槽备份）', 'ok');
+    this.status('已载入预设「' + slot + '」');
   },
   appendNode: function (type) {
     var c = this.canvas.getBoundingClientRect();
@@ -2115,6 +2370,10 @@ var UI = {
     });
     window.addEventListener('resize', function () { UI.renderMinimap(); });
   },
+  capturePointer: function (e) {
+    /* 合成事件（selftest 程序化 dispatch）无活动指针，setPointerCapture 会抛 NotFoundError → 降级放行 */
+    try { this.canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  },
   onPointerDown: function (e) {
     if (e.button !== 0 && e.button !== 1) return;
     var nodeEl = e.target.closest ? e.target.closest('.node') : null;
@@ -2125,11 +2384,12 @@ var UI = {
       if (!n) return;
       this.link = { from:n.id, start:{ x:n.pos.x+NODE_W, y:n.pos.y+PORT_Y }, cur:{ x:n.pos.x+NODE_W, y:n.pos.y+PORT_Y } };
       this.canvas.classList.add('linking');
-      this.canvas.setPointerCapture(e.pointerId);
+      this.capturePointer(e);
       this.renderWires();
       e.preventDefault(); return;
     }
     if (nodeEl) {
+      if (e.button !== 0) return;   // 节点拖拽仅左键；中键点击节点不拖拽
       var id = nodeEl.dataset.id, nd = Graph.byId(id);
       if (!nd) return;
       if (e.shiftKey) {
@@ -2141,22 +2401,22 @@ var UI = {
       this.drag = { kind:'node', ids:Array.from(Graph.selection), start:this.toWorld(e.clientX,e.clientY),
         origin:{}, moved:false };
       this.drag.ids.forEach(function (k) { var q = Graph.byId(k); if (q) UI.drag.origin[k] = { x:q.pos.x, y:q.pos.y }; });
-      this.canvas.setPointerCapture(e.pointerId);
+      this.capturePointer(e);
       this.renderNodes(); this.renderWires(); this.renderInspector();
       e.preventDefault(); return;
     }
     if (edgeEl) return;   // 交给 click 处理选中
-    /* 空白：Shift 框选，否则平移 */
+    /* 空白：左键（含 Shift）= 框选；中键 = 平移画布（右键交给 contextmenu） */
     Graph.selectedEdge = null;
-    if (e.shiftKey) {
-      var r = this.canvas.getBoundingClientRect();
-      this.marquee = { x0:e.clientX-r.left, y0:e.clientY-r.top, x1:e.clientX-r.left, y1:e.clientY-r.top, add:e.ctrlKey||e.metaKey };
-      this.canvas.setPointerCapture(e.pointerId);
-    } else {
+    if (e.button === 1) {
       this.drag = { kind:'pan', sx:e.clientX, sy:e.clientY, ox:Graph.viewport.x, oy:Graph.viewport.y, moved:false };
       this.canvas.classList.add('panning');
-      this.canvas.setPointerCapture(e.pointerId);
+      this.capturePointer(e);
       Graph.selection.clear(); this.renderNodes(); this.renderInspector();
+    } else {
+      var r = this.canvas.getBoundingClientRect();
+      this.marquee = { x0:e.clientX-r.left, y0:e.clientY-r.top, x1:e.clientX-r.left, y1:e.clientY-r.top, add:e.ctrlKey||e.metaKey };
+      this.capturePointer(e);
     }
     e.preventDefault();
   },
@@ -2405,6 +2665,7 @@ var UI = {
     $('#slot-save').addEventListener('click', function () {
       var s = $('#slot-name').value.trim() || Binding.name;
       Slots.save(s, Serializer.exportText());
+      UI.renderPresets();
       UI.toast('已保存到槽位 ' + s, 'ok'); UI.openSlots();
     });
     $$('#modal-box [data-load]').forEach(function (b) {
@@ -2414,7 +2675,7 @@ var UI = {
       });
     });
     $$('#modal-box [data-del]').forEach(function (b) {
-      b.addEventListener('click', function () { Slots.del(list[Number(b.dataset.del)].slot); UI.toast('槽位已删除'); UI.openSlots(); });
+      b.addEventListener('click', function () { Slots.del(list[Number(b.dataset.del)].slot); UI.renderPresets(); UI.toast('槽位已删除'); UI.openSlots(); });
     });
     if (presave) { /* 从导出面板跳转：聚焦槽名输入 */ setTimeout(function(){ var s=$('#slot-name'); if(s) s.focus(); },0); }
   },
@@ -2774,6 +3035,73 @@ function runSelfTest() {
       return { ok:zOk && rowOk && col && uncol, z:zOk, row:rowOk, col:col, uncol:uncol };
     } catch (e) { return { ok:false, error:String(e) }; }
   })();
+  // 收起能力自测（本轮交互改造）：①指南条收起/展开；②左右栏收起→display:none + chip 生成（尺寸≤80×28）→chip 程序化点击恢复；
+  // ③预设库分组渲染（存测试槽→渲染→删除清理，不留污染）；④左键空白拖拽=框选（marquee 显示）+ 中键拖拽=平移
+  var chipsT = (function () {
+    try {
+      /* ① 指南条 */
+      HintBar.collapsed = false; HintBar.apply();
+      var bar0 = !document.getElementById('canvas-hint').classList.contains('hidden');
+      HintBar.collapsed = true; HintBar.apply();
+      var hintCol = document.getElementById('canvas-hint').classList.contains('hidden') &&
+        document.getElementById('hint-chip').style.display === 'block';
+      HintBar.collapsed = false; HintBar.persist(); HintBar.apply();
+      var hintExp = !document.getElementById('canvas-hint').classList.contains('hidden') &&
+        document.getElementById('hint-chip').style.display === 'none';
+      /* ② 左栏收起 → chip 生成（尺寸断言）→ chip 点击恢复 */
+      RailChips.toggle('lib', true);
+      var libHidden = document.getElementById('library').style.display === 'none' &&
+        document.getElementById('rz-lib').style.display === 'none';
+      var libChip = document.getElementById('rail-chip-lib');
+      var chipSizeOk = !!libChip && libChip.offsetWidth <= 80 && libChip.offsetHeight <= 28;
+      if (libChip) libChip.click();
+      var libRestored = document.getElementById('library').style.display !== 'none' &&
+        !document.getElementById('rail-chip-lib');
+      /* ② 右栏同样流程 */
+      RailChips.toggle('insp', true);
+      var inspHidden = document.getElementById('inspector').style.display === 'none' &&
+        !!document.getElementById('rail-chip-insp');
+      var inspChip = document.getElementById('rail-chip-insp');
+      if (inspChip) inspChip.click();
+      var inspRestored = document.getElementById('inspector').style.display !== 'none' &&
+        !document.getElementById('rail-chip-insp');
+      /* ③ 预设库分组渲染 + 载入行为（存测试槽 → 渲染断言 → 清空画布 → loadPreset 还原 → 删除清理，不留污染）
+         注意：此前 ctx/combo 自测已改动画布，不能假设 demo 节点存在 —— 记录当前首个节点 id 做还原断言 */
+      var nSaved = Graph.nodes.length, firstId = Graph.nodes.length ? Graph.nodes[0].id : null;
+      Slots.save('__selftest_preset__', Serializer.exportText());
+      UI.renderPresets();
+      var presetOk = !!document.querySelector('#lib-presets .preset-item[data-preset="__selftest_preset__"]');
+      Graph.clear(); UI.refreshAll();
+      UI.loadPreset('__selftest_preset__');
+      var presetLoad = Graph.nodes.length === nSaved && (!firstId || !!Graph.byId(firstId));
+      Slots.del('__selftest_preset__');
+      UI.renderPresets();
+      var presetClean = !document.querySelector('#lib-presets .preset-item[data-preset="__selftest_preset__"]');
+      /* ④ 左键空白拖拽 = 框选（marquee 显示/隐藏）；中键拖拽 = 平移（panning class） */
+      var cvm = document.getElementById('canvas');
+      var mk = function (type, x, y, opts) {
+        opts = opts || {};
+        return new PointerEvent(type, { bubbles:true, pointerId:3, clientX:x, clientY:y,
+          button:opts.button||0, buttons:opts.button === 1 ? 4 : 1, shiftKey:!!opts.shiftKey });
+      };
+      var sel0 = Graph.selection.size;
+      cvm.dispatchEvent(mk('pointerdown', 200, 300));
+      cvm.dispatchEvent(mk('pointermove', 340, 420));
+      var marqueeShown = UI.marquee != null && document.getElementById('marquee').style.display === 'block';
+      cvm.dispatchEvent(mk('pointerup', 340, 420));
+      var marqueeDone = UI.marquee == null && document.getElementById('marquee').style.display === 'none';
+      cvm.dispatchEvent(mk('pointerdown', 500, 400, { button:1 }));
+      var panMid = UI.drag != null && UI.drag.kind === 'pan' && cvm.classList.contains('panning');
+      cvm.dispatchEvent(mk('pointermove', 560, 430));
+      cvm.dispatchEvent(mk('pointerup', 560, 430));
+      var panEnd = UI.drag == null && !cvm.classList.contains('panning');
+      var ok = bar0 && hintCol && hintExp && libHidden && chipSizeOk && libRestored &&
+        inspHidden && inspRestored && presetOk && presetLoad && presetClean && marqueeShown && marqueeDone && panMid && panEnd;
+      return { ok:ok, hint:bar0 && hintCol && hintExp, libChip:libHidden && chipSizeOk && libRestored,
+        inspChip:inspHidden && inspRestored, presets:presetOk && presetLoad && presetClean,
+        marquee:marqueeShown && marqueeDone, panMid:panMid && panEnd };
+    } catch (e) { return { ok:false, error:String(e) }; }
+  })();
   var doc = Serializer.build();
   var result = {
     validate: v,
@@ -2788,7 +3116,8 @@ function runSelfTest() {
     contextMenus: ctx,
     combo: comboT,
     panels: panelsT,
-    console: consoleT
+    console: consoleT,
+    chips: chipsT
   };
   $('#mg-selftest').textContent = JSON.stringify(result, null, 2);
   $('#mg-export').textContent = Serializer.exportText();
@@ -2803,6 +3132,8 @@ function runSelfTest() {
     + ' combo-' + (comboT.ok ? 'ok' : 'FAIL(' + (comboT.error ? 'err=' + comboT.error : 'nodes=' + comboT.nodes + '/edges=' + comboT.edges) + ')')
     + ' panels-' + (panelsT.ok ? 'ok' : 'FAIL(' + (panelsT.error ? 'err=' + panelsT.error : 'raised=' + panelsT.raised + '/col=' + panelsT.col + '/moved=' + panelsT.moved + '/reorder=' + panelsT.reorder) + ')')
     + ' console-' + (consoleT.ok ? 'ok' : 'FAIL(' + (consoleT.error ? 'err=' + consoleT.error : 'z=' + consoleT.z + '/row=' + consoleT.row + '/col=' + consoleT.col + '/uncol=' + consoleT.uncol) + ')')
+    + ' chips-' + (chipsT.ok ? 'ok' : 'FAIL(' + (chipsT.error ? 'err=' + chipsT.error :
+      'hint=' + chipsT.hint + '/libChip=' + chipsT.libChip + '/inspChip=' + chipsT.inspChip + '/presets=' + chipsT.presets + '/marquee=' + chipsT.marquee + '/panMid=' + chipsT.panMid) + ')')
     + (rt.diff.length ? ' diff=' + rt.diff.join('|') : '');
 }
 
