@@ -15,6 +15,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createAiInbox } from '../../packages/dsh-l2d-plugin/lib/ai-inbox.mjs';
 import {
@@ -26,6 +27,7 @@ import {
   runNodegraph,
   createInboxActExecutor,
 } from '../../packages/dsh-l2d-plugin/lib/nodegraph.mjs';
+import { createRunRegistry } from '../../packages/dsh-l2d-plugin/lib/nodegraph-runs.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
@@ -187,6 +189,10 @@ const nodegraphExecutor = createInboxActExecutor({
   call: (name, args) => aiInbox.call(name, args),
   read: (id) => aiInbox.read(id),
 });
+
+// NE-02 执行注册表（与真机宿主 index.js 同语义）：executionId / 同图 busy / 批间取消 / 历史回查
+const nodegraphRuns = createRunRegistry({ maxRecords: 20 });
+const randomUUID = () => crypto.randomUUID();
 const AI_ALLOWED = new Set([
   'l2d_set_expression',
   'l2d_play_motion',
@@ -586,13 +592,69 @@ const server = http.createServer(async (req, res) => {
     if (!name) {
       return send(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['name required'] }), 'utf8'));
     }
+    // NE-02：同图重入防护（与真机宿主同语义）
+    const executionId = randomUUID();
+    const begun = nodegraphRuns.begin(executionId, name);
+    if (!begun.ok) {
+      return send(res, 409, MIME['.json'], Buffer.from(JSON.stringify({
+        ok: false, reason: 'busy', executionId: begun.executionId,
+        message: '该节点图已在执行中',
+      }), 'utf8'));
+    }
+    // 取消传播：每批下发前检查 cancelRequested（批间粒度，已入队批次播完）
+    const cancellableExecutor = async (input) => {
+      const rec = nodegraphRuns.get(executionId);
+      if (rec && rec.cancelRequested) {
+        return { ok: false, accepted: false, reason: 'cancelled' };
+      }
+      return nodegraphExecutor(input);
+    };
     try {
-      const result = await runNodegraph(name, nodegraphExecutor);
+      const result = await runNodegraph(name, cancellableExecutor);
       const httpStatus = result && result.ok === false && typeof result.status === 'number' ? result.status : 200;
-      return send(res, httpStatus, MIME['.json'], Buffer.from(JSON.stringify(result), 'utf8'));
+      nodegraphRuns.finish(executionId, { ...result, executionId });
+      return send(res, httpStatus, MIME['.json'], Buffer.from(JSON.stringify({ ...result, executionId }), 'utf8'));
+    } catch (err) {
+      nodegraphRuns.finish(executionId, { ok: false, status: 'failed', reason: 'execution-error' });
+      return send(res, 500, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: [String((err && err.message) || err)], executionId }), 'utf8'));
+    }
+  }
+
+  // NE-02：执行历史回查（GET）与取消（POST），防护与 run 同级
+  if (urlPath === '/nodegraphs/executions') {
+    if (req.method !== 'GET') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'), false);
+    let id = '';
+    try {
+      const u = new URL(req.url, 'http://127.0.0.1');
+      id = u.searchParams.get('id') || '';
+      const limit = Number(u.searchParams.get('limit')) || 20;
+      if (id) {
+        const rec = nodegraphRuns.get(id);
+        if (!rec) return send(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'not-found' }), 'utf8'));
+        return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, record: rec }), 'utf8'));
+      }
+      return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, items: nodegraphRuns.list({ limit }) }), 'utf8'));
     } catch (err) {
       return send(res, 500, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: [String((err && err.message) || err)] }), 'utf8'));
     }
+  }
+
+  if (urlPath === '/nodegraphs/cancel') {
+    if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'), false);
+    if (!writeGuard(req, res)) return;
+    let id = '';
+    try {
+      id = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('id') || '');
+    } catch {
+      id = '';
+    }
+    if (!id) return send(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['id required'] }), 'utf8'));
+    const rec = nodegraphRuns.get(id);
+    if (!rec || rec.status !== 'running') {
+      return send(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'not-found-or-terminal' }), 'utf8'));
+    }
+    nodegraphRuns.requestCancel(id);
+    return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, cancelled: true, executionId: id }), 'utf8'));
   }
 
   if (urlPath === '/motion-mode') {
