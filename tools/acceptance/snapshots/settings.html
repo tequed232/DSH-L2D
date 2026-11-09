@@ -1311,40 +1311,12 @@
 
       <section class="card studio-card" id="sec-performance">
         <div class="sec-head"><span class="sec-no">04</span><h2>动画与性能</h2></div>
-        <p class="sec-desc">刷新节奏、声音、传感器与桌宠形态。</p>
+        <p class="sec-desc">刷新节奏、声音、传感器与桌宠形态。实时读数在「性能监控台」。</p>
         <div class="rows" id="rows-performance"></div>
-        <div class="readouts">
-          <div class="ro">
-            <div class="k">帧率</div>
-            <div class="ro-val" id="roFps">—</div>
-          </div>
-          <div class="ro">
-            <div class="k">分辨率</div>
-            <div class="ro-val" id="roRes">—</div>
-          </div>
-          <div class="ro">
-            <div class="k">渲染就绪</div>
-            <div class="ro-val" id="roReady">—</div>
-          </div>
-        </div>
-        <p class="note" id="roNote">读数来自 status.json 与 l2d_get_state，取不到时显示「—」。</p>
-      </section>
-
-      <section class="card studio-card" id="sec-dev">
-        <div class="sec-head"><span class="sec-no">05</span><h2>开发者工具</h2></div>
-        <p class="sec-desc">诊断信息与不常用的重活。</p>
-        <div class="kv" id="devInfo"></div>
-        <div class="dev-actions">
-          <a class="studio-menu-item" href="/dsh-l2d/test.html">参数监视台</a>
-          <button class="btn studio-btn" type="button" id="rescanBtn">能力重扫</button>
-          <span class="hint" id="devMsg"></span>
-          <button class="btn studio-btn" type="button" id="formBtn">模型形态变化</button>
-          <span class="hint" id="formMsg"></span>
-        </div>
       </section>
 
       <section class="card studio-card" id="sec-nodegraph">
-        <div class="sec-head"><span class="sec-no">06</span><h2>节点图动作编排</h2></div>
+        <div class="sec-head"><span class="sec-no">05</span><h2>节点图动作编排</h2></div>
         <p class="sec-desc">节点图与 LLM 通道互斥；分享 JSON 导入即用。</p>
         <div class="modes" id="ngModes" role="radiogroup" aria-label="执行通道模式">
           <label class="mode-opt"><input type="radio" name="motionMode" value="nodegraph" />节点图 + LLM 辅助</label>
@@ -1360,6 +1332,43 @@
         </div>
         <div class="ng-errors" id="ngErrors" hidden></div>
         <div class="ng-list" id="ngList"></div>
+        <h3 class="sub-head">模型形态控制</h3>
+        <div class="dev-actions">
+          <select class="sel" id="formSelect" aria-label="目标模型形态">
+            <!-- 三形态标签与 overlay.js BODY_TYPES 常量一致；无 l2d_set_form 直达指令，见 bindFormChange 注释 -->
+            <option value="0">默认体型</option>
+            <option value="1">体型1</option>
+            <option value="2">体型2</option>
+          </select>
+          <span class="hint" id="formMsg"></span>
+        </div>
+      </section>
+
+      <section class="card studio-card" id="sec-monitor">
+        <div class="sec-head"><span class="sec-no">06</span><h2>性能监控台</h2></div>
+        <p class="sec-desc">实时读数、诊断信息与不常用的重活。</p>
+        <div class="readouts">
+          <div class="ro">
+            <div class="k">帧率</div>
+            <div class="ro-val" id="roFps">—</div>
+          </div>
+          <div class="ro">
+            <div class="k">分辨率</div>
+            <div class="ro-val" id="roRes">—</div>
+          </div>
+          <div class="ro">
+            <div class="k">渲染就绪</div>
+            <div class="ro-val" id="roReady">—</div>
+          </div>
+        </div>
+        <p class="note" id="roNote">读数来自 status.json 与 l2d_get_state，每 6 秒自动刷新，取不到时显示「—」。</p>
+        <h3 class="sub-head">诊断信息</h3>
+        <div class="kv" id="devInfo"></div>
+        <div class="dev-actions">
+          <a class="studio-menu-item" href="/dsh-l2d/test.html">参数监视台</a>
+          <button class="btn studio-btn" type="button" id="rescanBtn">能力重扫</button>
+          <span class="hint" id="devMsg"></span>
+        </div>
       </section>
 
       <noscript>
@@ -2300,61 +2309,35 @@
         }
 
         function bindFormChange() {
-          var btn = $('formBtn');
+          var select = $('formSelect');
           var msg = $('formMsg');
           var busy = false;
           var unavailable = false;
+          // 三形态标签硬编码，与真源 overlay.js BODY_TYPES 常量一致（下拉初始选项必须先有值，
+          // 不能等首次回执才学习；回执 label 仅用于成功提示文案）
+          var FORM_LABELS = ['默认体型', '体型1', '体型2'];
+          // 当前形态 index：唯一可信来源是 l2d_change_form 回执的 form.index
+          //（l2d_get_state 不回传 bodyType；运行时无 l2d_set_form 直达指令，只有 +1 循环）。
+          // 学习值缓存进本页 localStorage，跨会话沿用，未知时为 null（首次切换先探测一步）。
+          var formIndex =
+            typeof local.formIndex === 'number' && local.formIndex >= 0 && local.formIndex <= 2
+              ? local.formIndex
+              : null;
 
           function say(text, isError) {
             msg.textContent = text;
             msg.className = 'hint' + (isError ? ' is-error' : '');
           }
 
-          // 统一收口：解除请求锁；仅当运行时仍不可用才保持禁用，杜绝按钮永久锁死
-          function settle() {
-            busy = false;
-            if (unavailable) {
-              btn.disabled = true;
-              btn.title = '运行时不可用：status.json 读取失败';
-              say('运行时不可用', true);
-            } else {
-              btn.disabled = false;
-            }
+          function rememberIndex(i) {
+            formIndex = i;
+            writeLocal('formIndex', i);
           }
 
-          function fail(text) {
-            say(text, true);
-            settle();
-          }
-
-          function poll(id, startedAt) {
-            if (Date.now() - startedAt >= 8000) {
-              fail('切换失败：等待运行时回执超时');
-              return;
-            }
-            fetchJson(API.result + '?id=' + encodeURIComponent(id)).then(function (res) {
-              var data = res.ok ? res.data : null;
-              if (data && data.ready) {
-                var r = data.result;
-                if (r && r.ok === true) {
-                  var label = (r.form && r.form.label) || '未知形态';
-                  say('已切换 · 当前形态：' + label, false);
-                  settle();
-                } else {
-                  fail('切换失败：' + ((r && r.reason) || '未知原因'));
-                }
-                return;
-              }
-              window.setTimeout(function () { poll(id, startedAt); }, 250);
-            });
-          }
-
-          btn.addEventListener('click', function () {
-            if (busy || unavailable) return;
-            busy = true;
-            btn.disabled = true;
-            say('正在切换…', false);
-            fetch(API.call, {
+          // 一次 l2d_change_form（运行时语义：+1 循环，钳制 0..2，到 2 后不可再进）
+          // 入队并轮询回执，8 秒超时；resolve 回执 result
+          function callChangeForm() {
+            return fetch(API.call, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ name: 'l2d_change_form', args: {} }),
@@ -2367,11 +2350,115 @@
               .then(function (queued) {
                 var id = queued && queued.id;
                 if (id === undefined || id === null || id === '') throw new Error('未返回队列 id');
-                poll(id, Date.now());
+                return new Promise(function (resolve, reject) {
+                  var tries = 0;
+                  (function poll() {
+                    if (tries >= 32) {
+                      reject(new Error('等待运行时回执超时'));
+                      return;
+                    }
+                    tries += 1;
+                    fetchJson(API.result + '?id=' + encodeURIComponent(id))
+                      .then(function (res) {
+                        var data = res.ok ? res.data : null;
+                        if (data && data.ready) {
+                          resolve(data.result);
+                          return;
+                        }
+                        window.setTimeout(poll, 250);
+                      })
+                      .catch(function () {
+                        window.setTimeout(poll, 250);
+                      });
+                  })();
+                });
+              });
+          }
+
+          // 统一收口：解除占用；仅当运行时仍不可用才保持禁用，杜绝控件永久锁死
+          function settle() {
+            busy = false;
+            if (unavailable) {
+              select.disabled = true;
+              select.title = '运行时不可用：status.json 读取失败';
+              say('运行时不可用', true);
+            } else {
+              select.disabled = false;
+            }
+          }
+
+          function fail(text) {
+            say(text, true);
+            settle();
+          }
+
+          // 逐次调用直到回执 index 到达 target。回执 index 是唯一权威：
+          // 每步都以它重新校准本地学习值，学习值漂移也不会假成功。
+          function stepToward(target) {
+            callChangeForm()
+              .then(function (r) {
+                if (!r || r.ok !== true) {
+                  fail('切换失败：' + (r && r.reason === 'form-unavailable'
+                    ? '当前模型不支持形态切换（缺形态参数，或已处于最高形态「体型2」）'
+                    : (r && r.reason) || '未知原因'));
+                  return;
+                }
+                var idx = r.form && typeof r.form.index === 'number'
+                  ? Math.max(0, Math.min(2, r.form.index))
+                  : null;
+                if (idx === null) {
+                  fail('切换失败：回执缺少形态 index，无法确认当前形态');
+                  return;
+                }
+                rememberIndex(idx);
+                if (idx === target) {
+                  select.value = String(target);
+                  say('已切换 · 当前形态：' + ((r.form && r.form.label) || FORM_LABELS[target]), false);
+                  settle();
+                  return;
+                }
+                if (idx < target) {
+                  stepToward(target); // 还没到，继续下一次（每次 +1，最多再 2 次）
+                  return;
+                }
+                // 探测步越过了目标：运行时形态通道只增不减，无法回退——如实报告，不假成功
+                select.value = String(idx);
+                fail(
+                  '无法切到「' + FORM_LABELS[target] + '」：运行时形态通道只支持「默认体型→体型1→体型2」' +
+                    '单向递增，当前已到「' + ((r.form && r.form.label) || FORM_LABELS[idx]) + '」，暂无切回低形态的指令'
+                );
               })
               .catch(function (err) {
                 fail('切换失败：' + reason(err));
               });
+          }
+
+          select.addEventListener('change', function () {
+            if (busy) {
+              select.value = formIndex === null ? '0' : String(formIndex);
+              say('上一次切换还在进行，请稍候', true);
+              return;
+            }
+            if (unavailable) return; // 此时控件应为禁用态，兜底不发起请求
+            var target = Number(select.value);
+            if (!(target >= 0 && target <= 2 && Math.floor(target) === target)) return;
+            if (formIndex !== null && target === formIndex) {
+              say('当前已是「' + FORM_LABELS[target] + '」', false);
+              return;
+            }
+            if (formIndex !== null && target < formIndex) {
+              // 已知当前形态且目标更低：运行时无直达/回退指令，如实告知，不假成功
+              say(
+                '无法从「' + FORM_LABELS[formIndex] + '」切到「' + FORM_LABELS[target] +
+                  '」：运行时形态通道只支持单向递增（默认体型→体型1→体型2），暂无切回低形态的指令',
+                true
+              );
+              return;
+            }
+            busy = true;
+            select.disabled = true;
+            say(formIndex === null ? '正在探测当前形态…' : '正在切换…', false);
+            stepToward(target);
           });
 
           // 复用 loadAll 现有的 status.json 探测结果（state.status），不另造一套探测
@@ -2379,26 +2466,32 @@
             unavailable = !state.status;
             if (busy) return;
             if (unavailable) {
-              btn.disabled = true;
-              btn.title = '运行时不可用：status.json 读取失败';
+              select.disabled = true;
+              select.title = '运行时不可用：status.json 读取失败';
               say('运行时不可用', true);
             } else {
-              btn.disabled = false;
-              btn.title = '';
+              select.disabled = false;
+              select.title = '';
               if (msg.textContent === '运行时不可用') say('', false);
             }
           };
 
-          // 只读调试钩子：供浏览器验收读取三态 / 主动触发，不影响正常使用
+          // 初始选中已学习的当前形态（未知时停在第一项，由首次切换的探测步校准）
+          if (formIndex !== null) select.value = String(formIndex);
+
+          // 只读调试钩子：供浏览器验收读取状态 / 主动触发，不影响正常使用
           window.__L2D_FORM_UI__ = {
             state: function () {
               return {
-                disabled: btn.disabled,
+                disabled: select.disabled,
                 message: msg.textContent,
-                error: msg.classList.contains('is-error')
+                error: msg.classList.contains('is-error'),
+                formIndex: formIndex
               };
             },
-            trigger: function () { btn.click(); }
+            trigger: function () {
+              select.dispatchEvent(new Event('change'));
+            }
           };
         }
 

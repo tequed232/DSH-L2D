@@ -63,14 +63,11 @@
   /* 新设置页分区直达：副标题说明每个分区管什么；返回路径 = 抽屉「完成」/ Esc / 新窗口打开 */
   /* URL 运行时探测：真机 /dsh-l2d/settings，DevServer /settings，file:// 独立页 /dsh-l2d/settings.html */
   var SETTINGS_URL_CANDS = ['/dsh-l2d/settings', '/settings', '/dsh-l2d/settings.html'];
+  /* 三页导航：「常规设置」直达第一分区 sec-display（页内含 显示/角色/情绪/动画 四分区滚动浏览） */
   var MENU_ITEMS = [
-    { sec: 'display', label: '显示与布局', sub: '桌宠形态 · 模型缩放 · 自动显隐' },
-    { sec: 'model', label: '角色与模型', sub: '资源状态 · 能力画像' },
-    { sec: 'behavior', label: '情绪与行为', sub: '自主动作 · 戳一戳 · 说话风格' },
-    { sec: 'performance', label: '动画与性能', sub: '刷新间隔 · 音效 · 传感器 · 余额刷新' },
-    { sec: 'nodegraph', label: '动作编排', sub: '节点图编辑器 · 槽位导入导出' },
-    { sec: 'dev', label: '开发者工具', sub: '版本信息 · 能力重扫 · 参数监视台' },
-    { href: '/dsh-l2d/test.html', label: '参数监视台', sub: '独立页：实时参数只读监控' }
+    { sec: 'display', label: '常规设置', sub: '显示布局 · 角色模型 · 情绪行为 · 动画性能' },
+    { sec: 'nodegraph', label: '节点编辑器', sub: '动作编排 · 模型形态 · 槽位导入导出' },
+    { sec: 'monitor', label: '性能监控台', sub: '实时读数 · 能力重扫 · 参数监视台' }
   ];
 
   var btn = null;
