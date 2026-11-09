@@ -17,6 +17,7 @@
  */
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +35,7 @@ import {
   runNodegraph,
   createInboxActExecutor,
 } from './nodegraph.mjs';
+import { createRunRegistry } from './nodegraph-runs.mjs';
 import { isReservedParam } from './param-guards.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
 import { ageSummaryState, isActionTool, legacyAgentState, summarizeSession } from './session-events.mjs';
@@ -1261,6 +1263,9 @@ export function apply(root, config = {}) {
     // 节点图执行入口（SPEC §4 第 4 行，14:50 定案）：导入的图回传动作给模型。
     // 传输面与 /ai/call 同级防护（回环 + 跨站栅栏 + POST 限）；业务面不经过 guardAiCall，
     // 互斥由 runNodegraph 内部兜住另一半（llm 模式 409 mode-blocked）。
+    // 执行注册表：每次 run 建 executionId 档（可回查/可取消），同图重入互斥按图隔离
+    // ——同名图同时只允许一个 run（busy 409），不同图允许并行执行。
+    const nodegraphRunRegistry = createRunRegistry();
     route('/dsh-l2d/nodegraphs/run', (req, res) => {
       if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
@@ -1276,17 +1281,93 @@ export function apply(root, config = {}) {
       if (!name) {
         return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['name required'] }), 'utf8'));
       }
+      const executionId = randomUUID();
+      const begun = nodegraphRunRegistry.begin(executionId, name);
+      if (!begun.ok) {
+        // 同图重入：409 + 既有 executionId，前端可据此回查在执行的 run。
+        return sendBuffer(res, 409, MIME['.json'], Buffer.from(JSON.stringify({
+          ok: false,
+          reason: 'busy',
+          executionId: begun.executionId,
+          message: '该节点图已在执行中',
+        }), 'utf8'));
+      }
+      // 包装 executor：每批下发前检查取消标志；已请求取消 → 不下发该批。
+      // 非 accepted 回执使 executeActionSequence 按 stopped 停止后续批次，取消即传播到执行链。
+      const cancellableExecutor = async (input) => {
+        const record = nodegraphRunRegistry.get(executionId);
+        if (record && record.cancelRequested) {
+          return { ok: false, accepted: false, reason: 'cancelled' };
+        }
+        return nodegraphExecutor(input);
+      };
       (async () => {
         try {
-          const result = await runNodegraph(name, nodegraphExecutor);
+          const result = await runNodegraph(name, cancellableExecutor);
+          nodegraphRunRegistry.finish(executionId, result);
           // runNodegraph 约定：ok:false 且 status 为数字 → 该数字即 HTTP 状态码；
           // 正常执行回 executeActionSequence 原样（含 receipts/completedSegments/remainingSegments），200。
           const httpStatus = result && result.ok === false && typeof result.status === 'number' ? result.status : 200;
-          sendBuffer(res, httpStatus, MIME['.json'], Buffer.from(JSON.stringify(result), 'utf8'));
+          // 正常路径追加 executionId（不改既有字段），供取消/回查关联。
+          sendBuffer(res, httpStatus, MIME['.json'], Buffer.from(JSON.stringify({ ...result, executionId }), 'utf8'));
         } catch (err) {
+          nodegraphRunRegistry.finish(executionId, { ok: false, reason: 'route-exception', errors: [String((err && err.message) || err)] });
           sendBuffer(res, 500, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: [String((err && err.message) || err)] }), 'utf8'));
         }
       })();
+    });
+
+    // 执行记录回查（只读）：?id=X → 完整记录（含 result/receipts 全文）；
+    // 否则 ?limit=N → 最近 N 条摘要（缺省注册表上限 20）。
+    route('/dsh-l2d/nodegraphs/executions', (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') {
+        return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      }
+      let id = '';
+      let limit = '';
+      try {
+        const params = new URL(req.url, 'http://127.0.0.1').searchParams;
+        id = String(params.get('id') || '');
+        limit = String(params.get('limit') || '');
+      } catch {
+        id = '';
+        limit = '';
+      }
+      if (id) {
+        const record = nodegraphRunRegistry.get(id);
+        if (!record) {
+          return sendBuffer(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['execution not found: ' + id] }), 'utf8'));
+        }
+        return sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, execution: record }), 'utf8'));
+      }
+      const parsedLimit = Number.parseInt(limit, 10);
+      const items = nodegraphRunRegistry.list({ limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined });
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, items }), 'utf8'));
+    });
+
+    // 取消执行：置 cancelRequested 标志；正在执行的批次循环在下一批 execute 前感知并停止。
+    // 仅对 running 记录生效；缺失/已终态 → 404（无正在执行的该次执行可取消）。
+    route('/dsh-l2d/nodegraphs/cancel', (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'POST') {
+        return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      }
+      let id = '';
+      try {
+        id = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('id') || '');
+      } catch {
+        id = '';
+      }
+      if (!id) {
+        return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['id required'] }), 'utf8'));
+      }
+      if (!nodegraphRunRegistry.requestCancel(id)) {
+        return sendBuffer(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['running execution not found: ' + id] }), 'utf8'));
+      }
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, cancelled: true, executionId: id }), 'utf8'));
     });
 
     // ------------------------------------------------------ 桌宠独立窗页面
