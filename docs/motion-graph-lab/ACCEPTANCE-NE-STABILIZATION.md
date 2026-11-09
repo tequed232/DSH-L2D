@@ -124,3 +124,30 @@
 ## Acceptance Status
 
 **PASS_WITH_WARNINGS** —— NE-01/02/03 核心目标全部达成且证据完备；K1（批间取消粒度）为已知语义边界；NE-04 全量拆分如实推迟至下一窗口（安全网已就位）。
+
+
+---
+
+# 附加轮：设置三页重构 + 编辑器五项交互改造（2026-11-09 18:40）
+
+## 交付（两代理并行，a4f1a24 + d9619f3）
+
+### 设置三页重构（impl-setrefactor）
+- 菜单六分区→三项：常规设置 / 节点编辑器 / 性能监控台；sec-dev 移除（诊断/重扫/监视台归性能监控台，实时读数自动画性能移入）
+- 形态下拉选择器：根治 form-unavailable——运行时形态通道单向递增 0→1→2（cycleBodyType 钳制），下拉直达目标（≤2 次逐调用+回执校准），2→0 如实报无切回指令，不假成功
+- run.mjs E 项断言授权更新为六分区新标题
+
+### 编辑器五项改造（impl-editor2）
+1. #canvas-hint z 4→1 + 可收起 chip（持久化）
+2. 三栏可收起小悬浮 chip（56×26 可拖动持久化，画布自动占满，两态不遮挡核心区——DOM 断言）
+3. 左键空白拖拽=框选、中键=平移、右键/滚轮零改动
+4. 预设库 PRESETS 分组（Slots 按 modelId：载入/存当前/删除）
+5. selftest 第九组 chips 断言
+
+## 终审
+- build verify IDENTICAL（192442B，模板同步后）
+- consistency 9P/0F、test:core/contract/typecheck 绿
+- selftest 九组全绿：validate-ok roundtrip-ok sim resizers-ok ctx-ok combo-ok panels-ok console-ok chips-ok
+
+## Acceptance Status
+PASS_WITH_WARNINGS —— 形态切回低形态需 overlay 轮次新增 l2d_set_form 直达 case（当前通道单向递增，UI 已如实提示）；预设载入无确认模态（toast 提示替代）；JSON 预览仅 selftest 模式存在（调查结论）；宿主 3080 真机 Live2D 呈现留待宿主在线。
