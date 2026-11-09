@@ -102,6 +102,25 @@
 7. ✅ Execution Console 真实 receipts
 8. ✅ 全量回归绿 + selftest 八项全绿
 
+## 七、Phase 5 UI 链路实测（2026-11-09 14:40，computer-use 端到端）
+
+宿主 3080 离线（用户外出），改走 dev-server 全链路实测（dev-server 已同步 NE-02 全部路由，445c2df）：
+
+| # | 步骤 | 结果 |
+|---|------|------|
+| 1 | POST /nodegraphs/import fixture | ✅ {ok:true,name:端到端实测图} |
+| 2 | GET /nodegraphs | ✅ valid:true |
+| 3 | 真实执行 run（无模型） | ✅ 12s timeout → stopped，executionId 附于响应，批 0 receipts 完整 |
+| 4 | GET /nodegraphs/executions?limit | ✅ 历史含 startedAt/finishedAt/status:timeout |
+| 5 | GET /executions?id=X | ✅ 完整记录含 result 全文 |
+| 6 | 切 llm 后 run | ✅ 409 mode-blocked（增强 message + executionId） |
+| 7 | UI：锚点 #sec-nodegraph 直达 | ✅ DOM 快照渲染正常 |
+| 8 | UI：点击 llm radio | ✅ POST 生效（mode:llm） |
+| 9 | UI：三态条 Runnable ✗ → 「切换到节点图模式」按钮自动出现 | ✅ DOM 取证 node_id=11 |
+| 10 | UI：点击切换按钮 | ✅ mode 恢复 nodegraph，闭环 |
+
+宿主 3080 真机 Live2D 呈现验收留待宿主在线（UI 之外的最后一环）。
+
 ## Acceptance Status
 
 **PASS_WITH_WARNINGS** —— NE-01/02/03 核心目标全部达成且证据完备；K1（批间取消粒度）为已知语义边界；NE-04 全量拆分如实推迟至下一窗口（安全网已就位）。
