@@ -111,6 +111,24 @@ export const STEP_KEYS = new Set([
 /** 并行组 id：只允许安全字符，长度 1~32（会进回执与诊断）。 */
 export const GROUP_ID_RE = /^[A-Za-z0-9_.:-]{1,32}$/;
 
+/**
+ * 步字段白名单的显式数组形式（与 STEP_KEYS 同一内容，供编辑器构建期复用）。
+ * 新增步字段时只改 STEP_KEYS，这里自动跟随。
+ */
+export const STEP_FIELD_KEYS = Object.freeze([...STEP_KEYS]);
+
+/**
+ * validateStep 内部使用的数值域（以既有硬编码值为准提取，供编辑器构建期复用）。
+ * look 的 x/y 同域（-1~1）；改动取值域必须同步 validateStep，两边测试互相对拍。
+ */
+export const STEP_FIELD_RANGES = Object.freeze({
+  delayMs: [0, 5000],
+  closeAfterMs: [300, 12000],
+  timeoutMs: [0, 8000],
+  x: [-1, 1],
+  y: [-1, 1],
+});
+
 /** 组语义：sequence 按顺序；parallel 同 elapsed 一次投放（必须带 group）。 */
 export const STEP_MODES = ['sequence', 'parallel'];
 

@@ -18,7 +18,8 @@
  *     校验失败绝不触碰原文件。
  *   - 编译语义（确定性，测试固化）：分支按 next 数组顺序深度优先线性化，共享后继只编译一次；
  *     delay 节点不产生 step，其 delayMs 累加并入线性化中下一个动作节点的 delayMs，
- *     末端无载体时丢弃。
+ *     末端无载体时丢弃。分段：每 8 步一段，步优先级变化也起新段（节点可选 priority，
+ *     缺省/非法回 NORMAL，旧图行为不变）。
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -37,6 +38,8 @@ export const NODEGRAPH_SCHEMA_VERSION = 1;
 export const NODEGRAPH_KIND = 'dsh-l2d-nodegraph';
 /** F1 四类动作步 + 纯延时节点（§2：编译为并入 delayMs）。 */
 export const NODE_TYPES = Object.freeze(['expression', 'motion', 'pose', 'look', 'delay']);
+/** 节点级可选执行优先级（与编辑器 Capability.priorities / ACT_PRIORITIES 同一取值域，缺省 NORMAL）。 */
+export const NODE_PRIORITIES = Object.freeze(['BACKGROUND', 'NORMAL', 'FORCE']);
 export const MOTION_MODES = Object.freeze(['nodegraph', 'llm']);
 export const MOTION_MODE_FILE_NAME = 'l2d-motion-mode.json';
 export const NODEGRAPH_DIR_NAME = 'l2d-nodegraphs';
@@ -158,6 +161,7 @@ export function sanitizeFileName(name) {
 
 const NODE_ALLOWED_KEYS = Object.freeze([
   'id', 'type', 'name', 'clear', 'closeMotion', 'closeAfterMs', 'delayMs', 'pose', 'x', 'y', 'next',
+  'priority',
 ]);
 
 /**
@@ -233,6 +237,11 @@ function validateGraph(graph) {
       if (!Number.isFinite(d) || d < 0 || d > 5000) {
         errors.push(at + ' delayMs 必须是 0~5000 的数字');
       }
+    }
+    if (node.priority !== undefined && !NODE_PRIORITIES.includes(node.priority)) {
+      errors.push(
+        at + ' priority 非法：' + String(node.priority) + '（可选 ' + NODE_PRIORITIES.join('/') + '，缺省 NORMAL）'
+      );
     }
     if (node.next !== undefined && !Array.isArray(node.next)) {
       errors.push(at + '.next 必须是数组');
@@ -335,6 +344,7 @@ export function compileGraphToSegments(graph) {
 
   let pendingDelay = 0;
   const steps = [];
+  const stepPriorities = [];
   for (const id of order) {
     const node = byId.get(id);
     if (!node || node.type === 'delay') {
@@ -363,14 +373,25 @@ export function compileGraphToSegments(graph) {
     if (delay > 0) step.delayMs = Math.round(delay);
     pendingDelay = 0;
     steps.push(step);
+    // 节点级可选优先级：取值域白名单校验（与编辑器语义一致），非法/缺省回 NORMAL。
+    // 无 priority 字段的旧图全部落 NORMAL，分段结果与改动前完全一致。
+    stepPriorities.push(NODE_PRIORITIES.includes(node.priority) ? node.priority : 'NORMAL');
   }
   // 末端遗留的累计延时无动作节点可并入：按「并入 delayMs」语义丢弃。
   if (steps.length === 0) {
     return { ok: false, errors: ['图没有可编译的动作节点'], segments: [], steps: [] };
   }
+  // 每 8 步一段；步优先级变化也起新段（与编辑器 Compiler 分段语义一致）。
+  // 全 NORMAL（旧图缺省）时退化为纯 8 步切分，与改动前行为完全一致。
   const segments = [];
-  for (let i = 0; i < steps.length; i += MAX_STEPS_PER_SEGMENT) {
-    segments.push({ priority: 'NORMAL', chain: steps.slice(i, i + MAX_STEPS_PER_SEGMENT) });
+  let cur = null;
+  for (let i = 0; i < steps.length; i++) {
+    const pr = stepPriorities[i] || 'NORMAL';
+    if (!cur || cur.priority !== pr || cur.chain.length >= MAX_STEPS_PER_SEGMENT) {
+      cur = { priority: pr, chain: [] };
+      segments.push(cur);
+    }
+    cur.chain.push(steps[i]);
   }
   if (segments.length > MAX_SEGMENTS) {
     return {
@@ -688,7 +709,7 @@ export async function runNodegraph(name, execute, options = {}) {
       ok: false,
       status: 409,
       reason: 'mode-blocked',
-      message: '纯 LLM 模式下节点图不执行，请先切换到节点图模式',
+      message: '纯 LLM 模式下节点图不执行，请先切换到节点图模式；导入新图后需在设置页切换动作模式',
     };
   }
   const raw = loadNodegraph(name, { homeDir });

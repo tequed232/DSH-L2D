@@ -204,6 +204,128 @@ assert.equal(bigDoc.ok, false);
 assert.ok(bigDoc.errors.some((e) => e.includes('120')), '超 120 节点应报 graph.nodes 上限');
 
 // ---------------------------------------------------------------------------
+// 4b) priority 分段对拍：多分支 next + delay 折叠 + 三种 priority + 8 步上限
+// （与编辑器 motion-graph.html Compiler「每 8 步一段；优先级变化也起新段」同语义）
+// ---------------------------------------------------------------------------
+const priorityFixture = {
+  roots: ['r'],
+  nodes: [
+    { id: 'r', type: 'expression', name: '兔牙', delayMs: 100, priority: 'BACKGROUND', next: ['a', 'b'] },
+    { id: 'a', type: 'motion', name: '竖手指打开', closeMotion: '竖手指关闭', closeAfterMs: 1800, priority: 'NORMAL', next: ['c'] },
+    { id: 'c', type: 'delay', delayMs: 300, next: ['d'] },
+    { id: 'd', type: 'look', x: 0, y: 0.1, priority: 'FORCE', next: ['e'] },
+    { id: 'e', type: 'expression', name: '屑', next: ['f'] },
+    { id: 'f', type: 'pose', pose: { right: 'chest' }, next: ['g'] },
+    { id: 'g', type: 'look', x: 0, y: 0, next: ['h'] },
+    { id: 'h', type: 'expression', name: '兔牙', delayMs: 50, next: ['i'] },
+    { id: 'i', type: 'look', x: 0.2, y: 0, next: [] },
+    { id: 'b', type: 'pose', pose: { right: 'rest' }, priority: 'BACKGROUND', next: [] },
+  ],
+};
+const priorityCompiled = compileGraphToSegments(priorityFixture);
+assert.equal(priorityCompiled.ok, true, JSON.stringify(priorityCompiled.errors));
+// 步序为 DFS 前序（分支按 next 数组顺序；delay 不产生步、其 delayMs 折叠进下一动作步）
+assert.deepEqual(priorityCompiled.steps, [
+  { kind: 'expression', name: '兔牙', delayMs: 100 },
+  { kind: 'motion', name: '竖手指打开', closeMotion: '竖手指关闭', closeAfterMs: 1800 },
+  { kind: 'look', x: 0, y: 0.1, delayMs: 300 },
+  { kind: 'expression', name: '屑' },
+  { kind: 'pose', pose: { right: 'chest' } },
+  { kind: 'look', x: 0, y: 0 },
+  { kind: 'expression', name: '兔牙', delayMs: 50 },
+  { kind: 'look', x: 0.2, y: 0 },
+  { kind: 'pose', pose: { right: 'rest' } },
+]);
+// 段边界与优先级：优先级变化起新段，同优先级共享一段；delay 合并语义不变、末端无遗留
+assert.deepEqual(priorityCompiled.segments, [
+  { priority: 'BACKGROUND', chain: [{ kind: 'expression', name: '兔牙', delayMs: 100 }] },
+  { priority: 'NORMAL', chain: [{ kind: 'motion', name: '竖手指打开', closeMotion: '竖手指关闭', closeAfterMs: 1800 }] },
+  { priority: 'FORCE', chain: [{ kind: 'look', x: 0, y: 0.1, delayMs: 300 }] },
+  {
+    priority: 'NORMAL',
+    chain: [
+      { kind: 'expression', name: '屑' },
+      { kind: 'pose', pose: { right: 'chest' } },
+      { kind: 'look', x: 0, y: 0 },
+      { kind: 'expression', name: '兔牙', delayMs: 50 },
+      { kind: 'look', x: 0.2, y: 0 },
+    ],
+  },
+  { priority: 'BACKGROUND', chain: [{ kind: 'pose', pose: { right: 'rest' } }] },
+]);
+// 整体校验路径同构：graph-only 导入编译出的 segments 与独立编译一致
+const priorityDoc = validateNodegraph(makeDoc({ name: '优先级对拍', graph: priorityFixture }));
+assert.equal(priorityDoc.ok, true, JSON.stringify(priorityDoc.errors));
+assert.deepEqual(priorityDoc.normalized.segments, priorityCompiled.segments);
+
+// 8 步上限与优先级变化共同作用：8 步 BACKGROUND 满段后，第 9 步换 NORMAL 起新段
+const boundaryNodes = Array.from({ length: 9 }, (_, i) => ({
+  id: 'b' + i, type: 'expression', name: '兔牙',
+  priority: i < 8 ? 'BACKGROUND' : 'NORMAL',
+  next: ['b' + (i + 1)],
+}));
+boundaryNodes[8].next = [];
+const boundaryCompiled = compileGraphToSegments({ roots: ['b0'], nodes: boundaryNodes });
+assert.equal(boundaryCompiled.ok, true);
+assert.deepEqual(
+  boundaryCompiled.segments.map((s) => ({ priority: s.priority, n: s.chain.length })),
+  [{ priority: 'BACKGROUND', n: 8 }, { priority: 'NORMAL', n: 1 }],
+);
+
+// 向后兼容（硬编码断言）：无 priority 字段的旧 fixture → 全 NORMAL、纯 8 步切分，
+// 编译结果与改动前逐字节一致
+const legacyNodes = [
+  { id: 'l1', type: 'expression', name: '兔牙', delayMs: 100, next: ['l2'] },
+  { id: 'l2', type: 'look', x: 0, y: 0, next: ['l3'] },
+  { id: 'l3', type: 'pose', pose: { right: 'rest' }, next: ['l4'] },
+  { id: 'l4', type: 'expression', name: '屑', next: ['l5'] },
+  { id: 'l5', type: 'look', x: 0.1, y: 0, next: ['l6'] },
+  { id: 'l6', type: 'expression', name: '兔牙', delayMs: 200, next: ['l7'] },
+  { id: 'l7', type: 'look', x: 0.2, y: 0, next: ['l8'] },
+  { id: 'l8', type: 'pose', pose: { right: 'chest' }, next: ['l9'] },
+  { id: 'l9', type: 'expression', name: '兔牙', next: ['l10'] },
+  { id: 'l10', type: 'look', x: 0, y: 0.2, next: [] },
+];
+const legacyCompiled = compileGraphToSegments({ roots: ['l1'], nodes: legacyNodes });
+assert.equal(legacyCompiled.ok, true);
+assert.deepEqual(legacyCompiled.segments, [
+  {
+    priority: 'NORMAL',
+    chain: [
+      { kind: 'expression', name: '兔牙', delayMs: 100 },
+      { kind: 'look', x: 0, y: 0 },
+      { kind: 'pose', pose: { right: 'rest' } },
+      { kind: 'expression', name: '屑' },
+      { kind: 'look', x: 0.1, y: 0 },
+      { kind: 'expression', name: '兔牙', delayMs: 200 },
+      { kind: 'look', x: 0.2, y: 0 },
+      { kind: 'pose', pose: { right: 'chest' } },
+    ],
+  },
+  {
+    priority: 'NORMAL',
+    chain: [
+      { kind: 'expression', name: '兔牙' },
+      { kind: 'look', x: 0, y: 0.2 },
+    ],
+  },
+]);
+
+// validateGraph：合法 priority 接受 / 非法 priority 拒绝 / 缺省仍合法
+const priorityOk = validateNodegraph(makeDoc({
+  graph: { roots: ['n1'], nodes: [{ id: 'n1', type: 'expression', name: '兔牙', priority: 'FORCE', next: [] }] },
+}));
+assert.equal(priorityOk.ok, true, JSON.stringify(priorityOk.errors));
+assert.deepEqual(priorityOk.normalized.segments, [
+  { priority: 'FORCE', chain: [{ kind: 'expression', name: '兔牙' }] },
+]);
+const priorityBad = validateNodegraph(makeDoc({
+  graph: { roots: ['n1'], nodes: [{ id: 'n1', type: 'expression', name: '兔牙', priority: 'HIGH', next: [] }] },
+}));
+assert.equal(priorityBad.ok, false);
+assert.ok(priorityBad.errors.some((e) => e.includes('priority')), '非法 priority 值应报错');
+
+// ---------------------------------------------------------------------------
 // 5) segments 优先 + graph 回算；只有 segments 时回算
 // ---------------------------------------------------------------------------
 const bothGiven = validateNodegraph(makeDoc({
@@ -365,6 +487,7 @@ assert.equal(runBlocked.ok, false);
 assert.equal(runBlocked.status, 409);
 assert.equal(runBlocked.reason, 'mode-blocked');
 assert.ok(String(runBlocked.message).includes('节点图模式'), '409 消息应提示切换到节点图模式');
+assert.ok(String(runBlocked.message).includes('设置页切换动作模式'), '409 消息应提示导入新图后在设置页切换动作模式');
 assert.equal(fakeCalls.length, 0, 'mode-blocked 时不得下发任何动作');
 
 // 9b. nodegraph 模式 + 不存在的 name → 404
