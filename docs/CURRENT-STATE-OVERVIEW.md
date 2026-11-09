@@ -137,7 +137,7 @@
 
 ### 3.3 链路 C：LLM 通道
 
-`/ai/call` → host-guard 白名单（18 项，含 FI 轮 `l2d_facial`/`l2d_facial_manual`）→ `guardAiCall`（nodegraph 模式拦整链编排类、放行单步原语；unknown-tool 优先）→ overlay 分发 → `window.DSH_L2D` 具名 API → FacialBridge / 动作链。
+`/ai/call` → host-guard 白名单（19 项，含 FI 轮 `l2d_facial`/`l2d_facial_manual`、形态直达 `l2d_set_form`）→ `guardAiCall`（nodegraph 模式拦整链编排类、放行单步原语；unknown-tool 优先）→ overlay 分发 → `window.DSH_L2D` 具名 API → FacialBridge / 动作链。
 
 ### 3.4 衔接关系总图
 
