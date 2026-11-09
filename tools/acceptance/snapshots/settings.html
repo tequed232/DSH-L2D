@@ -1335,7 +1335,7 @@
         <h3 class="sub-head">模型形态控制</h3>
         <div class="dev-actions">
           <select class="sel" id="formSelect" aria-label="目标模型形态">
-            <!-- 三形态标签与 overlay.js BODY_TYPES 常量一致；无 l2d_set_form 直达指令，见 bindFormChange 注释 -->
+            <!-- 三形态标签与 overlay.js BODY_TYPES 常量一致；切换优先走 l2d_set_form 直达，见 bindFormChange 注释 -->
             <option value="0">默认体型</option>
             <option value="1">体型1</option>
             <option value="2">体型2</option>
@@ -2316,8 +2316,9 @@
           // 三形态标签硬编码，与真源 overlay.js BODY_TYPES 常量一致（下拉初始选项必须先有值，
           // 不能等首次回执才学习；回执 label 仅用于成功提示文案）
           var FORM_LABELS = ['默认体型', '体型1', '体型2'];
-          // 当前形态 index：唯一可信来源是 l2d_change_form 回执的 form.index
-          //（l2d_get_state 不回传 bodyType；运行时无 l2d_set_form 直达指令，只有 +1 循环）。
+          // 当前形态 index：唯一可信来源是 l2d_set_form / l2d_change_form 回执的 form.index
+          //（l2d_get_state 不回传 bodyType）。切换优先发一次 l2d_set_form 直达（可切回低形态）；
+          // 老宿主 / 老 overlay 不认识该指令时，回退到 l2d_change_form 的 +1 逐步逼近。
           // 学习值缓存进本页 localStorage，跨会话沿用，未知时为 null（首次切换先探测一步）。
           var formIndex =
             typeof local.formIndex === 'number' && local.formIndex >= 0 && local.formIndex <= 2
@@ -2334,18 +2335,24 @@
             writeLocal('formIndex', i);
           }
 
-          // 一次 l2d_change_form（运行时语义：+1 循环，钳制 0..2，到 2 后不可再进）
-          // 入队并轮询回执，8 秒超时；resolve 回执 result
-          function callChangeForm() {
+          // 一次形态指令入队并轮询回执，8 秒超时；resolve 回执 result。
+          // 宿主守卫拒绝时（HTTP 400 纯文本）把文案带进错误，unknownTool 标记老宿主不认识该指令。
+          function callForm(name, args) {
             return fetch(API.call, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: 'l2d_change_form', args: {} }),
+              body: JSON.stringify({ name: name, args: args }),
               cache: 'no-store'
             })
               .then(function (res) {
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                return res.json();
+                if (res.ok) return res.json();
+                return res.text().then(function (text) {
+                  var err = new Error('HTTP ' + res.status + (text ? '：' + text : ''));
+                  err.unknownTool = res.status === 400 && /unknown tool/.test(text || '');
+                  throw err;
+                }, function () {
+                  throw new Error('HTTP ' + res.status);
+                });
               })
               .then(function (queued) {
                 var id = queued && queued.id;
@@ -2390,6 +2397,55 @@
           function fail(text) {
             say(text, true);
             settle();
+          }
+
+          // 一次 l2d_change_form（运行时语义：+1 循环，钳制 0..2，到 2 后不可再进）
+          function callChangeForm() {
+            return callForm('l2d_change_form', {});
+          }
+
+          // 回退路径入口：老通道只能 +1，目标低于已知形态时如实告知，不假成功
+          function legacyToward(target) {
+            if (formIndex !== null && target < formIndex) {
+              select.value = String(formIndex);
+              fail(
+                '无法从「' + FORM_LABELS[formIndex] + '」切到「' + FORM_LABELS[target] +
+                  '」：当前运行时版本的形态通道只支持单向递增（默认体型→体型1→体型2），暂无切回低形态的指令'
+              );
+              return;
+            }
+            say(formIndex === null ? '正在探测当前形态…' : '正在切换…', false);
+            stepToward(target);
+          }
+
+          // 首选：一次 l2d_set_form 直达。回执带合法 form.index 即为新通道权威结果；
+          // 宿主报 unknown tool，或老 overlay 回执缺 form 且不是新指令的已知失败码，判为老版本走回退。
+          function directSet(target) {
+            callForm('l2d_set_form', { index: target })
+              .then(function (r) {
+                var idx = r && r.form && typeof r.form.index === 'number' ? r.form.index : null;
+                if (r && r.ok === true && idx !== null) {
+                  rememberIndex(Math.max(0, Math.min(2, idx)));
+                  select.value = String(formIndex);
+                  var label = (r.form && r.form.label) || FORM_LABELS[formIndex];
+                  say((r.notes && r.notes.indexOf('already-current') >= 0 ? '当前已是「' + label + '」' : '已切换 · 当前形态：' + label), false);
+                  settle();
+                  return;
+                }
+                if (r && (r.reason === 'form-unavailable' || r.reason === 'invalid-form-index')) {
+                  select.value = formIndex === null ? '0' : String(formIndex);
+                  fail('切换失败：' + (r.reason === 'form-unavailable' ? '当前模型不支持形态切换（缺形态参数）' : '目标形态序号无效'));
+                  return;
+                }
+                legacyToward(target);
+              })
+              .catch(function (err) {
+                if (err && err.unknownTool) {
+                  legacyToward(target);
+                  return;
+                }
+                fail('切换失败：' + reason(err));
+              });
           }
 
           // 逐次调用直到回执 index 到达 target。回执 index 是唯一权威：
@@ -2446,19 +2502,10 @@
               say('当前已是「' + FORM_LABELS[target] + '」', false);
               return;
             }
-            if (formIndex !== null && target < formIndex) {
-              // 已知当前形态且目标更低：运行时无直达/回退指令，如实告知，不假成功
-              say(
-                '无法从「' + FORM_LABELS[formIndex] + '」切到「' + FORM_LABELS[target] +
-                  '」：运行时形态通道只支持单向递增（默认体型→体型1→体型2），暂无切回低形态的指令',
-                true
-              );
-              return;
-            }
             busy = true;
             select.disabled = true;
-            say(formIndex === null ? '正在探测当前形态…' : '正在切换…', false);
-            stepToward(target);
+            say('正在切换…', false);
+            directSet(target);
           });
 
           // 复用 loadAll 现有的 status.json 探测结果（state.status），不另造一套探测

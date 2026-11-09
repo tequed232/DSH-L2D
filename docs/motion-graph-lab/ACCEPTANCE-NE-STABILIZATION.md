@@ -150,4 +150,23 @@
 - selftest 九组全绿：validate-ok roundtrip-ok sim resizers-ok ctx-ok combo-ok panels-ok console-ok chips-ok
 
 ## Acceptance Status
-PASS_WITH_WARNINGS —— 形态切回低形态需 overlay 轮次新增 l2d_set_form 直达 case（当前通道单向递增，UI 已如实提示）；预设载入无确认模态（toast 提示替代）；JSON 预览仅 selftest 模式存在（调查结论）；宿主 3080 真机 Live2D 呈现留待宿主在线。
+PASS_WITH_WARNINGS —— ~~形态切回低形态需 overlay 轮次新增 l2d_set_form 直达 case（当前通道单向递增，UI 已如实提示）~~（✅ 已于 2026-11-10 形态直达轮解决，见下节）；预设载入无确认模态（toast 提示替代）；JSON 预览仅 selftest 模式存在（调查结论）；宿主 3080 真机 Live2D 呈现留待宿主在线。
+
+---
+
+# 附加轮：形态直达 l2d_set_form（2026-11-10，分支 cursor/set-form-direct）
+
+## 交付
+- [x] overlay.js 新增 `case 'l2d_set_form'`：参数 `{index}`（0..2 整数），复用 `setBodyType` 直达目标，**支持从高形态切回低形态**（2→0 / 2→1 / 1→0）
+  - 非法 index（缺失 / 非整数 / 越界 / 字符串数字）→ `{ok:false,reason:'invalid-form-index'}`，不钳制
+  - 缺 `L.setParameter` → `form-unavailable`；已是目标形态 → `{ok:true,form,notes:['already-current']}`，不写参数、不弹气泡
+  - 成功后以 `prefs.bodyType` 复核，回执 `{ok:true,form:{index,label}}`（label 取自 BODY_TYPES）
+  - `l2d_change_form` 零改动（仍为 +1 单向循环）
+- [x] host-guard 白名单末尾追加 `l2d_set_form`（19 项），`guardAiCall` 静态校验 index，非法即 400 `invalid-form-index`
+- [x] MCP 注册 `l2d_set_form` 工具（index: int 0..2，中文描述）
+- [x] settings.html `bindFormChange`：先发一次 `l2d_set_form` 直达；宿主报 unknown tool 或老 overlay 回执缺 form 时回退到原 `l2d_change_form` 逐步逼近，「暂无切回低形态」提示只留在回退路径；快照同步（扣除 8 行退役注释头后逐行一致）
+- [x] 新增 `lib/overlay-set-form.test.mjs`：从 overlay.js 原样抽取 BODY_TYPES / setBodyType / 分支在沙箱执行，7 用例覆盖回退、互切、already-current、非法 index、不可用、异常
+
+## 待审
+- 形态语义（三档标签 / Clothes2 取值 / already-current 不弹气泡）请 Live2D 席审阅
+- settings.html 前端改动请前端席（Grok Bot）过目

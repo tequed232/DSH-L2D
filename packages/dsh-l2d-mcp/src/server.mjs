@@ -425,5 +425,17 @@ server.registerTool(
   async () => toolResult(await forward('l2d_change_form', {}, 3000)),
 );
 
+server.registerTool(
+  'l2d_set_form',
+  {
+    description:
+      '直接切到指定模型形态（0=默认体型 / 1=体型1 / 2=体型2），可从高形态切回低形态。已是目标形态时回执带 notes:["already-current"]；index 非 0..2 整数时返回 invalid-form-index。',
+    inputSchema: {
+      index: z.number().int().min(0).max(2).describe('目标形态序号：0=默认体型，1=体型1，2=体型2'),
+    },
+  },
+  async ({ index }) => toolResult(await forward('l2d_set_form', { index }, 3000)),
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);

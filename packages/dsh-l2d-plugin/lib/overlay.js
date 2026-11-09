@@ -5529,6 +5529,43 @@
             var formItem = BODY_TYPES[formAfter] || BODY_TYPES[0];
             return { ok: true, form: { index: formAfter, label: formItem.label } };
           }
+          case 'l2d_set_form': {
+            // 形态直达：一次切到指定 index（0..2），支持从高形态切回低形态。
+            // l2d_change_form 只会 +1（钳制 0..2），无法回退；本指令补上回退通道。
+            // index 必须是 0..2 的整数，不做钳制，越界/缺失/非整数一律拒绝，不猜调用方意图。
+            var setIdx = a.index;
+            if (typeof setIdx !== 'number' || !Number.isInteger(setIdx) || setIdx < 0 || setIdx > 2) {
+              return { ok: false, reason: 'invalid-form-index' };
+            }
+            // setBodyType 缺 L.setParameter 时会静默返回，先判可用性，避免假成功。
+            if (typeof L.setParameter !== 'function' || typeof setBodyType !== 'function') {
+              return { ok: false, reason: 'form-unavailable' };
+            }
+            var setBefore = Math.max(0, Math.min(2, Number(prefs.bodyType) || 0));
+            if (setBefore === setIdx) {
+              // 已是目标形态：不重写参数、不弹气泡，回执带 already-current 便于调用方区分。
+              var curItem = BODY_TYPES[setIdx] || BODY_TYPES[0];
+              return { ok: true, form: { index: setIdx, label: curItem.label }, notes: ['already-current'] };
+            }
+            try {
+              setBodyType(setIdx);
+            } catch (err) {
+              // setBodyType 已先写 prefs 再写 Clothes2。写入抛错时回滚记录再落盘，
+              // 否则回执是失败，下次同目标会被误判成 already-current。
+              prefs.bodyType = setBefore;
+              persist();
+              return { ok: false, reason: 'form-unavailable' };
+            }
+            // 以 prefs.bodyType 实际值复核，未到目标即判失败（不以"调用过"当成功）。
+            var setAfter = Math.max(0, Math.min(2, Number(prefs.bodyType) || 0));
+            if (setAfter !== setIdx) {
+              prefs.bodyType = setBefore;
+              persist();
+              return { ok: false, reason: 'form-unavailable' };
+            }
+            var setItem = BODY_TYPES[setAfter] || BODY_TYPES[0];
+            return { ok: true, form: { index: setAfter, label: setItem.label } };
+          }
           default:
           case 'l2d_posture': {
 
