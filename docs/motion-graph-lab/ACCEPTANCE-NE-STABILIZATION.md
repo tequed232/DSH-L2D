@@ -151,3 +151,20 @@
 
 ## Acceptance Status
 PASS_WITH_WARNINGS —— 形态切回低形态需 overlay 轮次新增 l2d_set_form 直达 case（当前通道单向递增，UI 已如实提示）；预设载入无确认模态（toast 提示替代）；JSON 预览仅 selftest 模式存在（调查结论）；宿主 3080 真机 Live2D 呈现留待宿主在线。
+---
+
+# 附加轮：编辑器三项前端收尾（2026-11-10）
+
+## 交付
+1. **载入预设确认模态**（替换原「直接载入 + toast」）：非空画布单击预设先弹确认，列出当前画布与预设的节点/连线规模；按钮「取消 / 备份当前后载入 / 替换并载入」。备份写入槽位「载入前自动备份」。空画布直接载入不打扰。
+2. **JSON 预览正常模式可用**：顶栏新增「JSON」按钮与菜单「JSON 预览」，打开只读浮窗 `#json-preview`（内容与导出同源 `Serializer.exportText()`，随 `UI.refreshAll` 实时刷新，可复制），接入 PanelLayers（拖动/收起/图层/持久化）。`#mg-export` 仍只服务 selftest 取证。
+3. **NE-04 继续拆分**：新抽取 `hint-bar.js`、`rail-chips.js`（共 4 个模块）。迁移前快照与 extract→build 产物 `cmp` 一致，verify IDENTICAL（201288B）。
+
+## 测试
+- selftest 十组全绿：`validate-ok roundtrip-ok sim=3steps/1segs resizers-ok ctx-ok combo-ok panels-ok console-ok chips-ok jsonpv-ok`（chips 组的预设断言改为经确认模态：取消不改画布、确认才替换）
+- 新增第十组 jsonpv：可见、与导出同源、加节点后实时刷新、已注册图层、可关闭
+- 整页内联脚本与 4 个模块 `node --check`（.cjs Script 目标）通过
+- consistency：本轮未新增 FAIL（组 2 指纹漂移为 Linux LF 检出与 Windows CRLF 基线的既有差异，main 上同样存在）
+
+## Acceptance Status
+PASS_WITH_WARNINGS —— 宿主 3080 真机未验；浮窗沿用编辑器既有投影样式以与其余监看浮窗一致。
