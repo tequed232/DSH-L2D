@@ -301,6 +301,38 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
 #minimap-wrap.fp-collapsed #minimap { display:none; }
 #minimap-wrap.fp-collapsed .mm-head { margin-bottom:0; }
 #monitor-win.fp-collapsed #monitor-frame, #monitor-win.fp-collapsed #monitor-fallback { display:none; }
+/* ---- Execution Console 浮窗（NE-03 编辑器侧）：与 sim-panel/minimap-wrap 同在 canvas-wrap 内
+   （PanelLayers 的 pos 相对 el.parentElement），绝对定位 + 图层式 z 管理 ---- */
+#exec-console {
+  position:absolute; left:14px; bottom:14px; z-index:6; width:336px; max-height:270px;
+  display:none; flex-direction:column;
+  background:var(--panel); border:1px solid var(--mg-border-strong); border-radius:var(--r-md);
+  box-shadow:0 16px 40px rgba(0,0,0,.45); overflow:hidden;
+}
+#exec-console.show { display:flex; }
+#exec-console .ec-head {
+  display:flex; align-items:center; gap:8px; flex:none; padding:7px 10px;
+  border-bottom:1px solid var(--mg-border-strong);
+}
+#exec-console .ec-head b { flex:1; min-width:0; font:600 10px var(--mono); letter-spacing:.1em; color:var(--ink2); }
+#exec-console .ec-body { flex:1; min-height:0; overflow:auto; padding:6px 9px; font:10.5px/1.6 var(--mono); }
+#exec-console .ec-empty { color:var(--ink3); padding:9px 3px; }
+#exec-console .ec-group { border-bottom:1px solid var(--line-soft); padding:5px 0 6px; }
+#exec-console .ec-group:last-child { border-bottom:0; }
+#exec-console .ec-exec { display:flex; align-items:center; gap:7px; color:var(--ink); white-space:nowrap; overflow:hidden; }
+#exec-console .ec-exec b { font-weight:600; overflow:hidden; text-overflow:ellipsis; }
+#exec-console .ec-exec .num { color:var(--ink3); }
+#exec-console .ec-row { display:flex; align-items:center; gap:7px; color:var(--ink2); margin-top:3px; white-space:nowrap; overflow:hidden; }
+#exec-console .ec-row .ec-tail { margin-left:auto; overflow:hidden; text-overflow:ellipsis; }
+#exec-console .ec-badge {
+  flex:none; font:600 9px var(--mono); letter-spacing:.04em; padding:1px 5px; border-radius:4px;
+  border:1px solid var(--mg-border-strong); color:var(--ink3);
+}
+#exec-console .ec-badge.ec-completed { color:var(--ok); border-color:color-mix(in srgb,var(--ok) 45%,var(--line)); }
+#exec-console .ec-badge.ec-rejected { color:var(--danger); border-color:color-mix(in srgb,var(--danger) 45%,var(--line)); }
+#exec-console .ec-badge.ec-stopped { color:var(--warn); border-color:color-mix(in srgb,var(--warn) 45%,var(--line)); }
+#exec-console.fp-collapsed .ec-body { display:none; }
+#exec-console.fp-collapsed .ec-head { border-bottom:0; }
 .user-hidden { display:none !important; }
 #layers-pop {
   position:absolute; right:14px; bottom:56px; z-index:47; width:264px;
@@ -479,6 +511,7 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
   <div class="top-actions">
     <button class="btn" id="btn-sim" title="模拟动作触发（纯本地预览）"><span class="ico">▶</span><span class="lbl">模拟触发</span></button>
     <button class="btn" id="btn-monitor" title="Live2D 监看：宿主在线时显示真实模型执行画面"><span class="ico">◉</span><span class="lbl">监看</span></button>
+    <button class="btn" id="btn-exec" title="执行监视控制台：设置页运行节点图后自动推送执行回执时间线"><span class="ico">▤</span><span class="lbl">执行</span></button>
     <button class="btn" id="btn-validate" title="结构校验"><span class="ico">✓</span><span class="lbl">结构校验</span></button>
     <button class="btn" id="btn-export" title="导出 JSON"><span class="ico">⇩</span><span class="lbl">导出</span></button>
     <button class="btn" id="btn-import" title="导入 JSON"><span class="ico">⇧</span><span class="lbl">导入</span></button>
@@ -530,6 +563,13 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
       <div id="sim-note">纯本地预览：不调 LLM、不调后端、不提交 Runtime 动作队列。Graph Cache 命中不跳过播放。</div>
     </div>
     <div id="minimap-wrap"><div class="mm-head">MINIMAP<button class="fp-btn" data-fp-collapse="minimap-wrap" title="收起/展开">—</button></div><canvas id="minimap" width="368" height="224"></canvas></div>
+    <div id="exec-console">
+      <div class="ec-head"><b>EXECUTION CONSOLE</b>
+        <button class="fp-btn" data-fp-collapse="exec-console" title="收起/展开">—</button></div>
+      <div class="ec-body" id="exec-console-body">
+        <div class="ec-empty">等待执行数据：从设置页运行节点图后自动刷新</div>
+      </div>
+    </div>
     <div id="zoombar">
       <button id="zoom-out" title="缩小">−</button>
       <span class="zoom-val num" id="zoom-val">100%</span>
@@ -1368,9 +1408,10 @@ var PanelLayers = {
   panels: [
     { id: 'sim-panel', name: '模拟监视 LOCAL SIM' },
     { id: 'minimap-wrap', name: '小地图 MINIMAP' },
-    { id: 'monitor-win', name: 'Live2D 监看 MONITOR' }
+    { id: 'monitor-win', name: 'Live2D 监看 MONITOR' },
+    { id: 'exec-console', name: '执行监视 CONSOLE' }
   ],
-  state: { order: ['sim-panel', 'minimap-wrap', 'monitor-win'], collapsed: {}, hidden: {}, pos: {} },
+  state: { order: ['sim-panel', 'minimap-wrap', 'monitor-win', 'exec-console'], collapsed: {}, hidden: {}, pos: {} },
   load: function () {
     try {
       var raw = localStorage.getItem(this.KEY);
@@ -1534,6 +1575,63 @@ var PanelLayers = {
   }
 };
 
+/* =========================================================================
+   ExecConsole：执行监视控制台（NE-03 编辑器侧浮窗）。
+   数据源：window.__MG_EXEC_PUSH__(record) 全局钩子，由宿主（设置页运行节点图）注入回执。
+   record 形如 { executionId, name, status, startedAt,
+     receipts:[{ batch, sourceSegments, attempts, receipt:{ accepted, outcome, reason, at } }],
+     completedSegments, remainingSegments }
+   渲染：时间线行（最新在上，保留最近 20 行）；徽标 completed 绿 / rejected 红 / stopped 黄 / 其余灰。
+   ========================================================================= */
+var ExecConsole = {
+  MAX_ROWS: 20,
+  init: function () {
+    PanelLayers.makeDraggable('exec-console', '.ec-head');
+  },
+  badgeCls: function (outcome) {
+    return ['completed','rejected','stopped'].indexOf(outcome) >= 0 ? outcome : 'pending';
+  },
+  push: function (record) {
+    if (!record || typeof record !== 'object') return;
+    var body = document.getElementById('exec-console-body');
+    if (!body) return;
+    var empty = body.querySelector('.ec-empty');
+    if (empty) empty.parentNode.removeChild(empty);
+    var started = Number(record.startedAt) || 0;
+    var self = this;
+    var group = document.createElement('div');
+    group.className = 'ec-group';
+    var html = '<div class="ec-exec"><b>' + esc(String(record.name || '节点图执行')) + '</b>' +
+      '<span class="num">' + esc(String(record.executionId || '')) + '</span>' +
+      '<span class="ec-badge ec-' + this.badgeCls(String(record.status || 'pending')) + '">' +
+        esc(String(record.status || 'pending')) + '</span>' +
+      '<span class="ec-tail num">done ' + esc(String(record.completedSegments != null ? record.completedSegments : 0)) +
+        ' / remain ' + esc(String(record.remainingSegments != null ? record.remainingSegments : 0)) + '</span></div>';
+    (Array.isArray(record.receipts) ? record.receipts : []).forEach(function (r) {
+      var rc = (r && r.receipt) || {};
+      var outcome = String(rc.outcome || (rc.accepted ? 'completed' : 'pending'));
+      var dur = (rc.at != null && started) ? Number(rc.at) - started : null;
+      var tail = (dur != null && isFinite(dur) && dur >= 0) ? (Math.round(dur) + 'ms') : String(rc.reason || rc.outcome || '');
+      html += '<div class="ec-row" data-exec="' + esc(String(record.executionId || '')) + '">' +
+        '<span class="num">#' + esc(String(r && r.batch != null ? r.batch : '?')) + '</span>' +
+        '<span class="ec-badge ec-' + self.badgeCls(outcome) + '">' + esc(outcome) + '</span>' +
+        '<span class="num">attempts ' + esc(String(r && r.attempts != null ? r.attempts : 0)) + '</span>' +
+        '<span class="num">' + esc(String(r && r.sourceSegments != null ? r.sourceSegments : 0)) + ' seg</span>' +
+        '<span class="ec-tail">' + esc(tail) + '</span></div>';
+    });
+    group.innerHTML = html;
+    body.insertBefore(group, body.firstChild);
+    /* 最新在上：从末尾裁掉超限旧行（含其空组） */
+    var rows = body.querySelectorAll('.ec-row');
+    for (var i = rows.length - 1; i >= this.MAX_ROWS; i--) {
+      var g = rows[i].closest ? rows[i].closest('.ec-group') : null;
+      rows[i].parentNode.removeChild(rows[i]);
+      if (g && !g.querySelector('.ec-row')) g.parentNode.removeChild(g);
+    }
+  }
+};
+window.__MG_EXEC_PUSH__ = function (record) { ExecConsole.push(record); };
+
 var Slots = {
   memory: new Map(), available:true,
   prefix: function (modelId) { return 'mg-lab:v1:' + encodeURIComponent(modelId || '_default') + ':'; },
@@ -1576,6 +1674,7 @@ var UI = {
     this.nodesEl = $('#nodes'); this.minimap = $('#minimap');
     this.renderLibrary(); this.bindTopbar(); this.bindCanvas(); this.bindInspector(); this.bindModal(); this.bindResizers(); this.bindContextMenus();
     PanelLayers.init();
+    ExecConsole.init();
     this.applyViewport(); this.refreshAll();
     this.updateBadge(Validator.check(Serializer.build()));
   },
@@ -1681,14 +1780,26 @@ var UI = {
       created.push(Graph.addNode(def.type, { x: baseX + def.dx, y: baseY + def.dy },
         { label: def.label, props: JSON.parse(JSON.stringify(def.props)), disabled: def.disabled }));
     });
+    /* 审计 E8：实例化前置校验 —— 与 finishLink 同规则，两端 portType 同色才建边，异色跳过并计数 */
+    var skipped = 0;
     combo.edges.forEach(function (e) {
-      if (created[e.fromIdx] && created[e.toIdx]) Graph.addEdge(created[e.fromIdx].id, created[e.toIdx].id);
+      var a = created[e.fromIdx], b = created[e.toIdx];
+      if (!a || !b) return;
+      if (a.props.portType !== b.props.portType) { skipped += 1; return; }
+      Graph.addEdge(a.id, b.id);
     });
     Cache.invalidate();
     Graph.selection = new Set(created.map(function (n) { return n.id; }));
     Graph.selectedEdge = null;
     this.refreshAll();
-    this.toast('已实例化组合「' + name + '」（' + created.length + ' 节点 / ' + combo.edges.length + ' 连线）', 'ok');
+    this.toast('已实例化组合「' + name + '」（' + created.length + ' 节点 / ' + (combo.edges.length - skipped) + ' 连线）', 'ok');
+    if (skipped) this.toast(skipped + ' 条连线因端口类型不匹配被跳过', 'err');
+    /* 实例化后自动跑结构校验：有错误时 toast 报数 + 状态条提示 */
+    var chk = Validator.check(Serializer.build());
+    if (!chk.ok) {
+      this.toast('实例化后校验发现 ' + chk.errors.length + ' 项错误', 'err');
+      this.status('组合实例化完成，但校验发现 ' + chk.errors.length + ' 项错误：' + chk.errors[0]);
+    }
     return true;
   },
   openComboModal: function () {
@@ -1951,6 +2062,7 @@ var UI = {
   bindTopbar: function () {
     $('#btn-sim').addEventListener('click', function () { RuntimeCtl.toggle(); });
     $('#btn-monitor').addEventListener('click', function () { UI.toggleMonitor(); });
+    $('#btn-exec').addEventListener('click', function () { UI.toggleExecConsole(); });
     $('#monitor-close').addEventListener('click', function () { UI.toggleMonitor(false); });
     $('#btn-validate').addEventListener('click', function () { UI.openValidation(); });
     $('#btn-export').addEventListener('click', function () { UI.openExport(); });
@@ -2116,6 +2228,15 @@ var UI = {
       fb.classList.remove('hidden');
       self.status('Live2D 监看不可达：宿主未在线（本地预览用模拟触发）');
     });
+  },
+
+  /* ---- 执行监视控制台开关：与其他监看浮窗一致的图层式显隐 ---- */
+  toggleExecConsole: function (force) {
+    var win = $('#exec-console');
+    if (!win) return;
+    var show = force === undefined ? !win.classList.contains('show') : !!force;
+    win.classList.toggle('show', show);
+    PanelLayers.raise('exec-console');
   },
 
   menuItems: [
@@ -2840,6 +2961,35 @@ function runSelfTest() {
       return { ok:ok, raised:top1, col:col, moved:moved, reorder:reorder };
     } catch (e) { return { ok:false, error:String(e) }; }
   })();
+  // 执行监视控制台自测：注册进 PanelLayers → z 序生效；__MG_EXEC_PUSH__ 注入假记录 → 时间线行出现；收起/展开 class 生效
+  var consoleT = (function () {
+    try {
+      var P = PanelLayers;
+      var el = document.getElementById('exec-console');
+      if (!el) return { ok:false, error:'no element' };
+      if (P.state.order.indexOf('exec-console') < 0) P.state.order.push('exec-console');
+      P.raise('exec-console');
+      var zOk = el.style.zIndex !== '' && Number(el.style.zIndex) >= 30;
+      var shown = UI.toggleExecConsole(true);
+      window.__MG_EXEC_PUSH__({
+        executionId:'st-exec-1', name:'selftest 图', status:'completed', startedAt: Date.now(),
+        receipts:[{ batch:0, sourceSegments:1, attempts:1, receipt:{ accepted:true, outcome:'completed', reason:'', at: Date.now() + 120 } }],
+        completedSegments:1, remainingSegments:0
+      });
+      var row = el.querySelector('.ec-row');
+      var rowOk = !!row && el.querySelector('.ec-badge.ec-completed') != null;
+      P.toggleCollapse('exec-console');
+      var col = el.classList.contains('fp-collapsed');
+      P.toggleCollapse('exec-console');
+      var uncol = !el.classList.contains('fp-collapsed');
+      UI.toggleExecConsole(false);
+      /* 清理自测污染：执行浮窗回到默认最低层，不留置顶痕迹 */
+      var o = P.state.order.filter(function (x) { return x !== 'exec-console'; });
+      o.push('exec-console');
+      P.state.order = o; P.save(); P.applyAll();
+      return { ok:zOk && rowOk && col && uncol, z:zOk, row:rowOk, col:col, uncol:uncol };
+    } catch (e) { return { ok:false, error:String(e) }; }
+  })();
   var doc = Serializer.build();
   var result = {
     validate: v,
@@ -2853,7 +3003,8 @@ function runSelfTest() {
     resizers: rz,
     contextMenus: ctx,
     combo: comboT,
-    panels: panelsT
+    panels: panelsT,
+    console: consoleT
   };
   $('#mg-selftest').textContent = JSON.stringify(result, null, 2);
   $('#mg-export').textContent = Serializer.exportText();
@@ -2867,6 +3018,7 @@ function runSelfTest() {
     + ' ctx-' + (ctx.ok ? 'ok' : 'FAIL(node=' + (ctx.nodeOk===true?'ok':ctx.nodeOk) + ',edge=' + (ctx.edgeOk===true?'ok':ctx.edgeOk) + (ctx.error ? ',err=' + ctx.error : '') + ')')
     + ' combo-' + (comboT.ok ? 'ok' : 'FAIL(' + (comboT.error ? 'err=' + comboT.error : 'nodes=' + comboT.nodes + '/edges=' + comboT.edges) + ')')
     + ' panels-' + (panelsT.ok ? 'ok' : 'FAIL(' + (panelsT.error ? 'err=' + panelsT.error : 'raised=' + panelsT.raised + '/col=' + panelsT.col + '/moved=' + panelsT.moved + '/reorder=' + panelsT.reorder) + ')')
+    + ' console-' + (consoleT.ok ? 'ok' : 'FAIL(' + (consoleT.error ? 'err=' + consoleT.error : 'z=' + consoleT.z + '/row=' + consoleT.row + '/col=' + consoleT.col + '/uncol=' + consoleT.uncol) + ')')
     + (rt.diff.length ? ' diff=' + rt.diff.join('|') : '');
 }
 
