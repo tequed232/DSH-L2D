@@ -1354,6 +1354,7 @@ var Validator = {
    Slots：localStorage 按 modelId 分槽，每个模型可存多个 JSON 互不覆盖（§5.6）
    file:// 下 localStorage 可能受限 → try/catch 降级为内存 Map。
    ------------------------------------------------------------------------- */
+<!-- BUILD:SPLIT combos -->
 /* =========================================================================
    Combos：用户自定义节点组合事件。多选节点存为可复用组合，节点库一键实例化。
    存储 localStorage 'dsh-mg-combos.v1'；file:// 受限时降级内存（同 Slots 策略）。
@@ -1393,7 +1394,8 @@ var Combos = {
     this.memory = list;
   }
 };
-
+<!-- BUILD:END combos -->
+<!-- BUILD:SPLIT panel-layers -->
 /* =========================================================================
    PanelLayers：监看浮窗的图层式管理（Photoshop 图层语义）。
    - 可拖动：面板头部为拖拽手柄，落点 clamp 在画布内，位置持久化
@@ -1574,6 +1576,7 @@ var PanelLayers = {
     });
   }
 };
+<!-- BUILD:END panel-layers -->
 
 /* =========================================================================
    ExecConsole：执行监视控制台（NE-03 编辑器侧浮窗）。
