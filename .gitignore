@@ -43,3 +43,4 @@ data/
 # 例外：stage-web 内自包含的注册表副本（Plugin Center 构建期导入）
 !apps/stage-web/src/data/
 !apps/stage-web/src/data/**
+_test-models/
