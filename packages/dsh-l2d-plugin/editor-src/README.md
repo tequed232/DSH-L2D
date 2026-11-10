@@ -51,8 +51,8 @@ node tools/motion-graph-build.mjs verify
    import/export 的歧义文件按 ESM 解析，而 ESM 禁止 HTML 注释；浏览器 `<script>`
    走的是 Script 目标，以 `.cjs` 检查与之一致）。
 4. **回归**：`node tools/dev-server/index.mjs --port 5332` 后访问
-   `/dsh-l2d/motion-graph.html?selftest=1`，tab_title 应为十一组全绿
-   （validate-ok roundtrip-ok sim resizers-ok ctx-ok combo-ok panels-ok console-ok chips-ok jsonpv-ok i18n-ok）。
+   `/dsh-l2d/motion-graph.html?selftest=1`，tab_title 应为十四组全绿
+   （validate-ok roundtrip-ok sim resizers-ok ctx-ok combo-ok panels-ok console-ok chips-ok jsonpv-ok i18n-ok fold-ok nodeui-ok aiedit-ok）。
 
 ## 如何抽取下一个模块（规程）
 
@@ -73,8 +73,10 @@ node tools/motion-graph-build.mjs verify
 | --- | --- | --- |
 | `combos.js` | `var Combos = {...}`（含头注释） | 自定义组合事件，localStorage `dsh-mg-combos.v1` |
 | `panel-layers.js` | `var PanelLayers = {...}`（含头注释） | 监看浮窗图层管理，localStorage `dsh-mg-panels.v1` |
-| `hint-bar.js` | `var HintBar = {...}`（含头注释） | 画布操作指南条收起/展开，localStorage 持久化 |
-| `rail-chips.js` | `var RailChips = {...}`（含头注释） | 左右栏收起为悬浮 chip，localStorage `dsh-mg-rail-chips.v1` |
+| `hint-bar.js` | `var HintBar = {...}`（含头注释） | 画布底部停靠栏（操作指南 / AI 编辑两个标签页）收起/展开与标签切换，实际高度写入 `--hint-h`，localStorage 持久化 |
+| `folds.js` | `var Folds = {...}`（含头注释） | 库分组、检查器卡片、顶栏、状态栏的折叠；收起保留标题行名称与计数，localStorage `dsh-mg-folds.v1` |
+| `ai-edit.js` | `var AiEditAdapter` + `var AiEdit` | 底栏「AI 编辑」：`AiEditAdapter` 是唯一接口调用点（`/dsh-l2d/api/nodegraph/ai-edit`、`/apply-ops`），接口不可达显示「接口未就绪」；防过期、撤销快照；前端不自行应用 ops |
+| `rail-chips.js` | `var RailChips = {...}`（含头注释） | 左右栏宽度过渡收起为竖排 chip（图标 + 名称），位置 `dsh-mg-rail-chips.v1`、收起状态 `dsh-mg-rail-collapsed.v1` |
 | `i18n.js` | `var I18n = {...}` + `var tr`（紧跟 `NODE_W` 声明） | 界面中/英/日三语切换：三份同键字典、`tr(key, params)`、缺键回落中文、回执 reason 代码映射（未知代码原样显示）；语言选择存 localStorage `dsh-l2d.lang`，未选择时按 `?lang=` → 浏览器语言 → 中文。只翻译界面文案，节点自定义名、预设名、参数/动作 ID 与导出 JSON 一律不随语言变化（selftest `i18n-ok` 校验三语导出逐字节一致） |
 
 新增界面文案时：在 `i18n.js` 三份字典里加同一个键（selftest 会检出缺键），静态 HTML 用 `data-i18n` / `data-i18n-title` / `data-i18n-aria` / `data-i18n-ph`，脚本里用 `tr('键')`；动态渲染的区域需在 `UI.onLangChange` 中重绘。
