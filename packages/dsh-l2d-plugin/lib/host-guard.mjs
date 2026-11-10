@@ -178,6 +178,47 @@ export function parsePhysics3(json) {
 }
 
 /**
+ * [#28] 目录扫描回退：读 model3.json 同目录的 *.exp3.json，表情名 = 文件名去扩展名。
+ * 目录不可读时返回空数组不抛。
+ */
+function scanExpressionFiles(modelDir, fsImpl) {
+  try {
+    return fsImpl
+      .readdirSync(modelDir)
+      .filter((n) => typeof n === 'string' && n.endsWith('.exp3.json'))
+      .map((n) => n.slice(0, -'.exp3.json'.length))
+      .filter((n) => n && !n.startsWith('.'))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * [#28] 目录扫描回退：读 model3.json 同目录的 *.motion3.json，
+ * 动作组名 = 文件名去扩展名再去序号后缀（TapBody_01.motion3.json → TapBody）。
+ * 序号后缀按 Cubism 命名惯例取 `_\d+` / `-\d+`；同名多文件自动去重（Set 收敛）。
+ */
+function scanMotionGroups(modelDir, fsImpl) {
+  try {
+    const groups = new Set(
+      fsImpl
+        .readdirSync(modelDir)
+        .filter((n) => typeof n === 'string' && n.endsWith('.motion3.json'))
+        .map((n) =>
+          n
+            .slice(0, -'.motion3.json'.length)
+            .replace(/[_-]\d+$/, ''),
+        )
+        .filter((n) => n && !n.startsWith('.')),
+    );
+    return [...groups].sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
  * 读模型索引。任何读取/解析错误都吞进 `warnings`，绝不抛。
  *
  * @param {string} modelDir
@@ -225,6 +266,20 @@ export function loadModelIndex(modelDir, options = {}) {
     }
   }
   if (modelFailures.length < modelFiles.length) {
+    // [#28] FileReferences 为空的模型（VTS 导出如 miku：Expressions=[] 但目录里有
+    // 若干 exp3 / motion3）：model3.json 同目录扫描 *.exp3.json / *.motion3.json
+    // 自动登记回退。FileReferences 已声明（或 model3 不可读）时不扫——声明优先，
+    // 不可读走安全侧（集合为 null 由消费方回退静态名单）。
+    if (expressions.size === 0) {
+      const names = scanExpressionFiles(modelDir, fsImpl);
+      for (const name of names) expressions.add(name);
+      if (names.length) result.warnings.push('expressions-scanned: ' + names.length);
+    }
+    if (motionGroups.size === 0) {
+      const groups = scanMotionGroups(modelDir, fsImpl);
+      for (const name of groups) motionGroups.add(name);
+      if (groups.length) result.warnings.push('motions-scanned: ' + groups.length);
+    }
     result.expressions = expressions;
     result.motionGroups = motionGroups;
   } else {

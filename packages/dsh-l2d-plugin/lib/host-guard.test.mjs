@@ -432,6 +432,55 @@ assert.deepEqual(extractParamIds('l2d_posture', { values: [1, 2] }), []);
   assert.ok(emptyIdx.warnings.some((w) => w.startsWith('model3-unavailable')));
 }
 
+// 11) [#28] 目录扫描回退：FileReferences 为空的模型（VTS 导出如 miku），
+// model3.json 同目录的 *.exp3.json / *.motion3.json 自动登记。
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-l2d-hostguard-'));
+  tmpDirs.push(dir);
+  // miku 形态：FileReferences 只声明 Moc/Textures/Physics，无 Expressions / Motions。
+  fs.writeFileSync(
+    path.join(dir, 'miku.model3.json'),
+    JSON.stringify({ FileReferences: { Moc: 'miku.moc3', Textures: [], Physics: 'miku.physics3.json' } }),
+  );
+  fs.writeFileSync(path.join(dir, 'miku.physics3.json'), JSON.stringify(PHYSICS3));
+  for (const f of ['脸红.exp3.json', '唱歌.exp3.json', 'Scene1.motion3.json', 'TapBody_01.motion3.json']) {
+    fs.writeFileSync(path.join(dir, f), '{}');
+  }
+  const idx = loadModelIndex(dir);
+  assert.ok(idx.expressions.has('脸红'), '扫描回退应登记 exp3 表情名');
+  assert.ok(idx.expressions.has('唱歌'));
+  assert.ok(idx.motionGroups.has('Scene1'), '扫描回退应登记 motion3 组名');
+  assert.ok(idx.motionGroups.has('TapBody'), '序号后缀应剥离：TapBody_01 → TapBody');
+  assert.ok(idx.warnings.some((w) => w.startsWith('expressions-scanned')));
+  assert.ok(idx.warnings.some((w) => w.startsWith('motions-scanned')));
+  // 新模型资源经 guard 放行（unknown-expression / unknown-motion-group 不再出现）
+  assert.equal(guarded('l2d_set_expression', { name: '脸红' }, idx).ok, true);
+  assert.equal(guarded('l2d_play_motion', { group: 'Scene1' }, idx).ok, true);
+  assert.equal(guarded('l2d_play_motion', { group: 'Idle' }, idx).reason, 'idle-not-playable');
+  // 注视双名：短名 AngleX 与官方规范名 ParamAngleX 都是模型真实参数族，均放行。
+  assert.equal(guarded('l2d_set_parameters', { values: { AngleX: 1 } }, idx).ok, true);
+  assert.equal(guarded('l2d_set_parameters', { values: { ParamAngleX: 1 }, own: true }, idx).ok, true);
+  // FileReferences 声明优先：声明了 Expressions 就不扫描（扫描痕迹 warning 不出现）。
+  const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-l2d-hostguard-'));
+  tmpDirs.push(dir2);
+  fs.writeFileSync(
+    path.join(dir2, 'Haru.model3.json'),
+    JSON.stringify({ FileReferences: { Expressions: [{ Name: 'F01' }], Motions: { TapBody: [] } } }),
+  );
+  fs.writeFileSync(path.join(dir2, '裸名.exp3.json'), '{}');
+  const idx2 = loadModelIndex(dir2);
+  assert.ok(idx2.expressions.has('F01'));
+  assert.equal(idx2.expressions.has('裸名'), false, '声明过 Expressions 时不再目录扫描');
+  assert.ok(!idx2.warnings.some((w) => w.startsWith('expressions-scanned')));
+  // model3 不可读 → 不扫描（安全侧，集合为 null 由消费方回退静态名单）
+  const dir3 = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-l2d-hostguard-'));
+  tmpDirs.push(dir3);
+  fs.writeFileSync(path.join(dir3, 'broken.model3.json'), '{ not json');
+  fs.writeFileSync(path.join(dir3, '脸红.exp3.json'), '{}');
+  const idx3 = loadModelIndex(dir3);
+  assert.equal(idx3.expressions, null);
+}
+
 // ---------------------------------------------------------------------------
 for (const dir of tmpDirs) fs.rmSync(dir, { recursive: true, force: true });
 console.log('host-guard ok');
