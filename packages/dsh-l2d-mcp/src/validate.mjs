@@ -34,12 +34,16 @@ const DEFAULT_MODEL_DIR = path.resolve(
   'DeepSeek',
 );
 
-function buildWhitelist() {
+/**
+ * [#28] 白名单构建：以 modelDir 的真实 model3.json（含目录扫描回退）为资源清单。
+ * 导出供测试注入临时模型目录；进程内默认走 DSH_L2D_MODEL_DIR / DEFAULT_MODEL_DIR。
+ */
+export function buildWhitelist(modelDir) {
   let expressions = MODEL_EXPRESSIONS;
   let motionGroups = MODEL_MOTION_GROUPS;
   try {
-    const modelDir = process.env.DSH_L2D_MODEL_DIR || DEFAULT_MODEL_DIR;
-    const index = loadModelIndex(modelDir);
+    const dir = modelDir || process.env.DSH_L2D_MODEL_DIR || DEFAULT_MODEL_DIR;
+    const index = loadModelIndex(dir);
     if (index.expressions && index.expressions.size) expressions = [...index.expressions];
     if (index.motionGroups && index.motionGroups.size) {
       motionGroups = [...index.motionGroups].filter((g) => g !== 'Idle');
@@ -88,18 +92,25 @@ export function validateMotionGroup(group) {
 }
 
 /**
+/**
  * 动作链校验：结构/名字/范围 + 口型守卫。
  * @param {Array} chain
+ * @param {{expressions?: string[]|Set<string>, motionGroups?: string[]|Set<string>}} [allowed]
+ *   [#28] 缺省用当前模型的动态白名单（buildWhitelist 产物）；测试可注入其它清单。
  * @returns {{ok:boolean, errors:string[], reserved:string[]}}
  */
-export function validateActChain(chain) {
+export function validateActChain(chain, allowed = null) {
   const errors = [];
   if (chain !== undefined && !Array.isArray(chain)) {
     return { ok: false, errors: ['chain 必须是数组'], reserved: [] };
   }
+  const whitelist = allowed || {
+    expressions: EXPRESSION_SET,
+    motionGroups: MOTION_SET,
+  };
   const steps = Array.isArray(chain) ? chain : [];
   for (let i = 0; i < steps.length; i++) {
-    const result = validateStep(steps[i], i);
+    const result = validateStep(steps[i], i, whitelist);
     errors.push(...(result.errors || []));
   }
   const reserved = collectReservedParams(steps);

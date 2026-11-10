@@ -170,4 +170,37 @@ assert.match(checkActChain([{ kind: 'look', x: 0, y: 0, group: 'g1', timeoutMs: 
 // 仍拒绝真正的未知字段（防止并行组成为任意 payload 的口子）
 assert.match(checkActChain([{ kind: 'look', x: 0, y: 0, group: 'g1', priority: 1 }]).errors.join(';'), /未知字段/);
 
+// ---------------------------------------------------------------------------
+// [#28] checkActChain 带 index：动作链白名单 = 静态名单 ∪ 当前模型资源清单
+//（与 guardAiCall 单步原语同口径），换模型后 chain 里的新表情/新动作组不再误拒。
+{
+  const dir = tempDir({
+    'miku.model3.json': JSON.stringify({
+      FileReferences: { Moc: 'miku.moc3', Textures: [], Physics: 'miku.physics3.json' },
+    }),
+    'miku.physics3.json': '{}',
+    '唱歌.exp3.json': '{}',
+    'Scene1.motion3.json': '{}',
+  });
+  const idx = loadModelIndex(dir);
+  assert.ok(idx.expressions.has('唱歌'), '前置：目录扫描回退应登记 exp3');
+  const newModelChain = [
+    { kind: 'expression', name: '唱歌' },
+    { kind: 'motion', name: 'Scene1' },
+  ];
+  // 带 index：放行；不带（旧签名行为）：静态名单拒绝。
+  assert.deepEqual(checkActChain(newModelChain, { index: idx }), { ok: true, errors: [] });
+  assert.equal(checkActChain(newModelChain).ok, false);
+  // guardAiCall 整链路径同样放行（index 透传到 checkActChain）。
+  assert.equal(guardAiCall({ name: 'l2d_act', args: { chain: newModelChain } }, { index: idx }).ok, true);
+  // 口型红线不受动态白名单影响：chain 里塞口型参数照拒。
+  const mouth = guardAiCall(
+    { name: 'l2d_act', args: { chain: [{ kind: 'keyframes', tracks: [{ param: 'ParamMouthOpenY', keys: [[0, 0], [100, 1]] }] }] } },
+    { index: idx },
+  );
+  assert.equal(mouth.ok, false);
+  assert.match(mouth.message, /口型/);
+  dirs.push(dir);
+}
+
 console.log('host-guard-act ok');

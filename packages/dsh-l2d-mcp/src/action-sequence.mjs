@@ -6,7 +6,11 @@ export const MAX_BUBBLE_LENGTH = 40;
 export const DEFAULT_QUEUE_WAIT_MS = 15000;
 export const DEFAULT_QUEUE_RETRY_MS = 120;
 
-export function validateActionSequence(input) {
+/**
+ * [#28] allowed 可注入当前模型资源清单（表情/动作组）；缺省仍用 choreography
+ * 静态名单。MCP 侧 l2d_execute_sequence / nodegraph 校验按需传入动态白名单。
+ */
+export function validateActionSequence(input, allowed = null) {
   const errors = [];
   if (!input || typeof input !== 'object' || Array.isArray(input)) return { ok: false, errors: ['sequence 必须是对象'] };
   if (!Array.isArray(input.segments) || input.segments.length === 0) return { ok: false, errors: ['segments 不能为空'] };
@@ -21,7 +25,7 @@ export function validateActionSequence(input) {
     if (segment.chain.length > MAX_STEPS_PER_SEGMENT) errors.push(`${at}.chain 最多 ${MAX_STEPS_PER_SEGMENT} 步`);
     segment.chain.slice(0, MAX_STEPS_PER_SEGMENT).forEach((step, stepIndex) => {
       if (step && !STEP_KINDS.includes(step.kind)) { errors.push(`${at}.chain[${stepIndex}] kind 不受支持`); return; }
-      const result = validateStep(step, stepIndex);
+      const result = validateStep(step, stepIndex, allowed);
       errors.push(...result.errors.map((message) => `${at}: ${message}`));
     });
     const lifeMs = estimateLifeMs(segment.chain);

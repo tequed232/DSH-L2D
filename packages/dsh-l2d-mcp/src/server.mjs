@@ -14,7 +14,14 @@ import { resolveBase } from './discover.mjs';
 import { forwardCall } from './forward.mjs';
 import { executeActionSequence, validateActionSequence } from './action-sequence.mjs';
 import { CHOREOGRAPHY } from '../../dsh-l2d-plugin/lib/choreography.mjs';
-import { findReservedParams, validateActChain, validateExpressionName, validateMotionGroup } from './validate.mjs';
+import {
+  ALLOWED_EXPRESSIONS,
+  PLAYABLE_MOTION_GROUPS,
+  findReservedParams,
+  validateActChain,
+  validateExpressionName,
+  validateMotionGroup,
+} from './validate.mjs';
 import { readToolchainStatus } from './toolchain-status.mjs';
 
 let cachedBase = '';
@@ -265,7 +272,11 @@ server.registerTool(
     if (reserved.length) {
       return toolResult({ ok: false, status: 'rejected', reason: 'reserved-param', reserved, receipts: [] });
     }
-    const validation = validateActionSequence(plan);
+    // [#28] 序列校验用当前模型的动态白名单（与 validateActChain / 单步原语同源）。
+    const validation = validateActionSequence(plan, {
+      expressions: ALLOWED_EXPRESSIONS,
+      motionGroups: PLAYABLE_MOTION_GROUPS,
+    });
     if (!validation.ok) return toolResult({ ok: false, status: 'rejected', reason: 'invalid-sequence', errors: validation.errors, receipts: [] });
     const result = await executeActionSequence(plan, (args) => forward('l2d_act', args, 12000, 'act'));
     return toolResult({ ...result, source: selected ? 'preset:' + presetState : 'agent-generated' });

@@ -466,12 +466,24 @@ export function decide(input = {}, gate = DEFAULT_GATE) {
   };
 }
 
-/** 单步校验。 */
-export function validateStep(step, index = 0) {
+/**
+ * 单步校验。
+ * @param {object} step
+ * @param {number} index
+ * @param {{expressions?: string[]|Set<string>, motionGroups?: string[]|Set<string>}} [allowed]
+ *   [#28] 表情/动作组白名单可由调用方注入（当前模型资源清单）；缺省用写死的大肥鱼
+ *   名单（静态行为完全不变）。数组用 includes、Set 用 has，两种形态都收。
+ */
+export function validateStep(step, index = 0, allowed = null) {
   const errors = [];
   const warnings = [];
   const at = 'chain[' + index + ']';
   if (!isPlainObject(step)) return { errors: [at + ' 不是对象'], warnings };
+
+  const inWhitelist = (coll, name) =>
+    coll instanceof Set ? coll.has(name) : Array.isArray(coll) ? coll.includes(name) : false;
+  const allowedExpressions = allowed && allowed.expressions ? allowed.expressions : MODEL_EXPRESSIONS;
+  const allowedMotionGroups = allowed && allowed.motionGroups ? allowed.motionGroups : MODEL_MOTION_GROUPS;
 
   for (const key of Object.keys(step)) {
     if (!STEP_KEYS.has(key)) errors.push(at + ' 未知字段 ' + key);
@@ -487,13 +499,13 @@ export function validateStep(step, index = 0) {
   if (step.kind === 'expression') {
     if (step.clear === true) {
       if (step.name) warnings.push(at + ' 同时给了 clear 和 name，执行时只走 clear');
-    } else if (!MODEL_EXPRESSIONS.includes(step.name)) {
+    } else if (!inWhitelist(allowedExpressions, step.name)) {
       errors.push(at + ' 表情名不存在：' + String(step.name));
     }
   }
 
   if (step.kind === 'motion') {
-    if (!MODEL_MOTION_GROUPS.includes(step.name)) {
+    if (!inWhitelist(allowedMotionGroups, step.name)) {
       errors.push(at + ' 动作组不存在或不允许手动播：' + String(step.name));
     }
     const pair = PAIRED_CLOSES[step.name];

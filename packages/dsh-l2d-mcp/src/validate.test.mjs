@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   ALLOWED_EXPRESSIONS,
   PLAYABLE_MOTION_GROUPS,
+  buildWhitelist,
   findReservedParams,
   validateActChain,
   validateExpressionName,
@@ -77,3 +81,34 @@ assert.match(validateActChain([{ kind: 'look', x: 0, y: 0, group: 'g1', timeoutM
 assert.equal(validateActChain([{ kind: 'look', x: 0, y: 0, group: 'g1', timeoutMs: 0, mode: 'sequence' }]).ok, true);
 
 console.log('validate ok');
+
+// 6. [#28] 动态白名单：模型目录（含目录扫描回退）驱动的表情/动作组。
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-l2d-validate-'));
+  // miku 形态：FileReferences 无 Expressions/Motions，目录里有 exp3 / motion3。
+  fs.writeFileSync(
+    path.join(dir, 'miku.model3.json'),
+    JSON.stringify({ FileReferences: { Moc: 'miku.moc3', Textures: [], Physics: 'miku.physics3.json' } }),
+  );
+  fs.writeFileSync(path.join(dir, 'miku.physics3.json'), '{}');
+  for (const f of ['脸红.exp3.json', '唱歌.exp3.json', 'Scene1.motion3.json']) {
+    fs.writeFileSync(path.join(dir, f), '{}');
+  }
+  const wl = buildWhitelist(dir);
+  assert.ok(wl.expressions.includes('脸红'), 'buildWhitelist 应含扫描登记的表情');
+  assert.ok(wl.expressions.includes('唱歌'));
+  assert.deepEqual(wl.motionGroups, ['Scene1'], '扫描登记的动作组（Idle 过滤后）');
+  // 新模型资源过 validateExpressionName / validateMotionGroup / validateActChain
+  const dynamicAllowed = { expressions: new Set(wl.expressions), motionGroups: new Set(wl.motionGroups) };
+  const chain = [
+    { kind: 'expression', name: '脸红' },
+    { kind: 'motion', name: 'Scene1' },
+  ];
+  assert.equal(validateActChain(chain, dynamicAllowed).ok, true, '新模型表情/动作链应放行');
+  // 不带 allowed 时用模块级白名单（当前真实模型目录）：新模型独有的名被拒，静态名放行。
+  assert.equal(validateActChain([{ kind: 'expression', name: '唱歌' }]).ok, false, '模块白名单不含 miku 独有名');
+  assert.equal(validateActChain([{ kind: 'expression', name: '兔牙' }]).ok, true);
+  // 注视双名（issue 第 4 点）：look 步骤不写参数名，短名 AngleX 走 keyframes 轨道同样放行结构校验。
+  assert.equal(validateActChain([{ kind: 'look', x: 0.5, y: 0 }], dynamicAllowed).ok, true);
+  fs.rmSync(dir, { recursive: true, force: true });
+}

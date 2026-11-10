@@ -368,14 +368,24 @@ function validateKeyframeStep(step, index) {
  * 不能成为绕过白名单的旁路。结构与取值范围复用 choreography.validateStep，
  * 口型用同一份 param-guards 名单递归扫描。
  *
+ * [#28] 表情/动作组白名单与 guardAiCall 的单步原语同口径：静态名单 ∪ 当前模型
+ * 索引（expressionSet / motionGroupSet）。options.index 缺省时行为与旧版一致。
+ *
+ * @param {Array} chain
+ * @param {{index?: ReturnType<typeof loadModelIndex>|null}} [options]
  * @returns {{ok:boolean, errors:string[]}}
  */
-export function checkActChain(chain) {
+export function checkActChain(chain, options = {}) {
   if (chain === undefined) return { ok: true, errors: [] };
   if (!Array.isArray(chain)) return { ok: false, errors: ['chain 必须是数组'] };
   if (chain.length > MAX_CHAIN_STEPS) {
     return { ok: false, errors: ['chain 超过 ' + MAX_CHAIN_STEPS + ' 步'] };
   }
+  const index = options.index && typeof options.index === 'object' ? options.index : null;
+  const allowed = {
+    expressions: expressionSet(index),
+    motionGroups: motionGroupSet(index),
+  };
   const errors = [];
   for (let i = 0; i < chain.length; i++) {
     const step = chain[i];
@@ -388,7 +398,7 @@ export function checkActChain(chain) {
       errors.push(...validateKeyframeStep(step, i));
       continue;
     }
-    const result = validateStep(step, i);
+    const result = validateStep(step, i, allowed);
     errors.push(...((result && result.errors) || []));
   }
   const reserved = collectReservedParams(chain);
@@ -498,7 +508,7 @@ export function guardAiCall(request = {}, options = {}) {
 
   // l2d_act：MCP 侧有 validateActChain，HTTP 直连必须同规则（不能成为绕过白名单的旁路）。
   if (name === 'l2d_act') {
-    const chainCheck = checkActChain(args.chain);
+    const chainCheck = checkActChain(args.chain, { index });
     if (!chainCheck.ok) return deny('invalid-chain', chainCheck.errors.join('; '));
   }
 
