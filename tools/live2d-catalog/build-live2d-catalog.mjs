@@ -1,25 +1,36 @@
 #!/usr/bin/env node
 /**
- * 从大肥鱼真实模型文件 + overlay/host-guard 代码生成 Live2D 目录：
+ * 从真实模型文件 + overlay/host-guard 代码生成 Live2D 目录：
  *   docs/nodegraph/LIVE2D-CATALOG.md
  *   docs/nodegraph/live2d-catalog.json
  *   docs/nodegraph/live2d-ids.json   ← 后端校验用，严格字段
+ *
+ * 按模型生成（2026-11-10 统一约定）：modelId = 模型文件名去 .model3.json（如 大肥鱼.dsl2d.2048）。
+ * 每次运行都会写 docs/nodegraph/models/<modelId>/ 下的三份文件（live2d-ids.json / live2d-catalog.json /
+ * LIVE2D-CATALOG.md）；仅当 modelId 为 大肥鱼.dsl2d.2048 时才额外写 docs/nodegraph/ 全局三份
+ * （全局文档是历史产物，其它模型不覆盖）。
  *
  * 环境变量：
  *   DSH_L2D_MODEL_DIR  模型目录（含 *.model3.json / *.cdi3.json / moc3）
  *   DSH_L2D_CUBISM_CORE  live2dcubismcore.min.js 路径（可选）
  *
  * 纪律：不编造任何 ID；量程来自 Cubism Core 读 moc3；找不到的写明来源缺失。
+ * model3 FileReferences 为空时（VTS 导出如 miku）回退目录扫描 *.exp3.json / *.motion3.json。
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
+// 目录扫描回退与运行时同一份事实（host-guard 注释：「两处绝不分叉」）。
+import { scanExpressionFiles, scanMotionGroups } from '../../packages/dsh-l2d-plugin/lib/host-guard.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(__dirname, '../..');
 const OUT_DIR = path.join(REPO, 'docs/nodegraph');
+const MODELS_OUT_DIR = path.join(OUT_DIR, 'models');
+/** 全局 docs（历史产物）只属于大肥鱼；其它模型只写 models/<modelId>/。 */
+const GLOBAL_DOC_MODEL_ID = '大肥鱼.dsl2d.2048';
 
 const MODEL_DIR = process.env.DSH_L2D_MODEL_DIR ||
   path.join(REPO, 'DeepSeek免费公皮', 'DeepSeek');
@@ -30,18 +41,43 @@ const FALLBACK_MODEL_DIRS = [
 
 function resolveModelDir() {
   for (const d of FALLBACK_MODEL_DIRS) {
-    if (fs.existsSync(path.join(d, '大肥鱼.dsl2d.2048.model3.json')) ||
-        fs.existsSync(path.join(d, '大肥鱼.dsl2d.model3.json'))) {
-      return d;
-    }
+    if (discoverModel3Files(d).length) return d;
   }
   throw new Error(`找不到模型目录。请设置 DSH_L2D_MODEL_DIR。试过：${FALLBACK_MODEL_DIRS.join(' | ')}`);
 }
 
-function findFile(dir, names) {
+/** 目录下全部 .model3.json（排序）。目录不可读 → 空数组。 */
+function discoverModel3Files(dir) {
+  try {
+    return fs.readdirSync(dir).filter((n) => n.endsWith('.model3.json')).sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 选 model3：同目录多变体时优先 `.2048.model3.json`（纹理降档变体，与既有 catalog 的
+ * modelId 一致），否则取排序第一个。
+ */
+function pickModel3File(dir) {
+  const files = discoverModel3Files(dir);
+  if (!files.length) throw new Error(`模型目录里没有 .model3.json：${dir}`);
+  return files.find((f) => f.endsWith('.2048.model3.json')) || files[0];
+}
+
+function findFile(dir, names, extRegex) {
   for (const n of names) {
+    if (!n) continue;
     const p = path.join(dir, n);
     if (fs.existsSync(p)) return p;
+  }
+  if (extRegex) {
+    try {
+      const hit = fs.readdirSync(dir).filter((n) => extRegex.test(n)).sort();
+      if (hit.length) return path.join(dir, hit[0]);
+    } catch {
+      /* 目录不可读按未找到处理 */
+    }
   }
   return null;
 }
@@ -149,7 +185,7 @@ function physicsOutputIds(physics) {
 function buildMd(catalog) {
   const lines = [];
   const L = (s = '') => lines.push(s);
-  L('# Live2D 目录 · 大肥鱼（给 AI / 校验用）');
+  L(`# Live2D 目录 · ${catalog.modelId}（给 AI / 校验用）`);
   L();
   L('## 用途与纪律');
   L();
@@ -163,9 +199,10 @@ function buildMd(catalog) {
   L();
   L(`| 项 | 值 |`);
   L(`|---|---|`);
+  L(`| modelId | \`${catalog.modelId}\` |`);
   L(`| model3 | \`${catalog.model.model3File}\` |`);
   L(`| moc3 | \`${catalog.model.moc3File}\` |`);
-  L(`| cdi3 | \`${catalog.model.cdi3File}\` |`);
+  L(`| cdi3 | \`${catalog.model.cdi3File || '未在模型目录中找到'}\` |`);
   L(`| physics3 | \`${catalog.model.physics3File || '未在模型目录中找到'}\` |`);
   L(`| pose3 | \`${catalog.model.pose3File || '未在模型目录中找到'}\` |`);
   L(`| 量程来源 | ${catalog.ranges.source} |`);
@@ -177,6 +214,10 @@ function buildMd(catalog) {
   L();
   L('## 形态（forms）');
   L();
+  if (!catalog.forms.length) {
+    L('（本模型没有宿主 overlay `BODY_TYPES` 形态定义，forms 为空；`l2d_set_form` 不可用。）');
+    L();
+  } else {
   L('来源：`packages/dsh-l2d-plugin/lib/overlay.js` 的 `BODY_TYPES`；切换写参数 `Clothes2`。');
   L();
   L('| index | label（显示名，可译） | Clothes2 取值 | 视觉系数 factor |');
@@ -188,9 +229,10 @@ function buildMd(catalog) {
   L('- 直达切换：指令 `l2d_set_form`，`index` ∈ {0,1,2}（不钳制、不猜测）。');
   L('- 循环 +1：指令 `l2d_change_form`（只能往上切，不能回退）。');
   L();
+  }
   L('## 动作组（motions）');
   L();
-  L('来源：model3 `FileReferences.Motions`。播放用组名（不是文件名）。');
+  L(catalog.model.motionSource === 'scan' ? '来源：model3 `FileReferences.Motions` 为空，回退扫描同目录 `*.motion3.json`（组名去序号后缀）。播放用组名（不是文件名）。' : '来源：model3 `FileReferences.Motions`。播放用组名（不是文件名）。');
   L();
   L('| 组名（ID） | 文件 | 成对槽（motion-director） |');
   L('|---|---|---|');
@@ -198,15 +240,17 @@ function buildMd(catalog) {
     L(`| \`${m.group}\` | \`${m.file}\` | ${m.pairSlot || '—'} |`);
   }
   L();
+  if (catalog.motionPairs.length) {
   L('成对规则（`packages/renderer/src/app/motion-director.ts`）：');
   for (const s of catalog.motionPairs) {
     L(`- **${s.base}**：打开 \`${s.openGroup}\` / 关闭 \`${s.closeGroup}\`；姿态骨 ${s.poseParams.map((x) => '`' + x + '`').join(', ')}`);
   }
   L('- `竖手指` 与 `狗尾巴草` 共用右臂姿态骨，不可同时打开；`抚胸手` 用左臂，可与右臂共存。');
   L();
+  }
   L('## 表情（expressions）');
   L();
-  L('来源：model3 `FileReferences.Expressions`（Name 为 ID）。');
+  L(catalog.model.expressionSource === 'scan' ? '来源：model3 `FileReferences.Expressions` 为空，回退扫描同目录 `*.exp3.json`（表情名 = 文件名去扩展名）。' : '来源：model3 `FileReferences.Expressions`（Name 为 ID）。');
   L();
   L('| 表情名（ID） | 文件 | 写入参数（来自 exp3） |');
   L('|---|---|---|');
@@ -298,18 +342,25 @@ function buildMd(catalog) {
 
 async function main() {
   const modelDir = resolveModelDir();
-  const model3Path = findFile(modelDir, [
-    '大肥鱼.dsl2d.2048.model3.json',
-    '大肥鱼.dsl2d.model3.json',
-    '大肥鱼.model3.json',
-  ]);
-  const cdi3Path = findFile(modelDir, ['大肥鱼.cdi3.json']);
-  const moc3Path = findFile(modelDir, ['大肥鱼.moc3']);
-  const physicsPath = findFile(modelDir, ['大肥鱼.physics3.json']);
-  const pose3Path = findFile(modelDir, ['大肥鱼.pose3.json']);
+  const model3File = pickModel3File(modelDir);
+  const model3Path = path.join(modelDir, model3File);
+  // modelId = 模型文件名去 .model3.json（统一裁决：单个点放行，如 大肥鱼.dsl2d.2048）
+  const modelId = model3File.slice(0, -'.model3.json'.length);
+  const model3 = readJson(model3Path);
+  const fr = model3.FileReferences || {};
 
-  if (!model3Path || !cdi3Path || !moc3Path) {
-    throw new Error(`模型文件不完整：model3=${model3Path} cdi3=${cdi3Path} moc3=${moc3Path}`);
+  // 资源文件按 model3 自声明（FileReferences）优先；未声明时按目录通用名/首文件兜底。
+  const moc3Path = fr.Moc
+    ? path.join(modelDir, fr.Moc)
+    : findFile(modelDir, [`${modelId}.moc3`, 'model.moc3'], /\.moc3$/);
+  const cdi3Path = findFile(modelDir, [moc3Path ? path.basename(moc3Path).replace(/\.moc3$/, '.cdi3.json') : ''], /\.cdi3\.json$/);
+  const physicsPath = fr.Physics
+    ? path.join(modelDir, fr.Physics)
+    : findFile(modelDir, [], /\.physics3\.json$/);
+  const pose3Path = findFile(modelDir, [], /\.pose3\.json$/);
+
+  if (!model3Path || !moc3Path) {
+    throw new Error(`模型文件不完整：model3=${model3Path} moc3=${moc3Path}`);
   }
 
   const coreCandidates = [
@@ -322,10 +373,10 @@ async function main() {
 
   console.log('modelDir', modelDir);
   console.log('model3', model3Path);
+  console.log('modelId', modelId);
   console.log('core', corePath);
 
-  const model3 = readJson(model3Path);
-  const cdi3 = readJson(cdi3Path);
+  const cdi3 = cdi3Path ? readJson(cdi3Path) : { Parameters: [], ParameterGroups: [] };
   const physics = physicsPath ? readJson(physicsPath) : { PhysicsSettings: [] };
   const ranges = await extractRangesFromMoc3(moc3Path, corePath);
 
@@ -337,7 +388,7 @@ async function main() {
   );
   const rangeById = new Map(ranges.parameters.map((p) => [p.id, p]));
 
-  // 对齐：moc3 与 cdi3 都应 509
+  // 对齐：moc3 与 cdi3 都应同数
   const onlyMoc = ranges.parameters.filter((p) => !cdiById.has(p.id)).map((p) => p.id);
   const onlyCdi = [...cdiById.keys()].filter((id) => !rangeById.has(id));
 
@@ -364,19 +415,30 @@ async function main() {
     count: parameters.filter((p) => p.groupId === g.Id).length,
   }));
 
-  const fr = model3.FileReferences || {};
+  // 动作组：FileReferences.Motions 为空时回退扫描同目录 *.motion3.json（组名去序号后缀）。
+  let motionSource = 'model3';
+  let motionGroups;
+  if (fr.Motions && typeof fr.Motions === 'object' && Object.keys(fr.Motions).length) {
+    motionGroups = Object.keys(fr.Motions);
+  } else {
+    motionSource = 'scan';
+    motionGroups = scanMotionGroups(modelDir, fs);
+  }
   const motions = [];
-  for (const [group, list] of Object.entries(fr.Motions || {})) {
-    for (const item of list || []) {
+  for (const group of motionGroups) {
+    const list = (fr.Motions && fr.Motions[group]) || [];
+    for (const item of list) {
       motions.push({ group, file: item.File || '' });
     }
+    if (!list.length) motions.push({ group, file: '' });
   }
 
+  // 成对动作槽是宿主 motion-director 代码事实（大肥鱼）；组名在本模型不存在时自动消失。
   const pairSlots = [
     { base: '抚胸手', openGroup: '抚胸手打开', closeGroup: '抚胸手关闭', poseParams: ['Param59', 'Param60', 'Param61', 'Param62'] },
     { base: '竖手指', openGroup: '竖手指打开', closeGroup: '竖手指关闭', poseParams: ['Param36', 'Param39', 'Param40', 'Param41', 'Param42', 'Param43'] },
     { base: '狗尾巴草', openGroup: '狗尾巴草打开', closeGroup: '狗尾巴草关闭', poseParams: ['Param36', 'Param39', 'Param41', 'Param42', 'Param43'] },
-  ];
+  ].filter((s) => motionGroups.includes(s.openGroup) && motionGroups.includes(s.closeGroup));
   const pairByGroup = new Map();
   for (const s of pairSlots) {
     pairByGroup.set(s.openGroup, s.base);
@@ -384,8 +446,17 @@ async function main() {
   }
   for (const m of motions) m.pairSlot = pairByGroup.get(m.group) || null;
 
+  // 表情：FileReferences.Expressions 为空时回退扫描同目录 *.exp3.json（表情名 = 文件名去扩展名）。
+  let expressionSource = 'model3';
+  let expressionEntries;
+  if (Array.isArray(fr.Expressions) && fr.Expressions.length) {
+    expressionEntries = fr.Expressions.map((e) => ({ Name: e.Name, File: e.File || '' }));
+  } else {
+    expressionSource = 'scan';
+    expressionEntries = scanExpressionFiles(modelDir, fs).map((name) => ({ Name: name, File: name + '.exp3.json' }));
+  }
   const expressions = [];
-  for (const e of fr.Expressions || []) {
+  for (const e of expressionEntries) {
     const file = e.File || '';
     const expPath = path.join(modelDir, file);
     let parametersInExp = [];
@@ -403,7 +474,9 @@ async function main() {
   const hostGuardSrc = fs.readFileSync(hostGuardPath, 'utf8');
   const paramGuardsSrc = fs.readFileSync(paramGuardsPath, 'utf8');
 
-  const forms = extractBodyTypes(overlaySrc);
+  // 形态来自宿主 overlay 的 BODY_TYPES（写参数 Clothes2）：只有模型 moc3 里真有
+  // Clothes2 参数才有意义，否则 forms 为空（不给 AI 编造形态切换能力）。
+  const forms = extractBodyTypes(overlaySrc).filter((f) => parameters.some((p) => p.id === f.paramId));
   const overlayCommands = extractOverlayCommands(overlaySrc);
   const hostAllowed = extractHostAllowedTools(hostGuardSrc);
 
@@ -419,29 +492,31 @@ async function main() {
 
   const notes = [
     `参数量程全部来自 Cubism Core 读取 \`${path.basename(moc3Path)}\`，不是命名推断。`,
-    `cdi3 只有 Id/GroupId/Name，**不含** min/max/default。`,
+    cdi3Path ? 'cdi3 只有 Id/GroupId/Name，**不含** min/max/default。' : 'cdi3 未找到：显示名/分组为空，量程仍以 moc3 为准。',
     pose3Path ? `pose3: ${path.basename(pose3Path)}` : 'pose3：未在模型目录中找到。',
-    `HitAreas：model3 声明为空数组。`,
+    `HitAreas：model3 声明为 ${JSON.stringify(model3.HitAreas || [])}。`,
     onlyMoc.length ? `仅在 moc3、不在 cdi3：${onlyMoc.join(', ')}` : 'moc3 与 cdi3 参数 Id 集合一致（0 差异）。',
     onlyCdi.length ? `仅在 cdi3、不在 moc3：${onlyCdi.join(', ')}` : null,
-    '`ParamMouthOpen` 在 LIPSYNC_PARAMS 中，但 **未出现在本模型 moc3/cdi3**。',
-    'exp3 `裙子切换` 写 Clothes1=-1、`尾巴开关` 写 Clothes5=-1，超出 moc3 的 0..1；目录仍以 moc3 为准。',
-    '成对动作槽 poseParams 来自 motion-director.ts，不是 moc3 字段。',
-    'HOST_ALLOWED_TOOLS 与 overlay case 列表可能不完全重合（如 l2d_cue 系列仅 overlay）。',
+    '`ParamMouthOpen` 在 LIPSYNC_PARAMS 中但未出现在本模型 moc3/cdi3（保留名拦截）。',
+    '成对动作槽 poseParams 来自 motion-director.ts，不是 moc3 字段（仅当动作组存在时列出）。',
+    'forms 来自宿主 overlay 的 BODY_TYPES（大肥鱼专用）；本模型没有该表时 forms 为空。',
+    'HOST_ALLOWED_TOOLS 与 overlay case 列表是宿主代码事实，与模型无关。',
   ].filter(Boolean);
 
   const catalog = {
     schemaVersion: 1,
-    modelId: '大肥鱼.dsl2d.2048',
+    modelId,
     generatedBy: 'tools/live2d-catalog/build-live2d-catalog.mjs',
     generatedAt: new Date().toISOString(),
     model: {
       dir: modelDir,
       model3File: path.basename(model3Path),
       moc3File: path.basename(moc3Path),
-      cdi3File: path.basename(cdi3Path),
+      cdi3File: cdi3Path ? path.basename(cdi3Path) : null,
       physics3File: physicsPath ? path.basename(physicsPath) : null,
       pose3File: pose3Path ? path.basename(pose3Path) : null,
+      motionSource,
+      expressionSource,
     },
     ranges: { source: ranges.source, count: ranges.count },
     forms,
@@ -468,18 +543,23 @@ async function main() {
     forms: forms.map((f) => f.index),
   };
 
-  fs.mkdirSync(OUT_DIR, { recursive: true });
-  const jsonPath = path.join(OUT_DIR, 'live2d-catalog.json');
-  const idsPath = path.join(OUT_DIR, 'live2d-ids.json');
-  const mdPath = path.join(OUT_DIR, 'LIVE2D-CATALOG.md');
-  fs.writeFileSync(jsonPath, JSON.stringify(catalog, null, 2) + '\n');
-  fs.writeFileSync(idsPath, JSON.stringify(idsStrict, null, 2) + '\n');
-  fs.writeFileSync(mdPath, buildMd(catalog) + '\n');
+  const writeOutputs = (dir) => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'live2d-catalog.json'), JSON.stringify(catalog, null, 2) + '\n');
+    fs.writeFileSync(path.join(dir, 'live2d-ids.json'), JSON.stringify(idsStrict, null, 2) + '\n');
+    fs.writeFileSync(path.join(dir, 'LIVE2D-CATALOG.md'), buildMd(catalog) + '\n');
+    console.log('wrote', path.join(dir, 'LIVE2D-CATALOG.md'));
+    console.log('wrote', path.join(dir, 'live2d-catalog.json'));
+    console.log('wrote', path.join(dir, 'live2d-ids.json'));
+  };
 
-  console.log('wrote', mdPath);
-  console.log('wrote', jsonPath);
-  console.log('wrote', idsPath);
+  // 按模型目录（唯一权威位置；docs/nodegraph/models/ 不入库，授权待主理人裁定）
+  writeOutputs(path.join(MODELS_OUT_DIR, modelId));
+  // 全局 docs 是历史产物（大肥鱼）：只有大肥鱼的运行才写，其它模型不覆盖。
+  if (modelId === GLOBAL_DOC_MODEL_ID) writeOutputs(OUT_DIR);
+
   console.log('stats', {
+    modelId,
     params: parameters.length,
     motions: idsStrict.motions.length,
     expressions: idsStrict.expressions.length,
