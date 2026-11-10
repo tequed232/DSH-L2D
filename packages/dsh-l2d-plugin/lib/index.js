@@ -1599,14 +1599,17 @@ export function apply(root, config = {}) {
           .filter((n) => /^profile\..+\.json$/.test(n))
           .sort();
         // [#28] 画像按当前模型选：profile.<modelId>.json（modelId = 模型文件名去掉
-        // .model3.json，与 scan.mjs 的命名规则一致）。当前模型没有画像时回退
-        // 按文件名排序的第一份（旧行为），不再无声地把别的模型的画像当现状返回。
+        // .model3.json，与 scan.mjs 的命名规则一致）。只做精确匹配——多模型混部时
+        // 回退字母序第一份会把别的模型的画像当现状返回（错误画像驱动错误演出）。
+        // 当前模型没有画像 → 404 no-profile，提示 rescan；仅当目录里发现不了
+        // model3.json（目录不可读/为空）时才回退第一份，保持旧目录名下的旧行为。
         const modelFile = discoverModelFiles(MODEL_DIR)[0];
         if (modelFile) {
           const expected = 'profile.' + modelFile.replace(/\.model3\.json$/, '') + '.json';
           file = profiles.find((n) => n === expected) || null;
+        } else {
+          file = profiles[0] || null;
         }
-        file = file || profiles[0] || null;
       } catch {
         file = null;
       }

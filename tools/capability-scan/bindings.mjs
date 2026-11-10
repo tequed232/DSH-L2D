@@ -24,9 +24,11 @@ const COMPOSE = (ids, reason) => ({ mode: 'compose', ids, reason });
  * - 缺省（未列出的通道）：unknown。
  */
 export const CHANNEL_BINDINGS = {
-  'head.yaw': DIRECT([/^AngleX$/]),
-  'head.pitch': DIRECT([/^AngleY$/]),
-  'head.roll': DIRECT([/^AngleZ$/]),
+  // [#28] 头部三轴兼容短名（AngleX，大肥鱼自造）与官方规范名（ParamAngleX，
+  // miku/小祥等标准命名模型）——旧正则 /^AngleX$/ 对标准模型白丢 3 个 gaze 通道。
+  'head.yaw': DIRECT([/^(?:Param)?AngleX$/]),
+  'head.pitch': DIRECT([/^(?:Param)?AngleY$/]),
+  'head.roll': DIRECT([/^(?:Param)?AngleZ$/]),
 
   'torso.lean': DIRECT([/^LeanInput$/]),
   'torso.sway': DIRECT([/^ParamBodyAngleX$/]),

@@ -110,5 +110,19 @@ console.log('validate ok');
   assert.equal(validateActChain([{ kind: 'expression', name: '兔牙' }]).ok, true);
   // 注视双名（issue 第 4 点）：look 步骤不写参数名，短名 AngleX 走 keyframes 轨道同样放行结构校验。
   assert.equal(validateActChain([{ kind: 'look', x: 0.5, y: 0 }], dynamicAllowed).ok, true);
+  // [#28] 模型绑定语义（chain-e2e 边缘实证）：白名单跟随选定模型，不按名字符串匹配
+  // ——大肥鱼独有的「兔牙」在 miku 目录（miku 清单里没有它）必须被拒，
+  // 不因「碰巧是大肥鱼合法名」而放行。（validateExpressionName 读模块级白名单，
+  // 由 DSH_L2D_MODEL_DIR 启动时决定；模型绑定断言走注入式 validateActChain。）
+  assert.equal(
+    validateActChain([{ kind: 'expression', name: '兔牙' }], dynamicAllowed).ok,
+    false,
+    '模型 A 独有名在模型 B 清单下应拒',
+  );
+  assert.equal(
+    validateActChain([{ kind: 'motion', name: '抚胸手打开' }], dynamicAllowed).ok,
+    false,
+    '模型 A 独有动作组在模型 B 清单下应拒',
+  );
   fs.rmSync(dir, { recursive: true, force: true });
 }
