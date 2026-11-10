@@ -1593,6 +1593,19 @@ export async function playMotionAsync(
   const core = model.getModel();
   if (!core) return { status: 'failed', reason: 'not-ready' };
 
+  // 新动作开始前作废上一次收尾：竖手指打开等 Loop 动作会在 duration-120ms 设
+  // motionStopTimer；若变量被下一次 play 覆盖却没 clearTimeout，旧定时器仍会触发
+  // completeMotion，把 motionCompletionDone 置位且不释放新动作的 awaitFinish，
+  // 于是「先关再播」的 /ai/result 永久不就绪。递增纪元让旧闭包失效，并放行旧等待者。
+  motionEpoch += 1;
+  if (motionStopTimer) {
+    window.clearTimeout(motionStopTimer);
+    motionStopTimer = 0;
+  }
+  motionFinishPending = null;
+  for (const settle of pendingFinishResolvers) settle();
+  pendingFinishResolvers.clear();
+
   // 动作独占标志：动作播放期间姿势层完全不写，避免互抢。
   // Loop 动作不会触发结束回调，所以用动作时长定时交还。
   // 只清本动作共用的姿态骨，另一只手臂的 injector 值保留，避免叠加预览被全身清零。

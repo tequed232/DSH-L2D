@@ -2374,18 +2374,59 @@
     return closes;
   }
 
+  // 成对关闭动作约 1.0–1.25s；超过此时限就不再卡住 /ai/result，直接播新动作。
+  var CLOSE_YIELD_TIMEOUT_MS = 2000;
+
+  function raceTimeout(promise, ms, fallback) {
+    return new Promise(function (resolve) {
+      var settled = false;
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        resolve(fallback);
+      }, ms);
+      Promise.resolve(promise).then(function (value) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      }, function () {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(fallback);
+      });
+    });
+  }
+
   function playMotionYieldingSharedArm(L, group, opts) {
     var closes = closesForIncomingMotion(L, group);
-    var play = function () { return L.playMotionAsync(group, opts); };
-    if (!closes.length) return play();
+    var playIncoming = function (interrupt) {
+      var nextOpts = opts ? Object.assign({}, opts) : {};
+      if (interrupt) nextOpts.interrupt = true;
+      return L.playMotionAsync(group, nextOpts);
+    };
+    if (!closes.length) return playIncoming(false);
+    var closeTimedOut = false;
     var seq = Promise.resolve();
     closes.forEach(function (name) {
       seq = seq.then(function () {
-        return L.playMotionAsync(name, { awaitFinish: true, interrupt: true });
+        return raceTimeout(
+          L.playMotionAsync(name, { awaitFinish: true, interrupt: true }),
+          CLOSE_YIELD_TIMEOUT_MS,
+          { status: 'timeout', timedOut: true, group: name }
+        ).then(function (r) {
+          if (r && r.timedOut) closeTimedOut = true;
+          return r;
+        });
       });
     });
-    return seq.then(play).then(function (result) {
-      if (result && typeof result === 'object') result.yieldedCloses = closes;
+    // 收尾后（或收尾超时后）用 interrupt 播新动作，避免关闭仍在播时被 start-rejected。
+    return seq.then(function () { return playIncoming(true); }).then(function (result) {
+      if (result && typeof result === 'object') {
+        result.yieldedCloses = closes;
+        if (closeTimedOut) result.closeYieldTimedOut = true;
+      }
       return result;
     });
   }

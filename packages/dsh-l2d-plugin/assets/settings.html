@@ -2563,20 +2563,23 @@
           }).then(function (queued) {
             if (!queued || !queued.id) throw new Error('未入队');
             return new Promise(function (resolve, reject) {
-              var tries = 0;
+              // 共用手臂时要先收尾再播，关闭动作约 1.25s，8×200ms 会误报超时。
+              var deadline = Date.now() + 8000;
               function step() {
-                if (tries >= 8) {
+                if (Date.now() >= deadline) {
                   reject(new Error('超时'));
                   return;
                 }
-                tries += 1;
                 fetch(API.result + '?id=' + encodeURIComponent(queued.id), { cache: 'no-store' })
                   .then(function (res) { return res.json(); })
                   .then(function (data) {
                     if (data && data.ready) resolve(data.result);
                     else window.setTimeout(step, 200);
                   })
-                  .catch(function () { window.setTimeout(step, 200); });
+                  .catch(function () {
+                    if (Date.now() >= deadline) reject(new Error('超时'));
+                    else window.setTimeout(step, 200);
+                  });
               }
               window.setTimeout(step, 200);
             });
