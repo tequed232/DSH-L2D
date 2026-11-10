@@ -180,8 +180,10 @@ export function parsePhysics3(json) {
 /**
  * [#28] 目录扫描回退：读 model3.json 同目录的 *.exp3.json，表情名 = 文件名去扩展名。
  * 目录不可读时返回空数组不抛。
+ * 导出复用：tools/model-resources/register.mjs（FileReferences 登记补丁）与运行时
+ * 回退共用同一命名规则，两处绝不分叉。
  */
-function scanExpressionFiles(modelDir, fsImpl) {
+export function scanExpressionFiles(modelDir, fsImpl) {
   try {
     return fsImpl
       .readdirSync(modelDir)
@@ -198,8 +200,9 @@ function scanExpressionFiles(modelDir, fsImpl) {
  * [#28] 目录扫描回退：读 model3.json 同目录的 *.motion3.json，
  * 动作组名 = 文件名去扩展名再去序号后缀（TapBody_01.motion3.json → TapBody）。
  * 序号后缀按 Cubism 命名惯例取 `_\d+` / `-\d+`；同名多文件自动去重（Set 收敛）。
+ * 导出复用：与 tools/model-resources/register.mjs 共用（同上）。
  */
-function scanMotionGroups(modelDir, fsImpl) {
+export function scanMotionGroups(modelDir, fsImpl) {
   try {
     const groups = new Set(
       fsImpl
