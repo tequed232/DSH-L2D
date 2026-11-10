@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "modelId": "大肥鱼.dsl2d.2048",
-  "purpose": "神态部件表（给大模型读）：参数含义 → 部件（actionUnits）→ 情绪维度换算 → 组合算法 → 组合示例。body-regions.json 只管模块归属，语义只放这里。",
+  "purpose": "神态词典（给大模型读）：参数含义 → 部件（actionUnits）→ 情绪维度换算 → 组合算法 → 组合示例。body-regions.json 只管模块归属，语义只放这里。",
   "sources": [
     "body-regions.json（可写性）",
     "大肥鱼.vtube.json（输出范围）"
