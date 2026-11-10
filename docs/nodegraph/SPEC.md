@@ -11,7 +11,7 @@
 | F1 | 动作步模型 `ActStep { kind: 'expression'\|'motion'\|'pose'\|'look', name?, clear?, closeMotion?, closeAfterMs?, delayMs?, pose?, x?, y? }` | `packages/core/src/action-chain.ts:32-43` |
 | F2 | 序列校验 `validateActionSequence`：segments ≤15、每段 chain ≤8 步、bubble ≤40 字、priority ∈ BACKGROUND/NORMAL/FORCE、`estimateLifeMs ≤ DEFAULT_GATE.maxLifeMs`；步校验 `validateStep`、`STEP_KINDS`、`DEFAULT_GATE` 均从 choreography 导出 | `packages/dsh-l2d-mcp/src/action-sequence.mjs:3-31`、`packages/dsh-l2d-plugin/lib/choreography.mjs` |
 | F3 | 执行器 `executeActionSequence(input, execute, options)`：FIFO + 瞬时拒绝入队重试 + 回执 receipts | `action-sequence.mjs:66-71` |
-| F4 | LLM 通道白名单 16 项 `HOST_ALLOWED_TOOLS`（含 `l2d_change_form`），`ALLOWED_SET`，`guardAiCall()` 对未知 name `deny('unknown-tool')` | `packages/dsh-l2d-plugin/lib/host-guard.mjs:45-63` |
+| F4 | LLM 通道白名单 19 项 `HOST_ALLOWED_TOOLS`（含 `l2d_change_form` +1 循环、FI 轮 `l2d_facial`/`l2d_facial_manual`、形态直达 `l2d_set_form`），`ALLOWED_SET`，`guardAiCall()` 对未知 name `deny('unknown-tool')`；`l2d_set_form` 的 `index` 须为 0..2 整数，否则 `deny('invalid-form-index')`；两条形态指令在节点图模式下均作单步原语放行 | `packages/dsh-l2d-plugin/lib/host-guard.mjs:43-73` |
 | F5 | 状态文件先例：`$DSH_HOME/l2d-env-state.json` 原子写、白名单字段、过期失效；`envStatePath(homeDir)` 解析 | `packages/dsh-l2d-plugin/lib/env-state.mjs` |
 | F6 | 本地 curl 被系统代理劫持（http_proxy=127.0.0.1:11290 产生假 502），测试本地端口必须 `curl --noproxy '*'` | 主理人实测 |
 | F7 | 宿主 3080（外部 DSH 应用）当前未运行，LLM 通道端到端实测受限；本地调试台 = `pnpm dev:server`（tools/dev-server/index.mjs，5300） | 主理人实测 |
@@ -79,7 +79,7 @@
 ## 5. 测试与验收（全部本地）
 
 1. `lib/nodegraph.test.mjs`（node:assert 风格，同仓库既有测试）：schema 拒绝用例（坏 version/未知 type/环/悬空 next/segments 超 15 步超 8/超时长）、编译正确性（graph→segments 等价）、模式文件读写与缺省 llm、guardAiCall 互斥拒绝、重名导入原子性。
-2. 既有回归：`pnpm test:core` 全绿（host-guard 改动不得破坏现有 16 项白名单行为）。
+2. 既有回归：`pnpm test:core` 全绿（host-guard 改动不得破坏现有白名单行为；当前 19 项，新工具只允许末尾追加）。
 3. 通道可用性实测（本地 dev-server 5300，`--noproxy`）：`GET/POST motion-mode`、import 一个最小合法 JSON、export 回读 diff=0、nodegraphs 列表出现；宿主 3080 不可用如实记录为限制。
 4. 前端：05 区渲染「节点图」卡片（导入/导出/列表/模式开关三态复用 .dev-actions 现有机制），快照同步，1440×900 与 720×900 截图。
 5. 验收裁定：主理人 17:00 汇总，PASS / PASS_WITH_WARNINGS / BLOCKED / FAILED。

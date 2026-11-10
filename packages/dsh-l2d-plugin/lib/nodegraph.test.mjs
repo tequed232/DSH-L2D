@@ -405,11 +405,13 @@ assert.equal(guardAiCall({ name: 'l2d_set_expression', args: { name: '兔牙' } 
 assert.equal(guardAiCall({ name: 'l2d_play_motion', args: { group: '抚胸手打开' } }, { mode: 'nodegraph' }).ok, true);
 assert.equal(guardAiCall({ name: 'l2d_get_state', args: {} }, { mode: 'nodegraph' }).ok, true);
 assert.equal(guardAiCall({ name: 'l2d_change_form', args: {} }, { mode: 'nodegraph' }).ok, true);
+assert.equal(guardAiCall({ name: 'l2d_set_form', args: { index: 0 } }, { mode: 'nodegraph' }).ok, true);
 // 未知工具优先于 mode-blocked（unknown-tool 语义不变）
 assert.equal(guardAiCall({ name: 'l2d_unknown' }, { mode: 'nodegraph' }).reason, 'unknown-tool');
-// 白名单 18 项（FI 轮：追加 l2d_facial / l2d_facial_manual，其余顺序零改动）
-assert.equal(HOST_ALLOWED_TOOLS.length, 18);
+// 白名单 19 项（FI 轮：追加 l2d_facial / l2d_facial_manual；形态直达轮：末尾追加 l2d_set_form，其余顺序零改动）
+assert.equal(HOST_ALLOWED_TOOLS.length, 19);
 assert.equal(HOST_ALLOWED_TOOLS[17], 'l2d_facial_manual');
+assert.equal(HOST_ALLOWED_TOOLS[18], 'l2d_set_form');
 
 // ---------------------------------------------------------------------------
 // 8) 存取：保存 / 重名覆盖 / 失败原子性 / 列表 / 导出 / 文件名安全化（SPEC §4 + §5.1）

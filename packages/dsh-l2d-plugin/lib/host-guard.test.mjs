@@ -73,7 +73,8 @@ assert.deepEqual(fullIndex.warnings, []);
 // 1) 工具白名单：只放行 index.js 原 ALLOWED 集合
 // ---------------------------------------------------------------------------
 // FI 轮（2026-11-08）：+l2d_facial / +l2d_facial_manual（Facial Intelligence PR-01）
-assert.equal(HOST_ALLOWED_TOOLS.length, 18);
+// 形态直达轮（2026-11-10）：+l2d_set_form
+assert.equal(HOST_ALLOWED_TOOLS.length, 19);
 for (const tool of HOST_ALLOWED_TOOLS) {
   // 空入参可能因"缺字段"被拒（如空表情名），但绝不能是 unknown-tool。
   const r = guardAiCall({ name: tool, args: {} });
@@ -102,8 +103,9 @@ const LEGACY_ALLOWED_TOOLS = [
   'l2d_emote', 'l2d_gaze', 'l2d_say', 'l2d_act', 'l2d_posture', 'l2d_get_state', 'l2d_reset',
 ];
 assert.ok(HOST_ALLOWED_TOOLS.includes('l2d_change_form'), '白名单应含 l2d_change_form');
-// FI 轮：l2d_facial_manual 追加在末尾
-assert.equal(HOST_ALLOWED_TOOLS[HOST_ALLOWED_TOOLS.length - 1], 'l2d_facial_manual', '新工具应追加在末尾');
+// FI 轮：l2d_facial_manual 追加在 l2d_change_form 之后；形态直达轮：l2d_set_form 追加在末尾
+assert.equal(HOST_ALLOWED_TOOLS[HOST_ALLOWED_TOOLS.length - 2], 'l2d_facial_manual', 'FI 轮工具位置不变');
+assert.equal(HOST_ALLOWED_TOOLS[HOST_ALLOWED_TOOLS.length - 1], 'l2d_set_form', '新工具应追加在末尾');
 assert.deepEqual(HOST_ALLOWED_TOOLS.slice(0, 15), LEGACY_ALLOWED_TOOLS, '前 15 项名称与顺序零改动');
 // (2) guardAiCall 对无参调用放行，且不触发参数写入类守卫。
 const changeForm = guardAiCall({ name: 'l2d_change_form', args: {} });
@@ -117,6 +119,33 @@ assert.equal(guarded('l2d_set_expression', { name: '兔牙' }).ok, true);
 assert.equal(guarded('l2d_get_state', {}).ok, true);
 assert.equal(HOST_ALLOWED_TOOLS.indexOf('l2d_set_expression'), 0);
 assert.equal(HOST_ALLOWED_TOOLS.indexOf('l2d_get_state'), 13);
+
+// ---------------------------------------------------------------------------
+// 1c) l2d_set_form：形态直达（index 0..2 整数，支持切回低形态）
+// ---------------------------------------------------------------------------
+assert.ok(HOST_ALLOWED_TOOLS.includes('l2d_set_form'), '白名单应含 l2d_set_form');
+for (const idx of [0, 1, 2]) {
+  const okSet = guardAiCall({ name: 'l2d_set_form', args: { index: idx } });
+  assert.equal(okSet.ok, true, 'index=' + idx + ' 应放行');
+  assert.deepEqual(okSet.warnings, []);
+  assert.deepEqual(okSet.ignored, []);
+}
+// 缺失 / 非整数 / 越界 / 字符串数字 / 非数值 一律拒绝，不钳制
+const badFormArgs = [
+  {}, { index: -1 }, { index: 3 }, { index: 1.5 }, { index: '1' }, { index: null },
+  { index: NaN }, { index: Infinity }, { index: true },
+];
+for (const args of badFormArgs) {
+  const r = guardAiCall({ name: 'l2d_set_form', args });
+  assert.equal(r.ok, false, '应拒绝 ' + JSON.stringify(args));
+  assert.equal(r.status, 400);
+  assert.equal(r.reason, 'invalid-form-index');
+}
+assert.equal(guardAiCall({ name: 'l2d_set_form' }).reason, 'invalid-form-index', 'args 缺省也拒');
+assert.equal(guardAiCall({ name: 'l2d_set_form', args: [2] }).reason, 'invalid-form-index', 'args 为数组也拒');
+// 只带 index 的无参数名工具：额外字段不触发口型 / own 守卫（与 l2d_change_form 同口径）
+assert.equal(guardAiCall({ name: 'l2d_set_form', args: { index: 0, values: { ParamMouthOpenY: 1 } } }).ok, true,
+  'l2d_set_form 不进 PARAM_KEYED_TOOLS / OWN_REQUIRED_TOOLS');
 
 // ---------------------------------------------------------------------------
 // 2) 口型参数：任何通道永拒（含嵌套 / 数组形式），且优先于其它规则

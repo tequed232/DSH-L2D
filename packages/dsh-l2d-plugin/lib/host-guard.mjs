@@ -67,6 +67,9 @@ export const HOST_ALLOWED_TOOLS = Object.freeze([
   // 口型红线天然适用：renderer 口型参数在 injector.set 不区分通道无条件拒绝。
   'l2d_facial',
   'l2d_facial_manual',
+  // 形态直达（切到指定 index，支持切回低形态）：只带 index，不写参数名键，
+  // 故同样不进 PARAM_KEYED_TOOLS / OWN_REQUIRED_TOOLS；index 在 guardAiCall 里静态校验。
+  'l2d_set_form',
 ]);
 
 const ALLOWED_SET = new Set(HOST_ALLOWED_TOOLS);
@@ -385,6 +388,15 @@ export function guardAiCall(request = {}, options = {}) {
         ignored.push(...checked.ignored);
         warnings.push('own-ignored-non-physical:' + checked.ignored.join(','));
       }
+    }
+  }
+
+  // l2d_set_form：index 必须是 0..2 的整数（与 overlay 三形态 BODY_TYPES 对齐），不钳制、不猜。
+  // overlay 侧同规则兜底；这里先拦，避免非法请求进队列空等回执。
+  if (name === 'l2d_set_form') {
+    const formIndex = args.index;
+    if (typeof formIndex !== 'number' || !Number.isInteger(formIndex) || formIndex < 0 || formIndex > 2) {
+      return deny('invalid-form-index', String(formIndex));
     }
   }
 
