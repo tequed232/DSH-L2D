@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 校验 docs/nodegraph/models/<modelId>/body-regions.json：
- *   - 目录里的每个参数必须且只能出现在一个 region、shared、unassigned 或 expressionLayer
+ *   - 目录里的每个参数必须且只能出现在一个 region、shared、unassigned、expressionLayer 或 accessories
  *   - 物理输出全集覆盖且不重复，并标记为只读 / bridge 不可写
  *   - 21 个入库表情与 7 个入库动作都有分区记录
  *   - 131 个物理组都标注了输入参数及其所属模块
@@ -176,6 +176,103 @@ if (!Array.isArray(doc.unassigned)) {
   }
 }
 
+// accessories slots + uncertain params (from former unassigned)
+const acc = doc.accessories;
+const accParamList = [];
+if (!acc || typeof acc !== 'object') {
+  errors.push('缺少 accessories（饰品槽位分组）');
+} else {
+  if (!Array.isArray(acc.slots)) errors.push('accessories.slots 必须是数组');
+  if (!Array.isArray(acc.uncertain)) errors.push('accessories.uncertain 必须是数组');
+  const collected = [];
+  function collectAccParams(ids, loc) {
+    if (!Array.isArray(ids)) {
+      errors.push(`${loc} 缺少 params 数组`);
+      return;
+    }
+    for (const id of ids) {
+      collected.push(id);
+      place(id, loc);
+      const p = paramById.get(id);
+      if (p && p.physicsOutput && acc.params && !acc.physicsOutputs?.includes(id)) {
+        // checked later against accessories.physicsOutputs
+      }
+    }
+  }
+  const slotIds = new Set();
+  const itemIds = new Set();
+  for (const slot of acc.slots || []) {
+    if (!slot?.id || !slot.label) errors.push('accessories.slots 项缺少 id/label');
+    if (typeof slot.exclusive !== 'boolean') {
+      errors.push(`accessories.slots.${slot?.id || '?'} 缺少 exclusive（true|false）`);
+    }
+    if (slotIds.has(slot.id)) errors.push(`饰品槽位 id 重复：${slot.id}`);
+    slotIds.add(slot.id);
+    collectAccParams(slot.params || [], `accessories.slots.${slot.id}.params`);
+    if (!Array.isArray(slot.items)) {
+      errors.push(`accessories.slots.${slot.id} 缺少 items 数组`);
+      continue;
+    }
+    if (slot.exclusive === true && slot.items.length > 1) {
+      // 互斥由 bridge 按槽位判断；这里只检查结构
+    }
+    for (const it of slot.items) {
+      if (!it?.id || !it.label) {
+        errors.push(`槽位 ${slot.id} 的饰品缺少 id/label`);
+        continue;
+      }
+      if (itemIds.has(it.id)) errors.push(`饰品 item.id 重复：${it.id}`);
+      itemIds.add(it.id);
+      if (it.kind !== 'expression' && it.kind !== 'param') {
+        errors.push(`饰品 ${it.id} 的 kind 必须是 expression 或 param`);
+      }
+      if (it.ref == null || it.ref === '') errors.push(`饰品 ${it.id} 缺少 ref`);
+      if (!('on' in it) || !('off' in it)) errors.push(`饰品 ${it.id} 缺少 on/off`);
+      if (it.kind === 'expression') {
+        const names = new Set(catalog.expressions.map((e) => e.name));
+        if (!names.has(it.ref)) errors.push(`饰品 ${it.id} 的表情 ref 不在目录中：${it.ref}`);
+      }
+      if (it.kind === 'param') {
+        if (!catalogSet.has(it.ref)) errors.push(`饰品 ${it.id} 的参数 ref 未知：${it.ref}`);
+        // 直写参数应落在本槽 params（从 unassigned 改归）或 paramHome 所指的已分配位置
+        if (slot.params && !slot.params.includes(it.ref) && !it.paramHome) {
+          errors.push(`饰品 ${it.id} 的参数 ${it.ref} 不在该槽 params，也未标注 paramHome`);
+        }
+      }
+    }
+  }
+  for (const u of acc.uncertain || []) {
+    if (!u?.id || !u.reason) errors.push('accessories.uncertain 项缺少 id/reason');
+    collectAccParams(u.params || [], `accessories.uncertain.${u?.id || '?'}.params`);
+  }
+  if (Array.isArray(acc.params)) {
+    const a = [...collected].sort();
+    const b = [...acc.params].sort();
+    if (a.join('\n') !== b.join('\n')) {
+      errors.push('accessories.params 必须等于各 slot.params 与 uncertain.params 的并集（无遗漏、无多出）');
+    }
+    // 不要对 acc.params 再 place 一次，否则会报重复；上面已 place
+  } else {
+    errors.push('缺少 accessories.params');
+  }
+  if (Array.isArray(acc.physicsOutputs)) {
+    const paramSet = new Set(acc.params || collected);
+    for (const id of acc.physicsOutputs) {
+      if (!paramSet.has(id)) errors.push(`accessories.physicsOutputs 含 ${id}，但不在 accessories.params 中`);
+      const p = paramById.get(id);
+      if (p && !p.physicsOutput) errors.push(`accessories.physicsOutputs 含非物理输出 ${id}`);
+    }
+    for (const id of paramSet) {
+      const p = paramById.get(id);
+      if (p && p.physicsOutput && !acc.physicsOutputs.includes(id)) {
+        errors.push(`accessories 中的物理输出 ${id} 未列入 physicsOutputs`);
+      }
+    }
+  } else {
+    errors.push('缺少 accessories.physicsOutputs');
+  }
+}
+
 if (!doc.expressionLayer || !Array.isArray(doc.expressionLayer.params)) {
   errors.push('缺少 expressionLayer.params（表情是单独一层，不占神态模块）');
 } else {
@@ -198,7 +295,7 @@ if (!doc.expressionLayer || !Array.isArray(doc.expressionLayer.params)) {
 
 // completeness
 for (const id of catalogParamIds) {
-  if (!seen.has(id)) errors.push(`参数 ${id} 未出现在 region / shared / unassigned / expressionLayer`);
+  if (!seen.has(id)) errors.push(`参数 ${id} 未出现在 region / shared / unassigned / expressionLayer / accessories`);
 }
 
 if (doc.policy?.bridgeMayWritePhysicsOutputs === true) {
@@ -225,8 +322,9 @@ for (const item of doc.unassigned || []) {
   const p = paramById.get(id);
   if (p?.physicsOutput) listedPhys.add(id);
 }
+for (const id of doc.accessories?.physicsOutputs || []) listedPhys.add(id);
 for (const id of physicsIdSet) {
-  if (!listedPhys.has(id)) errors.push(`物理输出 ${id} 未出现在任何 physicsOutputs / shared / unassigned`);
+  if (!listedPhys.has(id)) errors.push(`物理输出 ${id} 未出现在任何 physicsOutputs / shared / unassigned / accessories`);
 }
 for (const id of listedPhys) {
   if (!physicsIdSet.has(id)) errors.push(`被标为物理输出的 ${id} 不在目录 physicsOutputIds 中`);
@@ -352,8 +450,12 @@ if (assigned !== catalogParamIds.length) {
 if (errors.length) fail(errors);
 
 const c = doc.counts || {};
+const accCount = doc.accessories?.params?.length ?? 0;
+const accSlots = doc.accessories?.slots?.length ?? 0;
+const accUnc = doc.accessories?.uncertain?.length ?? 0;
 ok(`${path.relative(REPO, regionsPath)}`);
-ok(`509 个参数覆盖完整且不重复（五区 ${REGIONS.map((r) => `${r}=${doc.regions[r].params.length}`).join(', ')}，表情层=${doc.expressionLayer.params.length}，shared=${doc.shared.length}，unassigned=${doc.unassigned.length}）`);
+ok(`509 个参数覆盖完整且不重复（五区 ${REGIONS.map((r) => `${r}=${doc.regions[r].params.length}`).join(', ')}，表情层=${doc.expressionLayer.params.length}，shared=${doc.shared.length}，accessories=${accCount}，unassigned=${doc.unassigned.length}）`);
+ok(`饰品槽位 ${accSlots} 个，uncertain ${accUnc} 组；同一 exclusive 槽互斥，不同槽可一起戴`);
 ok(`292 个物理输出全部只读，bridge 不可写；131 个物理组均标注了输入模块`);
 ok(`21 个入库表情均记录了写入参数与 Add/Multiply/Overwrite；7 个入库动作均记录了写入参数与所占区`);
 ok(`表情层与神态模块参数无交叉`);

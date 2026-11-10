@@ -19,7 +19,8 @@
     "lipSyncRedLine": [
       "ParamMouthOpenY"
     ],
-    "note": "每个参数必须且只能出现在一个 region、shared、unassigned 或 expressionLayer。物理输出一律只读，bridge 不可写；bridge 只写对应物理组的输入。表情是独立一层，不占神态模块。"
+    "note": "每个参数必须且只能出现在一个 region、shared、unassigned、expressionLayer 或 accessories。物理输出一律只读，bridge 不可写。表情是独立一层，不占神态模块。饰品按槽位分组：同一 slot 且 exclusive=true 时互斥；不同 slot 可以一起戴。饰品切换走 expression 层或 accessories 层，组内互斥由 bridge 按 slot 判断。",
+    "accessoriesSlotExclusive": true
   },
   "regions": {
     "hair": {
@@ -1079,14 +1080,6 @@
       "reason": "cdi3 分组「开关」中的分隔符（■■■■■■■■■■■■■），无实际控制语义。"
     },
     {
-      "id": "Clothes5",
-      "name": "5. 尾巴",
-      "groupName": "开关",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「5. 尾巴」，表情「尾巴开关」以 Add 写入 -1；尾巴不在头发/神态/手部/腰部躯干/腿部五个模块的定义内。"
-    },
-    {
       "id": "Paramshuiyin8",
       "name": "-----按键到此结束-----",
       "groupName": "开关",
@@ -1239,372 +1232,12 @@
       "reason": "cdi3 分组「头配饰」中的分隔符（■■■■■■■■头配饰■■■■），无实际控制语义。"
     },
     {
-      "id": "Shine",
-      "name": "闪光",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ShineX",
-      "name": "闪光旋转",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ShineBIG",
-      "name": "闪光大小",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "Hat_XA",
-      "name": "帽子 XA",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "Hat_XB",
-      "name": "帽子 XB",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "Hat_XC",
-      "name": "帽子 XC",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "Hat_YA",
-      "name": "帽子 YA",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "Hat_YB",
-      "name": "帽子 YB",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "Hat_YC",
-      "name": "帽子 YC",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "RBowX8",
-      "name": "<-配饰X1",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "RBowX5",
-      "name": "<-配饰X2",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "RBowX6",
-      "name": "<-配饰X3",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "RBowX7",
-      "name": "<-配饰X4",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "RBowX1",
-      "name": "<-配饰X1",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "RBowX2",
-      "name": "<-配饰X2",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "RBowX3",
-      "name": "<-配饰X3",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "RBowX4",
-      "name": "<-配饰X4",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "LBowX1",
-      "name": ">-配饰X1",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "LowX2",
-      "name": ">-配饰X2",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "LBowX3",
-      "name": ">-配饰X3",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "LBowX4",
-      "name": ">-配饰X4",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "RJewelry1",
-      "name": "< 耳环 A",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "RJewelry2",
-      "name": "< 耳环 B",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "RJewelry3",
-      "name": "< 耳环 C",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "LJewelry1",
-      "name": "> 耳环 A",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "LJewelry2",
-      "name": "> 耳环 B",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "LJewelry3",
-      "name": "> 耳环 C",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
       "id": "Divider23",
       "name": "■■■■■■■■■■■■",
       "groupName": "头配饰",
       "physicsOutput": false,
       "bridgeWritable": true,
       "reason": "cdi3 分组「头配饰」中的分隔符（■■■■■■■■■■■■），无实际控制语义。"
-    },
-    {
-      "id": "ribbonX1",
-      "name": "缎带X1",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ribbonX2",
-      "name": "缎带X2",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ribbonX3",
-      "name": "缎带X3",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ribbonX4",
-      "name": "缎带X4",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ribbonY1",
-      "name": "缎带Y1",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ribbonY2",
-      "name": "缎带Y2",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ribbonY3",
-      "name": "缎带Y3",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ribbonY4",
-      "name": "缎带Y4",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ribbonX5",
-      "name": "缎带X1",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ribbonX7",
-      "name": "缎带X2",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ribbonX6",
-      "name": "缎带X3",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ribbonY5",
-      "name": "缎带Y1",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ribbonY6",
-      "name": "缎带Y2",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "ribbonY7",
-      "name": "缎带Y3",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "Hat2pha",
-      "name": "帽子尖 PHA",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "Hat2phB",
-      "name": "帽子尖 PHB",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "Hat2phC",
-      "name": "帽子尖 PHC",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
-    },
-    {
-      "id": "Hat2phD",
-      "name": "帽子尖 PHD",
-      "groupName": "头配饰",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
     },
     {
       "id": "Divider20",
@@ -1631,212 +1264,12 @@
       "reason": "cdi3 分组「兽耳」中的分隔符（■■■■■■■■兽耳■■■■），无实际控制语义。"
     },
     {
-      "id": "LControl",
-      "name": "< Control",
-      "groupName": "兽耳",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
-    },
-    {
-      "id": "RFlip",
-      "name": "< Flip x",
-      "groupName": "兽耳",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
-    },
-    {
-      "id": "RFlip2",
-      "name": "< Flip y",
-      "groupName": "兽耳",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
-    },
-    {
-      "id": "LEar1",
-      "name": "<兽耳PHA",
-      "groupName": "兽耳",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
-    },
-    {
-      "id": "LEar2",
-      "name": "<兽耳PHB",
-      "groupName": "兽耳",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
-    },
-    {
-      "id": "LEar3",
-      "name": "<兽耳PHC",
-      "groupName": "兽耳",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
-    },
-    {
-      "id": "RControl",
-      "name": "> Control",
-      "groupName": "兽耳",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
-    },
-    {
-      "id": "LFlip",
-      "name": "> Flip x",
-      "groupName": "兽耳",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
-    },
-    {
-      "id": "LFlip2",
-      "name": "> Flip y",
-      "groupName": "兽耳",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
-    },
-    {
-      "id": "REar1",
-      "name": ">兽耳PHA",
-      "groupName": "兽耳",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
-    },
-    {
-      "id": "REar2",
-      "name": ">兽耳PHB",
-      "groupName": "兽耳",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
-    },
-    {
-      "id": "REar3",
-      "name": ">兽耳PHC",
-      "groupName": "兽耳",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
-    },
-    {
       "id": "Divider33",
       "name": "■■■■■■■■动画■■■■",
       "groupName": "待机动画",
       "physicsOutput": false,
       "bridgeWritable": true,
       "reason": "cdi3 分组「待机动画」中的分隔符（■■■■■■■■动画■■■■），无实际控制语义。"
-    },
-    {
-      "id": "MicroGlows",
-      "name": "话筒光",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「话筒光」，道具特效，未见入库动作/表情写入，不在五区内。"
-    },
-    {
-      "id": "WingOpenClose",
-      "name": "翅膀开合",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「翅膀开合」，翅膀附件，不在五区内。"
-    },
-    {
-      "id": "WingSpread",
-      "name": "翅膀舒展",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「翅膀舒展」，翅膀附件，不在五区内。"
-    },
-    {
-      "id": "FeatherPhysics1",
-      "name": "羽毛物理1",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「羽毛物理1」，翅膀/羽毛附件，不在五区内。未见对应 physics3 输出记录，名称含物理但 catalog.physicsOutput=false。"
-    },
-    {
-      "id": "FeatherPhysics2",
-      "name": "羽毛物理2",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「羽毛物理2」，翅膀/羽毛附件，不在五区内。"
-    },
-    {
-      "id": "WingRotation",
-      "name": "翅膀旋转",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「翅膀旋转」，翅膀附件，不在五区内。"
-    },
-    {
-      "id": "WingOpenClose2",
-      "name": "翅膀开合",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「翅膀开合」，翅膀附件，不在五区内。"
-    },
-    {
-      "id": "WingSpread2",
-      "name": "翅膀舒展",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「翅膀舒展」，翅膀附件，不在五区内。"
-    },
-    {
-      "id": "FeatherPhysics3",
-      "name": "羽毛物理1",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「羽毛物理1」，翅膀/羽毛附件，不在五区内。"
-    },
-    {
-      "id": "FeatherPhysics4",
-      "name": "羽毛物理2",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「羽毛物理2」，翅膀/羽毛附件，不在五区内。"
-    },
-    {
-      "id": "WingRotation2",
-      "name": "翅膀旋转",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「翅膀旋转」，翅膀附件，不在五区内。"
-    },
-    {
-      "id": "Param140",
-      "name": "加载",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「加载」。表情「加载」实际写的是 key8，不是本参数；本参数未见入库动作/表情写入，视为独立加载动画部件，不归入神态。"
-    },
-    {
-      "id": "Param136",
-      "name": "钱",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「钱」，特效部件，未见入库动作/表情写入，不在五区内。"
     },
     {
       "id": "Ani1",
@@ -1863,22 +1296,6 @@
       "reason": "中文名「动画2」，过泛，未见入库动作/表情写入。"
     },
     {
-      "id": "Param141",
-      "name": "闪光 1",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「闪光 1」，特效，未见入库动作/表情写入，不在五区内。"
-    },
-    {
-      "id": "Param142",
-      "name": "闪光 2",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「闪光 2」，特效，未见入库动作/表情写入，不在五区内。"
-    },
-    {
       "id": "Divider24",
       "name": "■■■■■■逸散的光点■■■■",
       "groupName": "待机动画",
@@ -1887,188 +1304,12 @@
       "reason": "cdi3 分组「待机动画」中的分隔符（■■■■■■逸散的光点■■■■），无实际控制语义。"
     },
     {
-      "id": "F1Anikey",
-      "name": "花1动画开关",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「花1动画开关」，飘花特效，不在五区内。"
-    },
-    {
-      "id": "F2Anikey",
-      "name": "花2动画开关",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「花2动画开关」，飘花特效，不在五区内。"
-    },
-    {
-      "id": "F3Anikey",
-      "name": "花3动画开关",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「花3动画开关」，飘花特效，不在五区内。"
-    },
-    {
-      "id": "Colorflicker5",
-      "name": "1眼光显隐",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「1眼光显隐」，逸散光点特效，不在五区内。"
-    },
-    {
-      "id": "Glintshift5",
-      "name": "1眼光移动",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「1眼光移动」，逸散光点特效，不在五区内。"
-    },
-    {
-      "id": "Colorflicker6",
-      "name": "2眼光显隐",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「2眼光显隐」，逸散光点特效，不在五区内。"
-    },
-    {
-      "id": "Glintshift6",
-      "name": "2眼光移动",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「2眼光移动」，逸散光点特效，不在五区内。"
-    },
-    {
-      "id": "Colorflicker7",
-      "name": "3眼光显隐",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「3眼光显隐」，逸散光点特效，不在五区内。"
-    },
-    {
-      "id": "Glintshift8",
-      "name": "3眼光移动",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「3眼光移动」，逸散光点特效，不在五区内。"
-    },
-    {
-      "id": "Colorflicker8",
-      "name": "4眼光显隐",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「4眼光显隐」，逸散光点特效，不在五区内。"
-    },
-    {
-      "id": "Glintshift7",
-      "name": "4眼光移动",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「4眼光移动」，逸散光点特效，不在五区内。"
-    },
-    {
       "id": "Divider25",
       "name": "■■■■■■飘花特效■■■■",
       "groupName": "待机动画",
       "physicsOutput": false,
       "bridgeWritable": true,
       "reason": "cdi3 分组「待机动画」中的分隔符（■■■■■■飘花特效■■■■），无实际控制语义。"
-    },
-    {
-      "id": "LittleFlower1",
-      "name": "小花飘落1",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「小花飘落1」，飘花特效，不在五区内。"
-    },
-    {
-      "id": "LittleFlower2",
-      "name": "小花显隐1",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「小花显隐1」，飘花特效，不在五区内。"
-    },
-    {
-      "id": "LittleFlower9",
-      "name": "小花左右",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「小花左右」，飘花特效，不在五区内。"
-    },
-    {
-      "id": "LittleFlower3",
-      "name": "小花飘落2",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「小花飘落2」，飘花特效，不在五区内。"
-    },
-    {
-      "id": "LittleFlower4",
-      "name": "小花显隐2",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「小花显隐2」，飘花特效，不在五区内。"
-    },
-    {
-      "id": "LittleFlower10",
-      "name": "小花左右",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「小花左右」，飘花特效，不在五区内。"
-    },
-    {
-      "id": "LittleFlower5",
-      "name": "小花飘落3",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「小花飘落3」，飘花特效，不在五区内。"
-    },
-    {
-      "id": "LittleFlower6",
-      "name": "小花显隐3",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「小花显隐3」，飘花特效，不在五区内。"
-    },
-    {
-      "id": "LittleFlower11",
-      "name": "花形变",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「花形变」，飘花特效，不在五区内。"
-    },
-    {
-      "id": "LittleFlower13",
-      "name": "花旋转",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「花旋转」，飘花特效，不在五区内。"
-    },
-    {
-      "id": "LittleFlower12",
-      "name": "花左右",
-      "groupName": "待机动画",
-      "physicsOutput": false,
-      "bridgeWritable": true,
-      "reason": "中文名「花左右」，飘花特效，不在五区内。"
     },
     {
       "id": "Divider28",
@@ -2127,124 +1368,12 @@
       "reason": "cdi3 分组在「尾巴」、中文名「光4」。Idle 以及全部 6 个手部成对动作都写入 Param56/Param57；Idle 还写入 Param55/Param58。motion-director 明确把 Param56/57 排除在手臂冲突判定之外（视为共用光效）。未经渲染探针无法判定视觉上属于尾巴还是手部/待机，故不归入五区。冲突建议：手部动作播放期间由动作覆盖，Idle 仅在无手部动作时写；不要当手臂姿态骨来做互斥。"
     },
     {
-      "id": "Param52",
-      "name": "尾巴翻面",
-      "groupName": "尾巴",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组与中文名均为尾巴，且是物理组「尾巴」的输出。尾巴不在五个模块定义内。只读，bridge 不可写。"
-    },
-    {
-      "id": "Param_Angle_Rotation84",
-      "name": "[0]尾巴",
-      "groupName": "尾巴",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组与中文名均为尾巴，且是物理组「尾巴」的输出。尾巴不在五个模块定义内。只读，bridge 不可写。"
-    },
-    {
-      "id": "Param_Angle_Rotation85",
-      "name": "[1]尾巴",
-      "groupName": "尾巴",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组与中文名均为尾巴，且是物理组「尾巴」的输出。尾巴不在五个模块定义内。只读，bridge 不可写。"
-    },
-    {
-      "id": "Param_Angle_Rotation86",
-      "name": "[2]尾巴",
-      "groupName": "尾巴",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组与中文名均为尾巴，且是物理组「尾巴」的输出。尾巴不在五个模块定义内。只读，bridge 不可写。"
-    },
-    {
-      "id": "Param_Angle_Rotation87",
-      "name": "[3]尾巴",
-      "groupName": "尾巴",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组与中文名均为尾巴，且是物理组「尾巴」的输出。尾巴不在五个模块定义内。只读，bridge 不可写。"
-    },
-    {
-      "id": "Param_Angle_Rotation88",
-      "name": "[4]尾巴",
-      "groupName": "尾巴",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组与中文名均为尾巴，且是物理组「尾巴」的输出。尾巴不在五个模块定义内。只读，bridge 不可写。"
-    },
-    {
-      "id": "Param_Angle_Rotation89",
-      "name": "[5]尾巴",
-      "groupName": "尾巴",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组与中文名均为尾巴，且是物理组「尾巴」的输出。尾巴不在五个模块定义内。只读，bridge 不可写。"
-    },
-    {
       "id": "Param37",
       "name": "动画开关",
       "groupName": "动画参数",
       "physicsOutput": false,
       "bridgeWritable": true,
       "reason": "中文名「动画开关」，过泛，未见入库动作/表情写入，无法判定所属模块。"
-    },
-    {
-      "id": "GemReflection",
-      "name": "宝石反光",
-      "groupName": "闪光",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「闪光」（宝石反光/高光或 Kira）。物理输入来自躯干角或头部角，属于饰品特效，不在五区内。物理输出只读。"
-    },
-    {
-      "id": "GemHighlightx",
-      "name": "宝石高光 x",
-      "groupName": "闪光",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「闪光」（宝石反光/高光或 Kira）。物理输入来自躯干角或头部角，属于饰品特效，不在五区内。物理输出只读。"
-    },
-    {
-      "id": "GemHighlighty",
-      "name": "宝石高光 y",
-      "groupName": "闪光",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「闪光」（宝石反光/高光或 Kira）。物理输入来自躯干角或头部角，属于饰品特效，不在五区内。物理输出只读。"
-    },
-    {
-      "id": "KiraA",
-      "name": "闪光 A",
-      "groupName": "闪光",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「闪光」（宝石反光/高光或 Kira）。物理输入来自躯干角或头部角，属于饰品特效，不在五区内。物理输出只读。"
-    },
-    {
-      "id": "KiraB",
-      "name": "闪光 B",
-      "groupName": "闪光",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「闪光」（宝石反光/高光或 Kira）。物理输入来自躯干角或头部角，属于饰品特效，不在五区内。物理输出只读。"
-    },
-    {
-      "id": "KiraC",
-      "name": "闪光 C",
-      "groupName": "闪光",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「闪光」（宝石反光/高光或 Kira）。物理输入来自躯干角或头部角，属于饰品特效，不在五区内。物理输出只读。"
-    },
-    {
-      "id": "KiraD",
-      "name": "闪光 D",
-      "groupName": "闪光",
-      "physicsOutput": true,
-      "bridgeWritable": false,
-      "reason": "cdi3 分组「闪光」（宝石反光/高光或 Kira）。物理输入来自躯干角或头部角，属于饰品特效，不在五区内。物理输出只读。"
     }
   ],
   "physicsGroups": [
@@ -4516,7 +3645,7 @@
         "ShineX",
         "ShineBIG"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -5329,7 +4458,7 @@
       "outputs": [
         "LControl"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -5342,7 +4471,7 @@
           "weight": 30,
           "type": "X",
           "reflect": false,
-          "bucket": "unassigned"
+          "bucket": "accessories"
         },
         {
           "param": "AngleX",
@@ -5387,7 +4516,7 @@
       ],
       "inputModules": [
         {
-          "bucket": "unassigned"
+          "bucket": "accessories"
         },
         {
           "bucket": "region",
@@ -5403,7 +4532,7 @@
         "LEar2",
         "LEar3"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -5429,7 +4558,7 @@
       "outputs": [
         "RControl"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -5442,7 +4571,7 @@
           "weight": 30,
           "type": "X",
           "reflect": false,
-          "bucket": "unassigned"
+          "bucket": "accessories"
         },
         {
           "param": "AngleX",
@@ -5487,7 +4616,7 @@
       ],
       "inputModules": [
         {
-          "bucket": "unassigned"
+          "bucket": "accessories"
         },
         {
           "bucket": "region",
@@ -5503,7 +4632,7 @@
         "REar2",
         "REar3"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -5516,7 +4645,7 @@
           "weight": 0,
           "type": "Angle",
           "reflect": false,
-          "bucket": "unassigned"
+          "bucket": "accessories"
         },
         {
           "param": "ParamAngleX",
@@ -5529,7 +4658,7 @@
       ],
       "inputModules": [
         {
-          "bucket": "unassigned"
+          "bucket": "accessories"
         },
         {
           "bucket": "region",
@@ -5539,7 +4668,7 @@
       "outputs": [
         "RFlip"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -5552,7 +4681,7 @@
           "weight": 0,
           "type": "Angle",
           "reflect": false,
-          "bucket": "unassigned"
+          "bucket": "accessories"
         },
         {
           "param": "ParamAngleX",
@@ -5565,7 +4694,7 @@
       ],
       "inputModules": [
         {
-          "bucket": "unassigned"
+          "bucket": "accessories"
         },
         {
           "bucket": "region",
@@ -5575,7 +4704,7 @@
       "outputs": [
         "LFlip"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -5596,7 +4725,7 @@
           "weight": 50,
           "type": "Angle",
           "reflect": false,
-          "bucket": "unassigned"
+          "bucket": "accessories"
         }
       ],
       "inputModules": [
@@ -5605,13 +4734,13 @@
           "region": "face"
         },
         {
-          "bucket": "unassigned"
+          "bucket": "accessories"
         }
       ],
       "outputs": [
         "RFlip2"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -5632,7 +4761,7 @@
           "weight": 50,
           "type": "Angle",
           "reflect": false,
-          "bucket": "unassigned"
+          "bucket": "accessories"
         }
       ],
       "inputModules": [
@@ -5641,13 +4770,13 @@
           "region": "face"
         },
         {
-          "bucket": "unassigned"
+          "bucket": "accessories"
         }
       ],
       "outputs": [
         "LFlip2"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -5897,7 +5026,7 @@
         "RBowX3",
         "RBowX4"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -5954,7 +5083,7 @@
         "RBowX6",
         "RBowX7"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6011,7 +5140,7 @@
         "LBowX3",
         "LBowX4"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6377,7 +5506,7 @@
         "KiraA",
         "KiraB"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6432,7 +5561,7 @@
         "KiraC",
         "KiraD"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6476,7 +5605,7 @@
         "LJewelry2",
         "LJewelry3"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6520,7 +5649,7 @@
         "RJewelry2",
         "RJewelry3"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6562,7 +5691,7 @@
       "outputs": [
         "GemReflection"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6588,7 +5717,7 @@
       "outputs": [
         "GemHighlightx"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6614,7 +5743,7 @@
       "outputs": [
         "GemHighlighty"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6651,7 +5780,7 @@
         "ribbonX3",
         "ribbonX4"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6692,7 +5821,7 @@
         "ribbonY3",
         "ribbonY4"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6728,7 +5857,7 @@
         "Hat_XB",
         "Hat_XC"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6778,7 +5907,7 @@
         "Hat_YB",
         "Hat_YC"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6814,7 +5943,7 @@
         "ribbonX7",
         "ribbonX6"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6842,7 +5971,7 @@
         "ribbonY6",
         "ribbonY7"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -6887,7 +6016,7 @@
         "Hat2phC",
         "Hat2phD"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -7187,7 +6316,7 @@
         "Param52",
         "Param_Angle_Rotation89"
       ],
-      "outputRegion": "unassigned",
+      "outputRegion": "accessories",
       "outputsReadOnly": true,
       "bridgeWritable": false
     },
@@ -7561,10 +6690,643 @@
     },
     "expressionLayerParams": 13,
     "shared": 3,
-    "unassigned": 149,
-    "unassignedPhysicsOutputs": 71,
+    "unassigned": 40,
+    "unassignedPhysicsOutputs": 0,
     "physicsGroups": 131,
     "assignedSum": 509,
-    "complete": true
+    "complete": true,
+    "accessories": {
+      "params": 109,
+      "physicsOutputs": 71,
+      "writable": 38,
+      "slots": 12,
+      "slotItems": 16,
+      "uncertainGroups": 5,
+      "uncertainParams": 58
+    }
+  },
+  "accessories": {
+    "note": "右键菜单「物品 → 饰品」和设置页按 slot 分类显示。同一 exclusive 槽只能戴一件；不同槽可以一起戴。items 是可切换饰品；slot.params / uncertain.params 是从 unassigned 改归本层的参数（含只读物理输出）。表情开关键仍留在 expressionLayer，衣物/鞋的 Clothes1/3/4 仍留在躯干或腿部。",
+    "slots": [
+      {
+        "id": "glasses",
+        "label": "眼镜",
+        "exclusive": true,
+        "canCombineWithOtherSlots": true,
+        "params": [],
+        "note": "单片眼镜写 key12，黑框眼镜写 key11，参数不同但都戴在眼上，视觉占同一位置，同槽互斥。开关键仍归表情层；切换走表情层，由 accessories 槽位判冲突。",
+        "items": [
+          {
+            "id": "monocle",
+            "label": "单片眼镜",
+            "kind": "expression",
+            "ref": "单片眼镜",
+            "on": 1,
+            "off": 0,
+            "writesParam": "key12",
+            "blend": "Add",
+            "paramHome": "expressionLayer"
+          },
+          {
+            "id": "black-glasses",
+            "label": "黑框眼镜",
+            "kind": "expression",
+            "ref": "黑框眼镜",
+            "on": 1,
+            "off": 0,
+            "writesParam": "key11",
+            "blend": "Add",
+            "paramHome": "expressionLayer"
+          }
+        ]
+      },
+      {
+        "id": "headwear",
+        "label": "头饰",
+        "exclusive": true,
+        "canCombineWithOtherSlots": true,
+        "params": [],
+        "note": "入库可切换项只有「钢盆」（写 key10，参数留在表情层）。帽/发饰/耳环/头缎带等只有物理输出、没有开关，不能确认为钢盆的一部分，见 uncertain.head-accessories-physics。",
+        "items": [
+          {
+            "id": "basin",
+            "label": "钢盆",
+            "kind": "expression",
+            "ref": "钢盆",
+            "on": 1,
+            "off": 0,
+            "writesParam": "key10",
+            "blend": "Add",
+            "paramHome": "expressionLayer"
+          }
+        ]
+      },
+      {
+        "id": "ears",
+        "label": "兽耳",
+        "exclusive": true,
+        "canCombineWithOtherSlots": true,
+        "params": [
+          "LControl",
+          "RFlip",
+          "RFlip2",
+          "LEar1",
+          "LEar2",
+          "LEar3",
+          "RControl",
+          "LFlip",
+          "LFlip2",
+          "REar1",
+          "REar2",
+          "REar3"
+        ],
+        "note": "cdi3 分组「兽耳」，参数全部是物理输出（只读）。没有入库表情或可写显隐开关，设置页可展示分类，但不能做成可切换穿戴项。分隔符 Divider13 仍留在 unassigned。",
+        "items": []
+      },
+      {
+        "id": "tail",
+        "label": "尾巴",
+        "exclusive": true,
+        "canCombineWithOtherSlots": true,
+        "params": [
+          "Clothes5",
+          "Param52",
+          "Param_Angle_Rotation84",
+          "Param_Angle_Rotation85",
+          "Param_Angle_Rotation86",
+          "Param_Angle_Rotation87",
+          "Param_Angle_Rotation88",
+          "Param_Angle_Rotation89"
+        ],
+        "note": "Clothes5 默认 1，视为尾巴可见；表情「尾巴开关」以 Add 写入 -1（超出 0..1）。Param55–58（光1–4）虽在尾巴分组，但被 Idle 与手部动作写入，视觉归属未经探针，仍留 unassigned，不算本槽饰品。",
+        "items": [
+          {
+            "id": "tail",
+            "label": "尾巴",
+            "kind": "expression",
+            "ref": "尾巴开关",
+            "on": 1,
+            "off": -1,
+            "writesParam": "Clothes5",
+            "blend": "Add",
+            "paramHome": "accessories",
+            "note": "on=1 为默认可见（不应用该表情）；off=-1 为应用「尾巴开关」。不要反复 Add。"
+          }
+        ]
+      },
+      {
+        "id": "shoes",
+        "label": "鞋",
+        "exclusive": true,
+        "canCombineWithOtherSlots": true,
+        "params": [],
+        "regionHint": "legs",
+        "note": "表情「脱鞋」写 Clothes4（默认 0，写 1）。参数仍归腿部模块，不搬到 accessories。本槽只提供菜单分类与互斥（本槽仅一项）。",
+        "items": [
+          {
+            "id": "shoes-off",
+            "label": "脱鞋",
+            "kind": "expression",
+            "ref": "脱鞋",
+            "on": 1,
+            "off": 0,
+            "writesParam": "Clothes4",
+            "blend": "Add",
+            "paramHome": "legs",
+            "note": "on=1 为应用「脱鞋」；off=0 为默认穿鞋。"
+          }
+        ]
+      },
+      {
+        "id": "skirt",
+        "label": "裙长",
+        "exclusive": true,
+        "canCombineWithOtherSlots": true,
+        "params": [],
+        "regionHint": "torso",
+        "note": "与「胸口衣服」写不同参数、部位不同，故分成两个槽，可以一起穿。Clothes1 仍归躯干。",
+        "items": [
+          {
+            "id": "skirt-toggle",
+            "label": "裙长切换",
+            "kind": "expression",
+            "ref": "裙长切换",
+            "on": -1,
+            "off": 1,
+            "writesParam": "Clothes1",
+            "blend": "Add",
+            "paramHome": "torso",
+            "note": "Clothes1 默认 1；表情以 Add 写入 -1（超出 0..1）。on=-1 为应用该表情，off=1 回到默认。不能从数值判断哪端是长裙还是短裙。不要反复 Add。"
+          }
+        ]
+      },
+      {
+        "id": "chest-clothes",
+        "label": "胸口衣服",
+        "exclusive": true,
+        "canCombineWithOtherSlots": true,
+        "params": [],
+        "regionHint": "torso",
+        "note": "与裙长分槽，可同时穿戴。Clothes3 仍归躯干。",
+        "items": [
+          {
+            "id": "chest-clothes",
+            "label": "胸口衣服",
+            "kind": "expression",
+            "ref": "胸口衣服",
+            "on": 1,
+            "off": 0,
+            "writesParam": "Clothes3",
+            "blend": "Add",
+            "paramHome": "torso"
+          }
+        ]
+      },
+      {
+        "id": "wings",
+        "label": "翅膀",
+        "exclusive": false,
+        "canCombineWithOtherSlots": true,
+        "params": [
+          "WingOpenClose",
+          "WingSpread",
+          "FeatherPhysics1",
+          "FeatherPhysics2",
+          "WingRotation",
+          "WingOpenClose2",
+          "WingSpread2",
+          "FeatherPhysics3",
+          "FeatherPhysics4",
+          "WingRotation2"
+        ],
+        "note": "两组同名参数（开合/舒展/旋转/羽毛，以及带 2 的一组）。量程多为 -1..1，不能当成 0/1 显隐开关；也没有入库表情。未见总开关，故本槽没有可切换饰品项。两组是左右一对还是两套翅膀未经探针确认，因此 exclusive=false，不做互斥。",
+        "items": []
+      },
+      {
+        "id": "flowers",
+        "label": "飘花",
+        "exclusive": false,
+        "canCombineWithOtherSlots": true,
+        "params": [
+          "LittleFlower1",
+          "LittleFlower2",
+          "LittleFlower9",
+          "LittleFlower3",
+          "LittleFlower4",
+          "LittleFlower10",
+          "LittleFlower5",
+          "LittleFlower6",
+          "LittleFlower11",
+          "LittleFlower13",
+          "LittleFlower12"
+        ],
+        "note": "按中文名把「小花显隐1/2/3」当作三件可叠加的特效开关；飘落/左右/形变/旋转并入本槽相关参数，不单列饰品。F1/F2/F3Anikey 名称含「花」但 cdi3 分隔在「逸散的光点」段，不能确认是本槽开关，见 uncertain。",
+        "items": [
+          {
+            "id": "flower-1",
+            "label": "小花1",
+            "kind": "param",
+            "ref": "LittleFlower2",
+            "on": 1,
+            "off": 0,
+            "note": "量程 0..1、默认 0，按显隐开关推断 on=1 / off=0；未见表情写入，若探针证明不是显隐需再改。 相关参数：LittleFlower1（飘落1）、LittleFlower9（左右）。"
+          },
+          {
+            "id": "flower-2",
+            "label": "小花2",
+            "kind": "param",
+            "ref": "LittleFlower4",
+            "on": 1,
+            "off": 0,
+            "note": "量程 0..1、默认 0，按显隐开关推断 on=1 / off=0；未见表情写入，若探针证明不是显隐需再改。 相关参数：LittleFlower3（飘落2）、LittleFlower10（左右）。"
+          },
+          {
+            "id": "flower-3",
+            "label": "小花3",
+            "kind": "param",
+            "ref": "LittleFlower6",
+            "on": 1,
+            "off": 0,
+            "note": "量程 0..1、默认 0，按显隐开关推断 on=1 / off=0；未见表情写入，若探针证明不是显隐需再改。 相关参数：LittleFlower5（飘落3）。LittleFlower11/12/13（形变/左右/旋转）未标明属于哪一朵，只挂在本槽，不单列第四件。"
+          }
+        ]
+      },
+      {
+        "id": "glints",
+        "label": "逸散光点",
+        "exclusive": false,
+        "canCombineWithOtherSlots": true,
+        "params": [
+          "Colorflicker5",
+          "Glintshift5",
+          "Colorflicker6",
+          "Glintshift6",
+          "Colorflicker7",
+          "Glintshift8",
+          "Colorflicker8",
+          "Glintshift7"
+        ],
+        "note": "四个「眼光显隐」写不同参数，默认按可同时开启处理（exclusive=false）。对应的「眼光移动」挂在本槽，不是独立饰品。",
+        "items": [
+          {
+            "id": "glint-1",
+            "label": "光点1",
+            "kind": "param",
+            "ref": "Colorflicker5",
+            "on": 1,
+            "off": 0,
+            "note": "量程 0..1、默认 0，按显隐开关推断 on=1 / off=0；未见表情写入，若探针证明不是显隐需再改。 相关：Glintshift5（1眼光移动）。"
+          },
+          {
+            "id": "glint-2",
+            "label": "光点2",
+            "kind": "param",
+            "ref": "Colorflicker6",
+            "on": 1,
+            "off": 0,
+            "note": "量程 0..1、默认 0，按显隐开关推断 on=1 / off=0；未见表情写入，若探针证明不是显隐需再改。 相关：Glintshift6。"
+          },
+          {
+            "id": "glint-3",
+            "label": "光点3",
+            "kind": "param",
+            "ref": "Colorflicker7",
+            "on": 1,
+            "off": 0,
+            "note": "量程 0..1、默认 0，按显隐开关推断 on=1 / off=0；未见表情写入，若探针证明不是显隐需再改。 相关：Glintshift8（3眼光移动）。"
+          },
+          {
+            "id": "glint-4",
+            "label": "光点4",
+            "kind": "param",
+            "ref": "Colorflicker8",
+            "on": 1,
+            "off": 0,
+            "note": "量程 0..1、默认 0，按显隐开关推断 on=1 / off=0；未见表情写入，若探针证明不是显隐需再改。 相关：Glintshift7（4眼光移动）。"
+          }
+        ]
+      },
+      {
+        "id": "mic-glow",
+        "label": "话筒光",
+        "exclusive": true,
+        "canCombineWithOtherSlots": true,
+        "params": [
+          "MicroGlows"
+        ],
+        "note": "中文名「话筒光」，单独一件特效。未见入库表情。",
+        "items": [
+          {
+            "id": "mic-glow",
+            "label": "话筒光",
+            "kind": "param",
+            "ref": "MicroGlows",
+            "on": 1,
+            "off": 0,
+            "note": "量程 0..1、默认 0，按显隐开关推断 on=1 / off=0；未见表情写入，若探针证明不是显隐需再改。"
+          }
+        ]
+      },
+      {
+        "id": "money",
+        "label": "钱币特效",
+        "exclusive": true,
+        "canCombineWithOtherSlots": true,
+        "params": [
+          "Param136"
+        ],
+        "note": "中文名「钱」，单独一件特效。未见入库表情。",
+        "items": [
+          {
+            "id": "money",
+            "label": "钱",
+            "kind": "param",
+            "ref": "Param136",
+            "on": 1,
+            "off": 0,
+            "note": "量程 0..1、默认 0，按显隐开关推断 on=1 / off=0；未见表情写入，若探针证明不是显隐需再改。"
+          }
+        ]
+      }
+    ],
+    "uncertain": [
+      {
+        "id": "head-accessories-physics",
+        "label": "头配饰物理（帽 / 发饰 / 耳环 / 头缎带 / 头部闪光）",
+        "reason": "cdi3 分组「头配饰」，全部是物理输出，没有入库表情或可写显隐开关，不能做成菜单里的可切换饰品。它们与「钢盆」（key10）是否同一件、彼此会不会占同一位置，都未经探针，故不并入 headwear 槽、也不拆成「帽子」「耳环」等多件饰品。参数从 unassigned 改归 accessories，只读。Divider12/23 仍留 unassigned。",
+        "params": [
+          "Shine",
+          "ShineX",
+          "ShineBIG",
+          "Hat_XA",
+          "Hat_XB",
+          "Hat_XC",
+          "Hat_YA",
+          "Hat_YB",
+          "Hat_YC",
+          "RBowX8",
+          "RBowX5",
+          "RBowX6",
+          "RBowX7",
+          "RBowX1",
+          "RBowX2",
+          "RBowX3",
+          "RBowX4",
+          "LBowX1",
+          "LowX2",
+          "LBowX3",
+          "LBowX4",
+          "RJewelry1",
+          "RJewelry2",
+          "RJewelry3",
+          "LJewelry1",
+          "LJewelry2",
+          "LJewelry3",
+          "ribbonX1",
+          "ribbonX2",
+          "ribbonX3",
+          "ribbonX4",
+          "ribbonY1",
+          "ribbonY2",
+          "ribbonY3",
+          "ribbonY4",
+          "ribbonX5",
+          "ribbonX7",
+          "ribbonX6",
+          "ribbonY5",
+          "ribbonY6",
+          "ribbonY7",
+          "Hat2pha",
+          "Hat2phB",
+          "Hat2phC",
+          "Hat2phD"
+        ]
+      },
+      {
+        "id": "gem-kira-physics",
+        "label": "宝石反光与 Kira 闪光物理",
+        "reason": "cdi3 分组「闪光」，全部是物理输出，没有显隐开关。与头配饰里的 Shine*、待机动画里的 Param141/142（闪光 1/2）是否同一套特效，未经探针确认，不能当作那些参数的总开关，也不并入某个已有槽。",
+        "params": [
+          "GemReflection",
+          "GemHighlightx",
+          "GemHighlighty",
+          "KiraA",
+          "KiraB",
+          "KiraC",
+          "KiraD"
+        ]
+      },
+      {
+        "id": "shine-anim-keys",
+        "label": "闪光动画参数 Param141 / Param142",
+        "reason": "中文名「闪光 1」「闪光 2」，量程 0..1，但与 Shine*、Kira*、Gem* 的对应关系未见证据，不能编造成饰品闪光的总开关。",
+        "params": [
+          "Param141",
+          "Param142"
+        ]
+      },
+      {
+        "id": "flower-anime-keys",
+        "label": "F1/F2/F3Anikey（花动画开关）",
+        "reason": "中文名是「花1/2/3动画开关」，量程 0..1、默认 0，看起来像开关；但 cdi3 分隔把它们放在「逸散的光点」段，而「飘花特效」段才是 LittleFlower*。不能确定应进飘花槽还是逸散光点槽，故不编造归属。",
+        "params": [
+          "F1Anikey",
+          "F2Anikey",
+          "F3Anikey"
+        ]
+      },
+      {
+        "id": "loading-part",
+        "label": "加载动画部件 Param140",
+        "reason": "中文名「加载」，但表情「加载」实际写的是 key8，不是本参数。更像状态/表情动画，不能确定是可与其它饰品并排穿戴的物品。",
+        "params": [
+          "Param140"
+        ]
+      }
+    ],
+    "params": [
+      "LControl",
+      "RFlip",
+      "RFlip2",
+      "LEar1",
+      "LEar2",
+      "LEar3",
+      "RControl",
+      "LFlip",
+      "LFlip2",
+      "REar1",
+      "REar2",
+      "REar3",
+      "Clothes5",
+      "Param52",
+      "Param_Angle_Rotation84",
+      "Param_Angle_Rotation85",
+      "Param_Angle_Rotation86",
+      "Param_Angle_Rotation87",
+      "Param_Angle_Rotation88",
+      "Param_Angle_Rotation89",
+      "WingOpenClose",
+      "WingSpread",
+      "FeatherPhysics1",
+      "FeatherPhysics2",
+      "WingRotation",
+      "WingOpenClose2",
+      "WingSpread2",
+      "FeatherPhysics3",
+      "FeatherPhysics4",
+      "WingRotation2",
+      "LittleFlower1",
+      "LittleFlower2",
+      "LittleFlower9",
+      "LittleFlower3",
+      "LittleFlower4",
+      "LittleFlower10",
+      "LittleFlower5",
+      "LittleFlower6",
+      "LittleFlower11",
+      "LittleFlower13",
+      "LittleFlower12",
+      "Colorflicker5",
+      "Glintshift5",
+      "Colorflicker6",
+      "Glintshift6",
+      "Colorflicker7",
+      "Glintshift8",
+      "Colorflicker8",
+      "Glintshift7",
+      "MicroGlows",
+      "Param136",
+      "Shine",
+      "ShineX",
+      "ShineBIG",
+      "Hat_XA",
+      "Hat_XB",
+      "Hat_XC",
+      "Hat_YA",
+      "Hat_YB",
+      "Hat_YC",
+      "RBowX8",
+      "RBowX5",
+      "RBowX6",
+      "RBowX7",
+      "RBowX1",
+      "RBowX2",
+      "RBowX3",
+      "RBowX4",
+      "LBowX1",
+      "LowX2",
+      "LBowX3",
+      "LBowX4",
+      "RJewelry1",
+      "RJewelry2",
+      "RJewelry3",
+      "LJewelry1",
+      "LJewelry2",
+      "LJewelry3",
+      "ribbonX1",
+      "ribbonX2",
+      "ribbonX3",
+      "ribbonX4",
+      "ribbonY1",
+      "ribbonY2",
+      "ribbonY3",
+      "ribbonY4",
+      "ribbonX5",
+      "ribbonX7",
+      "ribbonX6",
+      "ribbonY5",
+      "ribbonY6",
+      "ribbonY7",
+      "Hat2pha",
+      "Hat2phB",
+      "Hat2phC",
+      "Hat2phD",
+      "GemReflection",
+      "GemHighlightx",
+      "GemHighlighty",
+      "KiraA",
+      "KiraB",
+      "KiraC",
+      "KiraD",
+      "Param141",
+      "Param142",
+      "F1Anikey",
+      "F2Anikey",
+      "F3Anikey",
+      "Param140"
+    ],
+    "physicsOutputs": [
+      "LControl",
+      "RFlip",
+      "RFlip2",
+      "LEar1",
+      "LEar2",
+      "LEar3",
+      "RControl",
+      "LFlip",
+      "LFlip2",
+      "REar1",
+      "REar2",
+      "REar3",
+      "Param52",
+      "Param_Angle_Rotation84",
+      "Param_Angle_Rotation85",
+      "Param_Angle_Rotation86",
+      "Param_Angle_Rotation87",
+      "Param_Angle_Rotation88",
+      "Param_Angle_Rotation89",
+      "Shine",
+      "ShineX",
+      "ShineBIG",
+      "Hat_XA",
+      "Hat_XB",
+      "Hat_XC",
+      "Hat_YA",
+      "Hat_YB",
+      "Hat_YC",
+      "RBowX8",
+      "RBowX5",
+      "RBowX6",
+      "RBowX7",
+      "RBowX1",
+      "RBowX2",
+      "RBowX3",
+      "RBowX4",
+      "LBowX1",
+      "LowX2",
+      "LBowX3",
+      "LBowX4",
+      "RJewelry1",
+      "RJewelry2",
+      "RJewelry3",
+      "LJewelry1",
+      "LJewelry2",
+      "LJewelry3",
+      "ribbonX1",
+      "ribbonX2",
+      "ribbonX3",
+      "ribbonX4",
+      "ribbonY1",
+      "ribbonY2",
+      "ribbonY3",
+      "ribbonY4",
+      "ribbonX5",
+      "ribbonX7",
+      "ribbonX6",
+      "ribbonY5",
+      "ribbonY6",
+      "ribbonY7",
+      "Hat2pha",
+      "Hat2phB",
+      "Hat2phC",
+      "Hat2phD",
+      "GemReflection",
+      "GemHighlightx",
+      "GemHighlighty",
+      "KiraA",
+      "KiraB",
+      "KiraC",
+      "KiraD"
+    ]
   }
 }
