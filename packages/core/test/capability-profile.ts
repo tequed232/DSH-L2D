@@ -138,7 +138,7 @@ test('真实模型画像：存在、能过契约校验、不编造参数', () =>
   }
 
   const byId = new Map(profile.controls.map((c: any) => [c.id, c]));
-  assert.equal((byId.get('head.yaw') as any).sourceId, 'AngleX');
+  assert.equal((byId.get('head.yaw') as any).sourceId, 'ParamAngleX');
   assert.equal((byId.get('arm.left.raise') as any).ownership, 'requires-own');
   // 这台模型没有腿部骨骼，必须诚实报 unsupported
   for (const id of ['leg.left.inward', 'leg.left.bend', 'leg.right.inward', 'leg.right.bend']) {

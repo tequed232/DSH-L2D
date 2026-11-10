@@ -15,9 +15,9 @@
 
 | 通道 | 状态 | 真实参数 | 写入方式 | 置信度 | 说明 |
 |---|---|---|---|---|---|
-| `head.yaw` | supported | AngleX | 直写 | 0.95 |  |
-| `head.pitch` | supported | AngleY | 直写 | 0.95 |  |
-| `head.roll` | supported | AngleZ | 直写 | 0.95 |  |
+| `head.yaw` | supported | ParamAngleX | 需 own | 0.8 | 该参数是物理输出，必须 own 后才能写 |
+| `head.pitch` | supported | ParamAngleY | 需 own | 0.8 | 该参数是物理输出，必须 own 后才能写 |
+| `head.roll` | supported | ParamAngleZ | 需 own | 0.8 | 该参数是物理输出，必须 own 后才能写 |
 | `torso.lean` | supported | LeanInput | 直写 | 0.95 |  |
 | `torso.sway` | supported | ParamBodyAngleX | 需 own | 0.8 | 该参数是物理输出，必须 own 后才能写 |
 | `torso.contraction` | approximate | ShoulderX+ShoulderZ | 需 own | 0.6 | 靠双肩内收近似「缩肩」，无独立躯干收缩参数 |
@@ -86,6 +86,9 @@
 
 这些通道落到物理输出上，写入前必须 `own:true`，否则会被 physics 覆盖：
 
+- `head.yaw` → ParamAngleX
+- `head.pitch` → ParamAngleY
+- `head.roll` → ParamAngleZ
 - `torso.sway` → ParamBodyAngleX
 - `torso.contraction` → ShoulderZ
 - `torso.hip` → HipAngleZ
