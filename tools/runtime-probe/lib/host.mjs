@@ -55,7 +55,7 @@ export function startDevServer(port = 5319) {
 }
 
 /** 拉起 Edge（headed），打开调试台，等待模型就绪。返回操作面。 */
-export async function launchProbeHost({ baseUrl, width = 460, height = 620, headless = false } = {}) {
+export async function launchProbeHost({ baseUrl, width = 460, height = 620, headless = false, deviceScaleFactor = 1 } = {}) {
   const { chromium } = await import('playwright-core');
   const browser = await chromium.launch({
     channel: 'msedge',               // 本机 Edge，免下载 Chromium
@@ -72,7 +72,7 @@ export async function launchProbeHost({ baseUrl, width = 460, height = 620, head
       '--disable-background-timer-throttling',
     ],
   });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor });
   const page = await context.newPage();
   const consoleErrors = [];
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
