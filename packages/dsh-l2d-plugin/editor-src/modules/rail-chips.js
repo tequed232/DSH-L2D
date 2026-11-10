@@ -1,7 +1,8 @@
 /* =========================================================================
    RailChips：三栏可收起（本轮交互改造 ②）。
-   - #library / #inspector 收起 → display:none（flex 兄弟，#canvas-wrap 自动扩宽）
-   - 对应 col-resizer 同步隐藏；生成一个小悬浮 chip（固定定位、可拖动、位置持久化）
+   - #library / #inspector 收起 → .rail-collapsed（宽度 180ms 过渡到 0，#canvas-wrap 自动扩宽）
+   - 对应 col-resizer 同步隐藏；生成竖排 chip（图标 + 名称 + 展开箭头，固定定位、可拖动、位置持久化）
+   - 收起状态持久化 localStorage 'dsh-mg-rail-collapsed.v1'，刷新后恢复
    - chip 单击 → 恢复该栏（拖拽结束的 click 被抑制，不误触发）
    - 位置持久化 localStorage 'dsh-mg-rail-chips.v1'；chip 尺寸 ≤80×28px，初始贴原栏边缘
    - 正常模式的 JSON 预览由 JsonPreview 浮窗提供（接入 PanelLayers，自带收起/拖动）；
@@ -9,6 +10,8 @@
    ========================================================================= */
 var RailChips = {
   KEY: 'dsh-mg-rail-chips.v1',
+  CKEY: 'dsh-mg-rail-collapsed.v1',
+  collapsed: {},
   defs: {
     /* label / name / expand 为 I18n 词条键，显示时取当前界面语言 */
     lib:  { panel:'library',   resizer:'rz-lib',  label:'rail.libChip',  side:'left',  name:'rail.lib',  expand:'rail.expandLib' },
@@ -20,18 +23,32 @@ var RailChips = {
       var raw = localStorage.getItem(this.KEY);
       if (raw) { var s = JSON.parse(raw); if (s && typeof s === 'object') this.pos = s; }
     } catch (err) { /* file:// 降级 */ }
+    try {
+      var c = JSON.parse(localStorage.getItem(this.CKEY) || '{}');
+      if (c && typeof c === 'object') this.collapsed = c;
+    } catch (err2) { /* file:// 降级 */ }
+  },
+  saveCollapsed: function () {
+    try { localStorage.setItem(this.CKEY, JSON.stringify(this.collapsed)); } catch (err) { /* ignore */ }
+  },
+  isCollapsed: function (kind) {
+    var d = this.defs[kind], p = d && document.getElementById(d.panel);
+    return !!p && p.classList.contains('rail-collapsed');
   },
   save: function () {
     try { localStorage.setItem(this.KEY, JSON.stringify(this.pos)); } catch (err) { /* ignore */ }
   },
-  toggle: function (kind, force) {
+  toggle: function (kind, force, quiet) {
     var d = this.defs[kind]; if (!d) return;
     var panel = document.getElementById(d.panel);
-    var collapse = force === undefined ? panel.style.display !== 'none' : !!force;
+    var collapse = force === undefined ? !panel.classList.contains('rail-collapsed') : !!force;
+    if (collapse) this.collapsed[kind] = true; else delete this.collapsed[kind];
+    this.saveCollapsed();
     var btn = document.getElementById(kind === 'lib' ? 'lib-collapse' : 'insp-collapse');
     var chip = document.getElementById('rail-chip-' + kind);
     if (collapse) {
-      panel.style.display = 'none';
+      panel.classList.add('rail-collapsed');
+      panel.setAttribute('aria-hidden', 'true');
       var rz = document.getElementById(d.resizer); if (rz) rz.style.display = 'none';
       if (btn) btn.style.display = 'none';
       if (!chip) {
@@ -45,18 +62,20 @@ var RailChips = {
       this.labelChip(chip, kind);
       this.placeChip(chip, kind);
       chip.style.display = 'inline-flex';
-      UI.status(tr('rail.collapsed', { name:tr(d.name), chip:tr(d.label) }));
+      if (!quiet) UI.status(tr('rail.collapsed', { name:tr(d.name), chip:tr(d.label) }));
     } else {
-      panel.style.display = '';
+      panel.classList.remove('rail-collapsed');
+      panel.removeAttribute('aria-hidden');
       var rz2 = document.getElementById(d.resizer); if (rz2) rz2.style.display = '';
       if (btn) btn.style.display = '';
       if (chip && chip.parentNode) chip.parentNode.removeChild(chip);
-      UI.status(tr('rail.expanded', { name:tr(d.name) }));
+      if (!quiet) UI.status(tr('rail.expanded', { name:tr(d.name) }));
     }
   },
   labelChip: function (chip, kind) {
     var d = this.defs[kind];
-    chip.textContent = tr(d.label);
+    chip.innerHTML = icon(kind === 'lib' ? 'library' : 'inspector', 16) +
+      '<span class="lbl">' + esc(tr(d.name)) + '</span><span class="chev" aria-hidden="true">' + (d.side === 'left' ? '»' : '«') + '</span>';
     chip.title = tr(d.expand);
     chip.setAttribute('aria-label', tr(d.expand));
   },
@@ -69,14 +88,15 @@ var RailChips = {
     });
   },
   placeChip: function (chip, kind) {
-    var w = chip.offsetWidth || 56, h = chip.offsetHeight || 26;
+    var w = chip.offsetWidth || 28, h = chip.offsetHeight || 120;
+    var top = (document.getElementById('topbar') || { offsetHeight:52 }).offsetHeight + 10;
     var saved = this.pos[kind], x, y;
     if (saved && typeof saved.x === 'number' && typeof saved.y === 'number') {
       x = saved.x; y = saved.y;
     } else if (this.defs[kind].side === 'left') {
-      x = 8; y = 64;
+      x = 4; y = top;
     } else {
-      x = Math.max(8, window.innerWidth - w - 8); y = 64;
+      x = Math.max(4, window.innerWidth - w - 4); y = top;
     }
     x = clamp(x, 0, Math.max(0, window.innerWidth - w));
     y = clamp(y, 0, Math.max(0, window.innerHeight - h));
@@ -124,5 +144,6 @@ var RailChips = {
     if (lc) lc.addEventListener('click', function () { self.toggle('lib', true); });
     var ic = document.getElementById('insp-collapse');
     if (ic) ic.addEventListener('click', function () { self.toggle('insp', true); });
+    Object.keys(this.collapsed).forEach(function (k) { if (self.defs[k] && self.collapsed[k]) self.toggle(k, true, true); });
   }
 };
