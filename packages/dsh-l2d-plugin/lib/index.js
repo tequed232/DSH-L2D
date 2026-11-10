@@ -1491,6 +1491,7 @@ export function apply(root, config = {}) {
     // body-bridge.mjs + 同一张 body-regions.json）并经 aiInbox 转发，与 l2d_act / 节点图 run 通道同一条。
     const bridgeApi = createBridgeApi({
       getCurrentModelId,
+      modelDir: MODEL_DIR, // 只用来现算未标注动作的衔接点兜底；结果不落盘
       call: (name, args) => aiInbox.call(name, args),
       read: (id) => aiInbox.read(id),
     });
@@ -1540,6 +1541,29 @@ export function apply(root, config = {}) {
     };
     route('/dsh-l2d/api/bridge/act', bridgeApiPost((body) => bridgeApi.handleAct(body)));
     route('/dsh-l2d/api/bridge/release', bridgeApiPost((body) => bridgeApi.handleRelease(body)));
+    // 神态组合：词典（宿主直读 face-units.json / face-vocab.json）、组合（= 一条 face compose 步的 act）、反推（overlay 读当前参数）
+    route('/dsh-l2d/api/bridge/face/vocab', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      let model = '';
+      try {
+        model = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('model') || '');
+      } catch {
+        model = '';
+      }
+      nodegraphApiSend(res, bridgeApi.handleFaceVocab(model));
+    });
+    route('/dsh-l2d/api/bridge/face/compose', bridgeApiPost((body) => bridgeApi.handleFaceCompose(body)));
+    route('/dsh-l2d/api/bridge/face/describe', async (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      try {
+        nodegraphApiSend(res, await bridgeApi.handleFaceDescribe());
+      } catch (err) {
+        diag('bridge face describe 异常: ' + String((err && err.message) || err));
+        nodegraphApiSend(res, { status: 500, payload: { ok: false, reason: 'internal-error' } });
+      }
+    });
 
     // ------------------------------------------------------ 桌宠独立窗页面
     // 只从本机 webServer 同源加载（模型/渲染资源零拷贝）；preload 走文件路径不走路由

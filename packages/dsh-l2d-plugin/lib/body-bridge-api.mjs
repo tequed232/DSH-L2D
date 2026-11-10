@@ -12,11 +12,14 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { compileBodyTable, describeRegions, validateBridgeCommand, BRIDGE_REGIONS, MAX_WAIT_MS } from './body-bridge.mjs';
+import { compileBodyTable, describeRegions, validateBridgeCommand, pickFaceUnitsFile, BRIDGE_REGIONS, MAX_WAIT_MS } from './body-bridge.mjs';
 import { DEFAULT_MODEL_IDS_DIR, isSafeModelId } from './nodegraph-schema.mjs';
+import { autoCutsForModel } from './motion-cuts.mjs';
+
+export const MOTION_CUTS_FILE = 'motion-cutpoints.json';
 
 /** overlay 侧工具名（只经本模块入队，不进 /ai/call 白名单——那样会绕过静态校验）。 */
-export const BRIDGE_INBOX_TOOLS = Object.freeze(['l2d_regions_get', 'l2d_regions_act', 'l2d_regions_release']);
+export const BRIDGE_INBOX_TOOLS = Object.freeze(['l2d_regions_get', 'l2d_regions_act', 'l2d_regions_release', 'l2d_face_describe']);
 export const BRIDGE_API_BODY_LIMIT = 32 * 1024;
 /** 等 overlay 回执的基础预算（overlay 400ms 轮询一次，留足余量）。 */
 export const BRIDGE_FORWARD_TIMEOUT_MS = 5000;
@@ -40,14 +43,71 @@ export function loadBodyRegionsForModel(modelId, options = {}) {
   } catch {
     return { ok: false, reason: 'table-unavailable', modelId, file, message: '该模型还没有分区表 body-regions.json' };
   }
-  const key = file;
+  // 神态部件表（可选）：同目录先找 face-units.json，没有再找 face-vocab.json；都没有就不开放 compose 步骤
+  const dir = path.join(modelsDir, modelId);
+  const faceName = pickFaceUnitsFile((n) => {
+    try {
+      return fsImpl.statSync(path.join(dir, n)).isFile();
+    } catch {
+      return false;
+    }
+  });
+  const faceFile = faceName ? path.join(dir, faceName) : '';
+  let faceMtimeMs = -1;
+  if (faceFile) {
+    try {
+      faceMtimeMs = fsImpl.statSync(faceFile).mtimeMs;
+    } catch {
+      faceMtimeMs = -1;
+    }
+  }
+  // 动作衔接点（可选）：motion-cutpoints.json；没有标注的动作由宿主从许可模型目录现算兜底（不落盘）
+  const cutsFile = path.join(dir, MOTION_CUTS_FILE);
+  let cutsMtimeMs = -1;
+  try {
+    cutsMtimeMs = fsImpl.statSync(cutsFile).mtimeMs;
+  } catch {
+    cutsMtimeMs = -1;
+  }
+  const modelDir = options.modelDir || '';
+  const key = file + '\0' + modelDir;
   const hit = TABLE_CACHE.get(key);
-  if (hit && hit.mtimeMs === mtimeMs) return hit.result;
+  if (hit && hit.mtimeMs === mtimeMs && hit.faceFile === faceFile && hit.faceMtimeMs === faceMtimeMs && hit.cutsMtimeMs === cutsMtimeMs) return hit.result;
   try {
     const table = JSON.parse(fsImpl.readFileSync(file, 'utf8'));
-    const compiled = compileBodyTable(table);
-    const result = { ok: true, table, compiled, file, modelId };
-    TABLE_CACHE.set(key, { mtimeMs, result });
+    let faceUnits = null;
+    let faceError = '';
+    if (faceFile) {
+      try {
+        faceUnits = JSON.parse(fsImpl.readFileSync(faceFile, 'utf8'));
+      } catch (err) {
+        faceError = path.basename(faceFile) + ' 解析失败：' + String((err && err.message) || err);
+      }
+    }
+    const compiled = compileBodyTable(table, { faceUnits });
+    let motionCuts = null;
+    let motionCutsError = '';
+    if (cutsMtimeMs >= 0) {
+      try {
+        motionCuts = JSON.parse(fsImpl.readFileSync(cutsFile, 'utf8'));
+      } catch (err) {
+        motionCutsError = MOTION_CUTS_FILE + ' 解析失败：' + String((err && err.message) || err);
+      }
+    }
+    const annotated = new Set(Object.keys((motionCuts && motionCuts.motions) || {}));
+    const wanted = [...compiled.motionRegion.keys()].filter((g) => !annotated.has(g));
+    const regionParams = (g) => {
+      const r = compiled.motionRegion.get(g);
+      return [...compiled.paramHome.entries()].filter(([, home]) => home === r).map(([id]) => id);
+    };
+    let autoCuts = {};
+    try {
+      autoCuts = modelDir ? autoCutsForModel(modelDir, modelId, regionParams, wanted, fsImpl) : {};
+    } catch {
+      autoCuts = {};
+    }
+    const result = { ok: true, table, faceUnits, faceFile: faceName || '', faceError, motionCuts, motionCutsError, autoCuts, compiled, file, modelId };
+    TABLE_CACHE.set(key, { mtimeMs, faceFile, faceMtimeMs, cutsMtimeMs, result });
     return result;
   } catch (err) {
     return { ok: false, reason: 'table-unavailable', modelId, file, message: '分区表解析失败：' + String((err && err.message) || err) };
@@ -89,7 +149,7 @@ export function createBridgeApi(deps) {
   }
 
   function table(modelParam) {
-    return loadBodyRegionsForModel(modelIdOf(modelParam), { modelsDir: deps.modelsDir });
+    return loadBodyRegionsForModel(modelIdOf(modelParam), { modelsDir: deps.modelsDir, modelDir: deps.modelDir });
   }
 
   /** 入队并等 overlay 回执；awaitTargets 非空时继续收集 action-done 直到这些目标都终态。 */
@@ -121,7 +181,7 @@ export function createBridgeApi(deps) {
       if (result) {
         if (!awaitDone || result.ok !== true || !Array.isArray(result.accepted) || !result.commandId) break;
         const pending = result.accepted.filter((target) =>
-          !events.some((ev) => terminal(ev) && ev.commandId === result.commandId && (ev.region === target || ev.layer === target)));
+          !events.some((ev) => terminal(ev) && ev.commandId === result.commandId && (ev.region === target || ev.layer === target || (ev.item && 'accessory:' + ev.item === target))));
         if (!pending.length) break;
         if (now() >= awaitDone.deadline) {
           result = { ...result, settled: false, pendingTargets: pending };
@@ -137,7 +197,7 @@ export function createBridgeApi(deps) {
     if (own.length || Array.isArray(result.events)) {
       const seen = new Set();
       payload.events = [...(Array.isArray(result.events) ? result.events : []), ...own].filter((ev) => {
-        const k = [ev.commandId, ev.region || ev.layer, ev.phase].join(':');
+        const k = [ev.commandId, ev.region || ev.layer, ev.item || '', ev.phase].join(':');
         if (seen.has(k)) return false;
         seen.add(k);
         return true;
@@ -160,7 +220,7 @@ export function createBridgeApi(deps) {
     handleTable(modelParam) {
       const t = table(modelParam);
       if (!t.ok) return { status: 404, payload: { ok: false, reason: t.reason, modelId: t.modelId, message: t.message } };
-      return { status: 200, payload: { ok: true, modelId: t.modelId, table: t.table, capabilities: describeRegions(t.compiled) } };
+      return { status: 200, payload: { ok: true, modelId: t.modelId, table: t.table, faceUnits: t.faceUnits, faceFile: t.faceFile || undefined, faceError: t.faceError || undefined, motionCuts: t.motionCuts, motionCutsError: t.motionCutsError || undefined, autoCuts: t.autoCuts, capabilities: describeRegions(t.compiled) } };
     },
 
     /** GET state：overlay 的权威快照 + 静态能力摘要。 */
@@ -194,6 +254,28 @@ export function createBridgeApi(deps) {
         out.payload.warnings = [...merged];
       }
       return out;
+    },
+
+    /** GET face/vocab：神态部件表原文（face-units.json，旧名 face-vocab.json）+ 编译摘要（每个参数归哪个模块、是否被拦）。 */
+    handleFaceVocab(modelParam) {
+      const t = table(modelParam);
+      if (!t.ok) return { status: 404, payload: { ok: false, reason: t.reason, modelId: t.modelId, message: t.message } };
+      if (!t.faceUnits) return { status: 404, payload: { ok: false, reason: 'face-units-unavailable', modelId: t.modelId, message: t.faceError || '该模型没有 face-units.json / face-vocab.json' } };
+      return { status: 200, payload: { ok: true, modelId: t.modelId, file: t.faceFile, vocab: t.faceUnits, summary: describeRegions(t.compiled).face } };
+    },
+
+    /** POST face/compose：{compose, priority?, source?, onBusy?, waitMs?, awaitDone?} → 一条只有 face compose 步的 act。 */
+    async handleFaceCompose(body) {
+      const input = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+      const step = { region: 'face' };
+      if (typeof input.mood === 'string') step.mood = input.mood;
+      else step.compose = input.compose;
+      return this.handleAct({ ...input, steps: [step] });
+    },
+
+    /** GET face/describe：overlay 读当前参数做反推（部件强度）。 */
+    async handleFaceDescribe() {
+      return forward('l2d_face_describe', {}, forwardTimeoutMs);
     },
 
     /** POST release：{commandId} 释放整条指令，{region} 释放单个模块。 */

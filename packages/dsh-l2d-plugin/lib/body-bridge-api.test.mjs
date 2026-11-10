@@ -172,4 +172,54 @@ const api = createBridgeApi({
   assert.equal(r.payload.reason, 'table-unavailable');
 }
 
+// 神态部件表加载：先 face-units.json，没有再 face-vocab.json；face/vocab 与 face/compose 静态校验
+{
+  const real = loadBodyRegionsForModel(MODEL_ID, { modelsDir: MODELS_DIR });
+  assert.ok(['face-units.json', 'face-vocab.json'].includes(real.faceFile), real.faceFile);
+  assert.ok(real.compiled.face && real.compiled.face.dimensions.size === 13);
+  const faceSrc = fs.readFileSync(path.join(MODELS_DIR, MODEL_ID, real.faceFile), 'utf8');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bb-face-'));
+  const dir = path.join(tmp, 'm1');
+  fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir, 'body-regions.json'), JSON.stringify(table));
+  assert.equal(loadBodyRegionsForModel('m1', { modelsDir: tmp }).compiled.face, null, '没有部件表 → 不开放 compose');
+  fs.writeFileSync(path.join(dir, 'face-vocab.json'), faceSrc);
+  assert.equal(loadBodyRegionsForModel('m1', { modelsDir: tmp }).faceFile, 'face-vocab.json');
+  fs.writeFileSync(path.join(dir, 'face-units.json'), faceSrc);
+  assert.equal(loadBodyRegionsForModel('m1', { modelsDir: tmp }).faceFile, 'face-units.json', '两个都在时用 face-units.json');
+  const api = createBridgeApi({ getCurrentModelId: () => MODEL_ID, modelsDir: MODELS_DIR, call: () => ({ ok: false, reason: 'no' }), read: () => ({ ready: false }) });
+  const v = api.handleFaceVocab('');
+  assert.equal(v.status, 200);
+  assert.equal(Object.keys(v.payload.vocab.params).length, 20);
+  assert.ok(v.payload.summary.params.find((x) => x.id === 'LeanInput').region === 'torso');
+  assert.equal((await api.handleFaceCompose({ compose: { dimensions: { 不存在: 1 } } })).payload.reason, 'unknown-dimension');
+  assert.equal((await api.handleFaceCompose({ compose: { dimensions: { 慵懒: 0.6 } } })).payload.reason, 'overlay-unavailable', '合法组合才转发 overlay');
+  assert.equal((await api.handleFaceCompose({ mood: '妩媚' })).payload.reason, 'overlay-unavailable');
+  const none = createBridgeApi({ getCurrentModelId: () => 'm1', modelsDir: path.join(tmp, 'nope'), call: () => ({ ok: true, id: 1 }), read: () => ({ ready: false }) });
+  assert.equal(none.handleFaceVocab('').status, 404);
+}
+
+// 动作衔接点：motion-cutpoints.json 随表下发；未标注动作由 modelDir 现算兜底（手写最小样例，不用模型文件）
+{
+  const real = loadBodyRegionsForModel(MODEL_ID, { modelsDir: MODELS_DIR });
+  assert.ok(real.motionCuts && real.motionCuts.motions && real.motionCuts.motions['抚胸手关闭'], '仓库内 motion-cutpoints.json 已加载');
+  assert.deepEqual(real.autoCuts, {}, '没给 modelDir 不现算');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bb-cuts-'));
+  const models = path.join(tmp, 'models');
+  fs.mkdirSync(path.join(models, 'm2'), { recursive: true });
+  fs.writeFileSync(path.join(models, 'm2', 'body-regions.json'), JSON.stringify(table));
+  const mdir = path.join(tmp, 'modelfiles');
+  fs.mkdirSync(path.join(mdir, 'motions'), { recursive: true });
+  fs.writeFileSync(path.join(mdir, 'm2.model3.json'), JSON.stringify({ FileReferences: { Motions: { 竖手指打开: [{ File: 'motions/x.motion3.json', FadeInTime: 0.3 }] } } }));
+  fs.writeFileSync(path.join(mdir, 'motions', 'x.motion3.json'), JSON.stringify({ Meta: { Duration: 1 }, Curves: [] }));
+  const t2 = loadBodyRegionsForModel('m2', { modelsDir: models, modelDir: mdir });
+  assert.equal(t2.motionCuts, null);
+  assert.deepEqual(t2.autoCuts['竖手指打开'], { durationMs: 1000, loop: false, cutPointsMs: [], fadeInMs: 300 });
+  const api = createBridgeApi({ getCurrentModelId: () => 'm2', modelsDir: models, modelDir: mdir, call: () => ({ ok: false }), read: () => ({ ready: false }) });
+  const tp = api.handleTable('');
+  assert.equal(tp.status, 200);
+  assert.ok(tp.payload.autoCuts['竖手指打开']);
+  assert.equal(tp.payload.motionCuts, null);
+}
+
 console.log('body-bridge-api ok');
