@@ -36,6 +36,8 @@ import {
   createInboxActExecutor,
 } from './nodegraph.mjs';
 import { createRunRegistry } from './nodegraph-runs.mjs';
+import { deepseekChatJson, resolveDeepSeekKey } from './llm-channel.mjs';
+import { handleApplyOps, handleAiEdit, handleGraphGet, NODEGRAPH_API_BODY_LIMIT } from './nodegraph-api.mjs';
 import { isReservedParam } from './param-guards.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
 import { ageSummaryState, isActionTool, legacyAgentState, summarizeSession } from './session-events.mjs';
@@ -823,37 +825,15 @@ async function requestDeepSeekPokeAction(key, payload, style = {}) {
     '请返回 JSON。',
   ].join('\n');
 
-  const model = process.env.DSH_L2D_API_MODEL || 'deepseek-chat';
-  const response = await fetchWithTimeout('https://api.deepseek.com/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      temperature: 1.1,
-      max_tokens: 900,
-      response_format: { type: 'json_object' },
-    }),
+  // 与 AI 节点编辑共用同一条 LLM 通道（lib/llm-channel.mjs），参数与抽取前一致。
+  const raw = await deepseekChatJson({
+    key,
+    system,
+    user,
+    temperature: 1.1,
+    maxTokens: 900,
+    timeoutMs: EXTERNAL_FETCH_TIMEOUT_MS,
   });
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`HTTP ${response.status} ${text.slice(0, 180)}`);
-  }
-  const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content;
-  let raw;
-  try {
-    raw = JSON.parse(content);
-  } catch {
-    throw new Error('API 返回不是 JSON');
-  }
   return sanitizePokeAction(raw, payload);
 }
 
@@ -1368,6 +1348,49 @@ export function apply(root, config = {}) {
         return sendBuffer(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['running execution not found: ' + id] }), 'utf8'));
       }
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, cancelled: true, executionId: id }), 'utf8'));
+    });
+
+    // ---------------------- AI 节点编辑（docs/nodegraph/AI-EDIT-API.md） ----------------------
+    // 处理逻辑全部在 lib/nodegraph-api.mjs（与 dev-server 共用）；这里只做跨站拒、方法限、body 上限。
+    // ai-edit 复用 lib/llm-channel.mjs 的 DeepSeek 通道（与「戳一戳 API 决定动作」同一 Key 来源）；
+    // 没有 Key 时 llm=null → 503 ai-unavailable，不伪造结果。
+    const nodegraphApiSend = (res, out) => {
+      sendBuffer(res, out.status, MIME['.json'], Buffer.from(JSON.stringify(out.payload), 'utf8'));
+    };
+    const nodegraphApiPost = (handler) => async (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'POST') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      let body;
+      try {
+        body = await readJsonBody(req, NODEGRAPH_API_BODY_LIMIT);
+      } catch {
+        return nodegraphApiSend(res, { status: 400, payload: { ok: false, reason: 'invalid-request', message: 'body 不是合法 JSON 或超过 256KB' } });
+      }
+      try {
+        nodegraphApiSend(res, await handler(body));
+      } catch (err) {
+        diag('nodegraph api 异常: ' + String((err && err.message) || err));
+        nodegraphApiSend(res, { status: 500, payload: { ok: false, reason: 'internal-error' } });
+      }
+    };
+    route('/dsh-l2d/api/nodegraph/apply-ops', nodegraphApiPost((body) => handleApplyOps(body)));
+    route('/dsh-l2d/api/nodegraph/ai-edit', nodegraphApiPost((body) => {
+      const key = resolveDeepSeekKey(readSettings());
+      const llm = key
+        ? (prompt) => deepseekChatJson({ key, ...prompt, temperature: 0.2, maxTokens: 2000, timeoutMs: 30000 })
+        : null;
+      return handleAiEdit(body, { llm });
+    }));
+    route('/dsh-l2d/api/nodegraph/graph', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      let name = '';
+      try {
+        name = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('name') || '');
+      } catch {
+        name = '';
+      }
+      nodegraphApiSend(res, handleGraphGet(name));
     });
 
     // ------------------------------------------------------ 桌宠独立窗页面

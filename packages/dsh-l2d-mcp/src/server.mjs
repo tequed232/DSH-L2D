@@ -437,5 +437,64 @@ server.registerTool(
   async ({ index }) => toolResult(await forward('l2d_set_form', { index }, 3000)),
 );
 
+// ---------------------------------------------------------------- AI 节点编辑
+// 「当前节点图」= 宿主已导入的分享 JSON（$DSH_HOME/l2d-nodegraphs/<name>.json），按 name 读写。
+// 两个工具直连宿主路由（同 l2d_persona 风格，不经 /ai/call 队列）；宿主路由入口统一过
+// host-guard 的 guardGraphCall（HOST_GRAPH_TOOLS 白名单），逐 op 校验在 nodegraph-ops.applyOps。
+const GRAPH_OP_KINDS = ['add_node', 'remove_node', 'set_param', 'connect', 'disconnect', 'move_node'];
+
+async function graphApi(pathAndQuery, init) {
+  const base = await baseUrl();
+  if (!base) return { ok: false, reason: 'plugin-offline' };
+  try {
+    const res = await fetchTimeout(base + pathAndQuery, init);
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { ok: false, reason: 'http-' + res.status };
+    }
+  } catch {
+    cachedBase = '';
+    return { ok: false, reason: 'unreachable' };
+  }
+}
+
+server.registerTool(
+  'l2d_graph_get',
+  {
+    description:
+      '只读。读取宿主已导入的节点图（设计层：nodes/edges/pos/props）及其 hash。改图前先调它拿 hash，作为 l2d_graph_apply_ops 的 baseHash。节点类型、参数范围与 op 格式见 docs/nodegraph/NODE-SCHEMA.json。name 缺省时返回 name-required 及可选名单。',
+    inputSchema: {
+      name: z.string().min(1).max(64).describe('已导入节点图的名称（GET /dsh-l2d/nodegraphs 列表里的 name）'),
+    },
+  },
+  async ({ name }) => toolResult(await graphApi('/dsh-l2d/api/nodegraph/graph?name=' + encodeURIComponent(name), { cache: 'no-store' })),
+);
+
+server.registerTool(
+  'l2d_graph_apply_ops',
+  {
+    description:
+      '对已导入的节点图执行一批确定性编辑操作（add_node / remove_node / set_param / connect / disconnect / move_node）。整批原子：任一 op 不合法则全部不生效并返回带 opIndex 与英文 reason 的 errors；全部合法且整图校验通过才写回文件（saved:true）。baseHash 与当前图不一致返回 stale-graph，请重新 l2d_graph_get。',
+    inputSchema: {
+      name: z.string().min(1).max(64).describe('已导入节点图的名称'),
+      ops: z
+        .array(z.object({ op: z.enum(GRAPH_OP_KINDS) }).passthrough())
+        .max(200)
+        .describe('编辑操作数组，字段格式见 docs/nodegraph/NODE-SCHEMA.json 的 ops'),
+      baseHash: z.string().regex(/^[0-9a-f]{16}$/).describe('l2d_graph_get 返回的 hash'),
+    },
+  },
+  async ({ name, ops, baseHash }) =>
+    toolResult(
+      await graphApi('/dsh-l2d/api/nodegraph/apply-ops', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, ops, baseHash }),
+      }),
+    ),
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
