@@ -279,7 +279,12 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
 .ai-result { margin-top:8px; max-width:880px; }
 .ai-expl { color:var(--ink); font-size:12px; }
 .ai-ops { margin:6px 0 0; padding-left:20px; font:400 11px/1.6 var(--mono); color:var(--ink2); }
-.ai-ops code { color:var(--ink); }
+.ai-ops code, .ai-status code, .ai-err code, .ai-warn code { color:var(--ink3); font:400 11px var(--mono); }
+.ai-ops .desc { color:var(--ink); font-family:var(--font); font-size:12px; }
+.ai-ops li.has-err .desc { color:var(--danger); }
+.ai-err { color:var(--danger); font-family:var(--font); font-size:12px; }
+.ai-err::before { content:"✕ "; font-family:var(--mono); }
+.ai-empty { margin:6px 0 0; color:var(--ink2); font-size:12px; max-width:720px; }
 .ai-warn { margin:6px 0 0; padding-left:18px; color:var(--warn); font-size:12px; }
 .ai-actions { display:flex; gap:8px; margin-top:8px; }
 #grid-layer { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
@@ -360,6 +365,9 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
 .node-foot .st { margin-left:auto; white-space:nowrap; }
 .node-foot .st.st-running { color:var(--warn); } .node-foot .st.st-done { color:var(--ok); } .node-foot .st.st-blocked { color:var(--danger); }
 .node.selected { border-color:var(--accent); outline-color:var(--accent); }
+/* AI 编辑预览：会被改动的节点（虚线强调色外框 + 角标文字，不只靠颜色） */
+.node.ai-touch { outline:2px dashed var(--accent); }
+.node.ai-touch .node-head::after { content:"AI"; flex:none; font:500 11px/1 var(--mono); color:var(--accent); border:0.5px solid var(--accent); border-radius:4px; padding:2px 4px; }
 .node.executing { border-color:var(--nc); outline:2px dashed var(--nc); }
 /* 禁用节点：NEVER 语义 —— 虚线边框 + 「已禁用」文字徽标 + 降透明度（不只靠颜色） */
 .node.disabled { opacity:.55; border-style:dashed; }
@@ -1314,14 +1322,14 @@ var I18n = {
     'ai.idle': '生成的修改会先列出来，确认后才会改动画布',
     'ai.empty': '请先输入要做的修改',
     'ai.loading': '正在生成修改…',
-    'ai.notReady': '接口未就绪：AI 编辑服务暂不可用，画布未改动',
+    'ai.notReady': '接口未就绪：编辑器连不上 AI 编辑接口，画布未改动',
     'ai.badReply': '接口返回异常（{code}），画布未改动',
     'ai.proposal': '拟执行 {n} 项修改：',
     'ai.confirm': '确认应用',
     'ai.discard': '放弃',
     'ai.stale': '画布已变化，请重新生成',
     'ai.applying': '正在应用…',
-    'ai.invalid': '未应用，校验失败：{errors}',
+    'ai.invalid': '未应用：{n} 处校验错误，见下方对应操作',
     'ai.applied': '已应用 {n} 项修改，可撤销',
     'ai.undo': '撤销这次 AI 修改',
     'ai.undone': '已恢复到应用前的画布',
@@ -1336,8 +1344,8 @@ var I18n = {
     'tip.title': '{name} · 操作',
     'tip.type.trigger': '事件入口，填触发事件名，仅存于设计层',
     'tip.type.workspace': '按工作区状态分支，仅存于设计层',
-    'tip.type.condition': '条件表达式，仅存于设计层',
-    'tip.type.gate': '条件为假时阻断下游',
+    'tip.type.condition': '条件表达式，仅存于设计层，当前不参与编译和模拟',
+    'tip.type.gate': '条件门表达式，仅存于设计层，当前不参与编译和模拟',
     'tip.type.delay': '等待 delayMs 毫秒后继续',
     'tip.type.motion': '播放白名单动作组，自动配对关闭动作',
     'tip.type.expression': '设置白名单表情，可先清除',
@@ -1352,7 +1360,54 @@ var I18n = {
     'stat.edges': '连线',
     'stat.graph': '导出节点',
     'stat.segs': '段',
-    'node.aux': '辅助'
+    'node.aux': '辅助',
+    'ai.unavailable': 'AI 未配置或暂不可用，未生成任何改动',
+    'ai.unavailableHelp': '宿主需要配置 DeepSeek API Key 后才能生成修改。没有 Key 时可以继续手动编辑节点图。',
+    'ai.failed': '生成失败，可以重试',
+    'ai.retry': '重试',
+    'ai.previewInvalid': '预演结果未通过整图校验，确认时会再次校验',
+    'ai.applyFailed': '应用请求被拒绝，画布未改动',
+    'ai.op.add': '添加{type}节点「{name}」',
+    'ai.op.addPlain': '添加{type}节点',
+    'ai.op.remove': '删除节点「{name}」',
+    'ai.op.set': '把「{name}」的 {key} 改为 {value}',
+    'ai.op.connect': '连接 {a} → {b}',
+    'ai.op.replace': '替换原有输入',
+    'ai.op.disconnect': '断开 {a} → {b}',
+    'ai.op.disconnectEdge': '断开连线 {id}',
+    'ai.op.move': '移动「{name}」到 ({x}, {y})',
+    'ai.op.unknown': '未知操作 {op}',
+    'ai.reason.invalid-graph': '图结构不合法',
+    'ai.reason.invalid-ops': '操作列表不合法',
+    'ai.reason.too-many-ops': '一次的操作太多',
+    'ai.reason.invalid-op': '操作格式不合法',
+    'ai.reason.unknown-op': '不认识的操作类型',
+    'ai.reason.missing-field': '缺少必填字段',
+    'ai.reason.unknown-node-type': '不认识的节点类型',
+    'ai.reason.invalid-node-id': '节点 ID 不合法',
+    'ai.reason.duplicate-node-id': '节点 ID 重复',
+    'ai.reason.too-many-nodes': '节点数超过上限',
+    'ai.reason.node-not-found': '找不到这个节点',
+    'ai.reason.unknown-param': '这个节点没有该参数',
+    'ai.reason.param-readonly': '该参数只读',
+    'ai.reason.param-type-mismatch': '参数类型不对',
+    'ai.reason.param-out-of-range': '参数超出范围',
+    'ai.reason.param-not-allowed': '参数值不在允许列表里',
+    'ai.reason.unknown-live2d-id': '模型里没有这个表情或动作组',
+    'ai.reason.unknown-port': '不存在的端口',
+    'ai.reason.port-type-mismatch': '端口类型不同色，不能连接',
+    'ai.reason.self-loop': '不能连到自己',
+    'ai.reason.duplicate-edge': '这条连线已存在',
+    'ai.reason.input-occupied': '目标输入已有连线（需要替换）',
+    'ai.reason.cycle': '会形成环',
+    'ai.reason.edge-not-found': '找不到这条连线',
+    'ai.reason.invalid-position': '坐标不合法',
+    'ai.reason.graph-invalid': '应用后整图校验未通过',
+    'ai.reason.live2d-id-not-in-model': '提示：引用的 Live2D ID 在当前模型中不存在（不阻断）',
+    'ai.reason.stale-graph': '画布已变化',
+    'ai.reason.ai-unavailable': 'AI 未配置或不可用',
+    'ai.reason.ai-failed': 'AI 调用失败',
+    'ai.reason.ai-bad-response': 'AI 返回内容无法解析'
   },
   en: {
     'lang.aria': 'Interface language',
@@ -1816,14 +1871,14 @@ var I18n = {
     'ai.idle': 'Proposed changes are listed first; the canvas only changes after you confirm',
     'ai.empty': 'Type the change you want first',
     'ai.loading': 'Generating…',
-    'ai.notReady': 'Service not ready: AI editing is unavailable, the canvas was not changed',
+    'ai.notReady': 'Service not ready: the editor cannot reach the AI edit endpoint; the canvas was not changed',
     'ai.badReply': 'Unexpected reply ({code}); the canvas was not changed',
     'ai.proposal': '{n} proposed changes:',
     'ai.confirm': 'Apply',
     'ai.discard': 'Discard',
     'ai.stale': 'The canvas has changed, please generate again',
     'ai.applying': 'Applying…',
-    'ai.invalid': 'Not applied, validation failed: {errors}',
+    'ai.invalid': 'Not applied: {n} validation errors, see the matching steps below',
     'ai.applied': 'Applied {n} changes; you can undo',
     'ai.undo': 'Undo this AI edit',
     'ai.undone': 'Restored the canvas from before the edit',
@@ -1838,8 +1893,8 @@ var I18n = {
     'tip.title': '{name} · actions',
     'tip.type.trigger': 'Entry point; set the event name (design layer only)',
     'tip.type.workspace': 'Branch on workspace state (design layer only)',
-    'tip.type.condition': 'Condition expression (design layer only)',
-    'tip.type.gate': 'Blocks downstream when the condition is false',
+    'tip.type.condition': 'Condition expression; design layer only, not compiled or simulated yet',
+    'tip.type.gate': 'Gate expression; design layer only, not compiled or simulated yet',
     'tip.type.delay': 'Waits delayMs ms, then continues',
     'tip.type.motion': 'Plays a whitelisted motion group; the close motion is paired',
     'tip.type.expression': 'Sets a whitelisted expression, optionally clearing first',
@@ -1854,7 +1909,54 @@ var I18n = {
     'stat.edges': 'Edges',
     'stat.graph': 'Graph nodes',
     'stat.segs': 'Segments',
-    'node.aux': 'Aux'
+    'node.aux': 'Aux',
+    'ai.unavailable': 'AI is not configured or unavailable; nothing was generated',
+    'ai.unavailableHelp': 'The host needs a DeepSeek API key before it can generate edits. You can keep editing the graph by hand meanwhile.',
+    'ai.failed': 'Generation failed; you can retry',
+    'ai.retry': 'Retry',
+    'ai.previewInvalid': 'The preview did not pass graph validation; it is checked again when you apply',
+    'ai.applyFailed': 'The apply request was rejected; the canvas was not changed',
+    'ai.op.add': 'Add {type} node "{name}"',
+    'ai.op.addPlain': 'Add a {type} node',
+    'ai.op.remove': 'Remove node "{name}"',
+    'ai.op.set': 'Set {key} of "{name}" to {value}',
+    'ai.op.connect': 'Connect {a} → {b}',
+    'ai.op.replace': 'replaces the existing input',
+    'ai.op.disconnect': 'Disconnect {a} → {b}',
+    'ai.op.disconnectEdge': 'Remove wire {id}',
+    'ai.op.move': 'Move "{name}" to ({x}, {y})',
+    'ai.op.unknown': 'Unknown operation {op}',
+    'ai.reason.invalid-graph': 'The graph is malformed',
+    'ai.reason.invalid-ops': 'The operation list is malformed',
+    'ai.reason.too-many-ops': 'Too many operations in one batch',
+    'ai.reason.invalid-op': 'Malformed operation',
+    'ai.reason.unknown-op': 'Unknown operation type',
+    'ai.reason.missing-field': 'A required field is missing',
+    'ai.reason.unknown-node-type': 'Unknown node type',
+    'ai.reason.invalid-node-id': 'Invalid node ID',
+    'ai.reason.duplicate-node-id': 'Duplicate node ID',
+    'ai.reason.too-many-nodes': 'Too many nodes',
+    'ai.reason.node-not-found': 'Node not found',
+    'ai.reason.unknown-param': 'This node has no such parameter',
+    'ai.reason.param-readonly': 'This parameter is read-only',
+    'ai.reason.param-type-mismatch': 'Wrong parameter type',
+    'ai.reason.param-out-of-range': 'Parameter out of range',
+    'ai.reason.param-not-allowed': 'Value is not in the allowed list',
+    'ai.reason.unknown-live2d-id': 'The model has no such expression or motion group',
+    'ai.reason.unknown-port': 'Unknown port',
+    'ai.reason.port-type-mismatch': 'Port types differ, so they cannot connect',
+    'ai.reason.self-loop': 'A node cannot connect to itself',
+    'ai.reason.duplicate-edge': 'This wire already exists',
+    'ai.reason.input-occupied': 'The target input is taken (needs replace)',
+    'ai.reason.cycle': 'This would create a cycle',
+    'ai.reason.edge-not-found': 'Wire not found',
+    'ai.reason.invalid-position': 'Invalid position',
+    'ai.reason.graph-invalid': 'The graph fails validation after applying',
+    'ai.reason.live2d-id-not-in-model': 'Note: a referenced Live2D ID is not in the current model (not blocking)',
+    'ai.reason.stale-graph': 'The canvas has changed',
+    'ai.reason.ai-unavailable': 'AI not configured or unavailable',
+    'ai.reason.ai-failed': 'The AI call failed',
+    'ai.reason.ai-bad-response': 'The AI reply could not be parsed'
   },
   ja: {
     'lang.aria': '表示言語',
@@ -2318,14 +2420,14 @@ var I18n = {
     'ai.idle': '提案された変更を先に一覧表示し、確定するまでキャンバスは変わりません',
     'ai.empty': '先に変更内容を入力してください',
     'ai.loading': '生成中…',
-    'ai.notReady': 'インターフェース未準備：AI 編集は利用できません。キャンバスは変更されていません',
+    'ai.notReady': 'インターフェース未準備：AI 編集エンドポイントに接続できません。キャンバスは変更されていません',
     'ai.badReply': '想定外の応答（{code}）。キャンバスは変更されていません',
     'ai.proposal': '{n} 件の変更案：',
     'ai.confirm': '適用する',
     'ai.discard': '破棄',
     'ai.stale': 'キャンバスが変わりました。もう一度生成してください',
     'ai.applying': '適用中…',
-    'ai.invalid': '適用していません。検証エラー：{errors}',
+    'ai.invalid': '適用していません：検証エラー {n} 件（下の該当操作を参照）',
     'ai.applied': '{n} 件の変更を適用しました（元に戻せます）',
     'ai.undo': 'この AI 編集を元に戻す',
     'ai.undone': '適用前のキャンバスに戻しました',
@@ -2340,8 +2442,8 @@ var I18n = {
     'tip.title': '{name} · 操作',
     'tip.type.trigger': '入口。イベント名を設定（設計レイヤーのみ）',
     'tip.type.workspace': 'ワークスペース状態で分岐（設計レイヤーのみ）',
-    'tip.type.condition': '条件式（設計レイヤーのみ）',
-    'tip.type.gate': '条件が偽なら下流を止める',
+    'tip.type.condition': '条件式。設計レイヤーのみで、現在はコンパイル・シミュレーション対象外',
+    'tip.type.gate': 'ゲート式。設計レイヤーのみで、現在はコンパイル・シミュレーション対象外',
     'tip.type.delay': 'delayMs ミリ秒待って続行',
     'tip.type.motion': '許可リストのモーションを再生、閉じる動作は自動ペア',
     'tip.type.expression': '許可リストの表情を設定（先にクリア可）',
@@ -2356,7 +2458,54 @@ var I18n = {
     'stat.edges': 'ワイヤー',
     'stat.graph': '出力ノード',
     'stat.segs': 'セグメント',
-    'node.aux': '補助'
+    'node.aux': '補助',
+    'ai.unavailable': 'AI が未設定または利用できません。変更は生成されていません',
+    'ai.unavailableHelp': '変更を生成するにはホストに DeepSeek API Key が必要です。それまでは手動で編集できます。',
+    'ai.failed': '生成に失敗しました。再試行できます',
+    'ai.retry': '再試行',
+    'ai.previewInvalid': 'プレビューはグラフ検証に通っていません。適用時に再検証します',
+    'ai.applyFailed': '適用リクエストが拒否されました。キャンバスは変更されていません',
+    'ai.op.add': '{type}ノード「{name}」を追加',
+    'ai.op.addPlain': '{type}ノードを追加',
+    'ai.op.remove': 'ノード「{name}」を削除',
+    'ai.op.set': '「{name}」の {key} を {value} に変更',
+    'ai.op.connect': '{a} → {b} を接続',
+    'ai.op.replace': '既存の入力を置き換え',
+    'ai.op.disconnect': '{a} → {b} を切断',
+    'ai.op.disconnectEdge': 'ワイヤー {id} を切断',
+    'ai.op.move': '「{name}」を ({x}, {y}) へ移動',
+    'ai.op.unknown': '不明な操作 {op}',
+    'ai.reason.invalid-graph': 'グラフ構造が不正です',
+    'ai.reason.invalid-ops': '操作リストが不正です',
+    'ai.reason.too-many-ops': '一度の操作が多すぎます',
+    'ai.reason.invalid-op': '操作の形式が不正です',
+    'ai.reason.unknown-op': '不明な操作タイプ',
+    'ai.reason.missing-field': '必須フィールドがありません',
+    'ai.reason.unknown-node-type': '不明なノードタイプ',
+    'ai.reason.invalid-node-id': 'ノード ID が不正です',
+    'ai.reason.duplicate-node-id': 'ノード ID が重複しています',
+    'ai.reason.too-many-nodes': 'ノード数が上限を超えています',
+    'ai.reason.node-not-found': 'ノードが見つかりません',
+    'ai.reason.unknown-param': 'このノードにその引数はありません',
+    'ai.reason.param-readonly': 'この引数は読み取り専用です',
+    'ai.reason.param-type-mismatch': '引数の型が違います',
+    'ai.reason.param-out-of-range': '引数が範囲外です',
+    'ai.reason.param-not-allowed': '許可リストにない値です',
+    'ai.reason.unknown-live2d-id': 'モデルにその表情・モーショングループはありません',
+    'ai.reason.unknown-port': '存在しないポート',
+    'ai.reason.port-type-mismatch': 'ポートの型が違うため接続できません',
+    'ai.reason.self-loop': '自分自身には接続できません',
+    'ai.reason.duplicate-edge': 'このワイヤーは既にあります',
+    'ai.reason.input-occupied': '接続先の入力は使用中です（置き換えが必要）',
+    'ai.reason.cycle': '循環になります',
+    'ai.reason.edge-not-found': 'ワイヤーが見つかりません',
+    'ai.reason.invalid-position': '座標が不正です',
+    'ai.reason.graph-invalid': '適用後のグラフ検証に失敗しました',
+    'ai.reason.live2d-id-not-in-model': '注意：参照している Live2D ID が現在のモデルにありません（続行可）',
+    'ai.reason.stale-graph': 'キャンバスが変わりました',
+    'ai.reason.ai-unavailable': 'AI 未設定または利用不可',
+    'ai.reason.ai-failed': 'AI 呼び出しに失敗',
+    'ai.reason.ai-bad-response': 'AI の応答を解析できません'
   }
   },
   normalize: function (code) {
@@ -3519,30 +3668,36 @@ var Folds = {
 
 <!-- BUILD:SPLIT ai-edit -->
 /* =========================================================================
-   AiEdit：底栏「AI 编辑」标签页 + 可替换的接口适配层。
-   - 适配层 AiEditAdapter 是前端唯一的接口调用点（接口格式以后端文档为准）：
-       POST /dsh-l2d/api/nodegraph/ai-edit    {graph, instruction, lang} → {ops, explanation, warnings, baseHash}
-       POST /dsh-l2d/api/nodegraph/apply-ops  {graph, ops, baseHash?}    → {graph, valid, errors}
-     graph = 当前导出文档（Serializer.exportText 的 JSON），前端不自行应用 ops。
-   - 接口不可达（file://、网络错误、404/501/503）→ 显示「接口未就绪」，不改画布
-   - 防过期：生成时记下画布序列化快照；确认时画布已变化 → 提示重新生成，不应用
-   - 撤销：应用前保存原文档快照，撤销即恢复该快照
+   AiEdit：底栏「AI 编辑」标签页 + 可替换的接口适配层（契约：docs/nodegraph/AI-EDIT-API.md v1）。
+   - AiEditAdapter 是前端唯一的接口调用点：
+       POST /dsh-l2d/api/nodegraph/ai-edit    {graph, instruction, lang}
+         200 {ok, ops, explanation, warnings, baseHash, valid, previewHash}
+         503 ai-unavailable（未配置 / 不可用） · 502 ai-failed / ai-bad-response（失败，可重试）
+       POST /dsh-l2d/api/nodegraph/apply-ops  {graph, ops, baseHash}（纯预演，不写文件）
+         200 {ok, graph, valid, applied, errors[{opIndex, op, reason, message}], warnings, hash}
+         409 stale-graph
+     graph = 设计层 {nodes, edges, viewport}（与导出 meta.editor 同形）。前端不计算 graphHash、不自行应用 ops。
+   - 接口不存在（file://、网络错误、404/501）→「接口未就绪」
+   - 防过期：生成时记下画布序列化快照，确认时先本地比对；后端 409 再兜底
+   - 撤销：应用前保存完整导出快照，撤销即恢复该快照
+   - 预览：每条 op 译成人话，并在画布上高亮会变动的节点；reason code 原样保留为次要信息
    - 测试可替换 AiEditAdapter.fetch（selftest 用 mock，不发真实请求）
    ========================================================================= */
 var AiEditAdapter = {
   EDIT_URL: '/dsh-l2d/api/nodegraph/ai-edit',
   APPLY_URL: '/dsh-l2d/api/nodegraph/apply-ops',
   fetch: function (url, opts) { return window.fetch(url, opts); },
+  /* 结果统一为 { ready, status, data }；ready=false 表示接口本身不存在或不可达 */
   post: function (url, body) {
     var self = this;
-    if (location.protocol === 'file:') return Promise.resolve({ ready:false });
+    if (location.protocol === 'file:' && this.fetch === AiEditAdapter._nativeFetch) return Promise.resolve({ ready:false, status:0, data:{} });
     return Promise.resolve().then(function () {
       return self.fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
     }).then(function (res) {
-      if (!res || res.status === 404 || res.status === 501 || res.status === 503) return { ready:false };
-      return res.json().then(function (data) { return { ready:true, ok:!!res.ok, status:res.status, data:data || {} }; },
-        function () { return { ready:true, ok:false, status:res.status, data:{} }; });
-    }, function () { return { ready:false }; });
+      if (!res || res.status === 404 || res.status === 501) return { ready:false, status:res ? res.status : 0, data:{} };
+      return res.json().then(function (data) { return { ready:true, status:res.status, data:data || {} }; },
+        function () { return { ready:true, status:res.status, data:{} }; });
+    }, function () { return { ready:false, status:0, data:{} }; });
   },
   edit: function (graph, instruction, lang) { return this.post(this.EDIT_URL, { graph:graph, instruction:instruction, lang:lang }); },
   applyOps: function (graph, ops, baseHash) {
@@ -3551,11 +3706,15 @@ var AiEditAdapter = {
     return this.post(this.APPLY_URL, body);
   }
 };
+AiEditAdapter._nativeFetch = AiEditAdapter.fetch;
+
 var AiEdit = {
-  state: 'idle',         /* idle | loading | proposal | applying | applied | error */
-  proposal: null,        /* { ops, explanation, warnings, baseHash, snapshot } */
+  state: 'idle',        /* idle | loading | proposal | applying | applied | notready | unavailable | failed | error */
+  proposal: null,       /* { ops, explanation, warnings, baseHash, valid, snapshot, errors:{opIndex:[...]} } */
   undoSnapshot: null,
-  message: '',
+  message: '', code: '', lastWarnings: [],
+  touched: null,
+  LANGS: { 'zh-CN':'zh-CN', en:'en', ja:'ja' },
   init: function () {
     var self = this;
     var send = document.getElementById('ai-send');
@@ -3566,8 +3725,9 @@ var AiEdit = {
       if (!b) return;
       var act = b.getAttribute('data-ai');
       if (act === 'apply') self.confirm();
-      else if (act === 'discard') { self.proposal = null; self.set('idle', ''); }
+      else if (act === 'discard') { self.proposal = null; self.highlight(null); self.set('idle'); }
       else if (act === 'undo') self.undo();
+      else if (act === 'retry') self.generate();
     });
     var input = document.getElementById('ai-input');
     if (input) input.addEventListener('keydown', function (e) {
@@ -3575,41 +3735,64 @@ var AiEdit = {
     });
     this.render();
   },
-  set: function (state, msg) { this.state = state; this.message = msg || ''; this.render(); },
+  /* 设计层图：与导出 meta.editor 同形，只取 nodes / edges / viewport */
+  designGraph: function (text) {
+    var ed = JSON.parse(text || Serializer.exportText()).meta.editor;
+    return { nodes:ed.nodes, edges:ed.edges, viewport:ed.viewport };
+  },
+  set: function (state, msg, code) { this.state = state; this.message = msg || ''; this.code = code || ''; this.render(); },
+  reasonText: function (code) { return I18n.has('ai.reason.' + code) ? tr('ai.reason.' + code) : String(code || ''); },
+  warnText: function (w) {
+    if (w && typeof w === 'object') {
+      var code = w.reason || w.code || '';
+      return { text:(code && I18n.has('ai.reason.' + code) ? tr('ai.reason.' + code) : String(w.message || code)) + (w.id || w.value ? ' · ' + String(w.id || w.value) : ''), code:code };
+    }
+    return { text:String(w), code:'' };
+  },
   generate: function () {
     var self = this, input = document.getElementById('ai-input');
     var text = input ? input.value.trim() : '';
     if (!text) { this.set('error', tr('ai.empty')); return Promise.resolve(); }
     var snapshot = Serializer.exportText();
-    this.proposal = null;
+    this.proposal = null; this.highlight(null);
     this.set('loading', tr('ai.loading'));
-    return AiEditAdapter.edit(JSON.parse(snapshot), text, I18n.lang).then(function (r) {
-      if (!r.ready) { self.set('error', tr('ai.notReady')); return; }
-      var d = r.data;
-      if (!r.ok || !Array.isArray(d.ops)) { self.set('error', tr('ai.badReply', { code:r.status })); return; }
+    return AiEditAdapter.edit(this.designGraph(snapshot), text, this.LANGS[I18n.lang] || 'zh-CN').then(function (r) {
+      var d = r.data || {};
+      if (!r.ready) { self.set('notready', tr('ai.notReady')); return; }
+      if (r.status === 503) { self.set('unavailable', tr('ai.unavailable'), d.reason || 'ai-unavailable'); return; }
+      if (r.status >= 500 || r.status >= 400 && r.status !== 409) { self.set('failed', tr('ai.failed'), d.reason || ('http-' + r.status)); return; }
+      if (!Array.isArray(d.ops)) { self.set('failed', tr('ai.failed'), d.reason || 'ai-bad-response'); return; }
       self.proposal = { ops:d.ops, explanation:String(d.explanation || ''), warnings:Array.isArray(d.warnings) ? d.warnings : [],
-        baseHash:d.baseHash == null ? null : d.baseHash, snapshot:snapshot };
-      self.set('proposal', '');
+        baseHash:d.baseHash == null ? null : d.baseHash, valid:d.valid !== false, snapshot:snapshot, errors:{} };
+      self.highlight(d.ops);
+      self.set('proposal', d.valid === false ? tr('ai.previewInvalid') : '');
     });
   },
   confirm: function () {
     var self = this, p = this.proposal;
     if (!p) return Promise.resolve();
     var now = Serializer.exportText();
-    if (now !== p.snapshot) { this.set('proposal', tr('ai.stale')); return Promise.resolve(); }
+    if (now !== p.snapshot) { this.set('proposal', tr('ai.stale'), 'stale-graph'); return Promise.resolve(); }
     this.set('applying', tr('ai.applying'));
-    return AiEditAdapter.applyOps(JSON.parse(now), p.ops, p.baseHash).then(function (r) {
+    return AiEditAdapter.applyOps(this.designGraph(now), p.ops, p.baseHash).then(function (r) {
+      var d = r.data || {};
       if (!r.ready) { self.set('proposal', tr('ai.notReady')); return; }
-      var d = r.data;
+      if (r.status === 409) { self.set('proposal', tr('ai.stale'), d.reason || 'stale-graph'); return; }
+      if (r.status !== 200) { self.set('proposal', tr('ai.applyFailed'), d.reason || ('http-' + r.status)); return; }
       if (!d.valid || !d.graph) {
-        var errs = Array.isArray(d.errors) && d.errors.length ? d.errors.join('；') : tr('ai.badReply', { code:r.status });
-        self.set('proposal', tr('ai.invalid', { errors:errs })); return;
+        p.errors = {};
+        (Array.isArray(d.errors) ? d.errors : []).forEach(function (e) {
+          var k = typeof e.opIndex === 'number' ? e.opIndex : -1;
+          (p.errors[k] = p.errors[k] || []).push(e);
+        });
+        self.set('proposal', tr('ai.invalid', { n:(d.errors || []).length }), 'graph-invalid'); return;
       }
-      if (Serializer.exportText() !== p.snapshot) { self.set('proposal', tr('ai.stale')); return; }
-      var res = Serializer.import(JSON.stringify(d.graph));
-      if (!res.ok) { self.set('proposal', tr('ai.invalid', { errors:res.errors.join('；') })); return; }
+      if (Serializer.exportText() !== p.snapshot) { self.set('proposal', tr('ai.stale'), 'stale-graph'); return; }
       self.undoSnapshot = now;
-      self.proposal = null;
+      self.lastWarnings = Array.isArray(d.warnings) ? d.warnings : [];
+      Graph.restore(Serializer.scrub({ nodes:d.graph.nodes, edges:d.graph.edges, viewport:Graph.viewport }));
+      Cache.invalidate(); Runtime.stop();
+      self.proposal = null; self.highlight(null);
       UI.afterImport();
       self.set('applied', tr('ai.applied', { n:p.ops.length }));
     });
@@ -3617,33 +3800,74 @@ var AiEdit = {
   undo: function () {
     if (!this.undoSnapshot) return;
     var res = Serializer.import(this.undoSnapshot);
-    if (res.ok) { this.undoSnapshot = null; UI.afterImport(); this.set('idle', tr('ai.undone')); }
+    if (res.ok) { this.undoSnapshot = null; this.lastWarnings = []; UI.afterImport(); this.set('idle', tr('ai.undone')); }
+  },
+  /* 画布高亮：会被删除 / 改参 / 移动 / 连线涉及的现有节点 */
+  highlight: function (ops) {
+    var s = null;
+    if (ops && ops.length) {
+      s = new Set();
+      ops.forEach(function (op) { if (!op) return; ['id', 'from', 'to'].forEach(function (k) { if (op[k] && Graph.byId(op[k])) s.add(op[k]); }); });
+    }
+    this.touched = s;
+    if (typeof UI !== 'undefined' && UI.nodesEl) UI.renderNodes();
+  },
+  nodeName: function (id, ops) {
+    var n = Graph.byId(id);
+    if (n) return n.label;
+    for (var i = 0; ops && i < ops.length; i++) if (ops[i] && ops[i].op === 'add_node' && ops[i].id === id) return ops[i].label || NodeDef.typeName(ops[i].type);
+    return String(id);
+  },
+  describe: function (op, ops) {
+    if (!op || typeof op !== 'object') return tr('ai.op.unknown', { op:String(op) });
+    var nm = function (id) { return AiEdit.nodeName(id, ops); };
+    switch (op.op) {
+      case 'add_node': {
+        var pr = op.props || {};
+        var what = pr.name || op.label || '';
+        return tr(what ? 'ai.op.add' : 'ai.op.addPlain', { type:NodeDef.typeName(op.type), name:what });
+      }
+      case 'remove_node': return tr('ai.op.remove', { name:nm(op.id) });
+      case 'set_param': return tr('ai.op.set', { name:nm(op.id), key:String(op.key), value:JSON.stringify(op.value) });
+      case 'connect': return tr('ai.op.connect', { a:nm(op.from), b:nm(op.to) }) + (op.replace ? ' · ' + tr('ai.op.replace') : '');
+      case 'disconnect': return op.edgeId ? tr('ai.op.disconnectEdge', { id:String(op.edgeId) }) : tr('ai.op.disconnect', { a:nm(op.from), b:nm(op.to) });
+      case 'move_node': return tr('ai.op.move', { name:nm(op.id), x:op.x, y:op.y });
+      default: return tr('ai.op.unknown', { op:String(op.op) });
+    }
   },
   render: function () {
+    var self = this;
     var st = document.getElementById('ai-status'), box = document.getElementById('ai-result');
     var send = document.getElementById('ai-send');
     if (send) send.disabled = this.state === 'loading' || this.state === 'applying';
+    var warn = /^(notready|unavailable|failed|error)$/.test(this.state) || (this.state === 'proposal' && this.message);
     if (st) {
-      st.textContent = this.message || tr('ai.idle');
-      st.className = 'ai-status' + (this.state === 'error' || /^(proposal)$/.test(this.state) && this.message ? ' is-warn' : '') +
-        (this.state === 'applied' ? ' is-ok' : '');
+      st.innerHTML = esc(this.message || tr('ai.idle')) + (this.code ? ' <code class="ai-code">' + esc(this.code) + '</code>' : '');
+      st.className = 'ai-status' + (warn ? ' is-warn' : '') + (this.state === 'applied' ? ' is-ok' : '');
     }
     if (!box) return;
     var p = this.proposal, h = '';
     if (p && (this.state === 'proposal' || this.state === 'applying')) {
       h += '<div class="ai-expl"><b>' + esc(tr('ai.proposal', { n:p.ops.length })) + '</b> ' + esc(p.explanation) + '</div>';
       if (p.ops.length) {
-        h += '<ol class="ai-ops">' + p.ops.slice(0, 12).map(function (op) {
-          var name = op && (op.op || op.type || op.kind) || 'op';
-          var rest = JSON.stringify(op); if (rest.length > 96) rest = rest.slice(0, 95) + '…';
-          return '<li><code>' + esc(name) + '</code> <span>' + esc(rest) + '</span></li>';
-        }).join('') + (p.ops.length > 12 ? '<li>…</li>' : '') + '</ol>';
+        h += '<ol class="ai-ops">' + p.ops.map(function (op, i) {
+          var errs = p.errors[i] || [];
+          return '<li class="' + (errs.length ? 'has-err' : '') + '"><span class="desc">' + esc(self.describe(op, p.ops)) + '</span> <code>' + esc(op && op.op || 'op') + '</code>' +
+            errs.map(function (e) { return '<div class="ai-err">' + esc(self.reasonText(e.reason)) + ' <code>' + esc(e.reason || '') + '</code></div>'; }).join('') + '</li>';
+        }).join('') + '</ol>';
       }
-      if (p.warnings.length) h += '<ul class="ai-warn">' + p.warnings.map(function (w) { return '<li>' + esc(String(w)) + '</li>'; }).join('') + '</ul>';
+      var rest = p.errors[-1] || [];
+      if (rest.length) h += '<ul class="ai-warn">' + rest.map(function (e) { return '<li>' + esc(self.reasonText(e.reason)) + ' <code>' + esc(e.reason || '') + '</code></li>'; }).join('') + '</ul>';
+      if (p.warnings.length) h += '<ul class="ai-warn">' + p.warnings.map(function (w) { var t = self.warnText(w); return '<li>' + esc(t.text) + (t.code ? ' <code>' + esc(t.code) + '</code>' : '') + '</li>'; }).join('') + '</ul>';
       h += '<div class="ai-actions"><button class="btn primary" type="button" data-ai="apply"' + (this.state === 'applying' ? ' disabled' : '') + '>' + esc(tr('ai.confirm')) + '</button>' +
         '<button class="btn" type="button" data-ai="discard">' + esc(tr('ai.discard')) + '</button></div>';
-    } else if (this.undoSnapshot && this.state === 'applied') {
-      h += '<div class="ai-actions"><button class="btn" type="button" data-ai="undo">' + esc(tr('ai.undo')) + '</button></div>';
+    } else if (this.state === 'applied') {
+      if (this.lastWarnings.length) h += '<ul class="ai-warn">' + this.lastWarnings.map(function (w) { var t = self.warnText(w); return '<li>' + esc(t.text) + (t.code ? ' <code>' + esc(t.code) + '</code>' : '') + '</li>'; }).join('') + '</ul>';
+      if (this.undoSnapshot) h += '<div class="ai-actions"><button class="btn" type="button" data-ai="undo">' + esc(tr('ai.undo')) + '</button></div>';
+    } else if (this.state === 'failed') {
+      h += '<div class="ai-actions"><button class="btn" type="button" data-ai="retry">' + esc(tr('ai.retry')) + '</button></div>';
+    } else if (this.state === 'unavailable') {
+      h += '<p class="ai-empty">' + esc(tr('ai.unavailableHelp')) + '</p>';
     }
     box.innerHTML = h;
     box.hidden = !h;
@@ -4303,7 +4527,8 @@ var UI = {
       var gc = NodeDef.groupColor(n.type), pc = NodeDef.portColor(n.props.portType);
       var running = Runtime.activeNode === n.id;
       var cls = 'node' + (Graph.selection.has(n.id) ? ' selected' : '') +
-        (n.disabled ? ' disabled' : '') + (running ? ' executing' : '');
+        (n.disabled ? ' disabled' : '') + (running ? ' executing' : '')+
+        (AiEdit.touched && AiEdit.touched.has(n.id) ? ' ai-touch' : '');
       /* 状态徽标：文字 + 符号，不只靠颜色（禁用 / 执行中 / 编译类型 / 设计层辅助） */
       var flag = n.disabled ? '<span class="node-flag st-off">⊘ ' + esc(tr('node.off')) + '</span>'
         : running ? '<span class="node-flag st-run">▸ ' + esc(tr('node.run')) + '</span>'
@@ -5669,53 +5894,75 @@ function runSelfTest() {
         langAttr:langOk, missing:missingKeys, fallback:fallback, reason:reasonOk };
     } catch (e) { return { ok:false, error:String(e) }; }
   })();
-  /* 第十四组：AI 编辑适配层（mock fetch，不发真实请求）——未就绪 / 生成→确认（apply-ops 返回的 graph 替换画布）/
-     baseHash 透传 / 防过期 / valid=false 不改画布 / 撤销恢复快照 */
+  /* 第十四组：AI 编辑适配层（mock fetch，不发真实请求；契约 AI-EDIT-API v1）——404 接口未就绪 / 503 未配置 / 502 失败可重试 /
+     请求为设计层 graph + 语言映射 / op 人话预览 + 画布高亮 / 本地快照防过期 / 409 stale-graph / valid=false 按 opIndex 落到预览行 /
+     确认用 apply-ops 返回的 graph 替换画布 + baseHash 透传 / warnings 只提示 / 撤销恢复快照 */
   var aiTest = function () {
     var realFetch = AiEditAdapter.fetch, calls = [], r = {};
     var input = document.getElementById('ai-input'), prevIn = input.value;
     var base = Serializer.exportText();
-    var mod = JSON.parse(base); mod.name = String(mod.name) + ' · ai';
-    if (mod.meta && mod.meta.editor && typeof mod.meta.editor.name === 'string') mod.meta.editor.name = mod.name;
+    var ed0 = JSON.parse(base).meta.editor;
+    var first = ed0.nodes[0];
+    var newGraph = { nodes:ed0.nodes.map(function (n) { var c = JSON.parse(JSON.stringify(n)); if (c.id === first.id) c.label = c.label + ' · ai'; return c; }), edges:ed0.edges, viewport:ed0.viewport };
+    var ops = [{ op:'set_param', id:first.id, key:'label', value:first.label + ' · ai' }, { op:'add_node', type:'expression', id:'ai_1', props:{ name:'脸红' } }];
     var reply = function (status, data) { return Promise.resolve({ ok:status < 400, status:status, json:function () { return Promise.resolve(data); } }); };
-    var mode = 'down';
+    var mode = '404';
     AiEditAdapter.fetch = function (url, opts) {
       calls.push({ url:url, body:JSON.parse(opts.body) });
-      if (mode === 'down') return Promise.reject(new Error('offline'));
-      if (url === AiEditAdapter.EDIT_URL) return reply(200, { ops:[{ op:'set_name', name:'x' }], explanation:'rename', warnings:[], baseHash:'h1' });
-      if (mode === 'invalid') return reply(200, { graph:null, valid:false, errors:['bad op'] });
-      return reply(200, { graph:mod, valid:true, errors:[] });
+      if (mode === 'net') return Promise.reject(new Error('offline'));
+      if (mode === '404') return reply(404, {});
+      if (url === AiEditAdapter.EDIT_URL) {
+        if (mode === '503') return reply(503, { ok:false, reason:'ai-unavailable' });
+        if (mode === '502') return reply(502, { ok:false, reason:'ai-failed' });
+        return reply(200, { ok:true, ops:ops, explanation:'rename', warnings:[{ reason:'live2d-id-not-in-model', id:'ParamMouthOpen' }], baseHash:'h1', valid:true, previewHash:'h2' });
+      }
+      if (mode === '409') return reply(409, { ok:false, reason:'stale-graph' });
+      if (mode === 'invalid') return reply(200, { ok:true, graph:null, valid:false, errors:[{ opIndex:1, op:ops[1], reason:'unknown-live2d-id', message:'x' }] });
+      return reply(200, { ok:true, graph:newGraph, valid:true, applied:2, errors:[], warnings:[], hash:'h3' });
     };
-    var done = function (x) { AiEditAdapter.fetch = realFetch; input.value = prevIn; AiEdit.proposal = null; AiEdit.undoSnapshot = null; AiEdit.set('idle', ''); return x; };
+    var status = function () { return document.getElementById('ai-status').textContent; };
+    var done = function (x) { AiEditAdapter.fetch = realFetch; input.value = prevIn; AiEdit.proposal = null; AiEdit.undoSnapshot = null; AiEdit.highlight(null); AiEdit.set('idle'); return x; };
     input.value = 'rename';
     return AiEdit.generate().then(function () {
-      r.notReady = AiEdit.state === 'error' && document.getElementById('ai-status').textContent === tr('ai.notReady') && Serializer.exportText() === base;
-      mode = 'ok';
-      return AiEdit.generate();
+      r.notReady = AiEdit.state === 'notready' && status().indexOf(tr('ai.notReady')) === 0 && Serializer.exportText() === base;
+      mode = '503'; return AiEdit.generate();
+    }).then(function () {
+      r.unavailable = AiEdit.state === 'unavailable' && status().indexOf('ai-unavailable') > 0 && !!document.querySelector('#ai-result .ai-empty');
+      mode = '502'; return AiEdit.generate();
+    }).then(function () {
+      r.failedRetry = AiEdit.state === 'failed' && !!document.querySelector('#ai-result [data-ai="retry"]');
+      mode = 'ok'; return AiEdit.generate();
     }).then(function () {
       var c = calls[calls.length - 1];
-      r.request = c.url === AiEditAdapter.EDIT_URL && c.body.instruction === 'rename' && c.body.lang === I18n.lang && JSON.stringify(c.body.graph) === JSON.stringify(JSON.parse(base));
-      r.proposal = AiEdit.state === 'proposal' && !!document.querySelector('#ai-result [data-ai="apply"]');
-      /* 防过期：画布变化后确认 → 不应用、不调 apply-ops */
+      r.request = c.url === AiEditAdapter.EDIT_URL && c.body.instruction === 'rename' && c.body.lang === I18n.lang &&
+        Array.isArray(c.body.graph.nodes) && Array.isArray(c.body.graph.edges) && !c.body.graph.segments && c.body.graph.nodes.length === ed0.nodes.length;
+      var rows = $$('#ai-result .ai-ops li .desc').map(function (e) { return e.textContent; });
+      r.humanOps = rows.length === 2 && rows[1] === tr('ai.op.add', { type:NodeDef.typeName('expression'), name:'脸红' });
+      r.highlight = !!document.querySelector('.node.ai-touch[data-id="' + first.id + '"]');
+      r.warning = document.querySelector('#ai-result .ai-warn').textContent.indexOf('live2d-id-not-in-model') >= 0;
+      /* 本地快照防过期：画布变化后确认 → 不调 apply-ops */
       var nCalls = calls.length, tmp = Graph.addNode('delay', { x:0, y:0 }); UI.refreshAll();
       return AiEdit.confirm().then(function () {
-        r.stale = calls.length === nCalls && document.getElementById('ai-status').textContent === tr('ai.stale');
+        r.staleLocal = calls.length === nCalls && status().indexOf(tr('ai.stale')) === 0;
         Graph.removeNodes([tmp.id]); UI.refreshAll();
-        mode = 'invalid';
-        return AiEdit.confirm();
+        mode = '409'; return AiEdit.confirm();
       });
     }).then(function () {
-      r.invalid = Serializer.exportText() === base && AiEdit.state === 'proposal' && document.getElementById('ai-status').textContent.indexOf('bad op') >= 0;
-      mode = 'ok';
-      return AiEdit.confirm();
+      r.stale409 = status().indexOf(tr('ai.stale')) === 0 && Serializer.exportText() === base;
+      mode = 'invalid'; return AiEdit.confirm();
+    }).then(function () {
+      var bad = $$('#ai-result .ai-ops li')[1];
+      r.invalid = Serializer.exportText() === base && AiEdit.state === 'proposal' && !!bad && bad.classList.contains('has-err') &&
+        bad.textContent.indexOf('unknown-live2d-id') >= 0 && bad.textContent.indexOf(tr('ai.reason.unknown-live2d-id')) >= 0;
+      mode = 'ok'; return AiEdit.confirm();
     }).then(function () {
       var c = calls[calls.length - 1];
-      r.applyReq = c.url === AiEditAdapter.APPLY_URL && c.body.baseHash === 'h1' && Array.isArray(c.body.ops);
-      r.applied = AiEdit.state === 'applied' && Binding.name === mod.name;
+      r.applyReq = c.url === AiEditAdapter.APPLY_URL && c.body.baseHash === 'h1' && c.body.ops.length === 2 && Array.isArray(c.body.graph.nodes);
+      r.applied = AiEdit.state === 'applied' && Graph.byId(first.id).label === first.label + ' · ai' && !document.querySelector('.node.ai-touch');
       AiEdit.undo();
       r.undo = Serializer.exportText() === base;
-      var ok = r.notReady && r.request && r.proposal && r.stale && r.invalid && r.applyReq && r.applied && r.undo;
-      r.ok = !!ok;
+      var ok = true; Object.keys(r).forEach(function (k) { ok = ok && r[k] === true; });
+      r.ok = ok;
       return done(r);
     }).catch(function (e) { return done({ ok:false, error:String(e) }); });
   };

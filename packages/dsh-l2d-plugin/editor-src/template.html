@@ -279,7 +279,12 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
 .ai-result { margin-top:8px; max-width:880px; }
 .ai-expl { color:var(--ink); font-size:12px; }
 .ai-ops { margin:6px 0 0; padding-left:20px; font:400 11px/1.6 var(--mono); color:var(--ink2); }
-.ai-ops code { color:var(--ink); }
+.ai-ops code, .ai-status code, .ai-err code, .ai-warn code { color:var(--ink3); font:400 11px var(--mono); }
+.ai-ops .desc { color:var(--ink); font-family:var(--font); font-size:12px; }
+.ai-ops li.has-err .desc { color:var(--danger); }
+.ai-err { color:var(--danger); font-family:var(--font); font-size:12px; }
+.ai-err::before { content:"✕ "; font-family:var(--mono); }
+.ai-empty { margin:6px 0 0; color:var(--ink2); font-size:12px; max-width:720px; }
 .ai-warn { margin:6px 0 0; padding-left:18px; color:var(--warn); font-size:12px; }
 .ai-actions { display:flex; gap:8px; margin-top:8px; }
 #grid-layer { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
@@ -360,6 +365,9 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
 .node-foot .st { margin-left:auto; white-space:nowrap; }
 .node-foot .st.st-running { color:var(--warn); } .node-foot .st.st-done { color:var(--ok); } .node-foot .st.st-blocked { color:var(--danger); }
 .node.selected { border-color:var(--accent); outline-color:var(--accent); }
+/* AI 编辑预览：会被改动的节点（虚线强调色外框 + 角标文字，不只靠颜色） */
+.node.ai-touch { outline:2px dashed var(--accent); }
+.node.ai-touch .node-head::after { content:"AI"; flex:none; font:500 11px/1 var(--mono); color:var(--accent); border:0.5px solid var(--accent); border-radius:4px; padding:2px 4px; }
 .node.executing { border-color:var(--nc); outline:2px dashed var(--nc); }
 /* 禁用节点：NEVER 语义 —— 虚线边框 + 「已禁用」文字徽标 + 降透明度（不只靠颜色） */
 .node.disabled { opacity:.55; border-style:dashed; }
@@ -2081,7 +2089,8 @@ var UI = {
       var gc = NodeDef.groupColor(n.type), pc = NodeDef.portColor(n.props.portType);
       var running = Runtime.activeNode === n.id;
       var cls = 'node' + (Graph.selection.has(n.id) ? ' selected' : '') +
-        (n.disabled ? ' disabled' : '') + (running ? ' executing' : '');
+        (n.disabled ? ' disabled' : '') + (running ? ' executing' : '')+
+        (AiEdit.touched && AiEdit.touched.has(n.id) ? ' ai-touch' : '');
       /* 状态徽标：文字 + 符号，不只靠颜色（禁用 / 执行中 / 编译类型 / 设计层辅助） */
       var flag = n.disabled ? '<span class="node-flag st-off">⊘ ' + esc(tr('node.off')) + '</span>'
         : running ? '<span class="node-flag st-run">▸ ' + esc(tr('node.run')) + '</span>'
@@ -3447,53 +3456,75 @@ function runSelfTest() {
         langAttr:langOk, missing:missingKeys, fallback:fallback, reason:reasonOk };
     } catch (e) { return { ok:false, error:String(e) }; }
   })();
-  /* 第十四组：AI 编辑适配层（mock fetch，不发真实请求）——未就绪 / 生成→确认（apply-ops 返回的 graph 替换画布）/
-     baseHash 透传 / 防过期 / valid=false 不改画布 / 撤销恢复快照 */
+  /* 第十四组：AI 编辑适配层（mock fetch，不发真实请求；契约 AI-EDIT-API v1）——404 接口未就绪 / 503 未配置 / 502 失败可重试 /
+     请求为设计层 graph + 语言映射 / op 人话预览 + 画布高亮 / 本地快照防过期 / 409 stale-graph / valid=false 按 opIndex 落到预览行 /
+     确认用 apply-ops 返回的 graph 替换画布 + baseHash 透传 / warnings 只提示 / 撤销恢复快照 */
   var aiTest = function () {
     var realFetch = AiEditAdapter.fetch, calls = [], r = {};
     var input = document.getElementById('ai-input'), prevIn = input.value;
     var base = Serializer.exportText();
-    var mod = JSON.parse(base); mod.name = String(mod.name) + ' · ai';
-    if (mod.meta && mod.meta.editor && typeof mod.meta.editor.name === 'string') mod.meta.editor.name = mod.name;
+    var ed0 = JSON.parse(base).meta.editor;
+    var first = ed0.nodes[0];
+    var newGraph = { nodes:ed0.nodes.map(function (n) { var c = JSON.parse(JSON.stringify(n)); if (c.id === first.id) c.label = c.label + ' · ai'; return c; }), edges:ed0.edges, viewport:ed0.viewport };
+    var ops = [{ op:'set_param', id:first.id, key:'label', value:first.label + ' · ai' }, { op:'add_node', type:'expression', id:'ai_1', props:{ name:'脸红' } }];
     var reply = function (status, data) { return Promise.resolve({ ok:status < 400, status:status, json:function () { return Promise.resolve(data); } }); };
-    var mode = 'down';
+    var mode = '404';
     AiEditAdapter.fetch = function (url, opts) {
       calls.push({ url:url, body:JSON.parse(opts.body) });
-      if (mode === 'down') return Promise.reject(new Error('offline'));
-      if (url === AiEditAdapter.EDIT_URL) return reply(200, { ops:[{ op:'set_name', name:'x' }], explanation:'rename', warnings:[], baseHash:'h1' });
-      if (mode === 'invalid') return reply(200, { graph:null, valid:false, errors:['bad op'] });
-      return reply(200, { graph:mod, valid:true, errors:[] });
+      if (mode === 'net') return Promise.reject(new Error('offline'));
+      if (mode === '404') return reply(404, {});
+      if (url === AiEditAdapter.EDIT_URL) {
+        if (mode === '503') return reply(503, { ok:false, reason:'ai-unavailable' });
+        if (mode === '502') return reply(502, { ok:false, reason:'ai-failed' });
+        return reply(200, { ok:true, ops:ops, explanation:'rename', warnings:[{ reason:'live2d-id-not-in-model', id:'ParamMouthOpen' }], baseHash:'h1', valid:true, previewHash:'h2' });
+      }
+      if (mode === '409') return reply(409, { ok:false, reason:'stale-graph' });
+      if (mode === 'invalid') return reply(200, { ok:true, graph:null, valid:false, errors:[{ opIndex:1, op:ops[1], reason:'unknown-live2d-id', message:'x' }] });
+      return reply(200, { ok:true, graph:newGraph, valid:true, applied:2, errors:[], warnings:[], hash:'h3' });
     };
-    var done = function (x) { AiEditAdapter.fetch = realFetch; input.value = prevIn; AiEdit.proposal = null; AiEdit.undoSnapshot = null; AiEdit.set('idle', ''); return x; };
+    var status = function () { return document.getElementById('ai-status').textContent; };
+    var done = function (x) { AiEditAdapter.fetch = realFetch; input.value = prevIn; AiEdit.proposal = null; AiEdit.undoSnapshot = null; AiEdit.highlight(null); AiEdit.set('idle'); return x; };
     input.value = 'rename';
     return AiEdit.generate().then(function () {
-      r.notReady = AiEdit.state === 'error' && document.getElementById('ai-status').textContent === tr('ai.notReady') && Serializer.exportText() === base;
-      mode = 'ok';
-      return AiEdit.generate();
+      r.notReady = AiEdit.state === 'notready' && status().indexOf(tr('ai.notReady')) === 0 && Serializer.exportText() === base;
+      mode = '503'; return AiEdit.generate();
+    }).then(function () {
+      r.unavailable = AiEdit.state === 'unavailable' && status().indexOf('ai-unavailable') > 0 && !!document.querySelector('#ai-result .ai-empty');
+      mode = '502'; return AiEdit.generate();
+    }).then(function () {
+      r.failedRetry = AiEdit.state === 'failed' && !!document.querySelector('#ai-result [data-ai="retry"]');
+      mode = 'ok'; return AiEdit.generate();
     }).then(function () {
       var c = calls[calls.length - 1];
-      r.request = c.url === AiEditAdapter.EDIT_URL && c.body.instruction === 'rename' && c.body.lang === I18n.lang && JSON.stringify(c.body.graph) === JSON.stringify(JSON.parse(base));
-      r.proposal = AiEdit.state === 'proposal' && !!document.querySelector('#ai-result [data-ai="apply"]');
-      /* 防过期：画布变化后确认 → 不应用、不调 apply-ops */
+      r.request = c.url === AiEditAdapter.EDIT_URL && c.body.instruction === 'rename' && c.body.lang === I18n.lang &&
+        Array.isArray(c.body.graph.nodes) && Array.isArray(c.body.graph.edges) && !c.body.graph.segments && c.body.graph.nodes.length === ed0.nodes.length;
+      var rows = $$('#ai-result .ai-ops li .desc').map(function (e) { return e.textContent; });
+      r.humanOps = rows.length === 2 && rows[1] === tr('ai.op.add', { type:NodeDef.typeName('expression'), name:'脸红' });
+      r.highlight = !!document.querySelector('.node.ai-touch[data-id="' + first.id + '"]');
+      r.warning = document.querySelector('#ai-result .ai-warn').textContent.indexOf('live2d-id-not-in-model') >= 0;
+      /* 本地快照防过期：画布变化后确认 → 不调 apply-ops */
       var nCalls = calls.length, tmp = Graph.addNode('delay', { x:0, y:0 }); UI.refreshAll();
       return AiEdit.confirm().then(function () {
-        r.stale = calls.length === nCalls && document.getElementById('ai-status').textContent === tr('ai.stale');
+        r.staleLocal = calls.length === nCalls && status().indexOf(tr('ai.stale')) === 0;
         Graph.removeNodes([tmp.id]); UI.refreshAll();
-        mode = 'invalid';
-        return AiEdit.confirm();
+        mode = '409'; return AiEdit.confirm();
       });
     }).then(function () {
-      r.invalid = Serializer.exportText() === base && AiEdit.state === 'proposal' && document.getElementById('ai-status').textContent.indexOf('bad op') >= 0;
-      mode = 'ok';
-      return AiEdit.confirm();
+      r.stale409 = status().indexOf(tr('ai.stale')) === 0 && Serializer.exportText() === base;
+      mode = 'invalid'; return AiEdit.confirm();
+    }).then(function () {
+      var bad = $$('#ai-result .ai-ops li')[1];
+      r.invalid = Serializer.exportText() === base && AiEdit.state === 'proposal' && !!bad && bad.classList.contains('has-err') &&
+        bad.textContent.indexOf('unknown-live2d-id') >= 0 && bad.textContent.indexOf(tr('ai.reason.unknown-live2d-id')) >= 0;
+      mode = 'ok'; return AiEdit.confirm();
     }).then(function () {
       var c = calls[calls.length - 1];
-      r.applyReq = c.url === AiEditAdapter.APPLY_URL && c.body.baseHash === 'h1' && Array.isArray(c.body.ops);
-      r.applied = AiEdit.state === 'applied' && Binding.name === mod.name;
+      r.applyReq = c.url === AiEditAdapter.APPLY_URL && c.body.baseHash === 'h1' && c.body.ops.length === 2 && Array.isArray(c.body.graph.nodes);
+      r.applied = AiEdit.state === 'applied' && Graph.byId(first.id).label === first.label + ' · ai' && !document.querySelector('.node.ai-touch');
       AiEdit.undo();
       r.undo = Serializer.exportText() === base;
-      var ok = r.notReady && r.request && r.proposal && r.stale && r.invalid && r.applyReq && r.applied && r.undo;
-      r.ok = !!ok;
+      var ok = true; Object.keys(r).forEach(function (k) { ok = ok && r[k] === true; });
+      r.ok = ok;
       return done(r);
     }).catch(function (e) { return done({ ok:false, error:String(e) }); });
   };
