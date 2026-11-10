@@ -50,8 +50,12 @@ _test-models/
 docs/nodegraph/models/
 
 # （cherry-pick 9abccd0 合并：放行须在上面的 docs/nodegraph/models/ 之后才生效）
-# 文档中每模型分区/目录 JSON 可入库（不是授权模型资源；modelId 以 .2048 结尾，会撞到上面的 **/*.2048/）
-# 只放行 docs/nodegraph/models/**/*.json，其它模型资源仍忽略。
+# 每模型目录下只放行明确的几份文档数据（modelId 以 .2048 结尾，会撞到上面的 **/*.2048/，所以目录也要放行）；
+# live2d-ids.json 与其它任何模型文件仍忽略。
 !docs/nodegraph/models/
-!docs/nodegraph/models/**/
-!docs/nodegraph/models/**/*.json
+!docs/nodegraph/models/*/
+docs/nodegraph/models/*/*
+!docs/nodegraph/models/*/body-regions.json
+!docs/nodegraph/models/*/face-vocab.json
+!docs/nodegraph/models/*/face-units.json
+!docs/nodegraph/models/*/motion-cutpoints.json

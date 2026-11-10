@@ -18,6 +18,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createAiInbox } from '../../packages/dsh-l2d-plugin/lib/ai-inbox.mjs';
+import { queryValidatedActions as queryActionsShared } from '../../packages/dsh-l2d-plugin/lib/actions-api.mjs';
 import {
   readMotionMode,
   writeMotionMode,
@@ -87,30 +88,11 @@ function argOf(flag) {
  * 供 overlay 用真实动作库替代「只读 model3.json Motion 组」的随机池。
  * 动态 import node:sqlite：宿主 Node <22.5 或 sqlite 不可用时降级空集，不影响服务器启动。
  */
-const ACTIONS_DB_FILE = path.join(ROOT, 'data', 'bootstrap-state.sqlite');
+const ACTIONS_DB_FILE = process.env.DSH_L2D_ACTIONS_DB || path.join(ROOT, 'data', 'bootstrap-state.sqlite');
 const ACTIONS_MODEL_ID = process.env.DSH_L2D_ACTIONS_MODEL_ID || '大肥鱼.dsl2d';
+// 动作库查询与宿主插件 /dsh-l2d/api/actions 共用 lib/actions-api.mjs（同一库、同一过滤口径）
 async function queryValidatedActions() {
-  try {
-    const { DatabaseSync } = await import('node:sqlite');
-    const db = new DatabaseSync(ACTIONS_DB_FILE, { readOnly: true });
-    try {
-      return db
-        .prepare(
-          `SELECT c.id AS chainId, d.id AS motionId, d.semantic_key AS semanticKey,
-                  d.emotion AS emotion, c.chain_json AS chainJson, b.adapter_json AS adapterJson
-           FROM action_chains c
-           JOIN motion_definitions d ON d.id = c.motion_id
-           JOIN motion_model_bindings b ON b.motion_id = d.id
-           WHERE d.status = 'validated' AND b.compatible = 1 AND b.model_id = ?
-           ORDER BY d.semantic_key`
-        )
-        .all(ACTIONS_MODEL_ID);
-    } finally {
-      db.close();
-    }
-  } catch {
-    return []; // 库缺失/损坏/无 sqlite → 空集（预期：当前 2 条 validated；tail-sway-happy 为 draft 会被过滤）
-  }
+  return queryActionsShared({ dbFile: ACTIONS_DB_FILE, modelId: ACTIONS_MODEL_ID });
 }
 
 function send(res, status, type, buf, cors = true) {

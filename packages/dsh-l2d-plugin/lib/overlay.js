@@ -2767,7 +2767,7 @@
   }
 
   // ------------------------------------------------ 动作池读库接线（UI-FLOAT ⑤）
-  // 启动时经 GET /api/actions 拉取动作链（validated+compatible 由服务端过滤），
+  // 启动时经 GET /dsh-l2d/api/actions 拉取动作链（validated+compatible 由服务端过滤），
   // 失败静默降级（现有随机池照常）。链展开与参数白名单防线保持在此（写路径上游），
   // executePokeAction 的状态机语义不动。
   var dbActionRaw = [];     // /api/actions 原始行
@@ -2880,7 +2880,8 @@
   }
 
   function loadDbActions() {
-    fetch('/api/actions', { cache: 'no-store' })
+    // 插件前缀：dsh web 下由宿主 /dsh-l2d/api/actions 提供；dev-server 剥掉 /dsh-l2d 前缀后落到同一个 /api/actions
+    fetch('/dsh-l2d/api/actions', { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
         if (!data || data.ok !== true || !Array.isArray(data.actions)) return;

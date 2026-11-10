@@ -22,6 +22,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAiInbox } from './ai-inbox.mjs';
+import { handleActionsRequest } from './actions-api.mjs';
 import { createWorkspaceAgentBridge } from './workspace-agent.mjs';
 import { createReverseLog } from './reverse-log.mjs';
 import { normalizePresencePayload, readEnvState, writeEnvState } from './env-state.mjs';
@@ -1569,6 +1570,21 @@ export function apply(root, config = {}) {
       } catch (err) {
         diag('bridge face describe 异常: ' + String((err && err.message) || err));
         nodegraphApiSend(res, { status: 500, payload: { ok: false, reason: 'internal-error' } });
+      }
+    });
+
+    // ------------------------------------------------------ 动作库只读 API
+    // overlay 启动时拉 validated 动作链。与 dev-server 的 /api/actions 同一实现（lib/actions-api.mjs）：
+    // 同一个库 <仓库根>/data/bootstrap-state.sqlite、同一过滤口径；库缺失时返回空集。
+    route('/dsh-l2d/api/actions', async (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      try {
+        const out = await handleActionsRequest(req.method);
+        if (out.status !== 200) return sendBuffer(res, out.status, 'text/plain; charset=utf-8', Buffer.from(out.text || ''));
+        sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(out.payload), 'utf8'));
+      } catch (err) {
+        diag('api/actions 异常: ' + String((err && err.message) || err));
+        sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, actions: [] }), 'utf8'));
       }
     });
 
