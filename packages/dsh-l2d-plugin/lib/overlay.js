@@ -5337,7 +5337,12 @@
       var share = L && typeof L.motionsShareArm === 'function'
         ? function (a, b) { return !!L.motionsShareArm(a, b); }
         : undefined;
-      bodyBridge.core = mod.createBridge(data.table, { shareArm: share });
+      bodyBridge.core = mod.createBridge(data.table, {
+        shareArm: share,
+        faceUnits: data.faceUnits || null,
+        motionCuts: data.motionCuts || null,
+        autoCuts: data.autoCuts || null,
+      });
       bodyBridge.error = '';
       if (L && L.onActionCompletion) L.onActionCompletion(onBodyBridgeCompletion);
       return bodyBridge.core;
@@ -5388,16 +5393,19 @@
       (function (res, wt) {
         // 出队可能发生在渲染钩子里：执行放到下一个宏任务，不在帧内播动作
         setTimeout(function () {
+          if (wt && wt.onAdmit) { wt.resolve(wt.onAdmit(res)); return; }
           runBodyBridgePlan(res);
           if (wt) wt.resolve(bodyBridgePublic(res));
         }, 0);
       })(adm[j], waiter);
     }
-    var exp = out.expired || [];
+    // 超时出队 + 被同模块更新指令顶掉（superseded）：都给等待方一个失败回执
+    var exp = (out.expired || []).concat(out.superseded || []);
     for (var x = 0; x < exp.length; x++) {
       var wx = bodyBridge.waiters[exp[x].ticket];
       delete bodyBridge.waiters[exp[x].ticket];
-      if (wx) wx.resolve(bodyBridgePublic(exp[x]));
+      var fail = exp[x].ok === false ? exp[x] : { ok: false, reason: exp[x].reason || 'superseded', ticket: exp[x].ticket, by: exp[x].by };
+      if (wx) wx.resolve(wx.onFail ? wx.onFail(fail) : bodyBridgePublic(fail));
     }
     ensureBodyBridgePump();
   }
@@ -5468,7 +5476,7 @@
         info.form = fr;
         finishBodyBridge(id, 'form', fr && fr.ok ? 'end' : 'failed', fr && fr.ok ? undefined : { reason: (fr && fr.reason) || 'form-unavailable' });
       }
-      // kind === 'set'：交给 bodyBridgeFrame（preLateUpdateHook）
+      // kind === 'set' / 'mood' / 'accessory'：写入全部交给 bodyBridgeFrame（preLateUpdateHook）
     }
     return info;
   }
@@ -5491,7 +5499,31 @@
         return { status: 'failed', reason: 'motion-unavailable', group: step.motion };
       }
       var execId = 'bridge:' + id;
-      return L.playMotionAsync(step.motion, { index: step.index || 0, awaitFinish: false, executionId: execId }).then(function (r) {
+      // 手势路径（motion-cutpoints.json handStates）：中间段按 offsetMs 依次打断接上；
+      // executionId / 看门狗只挂在最后一段（它才是这条指令的动作）
+      var chain = step.chain && step.chain.length ? step.chain : [{ motion: step.motion, offsetMs: 0 }];
+      var lastOffset = chain[chain.length - 1].offsetMs || 0;
+      for (var ci = 0; ci < chain.length - 1; ci++) {
+        (function (seg, first) {
+          var go = function () {
+            if (!bodyBridgeHolds(id, region)) return;
+            L.playMotionAsync(seg.motion, { awaitFinish: false, interrupt: first ? !!step.interrupt : true });
+          };
+          if (seg.offsetMs > 0) setTimeout(go, seg.offsetMs); else go();
+        })(chain[ci], ci === 0);
+      }
+      var playLast = function () {
+        if (!bodyBridgeHolds(id, region)) return Promise.resolve({ status: 'skipped', reason: 'preempted', group: step.motion });
+        return L.playMotionAsync(step.motion, {
+          index: step.index || 0,
+          awaitFinish: false,
+          executionId: execId,
+          interrupt: chain.length > 1 ? true : !!step.interrupt,
+        });
+      };
+      var lastP = lastOffset > 0 ? new Promise(function (res2) { setTimeout(function () { res2(playLast()); }, lastOffset); }) : playLast();
+      return lastP.then(function (r) {
+        if (r && r.status === 'skipped' && r.reason === 'preempted') return r;
         var st = r && r.status;
         if (st === 'ok') {
           // 等渲染端自然完成事件；事件链路缺失时看门狗兜底结算（不冒充自然完成：带 note）
@@ -5536,6 +5568,14 @@
       if (L.setParametersRuntime) L.setParametersRuntime(writes);
       else if (L.setParameters) L.setParameters(writes);
     }
+    // 神态预设退出完毕：以 weight 0 写一次，中和渲染端粘滞值（set 语义 current+(v-current)*0 = 不改），
+    // 让动作曲线与自动眨眼重新接管；渲染端没有按 id 清粘滞的导出，这是不改 renderer 的做法
+    var neutral = out.neutral || [];
+    if (neutral.length && L && L.setParametersRuntime) {
+      var zero = {};
+      for (var n = 0; n < neutral.length; n++) zero[neutral[n]] = 0;
+      L.setParametersRuntime(zero, 0);
+    }
     if ((out.events && out.events.length) || (out.admitted && out.admitted.length) || (out.expired && out.expired.length)) {
       drainBodyBridge(out);
     }
@@ -5547,6 +5587,7 @@
       if (!core) return { ok: false, reason: 'bridge-unavailable', detail: bodyBridge.error };
       var res = core.act(command, bodyBridgeCtx());
       if (!res.ok) return bodyBridgePublic(res);
+      if (res.superseded && res.superseded.length) drainBodyBridge({ superseded: res.superseded });
       if (res.queued) {
         return new Promise(function (resolve) {
           bodyBridge.waiters[res.ticket] = { resolve: resolve, callId: callId };
@@ -5576,7 +5617,8 @@
   function legacyExpressionViaBridge(name, direct) {
     return loadBodyBridge().then(function (core) {
       if (!core || !core.compiled.expressions.has(name)) return direct();
-      var res = core.act({ source: 'llm', priority: 'NORMAL', steps: [{ layer: 'expression', expression: name, on: true }] }, bodyBridgeCtx());
+      // 旧表情接口保持「占用即拒」：回执是同步的 {ok, error}，没有排队语义
+      var res = core.act({ source: 'llm', priority: 'NORMAL', onBusy: 'reject', steps: [{ layer: 'expression', expression: name, on: true }] }, bodyBridgeCtx());
       if (!res.ok) return { ok: false, error: res.reason + ': ' + name, reason: res.reason, busy: res.busy };
       drainBodyBridge({ events: res.events });
       var info = runBodyBridgePlan(res);
@@ -5593,17 +5635,29 @@
     return loadBodyBridge().then(function (core) {
       var region = core ? core.compiled.motionRegion.get(group) : '';
       if (!core || !region) return direct();
-      var res = core.act({ source: 'llm', priority: 'NORMAL', steps: [{ region: region, motion: group, index: index }] }, bodyBridgeCtx());
-      if (!res.ok) return { ok: false, reason: res.reason, status: 'conflict', group: group, busy: res.busy };
-      drainBodyBridge({ events: res.events });
-      var done = awaitFinish ? waitBodyBridgeDone(res.commandId, region) : null;
-      var info = runBodyBridgePlan(res);
-      return Promise.resolve(info.motionStart).then(function (r) {
-        r = r || { status: 'failed', reason: 'motion-unavailable' };
-        if (r.status !== 'ok') return { ok: false, reason: r.reason || r.status, status: r.status, group: r.group || group };
-        var okRes = { ok: true, status: r.status, group: r.group, slot: r.slot, dir: r.dir };
-        return done ? done.then(function () { return okRes; }) : okRes;
-      });
+      // 旧接口也走 blend（默认 cut:next）：手部忙时等衔接点，回执形状不变
+      var res = core.act({ source: 'llm', priority: 'NORMAL', onBusy: 'blend', steps: [{ region: region, motion: group, index: index }] }, bodyBridgeCtx());
+      var failShape = function (x) { return { ok: false, reason: x.reason, status: 'conflict', group: group, busy: x.busy }; };
+      if (!res.ok) return failShape(res);
+      if (res.superseded && res.superseded.length) drainBodyBridge({ superseded: res.superseded });
+      var start = function (adm) {
+        drainBodyBridge({ events: adm.events });
+        var done = awaitFinish ? waitBodyBridgeDone(adm.commandId, region) : null;
+        var info = runBodyBridgePlan(adm);
+        return Promise.resolve(info.motionStart).then(function (r) {
+          r = r || { status: 'failed', reason: 'motion-unavailable' };
+          if (r.status !== 'ok') return { ok: false, reason: r.reason || r.status, status: r.status, group: r.group || group };
+          var okRes = { ok: true, status: r.status, group: r.group, slot: r.slot, dir: r.dir };
+          return done ? done.then(function () { return okRes; }) : okRes;
+        });
+      };
+      if (res.queued) {
+        return new Promise(function (resolve) {
+          bodyBridge.waiters[res.ticket] = { resolve: resolve, callId: null, onAdmit: start, onFail: failShape };
+          ensureBodyBridgePump();
+        });
+      }
+      return start(res);
     });
   }
 
@@ -5727,10 +5781,16 @@
           case 'l2d_regions_get': {
             return loadBodyBridge().then(function (core) {
               if (!core) return { ok: false, reason: 'bridge-unavailable', detail: bodyBridge.error };
-              var snap = core.snapshot({ now: bodyBridgeNow() });
+              var snap = core.snapshot(bodyBridgeCtx());
               snap.ok = true;
               snap.slots = L.getMotionSlots ? L.getMotionSlots() : null;
               return snap;
+            });
+          }
+          case 'l2d_face_describe': {
+            return loadBodyBridge().then(function (core) {
+              if (!core) return { ok: false, reason: 'bridge-unavailable', detail: bodyBridge.error };
+              return core.describeFace(bodyBridgeCtx());
             });
           }
           case 'l2d_regions_release': {

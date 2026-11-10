@@ -14,7 +14,7 @@
  * 运行：node packages/dsh-l2d-plugin/lib/overlay-body-bridge.test.mjs
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import * as bridgeModule from './body-bridge.mjs';
@@ -53,9 +53,13 @@ for (const marker of ["case 'l2d_regions_act'", "case 'l2d_regions_get'", "case 
   assert.ok(src.includes(marker), 'overlay.js 缺少：' + marker);
 }
 
+// 神态部件表：与宿主同一个挑选规则（先 face-units.json，再 face-vocab.json）
+const MODEL_DIR = resolve(HERE, '../../../docs/nodegraph/models/大肥鱼.dsl2d.2048');
+const faceUnits = JSON.parse(readFileSync(join(MODEL_DIR, bridgeModule.pickFaceUnitsFile((n) => existsSync(join(MODEL_DIR, n)))), 'utf8'));
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function makeSandbox() {
+function makeSandbox(extra = {}) {
   const log = { writes: [], posted: [], played: [], expressions: [], cleared: 0, outsideHookWrites: 0, forms: [] };
   let inPreLate = false;
   let now = 0;
@@ -65,9 +69,9 @@ function makeSandbox() {
   const L = {
     isReady: () => true,
     setPreUpdate(fn) { preUpdate = fn; },
-    setParametersRuntime(values) {
+    setParametersRuntime(values, weight = 1) {
       if (!inPreLate) log.outsideHookWrites++;
-      log.writes.push({ t: now, values: { ...values } });
+      log.writes.push({ t: now, values: { ...values }, weight });
       return { ok: Object.keys(values), failed: [] };
     },
     readParameters(ids) { const o = {}; for (const id of ids) o[id] = 0; return o; },
@@ -91,7 +95,7 @@ function makeSandbox() {
     DSH_L2D: L,
     DSH_L2D_AI: { exec(name, args) { log.forms.push(args.index); return { ok: true, form: { index: args.index } }; } },
   };
-  const fetchStub = (url) => Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, table }) });
+  const fetchStub = (url) => Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, table, faceUnits, ...extra }) });
   const factory = new Function(
     'window', 'log', 'fetch', 'performance', 'bridgeModule', 'physicsTickSpy', 'setTimeout', 'setInterval',
     `
@@ -199,14 +203,26 @@ function makeSandbox() {
   const r1 = await sb.api.legacyMotion('竖手指打开', 0, false, () => ({ ok: false, reason: 'direct' }));
   assert.deepEqual(r1, { ok: true, status: 'ok', group: '竖手指打开', slot: '竖手指', dir: 'open' });
   assert.equal(sb.log.played[0].opts.executionId.indexOf('bridge:'), 0);
-  // 手部还被占着（动作没播完）：第二个同级手部动作 region-busy，回执仍是旧形状
-  const r2 = await sb.api.legacyMotion('抚胸手打开', 0, false, () => ({ ok: false }));
-  assert.equal(r2.ok, false);
-  assert.equal(r2.reason, 'region-busy');
-  assert.equal(r2.group, '抚胸手打开');
-  assert.equal(r2.busy[0].region, 'hands');
-  // 渲染端自然完成 → hands end，带 commandId / region
+  // 手部还被占着（动作没播完）：旧接口也走 blend，第二个同级手部动作排队等衔接点，回执仍是旧形状
+  const p2 = sb.api.legacyMotion('抚胸手打开', 0, false, () => ({ ok: false }));
+  await sleep(5);
+  assert.equal(sb.log.played.length, 1, '还没到衔接点，不播');
+  // 渲染端自然完成 → hands end，带 commandId / region；排队的抚胸手出队开播
   sb.complete(sb.log.played[0].opts.executionId, 'end');
+  await sleep(5); // 出队执行放在下一个宏任务（测试里的定时器是 unref 的）
+  const r2 = await p2;
+  assert.deepEqual(r2, { ok: true, status: 'ok', group: '抚胸手打开', slot: '抚胸手', dir: 'open' });
+  sb.complete(sb.log.played[1].opts.executionId, 'end');
+  // 显式 onBusy:'reject' 仍是占用即拒
+  await sb.api.act({ priority: 'HIGH', steps: [{ region: 'hands', motion: '竖手指关闭' }] });
+  await sleep(2);
+  const busy = await sb.api.act({ onBusy: 'reject', steps: [{ region: 'hands', motion: '竖手指打开' }] });
+  await sleep(2);
+  assert.equal(busy.reason, 'region-busy');
+  sb.complete(sb.log.played[sb.log.played.length - 1].opts.executionId, 'end');
+  await sb.api.act({ steps: [{ region: 'hands', motion: '竖手指打开' }] });
+  await sleep(2);
+  sb.complete(sb.log.played[sb.log.played.length - 1].opts.executionId, 'end');
   const ev = sb.log.posted.find((e) => e.region === 'hands');
   assert.equal(ev, undefined, '旧接口没有 callId 时不回写 /ai/result');
   // 狗尾巴草打开：竖手指（共用右臂）开着 → 先播竖手指关闭，再开狗尾巴草；awaitFinish 等完成
@@ -222,8 +238,6 @@ function makeSandbox() {
   const r3 = await p;
   assert.deepEqual(r3, { ok: true, status: 'ok', group: '狗尾巴草打开', slot: '狗尾巴草', dir: 'open' });
   // 抚胸手（左臂）开着时打开竖手指不关它
-  await sb.api.legacyMotion('抚胸手打开', 0, false, () => ({}));
-  sb.complete(sb.log.played[sb.log.played.length - 1].opts.executionId, 'end');
   const before = sb.log.played.length;
   await sb.api.legacyMotion('竖手指打开', 0, false, () => ({}));
   const after = sb.log.played.slice(before).map((x) => x.group);
@@ -253,7 +267,7 @@ function makeSandbox() {
   sb.api.bindPhysics();
   await sleep(5);
   await sb.api.load();
-  await sb.api.act({ steps: [{ region: 'legs', set: { Clothes4: 1 }, durationMs: 100 }] }, 31);
+  await sb.api.act({ priority: 'HIGH', steps: [{ region: 'legs', set: { Clothes4: 1 }, durationMs: 100 }] }, 31);
   const queued = sb.api.act({ onBusy: 'wait', waitMs: 2000, steps: [{ region: 'legs', set: { Clothes4: 0 } }] }, 32);
   await sleep(1); // 让 act 先落账（loadBodyBridge 之后的微任务）再跑帧
   assert.equal(sb.api.state().core.snapshot({ now: sb.now }).queue.length, 1);
@@ -272,6 +286,75 @@ function makeSandbox() {
   assert.equal(t.ok, false);
   assert.equal(t.reason, 'region-busy');
   assert.equal(t.timeout, true);
+}
+
+// ---------------------------------------------------------------- 6) 饰品与神态：写入都在 preLateUpdateHook；退出后以 weight 0 中和
+{
+  const sb = makeSandbox();
+  sb.api.bindPhysics();
+  await sleep(5);
+  await sb.api.load();
+  const acc = await sb.api.act({ steps: [{ layer: 'accessory', item: 'monocle' }, { layer: 'accessory', item: 'black-glasses' }, { layer: 'accessory', item: 'flower-1' }] }, 41);
+  assert.equal(acc.ok, true, JSON.stringify(acc));
+  assert.equal(sb.log.expressions.length, 0, '饰品表情不调单槽 setExpression');
+  for (let i = 0; i < 25; i++) sb.frame(16);
+  const last = Object.assign({}, ...sb.log.writes.map((w) => w.values));
+  assert.equal(last.key12, 1);
+  assert.equal(last.key11, 1);
+  assert.equal(last.LittleFlower2, 1);
+  const mood = await sb.api.act({ steps: [{ region: 'face', compose: { dimensions: { 慵懒: 0.6, 挑逗: 0.7, 害羞: 0.2 } } }] }, 42);
+  assert.equal(mood.ok, true, JSON.stringify(mood));
+  assert.deepEqual(sb.log.expressions, ['脸红'], '害羞 ≥ expressionAt → 伴随表情走表情层');
+  assert.ok(mood.compose.written.length > 5 && mood.compose.blocked.some((b) => b.param === 'ParamMouthForm'));
+  sb.log.writes.length = 0;
+  for (let i = 0; i < 80; i++) sb.frame(16);
+  assert.ok(sb.log.writes.some((w) => 'EyeSmile' in w.values && 'AngleZ' in w.values));
+  const desc = sb.api.state().core.describeFace({ read: (ids) => Object.fromEntries(ids.map((id) => [id, 0])) });
+  assert.equal(desc.ok, true);
+  assert.ok(!sb.log.writes.some((w) => 'ParamMouthOpenY' in w.values || 'ParamMouthForm' in w.values));
+  sb.log.writes.length = 0;
+  const rel = sb.api.state().core.release({ commandId: mood.commandId }, { now: sb.now });
+  assert.equal(rel.ok, true);
+  for (let i = 0; i < 45; i++) sb.frame(16);
+  const neutral = sb.log.writes.find((w) => w.weight === 0);
+  assert.ok(neutral && 'ParamEyeLOpen' in neutral.values && 'EyeSmile' in neutral.values, '退出后 weight 0 中和粘滞值');
+  assert.ok(src.includes("case 'l2d_face_describe'"), 'overlay 应接 l2d_face_describe');
+  assert.equal(sb.log.outsideHookWrites, 0, '所有写入都在 preLateUpdateHook 里');
+}
+
+// ---------------------------------------------------------------- 7) 动作衔接：手势路径按 offset 依次接上、superseded 回执、旧接口被顶掉
+{
+  const motionCuts = JSON.parse(readFileSync(join(MODEL_DIR, 'motion-cutpoints.json'), 'utf8'));
+  const sb = makeSandbox({ motionCuts, autoCuts: {} });
+  sb.api.bindPhysics();
+  await sleep(5);
+  await sb.api.load();
+  sb.slots.抚胸手 = 'open';
+  const r = await sb.api.act({ steps: [{ region: 'hands', motion: '竖手指打开' }] }, 51);
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.deepEqual(r.gesture, { from: '抚胸', to: '竖手指' });
+  assert.equal(r.cut.mode, 'next');
+  assert.equal(r.plan, undefined, '公开回执不带执行计划');
+  await sleep(5);
+  assert.deepEqual(sb.log.played.map((x) => x.group), ['抚胸手关闭'], '先播关闭');
+  assert.equal(sb.log.played[0].opts.executionId, undefined, '中间段不挂 executionId');
+  await sleep(600);
+  assert.deepEqual(sb.log.played.map((x) => x.group), ['抚胸手关闭', '竖手指打开'], '关闭的 chainFrom(550ms) 后接打开');
+  assert.equal(sb.log.played[1].opts.interrupt, true);
+  assert.equal(sb.log.played[1].opts.executionId, 'bridge:' + r.commandId);
+  // 同模块排队只留最新：旧的等待方收到 superseded（旧接口形状）
+  // 渲染时钟走到 1000ms：竖手指打开已播 450ms，处在 abortBefore(370)..chainFrom(670) 之间 → NORMAL 排队
+  sb.advance(1000);
+  assert.equal(sb.api.state().core.snapshot({ now: 1000 }).regions.hands.nextCutInMs, 220);
+  const p1 = sb.api.legacyMotion('狗尾巴草打开', 0, false, () => ({}));
+  await sleep(2);
+  const p2 = sb.api.act({ steps: [{ region: 'hands', motion: '竖手指关闭' }] }, 52);
+  const old = await p1;
+  assert.deepEqual([old.ok, old.reason, old.status, old.group], [false, 'superseded', 'conflict', '狗尾巴草打开']);
+  sb.complete('bridge:' + r.commandId, 'end');
+  await sleep(5);
+  const n = await p2;
+  assert.equal(n.ok, true, JSON.stringify(n));
 }
 
 console.log('overlay-body-bridge ok');
