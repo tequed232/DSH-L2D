@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- 临时验证页（UI4-1）：模拟宿主侧边栏 + 注入 settings-entry.js，
+     验证菜单「节点编辑器」点击直达 motion-graph.html。验证后删除。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>host-sim · settings-entry 验证</title>
+<style>
+  html,body{margin:0;height:100%;display:flex;font-family:system-ui;}
+  .sidebar{width:220px;height:100%;background:#141821;color:#e9ecf3;padding:16px;box-sizing:border-box;}
+  .sidebar-footer{margin-top:auto;display:flex;flex-direction:column;}
+</style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div>宿主侧边栏模拟</div>
+    <div class="sidebar-footer"></div>
+  </aside>
+  <main style="flex:1;padding:20px;">
+    <p>1. 点左下角「设置」按钮 → 2. 点「节点编辑器」→ 应新窗口打开 /motion-graph.html</p>
+  </main>
+  <script src="/dsh-l2d/settings-entry.js"></script>
+</body>
+</html>

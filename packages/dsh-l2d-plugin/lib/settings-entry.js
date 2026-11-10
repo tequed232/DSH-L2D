@@ -63,10 +63,26 @@
   /* 新设置页分区直达：副标题说明每个分区管什么；返回路径 = 抽屉「完成」/ Esc / 新窗口打开 */
   /* URL 运行时探测：真机 /dsh-l2d/settings，DevServer /settings，file:// 独立页 /dsh-l2d/settings.html */
   var SETTINGS_URL_CANDS = ['/dsh-l2d/settings', '/settings', '/dsh-l2d/settings.html'];
+  /* 节点编辑器直达：菜单点「节点编辑器」直接开 motion-graph.html（新窗口），不再滚到设置页 05 卡片。
+     同样运行时 HEAD 探测（真机 /dsh-l2d/motion-graph.html，DevServer /motion-graph.html）；
+     探测失败（file:// 独立打开等）时兜底回落到设置抽屉 sec-nodegraph 分区。 */
+  var EDITOR_URL_CANDS = ['/dsh-l2d/motion-graph.html', '/motion-graph.html'];
+  var editorUrl = null;
+  function probeEditorUrl() {
+    var i = 0;
+    (function tryNext() {
+      if (i >= EDITOR_URL_CANDS.length || editorUrl) return;
+      var url = EDITOR_URL_CANDS[i++];
+      fetch(url, { method: 'HEAD' }).then(function (r) {
+        if (r.ok) editorUrl = url;
+        else tryNext();
+      }).catch(function () { tryNext(); });
+    })();
+  }
   /* 三页导航：「常规设置」直达第一分区 sec-display（页内含 显示/角色/情绪/动画 四分区滚动浏览） */
   var MENU_ITEMS = [
     { sec: 'display', label: '常规设置', sub: '显示布局 · 角色模型 · 情绪行为 · 动画性能' },
-    { sec: 'nodegraph', label: '节点编辑器', sub: '动作编排 · 模型形态 · 槽位导入导出' },
+    { sec: 'nodegraph', label: '节点编辑器', sub: '直达编辑器 · 动作编排与槽位导入导出' },
     { sec: 'monitor', label: '性能监控台', sub: '实时读数 · 能力重扫 · 参数监视台' }
   ];
 
@@ -139,6 +155,11 @@
         el.innerHTML = '<span class="dsh-se-label">' + inner + '</span>';
         el.addEventListener('click', function () {
           closeMenu();
+          if (item.sec === 'nodegraph' && editorUrl) {
+            // 直达节点编辑器（新窗口）。window.open 在用户手势同步上下文内调用，不会被弹窗拦截。
+            window.open(editorUrl, '_blank', 'noopener');
+            return;
+          }
           SettingsWindowManager.open(item.sec);
         });
       }
@@ -308,6 +329,9 @@
     }
     if (tries > 80) clearInterval(attemptTimer);
   }, 500);
+
+  // 节点编辑器 URL 预热探测：挂载即开始，菜单点击时已有缓存，避免首次点击被弹窗拦截器盯上
+  probeEditorUrl();
 
   // 外点关闭二级菜单
   document.addEventListener('pointerdown', function (e) {

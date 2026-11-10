@@ -482,6 +482,13 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, MIME['.html'], Buffer.from(html, 'utf8'));
   }
 
+  // host-sim.html（UI4：宿主侧边栏模拟页，验证 settings-entry 菜单直达节点编辑器）
+  if (urlPath === '/host-sim.html') {
+    const buf = readIfExists(path.join(PUBLIC_DIR, 'host-sim.html'));
+    if (!buf) return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('host-sim.html missing'));
+    return send(res, 200, MIME['.html'], buf);
+  }
+
   // AI 指令：外部 Agent 通过这里驱动角色
   if (urlPath === '/ai/call') {
     if (req.method !== 'POST') {
@@ -783,6 +790,13 @@ const server = http.createServer(async (req, res) => {
   if (urlPath === '/overlay.js') {
     const buf = readIfExists(path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'lib', 'overlay.js'));
     if (!buf) return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('overlay.js missing'));
+    return send(res, 200, MIME['.js'], buf);
+  }
+
+  // settings-entry.js（UI4：便于在 host-sim 页里验证侧边栏菜单直达节点编辑器）
+  if (urlPath === '/settings-entry.js') {
+    const buf = readIfExists(path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'lib', 'settings-entry.js'));
+    if (!buf) return send(res, 404, 'text/plain; charset=utf-8', Buffer.from('settings-entry.js missing'));
     return send(res, 200, MIME['.js'], buf);
   }
 
