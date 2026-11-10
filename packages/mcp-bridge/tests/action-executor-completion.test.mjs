@@ -202,4 +202,52 @@ test('⑦ 构造校验：subscribeEvents 非函数必须抛错', () => {
   );
 });
 
+test('⑧ release executionId 归属不匹配 → 上下文保留给正确调用方（不误发证据）', async () => {
+  const fake = createFakeServer();
+  const executor = new HttpActionExecutor({ baseUrl: 'http://fake.local', fetchImpl: fake.fetchImpl, pollIntervalMs: 10 });
+  const pending = executor.execute(REQUEST([{ kind: 'keyframes', tracks: [{ param: 'ParamAngleZ', keys: [[0, 0], [400, 12]] }] }]));
+  setTimeout(() => {
+    const id = fake.lastId();
+    fake.postResult(id, { ok: true, accepted: true, runId: id });
+    fake.postEvent(id, {
+      type: 'action-done', phase: 'end', callId: id, runId: id, ts: Date.now(),
+      completionSource: 'runtime-event', ownedParams: [],
+    });
+  }, 20);
+  const r = await pending;
+  assert.equal(r.completionSource, 'runtime-event');
+
+  // 释放请求携带的不是本次执行的 executionId（超时/取消路径传错归属）：不得消费证据
+  const wrong = await executor.release({ executionId: 'other-execution' });
+  assert.deepEqual(wrong, { confirmed: false, via: 'no-completion-evidence' });
+
+  // 上下文必须保留：正确 executionId 的释放请求仍能拿到完成事件证据
+  const right = await executor.release({ executionId: r.executionId });
+  assert.deepEqual(right, { confirmed: true, via: 'completion-event+ownership-exit' });
+});
+
+test('⑨ 订阅路径 PR-A 三态：failed 事件 → execute 即时失败（不冒充 completed）', async () => {
+  const fake = createFakeServer();
+  let resultGets = 0;
+  const countingFetch = async (url, opts) => {
+    const u = new URL(url, 'http://fake.local');
+    if (u.pathname === '/ai/result' && (!opts || !opts.method || opts.method === 'GET')) resultGets++;
+    return fake.fetchImpl(url, opts);
+  };
+  const executor = new HttpActionExecutor({
+    baseUrl: 'http://fake.local', fetchImpl: countingFetch, pollIntervalMs: 10,
+    subscribeEvents: async (callId, onEvent) => {
+      onEvent({ type: 'action-done', phase: 'failed', reason: 'start-rejected' });
+      return {}; // 订阅通道不交付终态 phase，由事件本身判定
+    },
+  });
+  const r = await executor.execute(REQUEST([{ kind: 'motion', name: '点头' }]));
+  assert.equal(r.ok, false, 'failed 是失败终态，不得返回 ok:true');
+  assert.equal(r.phase, 'failed');
+  assert.equal(r.reason, 'start-rejected');
+  assert.equal(resultGets, 0, 'failed 已即时返回，不得落轮询');
+  const rel = await executor.release({ executionId: r.executionId });
+  assert.equal(rel.confirmed, false, '失败执行不得给 confirmed');
+});
+
 console.log('\nPR-D action-executor 完成事件/释放核对测试全部通过');
