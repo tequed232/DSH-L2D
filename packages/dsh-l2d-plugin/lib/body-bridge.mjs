@@ -831,6 +831,14 @@ export function createBridge(table, options = {}) {
       return { writes, events, ...pumped };
     },
 
+    /**
+     * 只推进等待队列（不算插值、不产生写入）：渲染暂停时 overlay 用定时器调它，
+     * 保证 waitMs 超时照样判定。插值只能在 frame()（preLateUpdateHook）里推进。
+     */
+    pump(ctx = {}) {
+      return pumpQueue(ctx);
+    },
+
     /** 是否还有需要每帧推进的东西（插值或排队）。 */
     busy() {
       return tweens.size > 0 || queue.length > 0;
