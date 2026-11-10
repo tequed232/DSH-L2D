@@ -82,6 +82,7 @@
   /* 三页导航：「常规设置」直达第一分区 sec-display（页内含 显示/角色/情绪/动画 四分区滚动浏览） */
   var MENU_ITEMS = [
     { sec: 'display', label: '常规设置', sub: '显示布局 · 角色模型 · 情绪行为 · 动画性能' },
+    { sec: 'preview', label: '动作预览', sub: '点按动作或表情，在角色上即时预览' },
     { sec: 'nodegraph', label: '节点编辑器', sub: '直达编辑器 · 动作编排与槽位导入导出' },
     { sec: 'monitor', label: '性能监控台', sub: '实时读数 · 能力重扫 · 参数监视台' }
   ];

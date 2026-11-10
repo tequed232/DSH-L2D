@@ -1291,6 +1291,88 @@
       .ng-tri-state .ng-tri-dot { flex: none; font-size: 10px; line-height: 1; }
       .ng-tri-state .ng-tri-item[data-state='ok'] { color: var(--studio-ok); }
       .ng-tri-state .ng-tri-item[data-state='bad'] { color: var(--studio-danger); }
+
+      /* ===== ACTION PREVIEW v1 ===== */
+      .preview-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--dsh-space-2);
+        flex-wrap: wrap;
+      }
+      .preview-head .sec-title {
+        display: flex;
+        align-items: baseline;
+        gap: var(--dsh-space-2);
+        min-width: 0;
+      }
+      .preview-langs {
+        display: inline-flex;
+        flex: none;
+        border: 0.5px solid var(--studio-line-strong, var(--dsh-line));
+        border-radius: var(--studio-radius-sm, 6px);
+        overflow: hidden;
+      }
+      .preview-langs button {
+        min-height: var(--studio-control-h-sm, 32px);
+        padding: 0 10px;
+        border: 0;
+        border-right: 0.5px solid var(--studio-line-strong, var(--dsh-line));
+        background: transparent;
+        color: var(--studio-ink-2, var(--dsh-ink-muted));
+        font: 400 12px/1.4 var(--studio-font-ui, system-ui);
+        cursor: pointer;
+      }
+      .preview-langs button:last-child { border-right: 0; }
+      .preview-langs button[aria-pressed='true'] {
+        background: var(--studio-selected, rgba(157,193,255,.16));
+        color: var(--studio-ink, var(--dsh-ink));
+        font-weight: 500;
+      }
+      .preview-langs button:hover {
+        background: var(--studio-hover, var(--dsh-hover));
+        color: var(--studio-ink, var(--dsh-ink));
+      }
+      .preview-status {
+        margin: var(--dsh-space-2) 0 0;
+        min-height: 1.4em;
+      }
+      .preview-status[data-state='ok'] { color: var(--studio-ok, var(--dsh-ok)); }
+      .preview-status[data-state='error'] { color: var(--studio-danger, var(--dsh-danger)); }
+      .preview-status[data-state='busy'] { color: var(--studio-ink-2, var(--dsh-ink-muted)); }
+      .preview-group-head {
+        display: flex;
+        align-items: baseline;
+        gap: var(--dsh-space-2);
+      }
+      .preview-btn.chip.is-btn {
+        height: var(--studio-control-h-sm, 32px);
+        padding: 0 12px;
+        font: 400 12px/1.4 var(--studio-font-ui, system-ui);
+        border-width: 0.5px;
+        background: var(--studio-surface-2, var(--dsh-surface-raised));
+        color: var(--studio-ink, var(--dsh-ink));
+      }
+      .preview-btn.chip.is-btn[data-state='selected'],
+      .preview-btn.chip.is-btn.is-active {
+        background: var(--studio-selected, rgba(157,193,255,.16));
+        border-color: var(--studio-accent, var(--dsh-accent));
+        color: var(--studio-accent-soft-ink, var(--dsh-ink));
+        font-weight: 500;
+      }
+      .preview-btn.chip.is-btn[data-state='error'] {
+        border-color: var(--studio-danger, var(--dsh-danger));
+        color: var(--studio-danger, var(--dsh-danger));
+      }
+      .preview-btn.chip.is-btn:disabled {
+        opacity: var(--studio-state-disabled-opacity, var(--dsh-disabled-opacity, .42));
+        cursor: not-allowed;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .preview-langs button, .preview-btn { transition: none !important; }
+      }
+      /* ===== END ACTION PREVIEW v1 ===== */
+
       /* ===== END NODEGRAPH UI v1 ===== */
     </style>
   </head>
@@ -1331,20 +1413,41 @@
         <div id="capGroups"></div>
       </section>
 
+      <section class="card studio-card" id="sec-preview">
+        <div class="sec-head preview-head">
+          <div class="sec-title">
+            <span class="sec-no">03</span>
+            <h2 data-preview-i18n="title">动作与表情预览</h2>
+          </div>
+          <div class="preview-langs" id="previewLangs" role="group" aria-label="界面语言">
+            <button type="button" data-preview-lang="zh" aria-pressed="true">中</button>
+            <button type="button" data-preview-lang="en" aria-pressed="false">EN</button>
+            <button type="button" data-preview-lang="ja" aria-pressed="false">日</button>
+          </div>
+        </div>
+        <p class="sec-desc" data-preview-i18n="desc">点按下面的动作或表情，页面上的角色会立刻播放对应效果。</p>
+        <p class="hint" id="previewHint" data-preview-i18n="hint">预览走现有角色运行时，不会在设置页再开一套渲染。Idle 待机动作不能手动播放。</p>
+        <p class="preview-status hint" id="previewStatus" role="status" aria-live="polite"></p>
+        <h3 class="sub-head preview-group-head"><span data-preview-i18n="motions">动作</span> <span class="hint" id="previewMotionCount"></span></h3>
+        <div class="chips" id="previewMotions"></div>
+        <h3 class="sub-head preview-group-head"><span data-preview-i18n="expressions">表情</span> <span class="hint" id="previewExprCount"></span></h3>
+        <div class="chips" id="previewExpressions"></div>
+      </section>
+
       <section class="card studio-card" id="sec-behavior">
-        <div class="sec-head"><span class="sec-no">03</span><h2>情绪与行为</h2></div>
+        <div class="sec-head"><span class="sec-no">04</span><h2>情绪与行为</h2></div>
         <p class="sec-desc">角色怎么被驱动，以及主动说话和玩梗的尺度。</p>
         <div class="rows" id="rows-behavior"></div>
       </section>
 
       <section class="card studio-card" id="sec-performance">
-        <div class="sec-head"><span class="sec-no">04</span><h2>动画与性能</h2></div>
+        <div class="sec-head"><span class="sec-no">05</span><h2>动画与性能</h2></div>
         <p class="sec-desc">刷新节奏、声音、传感器与桌宠形态。实时读数在「性能监控台」。</p>
         <div class="rows" id="rows-performance"></div>
       </section>
 
       <section class="card studio-card" id="sec-nodegraph">
-        <div class="sec-head"><span class="sec-no">05</span><h2>节点图动作编排</h2></div>
+        <div class="sec-head"><span class="sec-no">06</span><h2>节点图动作编排</h2></div>
         <p class="sec-desc">节点图与 LLM 通道互斥；分享 JSON 导入即用。</p>
         <div class="modes" id="ngModes" role="radiogroup" aria-label="执行通道模式">
           <label class="mode-opt"><input type="radio" name="motionMode" value="nodegraph" />节点图 + LLM 辅助</label>
@@ -1377,7 +1480,7 @@
       </section>
 
       <section class="card studio-card" id="sec-monitor">
-        <div class="sec-head"><span class="sec-no">06</span><h2>性能监控台</h2></div>
+        <div class="sec-head"><span class="sec-no">07</span><h2>性能监控台</h2></div>
         <p class="sec-desc">实时读数、诊断信息与不常用的重活。</p>
         <div class="readouts">
           <div class="ro">
@@ -1419,6 +1522,7 @@
           rescan: '/dsh-l2d/capability/rescan',
           call: '/dsh-l2d/ai/call',
           result: '/dsh-l2d/ai/result',
+          catalog: '/dsh-l2d/api/nodegraph/catalog',
           test: '/dsh-l2d/test.html'
         };
 
@@ -2292,10 +2396,366 @@
 
             state.capability = capability.ok ? capability.data : null;
             renderCapability(state.capability);
+            loadPreviewCatalog();
 
             paintTopBar();
             if (syncFormAvailability) syncFormAvailability();
           });
+        }
+
+
+        // ------------------------------------------------------------ 动作与表情预览
+        var PREVIEW_LS_KEY = 'dsh-l2d.settings-preview-lang';
+        var PREVIEW_I18N = {
+          zh: {
+            title: '动作与表情预览',
+            desc: '点按下面的动作或表情，页面上的角色会立刻播放对应效果。',
+            hint: '预览走现有角色运行时，不会在设置页再开一套渲染。Idle 待机动作不能手动播放。',
+            motions: '动作',
+            expressions: '表情',
+            langGroup: '界面语言',
+            statusIdle: '尚未预览',
+            statusLoading: '正在读取动作目录…',
+            statusEmpty: '当前模型没有可预览的动作或表情。',
+            statusMissing: '该模型没有目录，无法列出按键。',
+            statusError: '读取目录失败：{error}',
+            statusPlayingMotion: '正在预览动作「{name}」',
+            statusPlayingExpr: '正在预览表情「{name}」',
+            statusOkMotion: '已预览动作「{name}」',
+            statusOkExpr: '已预览表情「{name}」',
+            statusFail: '预览失败：{error}',
+            statusBusy: '上一次预览还在进行',
+            modelLine: '模型 {id}',
+            warnCatalog: '已回退到全局目录（该模型清单缺失）',
+            emptyMotions: '没有可手动播放的动作组',
+            emptyExpressions: '没有可预览的表情',
+            countItems: '{n} 项',
+            statusReady: '模型 {id}',
+            statusReadyWarn: '模型 {id} · 已回退到全局目录（该模型清单缺失）'
+          },
+          en: {
+            title: 'Motion & expression preview',
+            desc: 'Click a motion or expression below to play it immediately on the character.',
+            hint: 'Preview uses the existing character runtime. This settings page does not start a second renderer. The Idle motion cannot be played manually.',
+            motions: 'Motions',
+            expressions: 'Expressions',
+            langGroup: 'Language',
+            statusIdle: 'Nothing previewed yet',
+            statusLoading: 'Loading action catalog…',
+            statusEmpty: 'This model has no previewable motions or expressions.',
+            statusMissing: 'No catalog is available for this model, so the buttons cannot be listed.',
+            statusError: 'Failed to load catalog: {error}',
+            statusPlayingMotion: 'Previewing motion “{name}”',
+            statusPlayingExpr: 'Previewing expression “{name}”',
+            statusOkMotion: 'Previewed motion “{name}”',
+            statusOkExpr: 'Previewed expression “{name}”',
+            statusFail: 'Preview failed: {error}',
+            statusBusy: 'The previous preview is still running',
+            modelLine: 'Model {id}',
+            warnCatalog: 'Fell back to the global catalog (this model’s list is missing)',
+            emptyMotions: 'No manually playable motion groups',
+            emptyExpressions: 'No previewable expressions',
+            countItems: '{n} items',
+            statusReady: 'Model {id}',
+            statusReadyWarn: 'Model {id} · Fell back to the global catalog (this model’s list is missing)'
+          },
+          ja: {
+            title: 'モーションと表情のプレビュー',
+            desc: '下のモーションまたは表情を押すと、ページ上のキャラクターがすぐに再生します。',
+            hint: 'プレビューは既存のキャラクターランタイムを使います。設定ページで別のレンダラーは起動しません。Idle は手動再生できません。',
+            motions: 'モーション',
+            expressions: '表情',
+            langGroup: '表示言語',
+            statusIdle: 'まだプレビューしていません',
+            statusLoading: 'カタログを読み込み中…',
+            statusEmpty: 'このモデルにプレビューできるモーションまたは表情がありません。',
+            statusMissing: 'このモデルのカタログがないため、ボタンを表示できません。',
+            statusError: 'カタログの読み込みに失敗しました：{error}',
+            statusPlayingMotion: 'モーション「{name}」をプレビュー中',
+            statusPlayingExpr: '表情「{name}」をプレビュー中',
+            statusOkMotion: 'モーション「{name}」をプレビューしました',
+            statusOkExpr: '表情「{name}」をプレビューしました',
+            statusFail: 'プレビューに失敗しました：{error}',
+            statusBusy: '前回のプレビューがまだ実行中です',
+            modelLine: 'モデル {id}',
+            warnCatalog: 'グローバルカタログにフォールバックしました（このモデルの一覧がありません）',
+            emptyMotions: '手動再生できるモーショングループがありません',
+            emptyExpressions: 'プレビューできる表情がありません',
+            countItems: '{n} 件',
+            statusReady: 'モデル {id}',
+            statusReadyWarn: 'モデル {id} · グローバルカタログにフォールバックしました（このモデルの一覧がありません）'
+          }
+        };
+        var previewLang = 'zh';
+        var previewBusy = false;
+        var previewItems = { motions: [], expressions: [], modelId: '', warning: '' };
+        var previewStatusKey = 'statusIdle';
+        var previewStatusVars = null;
+        var previewStatusState = '';
+
+        function previewT(key, vars) {
+          var pack = PREVIEW_I18N[previewLang] || PREVIEW_I18N.zh;
+          var text = pack[key] || PREVIEW_I18N.zh[key] || key;
+          if (vars) {
+            Object.keys(vars).forEach(function (k) {
+              text = text.split('{' + k + '}').join(String(vars[k]));
+            });
+          }
+          return text;
+        }
+
+        function readPreviewLang() {
+          var raw = '';
+          try { raw = String(localStorage.getItem(PREVIEW_LS_KEY) || ''); } catch (e) { raw = ''; }
+          if (raw === 'en' || raw === 'ja' || raw === 'zh') return raw;
+          var htmlLang = String(document.documentElement.lang || '').toLowerCase();
+          if (htmlLang.indexOf('ja') === 0) return 'ja';
+          if (htmlLang.indexOf('en') === 0) return 'en';
+          return 'zh';
+        }
+
+        function writePreviewLang(lang) {
+          previewLang = lang === 'en' || lang === 'ja' ? lang : 'zh';
+          try { localStorage.setItem(PREVIEW_LS_KEY, previewLang); } catch (e) { /* ignore quota */ }
+        }
+
+        function setPreviewStatus(key, vars, stateName) {
+          var el = $('previewStatus');
+          if (!el) return;
+          previewStatusKey = key;
+          previewStatusVars = vars || null;
+          previewStatusState = stateName || '';
+          el.textContent = previewT(key, vars);
+          if (previewStatusState) el.setAttribute('data-state', previewStatusState);
+          else el.removeAttribute('data-state');
+        }
+
+        function applyPreviewLang() {
+          document.querySelectorAll('[data-preview-i18n]').forEach(function (el) {
+            el.textContent = previewT(el.getAttribute('data-preview-i18n'));
+          });
+          var group = $('previewLangs');
+          if (group) {
+            group.setAttribute('aria-label', previewT('langGroup'));
+            var buttons = group.querySelectorAll('[data-preview-lang]');
+            for (var i = 0; i < buttons.length; i += 1) {
+              buttons[i].setAttribute('aria-pressed', buttons[i].getAttribute('data-preview-lang') === previewLang ? 'true' : 'false');
+            }
+          }
+          renderPreviewButtons();
+          if (previewStatusKey) setPreviewStatus(previewStatusKey, previewStatusVars, previewStatusState);
+          else setPreviewStatus('statusIdle', null, '');
+        }
+
+        function previewPostCall(name, args) {
+          return fetch(API.call, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, args: args || {} }),
+            cache: 'no-store'
+          }).then(function (res) {
+            if (!res.ok) {
+              return res.text().then(function (body) {
+                throw new Error(body || ('HTTP ' + res.status));
+              });
+            }
+            return res.json();
+          }).then(function (queued) {
+            if (!queued || !queued.id) throw new Error('未入队');
+            return new Promise(function (resolve, reject) {
+              var tries = 0;
+              function step() {
+                if (tries >= 8) {
+                  reject(new Error('超时'));
+                  return;
+                }
+                tries += 1;
+                fetch(API.result + '?id=' + encodeURIComponent(queued.id), { cache: 'no-store' })
+                  .then(function (res) { return res.json(); })
+                  .then(function (data) {
+                    if (data && data.ready) resolve(data.result);
+                    else window.setTimeout(step, 200);
+                  })
+                  .catch(function () { window.setTimeout(step, 200); });
+              }
+              window.setTimeout(step, 200);
+            });
+          });
+        }
+
+        function setPreviewButtonsDisabled(disabled) {
+          var nodes = document.querySelectorAll('.preview-btn');
+          for (var i = 0; i < nodes.length; i += 1) nodes[i].disabled = disabled;
+        }
+
+        function markPreviewButton(kind, name, stateName) {
+          var nodes = document.querySelectorAll('.preview-btn');
+          for (var i = 0; i < nodes.length; i += 1) {
+            var btn = nodes[i];
+            var match = btn.getAttribute('data-preview-kind') === kind && btn.getAttribute('data-preview-name') === name;
+            if (match) {
+              btn.setAttribute('data-state', stateName || 'selected');
+              btn.classList.add('is-active');
+            } else {
+              btn.removeAttribute('data-state');
+              btn.classList.remove('is-active');
+            }
+          }
+        }
+
+        function addEmpty(host, key) {
+          var empty = document.createElement('p');
+          empty.className = 'empty';
+          empty.textContent = previewT(key);
+          host.appendChild(empty);
+        }
+
+        function renderPreviewButtons() {
+          var motionHost = $('previewMotions');
+          var exprHost = $('previewExpressions');
+          var motionCount = $('previewMotionCount');
+          var exprCount = $('previewExprCount');
+          if (!motionHost || !exprHost) return;
+
+          motionHost.textContent = '';
+          exprHost.textContent = '';
+
+          var motions = previewItems.motions || [];
+          var expressions = previewItems.expressions || [];
+          if (motionCount) motionCount.textContent = motions.length ? previewT('countItems', { n: motions.length }) : '';
+          if (exprCount) exprCount.textContent = expressions.length ? previewT('countItems', { n: expressions.length }) : '';
+
+          if (!motions.length) addEmpty(motionHost, 'emptyMotions');
+          motions.forEach(function (name) {
+            motionHost.appendChild(makePreviewButton('motion', name));
+          });
+          if (!expressions.length) addEmpty(exprHost, 'emptyExpressions');
+          expressions.forEach(function (name) {
+            exprHost.appendChild(makePreviewButton('expression', name));
+          });
+          setPreviewButtonsDisabled(previewBusy);
+        }
+
+        function makePreviewButton(kind, name) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'chip is-btn preview-btn';
+          btn.textContent = name;
+          btn.setAttribute('data-preview-kind', kind);
+          btn.setAttribute('data-preview-name', name);
+          btn.addEventListener('click', function () {
+            playPreview(kind, name, btn);
+          });
+          return btn;
+        }
+
+        function resultError(result) {
+          if (!result) return '';
+          if (result.ok === false) {
+            return String(result.message || result.reason || result.error || 'failed');
+          }
+          if (result.reason && result.ok !== true && result.status === 'error') {
+            return String(result.reason);
+          }
+          return '';
+        }
+
+        function playPreview(kind, name, btn) {
+          if (previewBusy) {
+            setPreviewStatus('statusBusy', null, 'busy');
+            return;
+          }
+          previewBusy = true;
+          setPreviewButtonsDisabled(true);
+          markPreviewButton(kind, name, 'selected');
+          setPreviewStatus(kind === 'motion' ? 'statusPlayingMotion' : 'statusPlayingExpr', { name: name }, 'busy');
+          var callName = kind === 'motion' ? 'l2d_play_motion' : 'l2d_set_expression';
+          var args = kind === 'motion' ? { group: name } : { name: name };
+          previewPostCall(callName, args)
+            .then(function (result) {
+              var err = resultError(result);
+              if (err) {
+                if (btn) btn.setAttribute('data-state', 'error');
+                setPreviewStatus('statusFail', { error: err }, 'error');
+                return;
+              }
+              markPreviewButton(kind, name, 'selected');
+              setPreviewStatus(kind === 'motion' ? 'statusOkMotion' : 'statusOkExpr', { name: name }, 'ok');
+            })
+            .catch(function (err) {
+              if (btn) btn.setAttribute('data-state', 'error');
+              setPreviewStatus('statusFail', { error: err && err.message ? err.message : String(err) }, 'error');
+            })
+            .then(function () {
+              previewBusy = false;
+              setPreviewButtonsDisabled(false);
+            });
+        }
+
+        function loadPreviewCatalog() {
+          setPreviewStatus('statusLoading', null, 'busy');
+          fetch(API.catalog, { cache: 'no-store' })
+            .then(function (res) {
+              return res.json().then(function (data) {
+                return { ok: res.ok, status: res.status, data: data };
+              });
+            })
+            .then(function (res) {
+              var data = res.data || {};
+              if (!res.ok || data.ok === false) {
+                previewItems = { motions: [], expressions: [], modelId: '', warning: '' };
+                renderPreviewButtons();
+                var reason = data.reason || data.message || data.warning || ('HTTP ' + res.status);
+                if (data.reason === 'no-model' || reason === 'model-catalog-missing') {
+                  setPreviewStatus('statusMissing', null, 'error');
+                } else {
+                  setPreviewStatus('statusError', { error: reason }, 'error');
+                }
+                return;
+              }
+              var catalog = data.catalog || {};
+              var motions = Array.isArray(catalog.motions) ? catalog.motions.filter(function (name) {
+                return name && name !== 'Idle';
+              }) : [];
+              var expressions = Array.isArray(catalog.expressions) ? catalog.expressions.filter(Boolean) : [];
+              previewItems = {
+                motions: motions,
+                expressions: expressions,
+                modelId: data.modelId || '',
+                warning: data.warning || ''
+              };
+              renderPreviewButtons();
+              if (!motions.length && !expressions.length) {
+                setPreviewStatus(data.warning === 'model-catalog-missing' ? 'statusMissing' : 'statusEmpty', null, data.warning ? 'error' : '');
+                return;
+              }
+              if (previewItems.warning === 'model-catalog-missing' && previewItems.modelId) {
+                setPreviewStatus('statusReadyWarn', { id: previewItems.modelId }, 'error');
+              } else if (previewItems.modelId) {
+                setPreviewStatus('statusReady', { id: previewItems.modelId }, '');
+              } else {
+                setPreviewStatus('statusIdle', null, '');
+              }
+            })
+            .catch(function (err) {
+              previewItems = { motions: [], expressions: [], modelId: '', warning: '' };
+              renderPreviewButtons();
+              setPreviewStatus('statusError', { error: err && err.message ? err.message : String(err) }, 'error');
+            });
+        }
+
+        function bindPreview() {
+          previewLang = readPreviewLang();
+          var group = $('previewLangs');
+          if (group) {
+            group.addEventListener('click', function (event) {
+              var btn = event.target && event.target.closest ? event.target.closest('[data-preview-lang]') : null;
+              if (!btn) return;
+              writePreviewLang(btn.getAttribute('data-preview-lang'));
+              applyPreviewLang();
+            });
+          }
+          applyPreviewLang();
         }
 
         function bindDev() {
@@ -2966,6 +3426,7 @@
         bindDev();
         bindFormChange();
         bindNodegraph();
+        bindPreview();
         loadAll();
         refreshReadouts();
         window.setInterval(refreshReadouts, 6000);
