@@ -1,0 +1,287 @@
+{
+  "schemaVersion": 1,
+  "modelId": "大肥鱼.dsl2d.2048",
+  "method": "30fps 采样，每条参数曲线按自身振幅归一化，取所有曲线最大速度；速度低于本动作峰值 25% 且持续 ≥ 0.1 秒的时间窗记为可衔接窗；Movement* 是 0/1 开关曲线，不计入速度",
+  "motions": {
+    "抚胸手打开": {
+      "file": "默认手切举手.motion3.json",
+      "durationSec": 1.133,
+      "loop": true,
+      "fadeInSec": 0.3,
+      "fadeOutSec": 0.3,
+      "curves": [
+        "Param62",
+        "Param59",
+        "Param60",
+        "Param61"
+      ],
+      "switches": [
+        "Movement2"
+      ],
+      "peakMotionSec": 1,
+      "cutWindowsSec": [
+        [
+          0,
+          0.13
+        ],
+        [
+          0.7,
+          0.87
+        ]
+      ],
+      "switchAtSec": 0.33,
+      "abortBeforeSec": 0.33,
+      "chainFromSec": 0.7,
+      "anytime": false
+    },
+    "抚胸手关闭": {
+      "file": "举手切默认手.motion3.json",
+      "durationSec": 1.017,
+      "loop": true,
+      "fadeInSec": 0.3,
+      "fadeOutSec": 0.3,
+      "curves": [
+        "Param62",
+        "Param59",
+        "Param60",
+        "Param61"
+      ],
+      "switches": [
+        "Movement2"
+      ],
+      "peakMotionSec": 0.93,
+      "cutWindowsSec": [
+        [
+          0,
+          0.27
+        ],
+        [
+          0.53,
+          0.8
+        ]
+      ],
+      "switchAtSec": 0.55,
+      "abortBeforeSec": 0.55,
+      "chainFromSec": 0.55,
+      "anytime": false,
+      "chainFromNote": "低速窗早于姿势开关，取开关时间"
+    },
+    "竖手指打开": {
+      "file": "竖手指切出来动画.motion3.json",
+      "durationSec": 1.25,
+      "loop": true,
+      "fadeInSec": 0.3,
+      "fadeOutSec": 0.3,
+      "curves": [
+        "Param40",
+        "Param36",
+        "Param39",
+        "Param41",
+        "Param42",
+        "Param43"
+      ],
+      "switches": [
+        "Movement1",
+        "Movement3"
+      ],
+      "peakMotionSec": 0.97,
+      "cutWindowsSec": [
+        [
+          0,
+          0.4
+        ],
+        [
+          0.67,
+          0.87
+        ]
+      ],
+      "switchAtSec": 0.37,
+      "abortBeforeSec": 0.37,
+      "chainFromSec": 0.67,
+      "anytime": false
+    },
+    "竖手指关闭": {
+      "file": "竖手指切回默认.motion3.json",
+      "durationSec": 1.25,
+      "loop": true,
+      "fadeInSec": 0.3,
+      "fadeOutSec": 0.3,
+      "curves": [
+        "Param40",
+        "Param39",
+        "Param41",
+        "Param42",
+        "Param43"
+      ],
+      "switches": [
+        "Movement3"
+      ],
+      "peakMotionSec": 1.2,
+      "cutWindowsSec": [
+        [
+          0,
+          0.13
+        ],
+        [
+          0.97,
+          1.1
+        ]
+      ],
+      "switchAtSec": 0.67,
+      "abortBeforeSec": 0.67,
+      "chainFromSec": 0.97,
+      "anytime": false
+    },
+    "狗尾巴草打开": {
+      "file": "狗尾草切换出来.motion3.json",
+      "durationSec": 1.233,
+      "loop": true,
+      "fadeInSec": 0.3,
+      "fadeOutSec": 0.3,
+      "curves": [
+        "Param36",
+        "Param39",
+        "Param41",
+        "Param42"
+      ],
+      "switches": [
+        "Movement1",
+        "Movement3"
+      ],
+      "peakMotionSec": 0.17,
+      "cutWindowsSec": [],
+      "switchAtSec": 0.28,
+      "abortBeforeSec": 0.28,
+      "chainFromSec": 0.93,
+      "anytime": false,
+      "chainFromNote": "未找到低速窗，回退为 时长−淡出时长"
+    },
+    "狗尾巴草关闭": {
+      "file": "狗尾草切回默认手.motion3.json",
+      "durationSec": 1.133,
+      "loop": true,
+      "fadeInSec": 0.3,
+      "fadeOutSec": 0.3,
+      "curves": [
+        "Param36",
+        "Param39",
+        "Param41",
+        "Param42"
+      ],
+      "switches": [
+        "Movement1"
+      ],
+      "peakMotionSec": 1.03,
+      "cutWindowsSec": [
+        [
+          0.3,
+          0.4
+        ]
+      ],
+      "switchAtSec": 0.92,
+      "abortBeforeSec": 0.92,
+      "chainFromSec": 0.92,
+      "anytime": false,
+      "chainFromNote": "未找到低速窗，回退为 时长−淡出时长"
+    },
+    "Idle": {
+      "file": "IDLE.motion3.json",
+      "durationSec": 5.983,
+      "loop": true,
+      "fadeInSec": 0.5,
+      "fadeOutSec": 0.5,
+      "curves": [
+        "ShockR",
+        "ShockL",
+        "Param11",
+        "SweatBurst1",
+        "SweatBurst2",
+        "SweatBurst3",
+        "SweatBurst4",
+        "Param31",
+        "Param32",
+        "Param27",
+        "Param28",
+        "RCry",
+        "Param29",
+        "Param30",
+        "LCry",
+        "Startwinkle",
+        "Param55",
+        "Param56",
+        "Param58",
+        "Param57"
+      ],
+      "switches": [],
+      "peakMotionSec": 0.03,
+      "cutWindowsSec": [],
+      "switchAtSec": null,
+      "abortBeforeSec": null,
+      "chainFromSec": 0,
+      "anytime": true
+    }
+  },
+  "handStates": {
+    "note": "手部动作其实是姿势切换片段，状态图如下。换姿势不要排队：先播当前姿势的「关闭」，在它的 chainFromSec 处交叉淡入下一个「打开」。",
+    "states": [
+      "默认",
+      "抚胸",
+      "竖手指",
+      "狗尾巴草"
+    ],
+    "edges": {
+      "默认→抚胸": [
+        "抚胸手打开"
+      ],
+      "抚胸→默认": [
+        "抚胸手关闭"
+      ],
+      "默认→竖手指": [
+        "竖手指打开"
+      ],
+      "竖手指→默认": [
+        "竖手指关闭"
+      ],
+      "默认→狗尾巴草": [
+        "狗尾巴草打开"
+      ],
+      "狗尾巴草→默认": [
+        "狗尾巴草关闭"
+      ],
+      "抚胸→竖手指": [
+        "抚胸手关闭",
+        "竖手指打开"
+      ],
+      "抚胸→狗尾巴草": [
+        "抚胸手关闭",
+        "狗尾巴草打开"
+      ],
+      "竖手指→抚胸": [
+        "竖手指关闭",
+        "抚胸手打开"
+      ],
+      "竖手指→狗尾巴草": [
+        "竖手指关闭",
+        "狗尾巴草打开"
+      ],
+      "狗尾巴草→抚胸": [
+        "狗尾巴草关闭",
+        "抚胸手打开"
+      ],
+      "狗尾巴草→竖手指": [
+        "狗尾巴草关闭",
+        "竖手指打开"
+      ]
+    }
+  },
+  "interruptRules": [
+    "新指令到达时不进队列：同一模块只保留最新的一条待执行指令（latest wins），旧的待执行指令直接丢弃并回执 superseded",
+    "当前动作在 abortBeforeSec 之前（姿势开关 Movement* 还没翻）：可立即中止，按 fadeOutSec 淡出，姿势仍算原状态",
+    "已过 abortBeforeSec、未到 chainFromSec：优先级 HIGH/FORCE 立即切（交叉淡入 0.3s，姿势状态按已切换算，必要时先补对应「关闭」）；LOW/NORMAL 等到 chainFromSec 再接，最多等到动作结束",
+    "到达 chainFromSec 后：立即交叉淡入下一个动作，不等动作播完",
+    "anytime 的循环动作（Idle）：任何时刻都可切，淡出 0.5s",
+    "神态、表情、饰品是持续写值，不存在排队，新指令直接按 enterMs 渐变到新目标",
+    "调用方可选 when: now | next-cut（默认）| after-finish，由模型侧按上面规则落到具体时间点"
+  ],
+  "note": "时间点由 tools/live2d-catalog/motion-cutpoints.mjs 从本地模型算出，均为秒；需在真模型上目测复核"
+}
