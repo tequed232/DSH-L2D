@@ -33,6 +33,7 @@ import {
   handleApplyOps,
   handleAiEdit,
   handleGraphGet,
+  handleCatalog,
   NODEGRAPH_API_BODY_LIMIT,
 } from '../../packages/dsh-l2d-plugin/lib/nodegraph-api.mjs';
 
@@ -520,6 +521,27 @@ const server = http.createServer(async (req, res) => {
   // ---------------------- AI 节点编辑（docs/nodegraph/AI-EDIT-API.md） ----------------------
   // 与插件路由同语义，处理器共用 lib/nodegraph-api.mjs。dev-server 没有插件设置，
   // LLM Key 只认环境变量 DEEPSEEK_API_KEY；没有则 ai-edit 返回 503 ai-unavailable。
+  // 模型目录清单接口（按模型动作链）：catalog?model=X 不传则用当前模型（目录第一个 model3.json）。
+  if (urlPath === '/api/nodegraph/catalog') {
+    if (req.method !== 'GET') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'), false);
+    let modelParam;
+    try {
+      const u = new URL(req.url, 'http://127.0.0.1');
+      if (u.searchParams.has('model')) modelParam = String(u.searchParams.get('model'));
+    } catch {
+      modelParam = undefined;
+    }
+    const currentModelId = (() => {
+      try {
+        const f = fs.readdirSync(MODEL_DIR).find((n) => n.endsWith('.model3.json'));
+        return f ? f.slice(0, -'.model3.json'.length) : '';
+      } catch {
+        return '';
+      }
+    })();
+    const out = handleCatalog(modelParam, { modelId: currentModelId });
+    return send(res, out.status, MIME['.json'], Buffer.from(JSON.stringify(out.payload), 'utf8'));
+  }
   if (urlPath === '/api/nodegraph/apply-ops' || urlPath === '/api/nodegraph/ai-edit') {
     if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'), false);
     if (!writeGuard(req, res)) return;
@@ -558,12 +580,15 @@ const server = http.createServer(async (req, res) => {
   if (urlPath === '/api/nodegraph/graph') {
     if (req.method !== 'GET') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'), false);
     let name = '';
+    let listModel = '';
     try {
-      name = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('name') || '');
+      const u = new URL(req.url, 'http://127.0.0.1');
+      name = String(u.searchParams.get('name') || '');
+      listModel = String(u.searchParams.get('model') || '');
     } catch {
       name = '';
     }
-    const out = handleGraphGet(name);
+    const out = handleGraphGet(name, { listModel: listModel || undefined });
     return send(res, out.status, MIME['.json'], Buffer.from(JSON.stringify(out.payload), 'utf8'));
   }
 
