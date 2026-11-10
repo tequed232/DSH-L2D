@@ -475,7 +475,7 @@ server.registerTool(
   'l2d_graph_get',
   {
     description:
-      '只读。读取宿主已导入的节点图（设计层：nodes/edges/pos/props）及其 hash。改图前先调它拿 hash，作为 l2d_graph_apply_ops 的 baseHash。节点类型、参数范围与 op 格式见 docs/nodegraph/NODE-SCHEMA.json。name 缺省时返回 name-required 及可选名单。',
+      '只读。读取宿主已导入的节点图（设计层：nodes/edges/pos/props）及其 hash。改图前先调它拿 hash，作为 l2d_graph_apply_ops 的 baseHash。节点类型、参数范围与 op 格式见 docs/nodegraph/NODE-SCHEMA.json。每条动作链属于一个模型：校验按图的绑定模型选清单（docs/nodegraph/models/<modelId>/live2d-ids.json，缺失回退全局），回执带 modelId 与 live2dIdsSource。name 缺省时返回 name-required 及可选名单。',
     inputSchema: {
       name: z.string().min(1).max(64).describe('已导入节点图的名称（GET /dsh-l2d/nodegraphs 列表里的 name）'),
     },
@@ -487,7 +487,7 @@ server.registerTool(
   'l2d_graph_apply_ops',
   {
     description:
-      '对已导入的节点图执行一批确定性编辑操作（add_node / remove_node / set_param / connect / disconnect / move_node）。整批原子：任一 op 不合法则全部不生效并返回带 opIndex 与英文 reason 的 errors；全部合法且整图校验通过才写回文件（saved:true）。baseHash 与当前图不一致返回 stale-graph，请重新 l2d_graph_get。',
+      '对已导入的节点图执行一批确定性编辑操作（add_node / remove_node / set_param / connect / disconnect / move_node）。整批原子：任一 op 不合法则全部不生效并返回带 opIndex 与英文 reason 的 errors；全部合法且整图校验通过才写回文件（saved:true）。baseHash 与当前图不一致返回 stale-graph，请重新 l2d_graph_get。动作/表情/参数 ID 按图绑定模型的清单校验（modelId 可选字段可显式指定，缺省用图绑定模型）；strict 绑定模型与宿主当前模型不一致的图，运行会得 409 model-mismatch。',
     inputSchema: {
       name: z.string().min(1).max(64).describe('已导入节点图的名称'),
       ops: z
@@ -495,14 +495,19 @@ server.registerTool(
         .max(200)
         .describe('编辑操作数组，字段格式见 docs/nodegraph/NODE-SCHEMA.json 的 ops'),
       baseHash: z.string().regex(/^[0-9a-f]{16}$/).describe('l2d_graph_get 返回的 hash'),
+      modelId: z
+        .string()
+        .max(128)
+        .optional()
+        .describe('可选。显式指定校验用模型清单（模型文件名去 .model3.json，如 demo-model）；缺省用图的绑定模型'),
     },
   },
-  async ({ name, ops, baseHash }) =>
+  async ({ name, ops, baseHash, modelId }) =>
     toolResult(
       await graphApi('/dsh-l2d/api/nodegraph/apply-ops', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name, ops, baseHash }),
+        body: JSON.stringify(modelId ? { name, ops, baseHash, modelId } : { name, ops, baseHash }),
       }),
     ),
 );
