@@ -75,6 +75,47 @@ export const HOST_ALLOWED_TOOLS = Object.freeze([
 const ALLOWED_SET = new Set(HOST_ALLOWED_TOOLS);
 
 /**
+ * AI 节点编辑工具白名单（与 /ai/call 的 HOST_ALLOWED_TOOLS 分开）：
+ * 这三项在宿主进程内同步执行（lib/nodegraph-api.mjs），不进浏览器 aiInbox 队列，
+ * 所以不能混进 HOST_ALLOWED_TOOLS——否则 /ai/call 会把它们入队给 overlay，而 overlay 没有执行器。
+ * MCP 的 l2d_graph_get / l2d_graph_apply_ops 经宿主路由进入，路由入口统一过 guardGraphCall。
+ */
+export const HOST_GRAPH_TOOLS = Object.freeze(['l2d_graph_get', 'l2d_graph_apply_ops', 'l2d_graph_ai_edit']);
+const GRAPH_TOOL_SET = new Set(HOST_GRAPH_TOOLS);
+const GRAPH_HASH_RE = /^[0-9a-f]{16}$/;
+/** 与 nodegraph-schema.MAX_OPS_PER_CALL 一致（这里不 import，避免守卫依赖节点定义模块）。 */
+const GRAPH_MAX_OPS = 200;
+
+/**
+ * AI 节点编辑入口的静态守卫：未知工具名、ops 形状/数量、baseHash 格式、name 必填。
+ * 逐 op 的语义校验在 applyOps 里做，这里只拦明显畸形的请求。
+ * @returns {{ok:true} | {ok:false, status:400, reason:string, detail:string, message:string}}
+ */
+export function guardGraphCall(request = {}) {
+  const req = request && typeof request === 'object' ? request : {};
+  const name = typeof req.name === 'string' ? req.name.trim() : '';
+  const args = req.args && typeof req.args === 'object' && !Array.isArray(req.args) ? req.args : {};
+  if (!GRAPH_TOOL_SET.has(name)) return deny('unknown-tool', name, 'unknown tool: ' + name);
+  if (name === 'l2d_graph_get') {
+    if (typeof args.name !== 'string' || !args.name.trim()) return deny('name-required', '', 'name-required: 需要已导入节点图的 name');
+  }
+  if (name === 'l2d_graph_apply_ops') {
+    if (!Array.isArray(args.ops)) return deny('invalid-ops', '', 'invalid-ops: ops 必须是数组');
+    if (args.ops.length > GRAPH_MAX_OPS) return deny('too-many-ops', String(args.ops.length));
+    if (args.baseHash !== undefined && (typeof args.baseHash !== 'string' || !GRAPH_HASH_RE.test(args.baseHash))) {
+      return deny('invalid-base-hash', String(args.baseHash).slice(0, 32));
+    }
+    if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) return deny('name-required', '');
+  }
+  if (name === 'l2d_graph_ai_edit') {
+    if (typeof args.instruction !== 'string' || !args.instruction.trim()) {
+      return deny('invalid-request', '', 'invalid-request: instruction 必须是非空字符串');
+    }
+  }
+  return { ok: true };
+}
+
+/**
  * 入参里可能以参数名为键的工具：先做口型递归扫描。
  * `l2d_posture` 的 values 也是参数名键（语义姿态直写参数 id），口型红线同样适用。
  */

@@ -89,6 +89,12 @@ assert.equal(readBack.description, '蓝鲸女仆');
 assert.equal(readBack.updatedAt, written.updatedAt);
 
 // 修改后下一次读取立即生效（无缓存）。
+// updatedAt 精度是毫秒：两次写入可能落在同一毫秒，导致下面的 notEqual 偶发失败。
+// 先等到时钟越过第一次写入的时间戳再写第二次（只改测试，不改业务语义）。
+const firstWriteMs = Date.parse(written.updatedAt);
+while (Date.now() <= firstWriteMs) {
+  /* 自旋至多 1ms */
+}
 const second = writePersona({ proactivity: 0.95 }, { homeDir: home });
 assert.equal(readPersona({ homeDir: home }).proactivity, 0.95);
 assert.notEqual(second.updatedAt, written.updatedAt);

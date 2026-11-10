@@ -1,0 +1,438 @@
+{
+  "schemaVersion": 1,
+  "kind": "dsh-l2d-nodegraph-editor-schema",
+  "generatedBy": "tools/nodegraph-schema/gen.mjs（数据源 packages/dsh-l2d-plugin/lib/nodegraph-schema.mjs）",
+  "graphFormat": {
+    "description": "设计层节点图（与编辑器 meta.editor 同形）：{nodes:[{id,type,label,pos:{x,y},props,disabled}], edges:[{id,from,to}], viewport?}",
+    "hashScope": "graphHash 只覆盖 nodes 与 edges（稳定序列化后 sha256 前 16 位），viewport 不参与",
+    "limits": {
+      "maxNodes": 120,
+      "maxOpsPerCall": 200,
+      "nodeIdPattern": "^[A-Za-z0-9_.:-]{1,48}$",
+      "maxAbsPos": 100000
+    }
+  },
+  "commonParams": [
+    {
+      "key": "priority",
+      "kind": "enum",
+      "options": [
+        "BACKGROUND",
+        "NORMAL",
+        "FORCE"
+      ],
+      "default": "NORMAL"
+    },
+    {
+      "key": "cooldownMs",
+      "kind": "number",
+      "min": 0,
+      "max": 600000,
+      "default": 0
+    },
+    {
+      "key": "execState",
+      "kind": "enum",
+      "options": [
+        "idle",
+        "running",
+        "done",
+        "blocked"
+      ],
+      "default": "idle"
+    },
+    {
+      "key": "modelWhitelist",
+      "kind": "string",
+      "maxLength": 200,
+      "default": ""
+    },
+    {
+      "key": "portType",
+      "kind": "enum",
+      "options": [
+        "flow",
+        "signal",
+        "data"
+      ],
+      "default": "flow"
+    },
+    {
+      "key": "disabled",
+      "kind": "boolean",
+      "default": false
+    }
+  ],
+  "nodeTypes": {
+    "trigger": {
+      "group": "event",
+      "label": "Trigger",
+      "compilesTo": null,
+      "note": "设计层标注，不编译；本模型无 HitAreas，不要写依赖点击区域的事件",
+      "ports": {
+        "in": "input",
+        "out": "output"
+      },
+      "params": [
+        {
+          "key": "event",
+          "kind": "string",
+          "maxLength": 120,
+          "default": "on_user_message"
+        }
+      ]
+    },
+    "workspace": {
+      "group": "event",
+      "label": "Workspace State",
+      "compilesTo": null,
+      "ports": {
+        "in": "input",
+        "out": "output"
+      },
+      "params": [
+        {
+          "key": "state",
+          "kind": "string",
+          "maxLength": 120,
+          "default": "attention"
+        }
+      ]
+    },
+    "condition": {
+      "group": "logic",
+      "label": "Condition",
+      "compilesTo": null,
+      "ports": {
+        "in": "input",
+        "out": "output"
+      },
+      "params": [
+        {
+          "key": "expr",
+          "kind": "string",
+          "maxLength": 200,
+          "default": "idle == false"
+        }
+      ]
+    },
+    "gate": {
+      "group": "logic",
+      "label": "Condition Gate",
+      "compilesTo": null,
+      "ports": {
+        "in": "input",
+        "out": "output"
+      },
+      "params": [
+        {
+          "key": "expr",
+          "kind": "string",
+          "maxLength": 200,
+          "default": "state == attention"
+        }
+      ]
+    },
+    "delay": {
+      "group": "logic",
+      "label": "Delay",
+      "compilesTo": "delay",
+      "ports": {
+        "in": "input",
+        "out": "output"
+      },
+      "params": [
+        {
+          "key": "delayMs",
+          "kind": "number",
+          "min": 1,
+          "max": 5000,
+          "default": 200
+        }
+      ]
+    },
+    "motion": {
+      "group": "action",
+      "label": "Motion",
+      "compilesTo": "motion",
+      "ports": {
+        "in": "input",
+        "out": "output"
+      },
+      "params": [
+        {
+          "key": "name",
+          "kind": "string",
+          "live2d": "motions",
+          "forbidden": [
+            "Idle"
+          ],
+          "enumFallback": [
+            "抚胸手打开",
+            "抚胸手关闭",
+            "竖手指打开",
+            "竖手指关闭",
+            "狗尾巴草打开",
+            "狗尾巴草关闭"
+          ],
+          "default": "竖手指打开"
+        },
+        {
+          "key": "closeMotion",
+          "kind": "string",
+          "readonly": true,
+          "derivedFrom": "name",
+          "default": "竖手指关闭"
+        },
+        {
+          "key": "closeAfterMs",
+          "kind": "number",
+          "min": 300,
+          "max": 12000,
+          "default": 1800
+        },
+        {
+          "key": "stepDelayMs",
+          "kind": "number",
+          "min": 0,
+          "max": 5000,
+          "default": 0
+        }
+      ]
+    },
+    "expression": {
+      "group": "action",
+      "label": "Expression",
+      "compilesTo": "expression",
+      "ports": {
+        "in": "input",
+        "out": "output"
+      },
+      "params": [
+        {
+          "key": "name",
+          "kind": "string",
+          "live2d": "expressions",
+          "enumFallback": [
+            "兔牙",
+            "加载",
+            "单片眼镜",
+            "圈圈眼",
+            "屑",
+            "流泪",
+            "爱心眼",
+            "脱鞋",
+            "脸红",
+            "钢盆",
+            "裙长切换",
+            "黑框眼镜",
+            "黑脸",
+            "＞＜",
+            "体型1",
+            "体型2",
+            "默认体型",
+            "前倾",
+            "尾巴开关",
+            "流冷汗",
+            "胸口衣服"
+          ],
+          "default": "兔牙"
+        },
+        {
+          "key": "clear",
+          "kind": "boolean",
+          "default": false
+        },
+        {
+          "key": "stepDelayMs",
+          "kind": "number",
+          "min": 0,
+          "max": 5000,
+          "default": 0
+        }
+      ]
+    },
+    "pose": {
+      "group": "action",
+      "label": "Pose",
+      "compilesTo": "pose",
+      "note": "手臂姿势预设（rest/finger/grass/chest），不依赖 Cubism pose3；本模型无 pose3、无 HitAreas",
+      "ports": {
+        "in": "input",
+        "out": "output"
+      },
+      "params": [
+        {
+          "key": "poseRight",
+          "kind": "enum",
+          "options": [
+            "",
+            "rest",
+            "finger",
+            "grass",
+            "chest"
+          ],
+          "default": "rest"
+        },
+        {
+          "key": "poseLeft",
+          "kind": "enum",
+          "options": [
+            "",
+            "rest",
+            "finger",
+            "grass",
+            "chest"
+          ],
+          "default": ""
+        },
+        {
+          "key": "stepDelayMs",
+          "kind": "number",
+          "min": 0,
+          "max": 5000,
+          "default": 0
+        }
+      ]
+    },
+    "look": {
+      "group": "action",
+      "label": "Look At",
+      "compilesTo": "look",
+      "ports": {
+        "in": "input",
+        "out": "output"
+      },
+      "params": [
+        {
+          "key": "x",
+          "kind": "number",
+          "min": -1,
+          "max": 1,
+          "default": 0
+        },
+        {
+          "key": "y",
+          "kind": "number",
+          "min": -1,
+          "max": 1,
+          "default": 0.05
+        },
+        {
+          "key": "stepDelayMs",
+          "kind": "number",
+          "min": 0,
+          "max": 5000,
+          "default": 0
+        }
+      ]
+    }
+  },
+  "connectionRules": {
+    "ports": "每个节点一个输入端口 in、一个输出端口 out",
+    "sameColorOnly": "两端节点的 props.portType 必须相同（flow/signal/data）",
+    "noSelfLoop": true,
+    "acyclic": true,
+    "noDuplicateEdge": true,
+    "singleInputByDefault": "目标 in 端口已有连线时，connect 需 replace:true 才会替换（与编辑器拖线替换语义一致）",
+    "compile": "设计层辅助节点（compilesTo=null）与 disabled 节点在编译时被穿透，动作节点按 next 编译为 segments，最终由 nodegraph.mjs validateNodegraph 整体校验"
+  },
+  "ops": {
+    "add_node": {
+      "required": [
+        "type"
+      ],
+      "optional": [
+        "id",
+        "label",
+        "pos",
+        "props"
+      ],
+      "note": "id 缺省时自动分配 ai_<n>；pos={x,y}；props 只写要覆盖默认值的参数"
+    },
+    "remove_node": {
+      "required": [
+        "id"
+      ],
+      "optional": [],
+      "note": "同时删除与该节点相连的全部连线"
+    },
+    "set_param": {
+      "required": [
+        "id",
+        "key",
+        "value"
+      ],
+      "optional": [],
+      "note": "key 为参数名或 label；motion.name 改动会自动同步只读 closeMotion"
+    },
+    "connect": {
+      "required": [
+        "from",
+        "to"
+      ],
+      "optional": [
+        "fromPort",
+        "toPort",
+        "replace"
+      ],
+      "note": "端口固定 fromPort='out' / toPort='in'；两端 portType 必须相同；禁止自连与成环；目标输入已有连线时需 replace:true 才替换"
+    },
+    "disconnect": {
+      "required": [],
+      "optional": [
+        "edgeId",
+        "from",
+        "to"
+      ],
+      "note": "给 edgeId，或给 from+to"
+    },
+    "move_node": {
+      "required": [
+        "id",
+        "x",
+        "y"
+      ],
+      "optional": [],
+      "note": "画布坐标，绝对值 ≤ 100000"
+    }
+  },
+  "reasonCodes": [
+    "invalid-graph",
+    "invalid-ops",
+    "too-many-ops",
+    "invalid-op",
+    "unknown-op",
+    "missing-field",
+    "unknown-node-type",
+    "invalid-node-id",
+    "duplicate-node-id",
+    "too-many-nodes",
+    "node-not-found",
+    "unknown-param",
+    "param-readonly",
+    "param-type-mismatch",
+    "param-out-of-range",
+    "param-not-allowed",
+    "unknown-live2d-id",
+    "unknown-port",
+    "port-type-mismatch",
+    "self-loop",
+    "duplicate-edge",
+    "input-occupied",
+    "cycle",
+    "edge-not-found",
+    "invalid-position",
+    "graph-invalid",
+    "live2d-id-not-in-model"
+  ],
+  "live2dIds": {
+    "file": "docs/nodegraph/live2d-ids.json",
+    "format": "{params:{<id>:{min,max}}, motions:[<group>], expressions:[<name>], forms:[<index|name>]}",
+    "note": "可选。存在时 live2d 引用参数按它校验（unknown-live2d-id / param-out-of-range），不存在时只做通用类型校验；只校验节点 op 写入的值，不校验模型自带表情文件内部的参数值",
+    "codeOnlyParamIds": [
+      "ParamMouthOpen"
+    ],
+    "modelFacts": "大肥鱼模型没有 HitAreas，也没有 pose3"
+  }
+}

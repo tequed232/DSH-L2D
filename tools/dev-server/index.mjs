@@ -28,6 +28,13 @@ import {
   createInboxActExecutor,
 } from '../../packages/dsh-l2d-plugin/lib/nodegraph.mjs';
 import { createRunRegistry } from '../../packages/dsh-l2d-plugin/lib/nodegraph-runs.mjs';
+import { deepseekChatJson, resolveDeepSeekKey } from '../../packages/dsh-l2d-plugin/lib/llm-channel.mjs';
+import {
+  handleApplyOps,
+  handleAiEdit,
+  handleGraphGet,
+  NODEGRAPH_API_BODY_LIMIT,
+} from '../../packages/dsh-l2d-plugin/lib/nodegraph-api.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
@@ -508,6 +515,56 @@ const server = http.createServer(async (req, res) => {
       }
       return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true }), 'utf8'));
     });
+  }
+
+  // ---------------------- AI 节点编辑（docs/nodegraph/AI-EDIT-API.md） ----------------------
+  // 与插件路由同语义，处理器共用 lib/nodegraph-api.mjs。dev-server 没有插件设置，
+  // LLM Key 只认环境变量 DEEPSEEK_API_KEY；没有则 ai-edit 返回 503 ai-unavailable。
+  if (urlPath === '/api/nodegraph/apply-ops' || urlPath === '/api/nodegraph/ai-edit') {
+    if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'), false);
+    if (!writeGuard(req, res)) return;
+    const chunks = [];
+    let total = 0;
+    req.on('data', (c) => {
+      total += c.length;
+      if (total > NODEGRAPH_API_BODY_LIMIT) {
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', async () => {
+      const reply = (out) => send(res, out.status, MIME['.json'], Buffer.from(JSON.stringify(out.payload), 'utf8'), false);
+      let body;
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      } catch {
+        return reply({ status: 400, payload: { ok: false, reason: 'invalid-request', message: 'body 不是合法 JSON' } });
+      }
+      try {
+        if (urlPath === '/api/nodegraph/apply-ops') return reply(handleApplyOps(body));
+        const key = resolveDeepSeekKey({});
+        const llm = key
+          ? (prompt) => deepseekChatJson({ key, ...prompt, temperature: 0.2, maxTokens: 2000, timeoutMs: 30000 })
+          : null;
+        return reply(await handleAiEdit(body, { llm }));
+      } catch {
+        return reply({ status: 500, payload: { ok: false, reason: 'internal-error' } });
+      }
+    });
+    return;
+  }
+
+  if (urlPath === '/api/nodegraph/graph') {
+    if (req.method !== 'GET') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'), false);
+    let name = '';
+    try {
+      name = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('name') || '');
+    } catch {
+      name = '';
+    }
+    const out = handleGraphGet(name);
+    return send(res, out.status, MIME['.json'], Buffer.from(JSON.stringify(out.payload), 'utf8'));
   }
 
   // ---------------------- 节点图动作编排通道（docs/nodegraph/SPEC.md §4） ----------------------

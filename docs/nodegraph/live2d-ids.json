@@ -1,0 +1,2077 @@
+{
+  "params": {
+    "Paramshuiyin7": {
+      "min": -1,
+      "max": 1
+    },
+    "key1": {
+      "min": 0,
+      "max": 1
+    },
+    "key2": {
+      "min": 0,
+      "max": 1
+    },
+    "key3": {
+      "min": 0,
+      "max": 1
+    },
+    "key4": {
+      "min": 0,
+      "max": 1
+    },
+    "key5": {
+      "min": 0,
+      "max": 1
+    },
+    "key6": {
+      "min": 0,
+      "max": 1
+    },
+    "key7": {
+      "min": 0,
+      "max": 1
+    },
+    "key8": {
+      "min": 0,
+      "max": 1
+    },
+    "key9": {
+      "min": 0,
+      "max": 1
+    },
+    "key10": {
+      "min": 0,
+      "max": 1
+    },
+    "key11": {
+      "min": 0,
+      "max": 1
+    },
+    "key12": {
+      "min": 0,
+      "max": 1
+    },
+    "key13": {
+      "min": 0,
+      "max": 1
+    },
+    "Divider1": {
+      "min": 0,
+      "max": 1
+    },
+    "Movement1": {
+      "min": 0,
+      "max": 1
+    },
+    "Movement2": {
+      "min": 0,
+      "max": 1
+    },
+    "Movement3": {
+      "min": 0,
+      "max": 1
+    },
+    "Divider3": {
+      "min": 0,
+      "max": 1
+    },
+    "Clothes1": {
+      "min": 0,
+      "max": 1
+    },
+    "Clothes2": {
+      "min": 0,
+      "max": 1
+    },
+    "Clothes3": {
+      "min": 0,
+      "max": 1
+    },
+    "Clothes4": {
+      "min": 0,
+      "max": 1
+    },
+    "Clothes5": {
+      "min": 0,
+      "max": 1
+    },
+    "Paramshuiyin8": {
+      "min": -1,
+      "max": 1
+    },
+    "Param2": {
+      "min": -1,
+      "max": 1
+    },
+    "Param34": {
+      "min": 0,
+      "max": 1
+    },
+    "Param": {
+      "min": 0,
+      "max": 1
+    },
+    "ParamAngleX": {
+      "min": -30,
+      "max": 30
+    },
+    "ParamAngleY": {
+      "min": -30,
+      "max": 30
+    },
+    "ParamAngleZ": {
+      "min": -30,
+      "max": 30
+    },
+    "AngleXbs": {
+      "min": -30,
+      "max": 30
+    },
+    "AngleYbs": {
+      "min": -30,
+      "max": 30
+    },
+    "AngleXbs3": {
+      "min": -30,
+      "max": 30
+    },
+    "AngleXbs2": {
+      "min": -30,
+      "max": 30
+    },
+    "AngleYbs2": {
+      "min": -30,
+      "max": 30
+    },
+    "ParamBodyAngleX": {
+      "min": -30,
+      "max": 30
+    },
+    "ParamBodyAngleY": {
+      "min": -30,
+      "max": 30
+    },
+    "Param50": {
+      "min": 0,
+      "max": 1
+    },
+    "Param53": {
+      "min": 0,
+      "max": 1
+    },
+    "Param54": {
+      "min": 0,
+      "max": 1
+    },
+    "ParamBodyAngleZ": {
+      "min": -30,
+      "max": 30
+    },
+    "HipAngleZ": {
+      "min": -30,
+      "max": 30
+    },
+    "LEGAngleZ2": {
+      "min": -30,
+      "max": 30
+    },
+    "HipAngleX": {
+      "min": -30,
+      "max": 30
+    },
+    "HipAngleY": {
+      "min": -30,
+      "max": 30
+    },
+    "ShoulderY": {
+      "min": -30,
+      "max": 30
+    },
+    "ShoulderZ": {
+      "min": -30,
+      "max": 30
+    },
+    "ShoulderX": {
+      "min": -30,
+      "max": 30
+    },
+    "ShoulderYy": {
+      "min": -30,
+      "max": 30
+    },
+    "Divider19": {
+      "min": -1,
+      "max": 1
+    },
+    "HipZ1": {
+      "min": -1,
+      "max": 1
+    },
+    "HipZ2": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamBodyAngleX2": {
+      "min": -30,
+      "max": 30
+    },
+    "ParamBodyAngleY2": {
+      "min": -30,
+      "max": 30
+    },
+    "HipAngleX2": {
+      "min": -30,
+      "max": 30
+    },
+    "ParamHipAngleZ": {
+      "min": -30,
+      "max": 30
+    },
+    "ParamHipAngleZ2": {
+      "min": -30,
+      "max": 30
+    },
+    "HipAngleYUP": {
+      "min": -30,
+      "max": 30
+    },
+    "HipAngleYDOWN": {
+      "min": -30,
+      "max": 30
+    },
+    "HipAngleXq": {
+      "min": -30,
+      "max": 30
+    },
+    "Param33": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamBodyAngleRX": {
+      "min": -30,
+      "max": 30
+    },
+    "ParamBodyAngleRY": {
+      "min": -30,
+      "max": 30
+    },
+    "ParamBodyAngleRZ": {
+      "min": -30,
+      "max": 30
+    },
+    "AngleX": {
+      "min": -30,
+      "max": 30
+    },
+    "AngleY": {
+      "min": -30,
+      "max": 30
+    },
+    "AngleZ": {
+      "min": -30,
+      "max": 30
+    },
+    "PositionX": {
+      "min": -30,
+      "max": 30
+    },
+    "PositionY": {
+      "min": -30,
+      "max": 30
+    },
+    "PositionZ": {
+      "min": -30,
+      "max": 30
+    },
+    "LeanInput": {
+      "min": -30,
+      "max": 30
+    },
+    "Emotion": {
+      "min": -1,
+      "max": 1
+    },
+    "Emotion2": {
+      "min": -1,
+      "max": 1
+    },
+    "IDLE": {
+      "min": 0,
+      "max": 1
+    },
+    "EyeSmile": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamEyeBallX": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamEyeBallY": {
+      "min": -1,
+      "max": 1
+    },
+    "PupilX": {
+      "min": -1,
+      "max": 1
+    },
+    "PupilY": {
+      "min": -1,
+      "max": 1
+    },
+    "BrowInnerUp": {
+      "min": 0,
+      "max": 1
+    },
+    "Divider4": {
+      "min": -1,
+      "max": 1
+    },
+    "RParamGlowA": {
+      "min": 0,
+      "max": 1
+    },
+    "RParamGlowB": {
+      "min": -1,
+      "max": 1
+    },
+    "RParamGlowC": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamEyeROpen": {
+      "min": 0,
+      "max": 1.5
+    },
+    "ParamBrowRY": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamBrowRAngleSmoothing": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamBrowRAngle": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamBrowRY2": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamBrowRY3": {
+      "min": -1,
+      "max": 1
+    },
+    "ShockR": {
+      "min": -1,
+      "max": 1
+    },
+    "REyeSquint": {
+      "min": 0,
+      "max": 1
+    },
+    "Divider5": {
+      "min": -1,
+      "max": 1
+    },
+    "LParamGlowA": {
+      "min": 0,
+      "max": 1
+    },
+    "LParamGlowB": {
+      "min": -1,
+      "max": 1
+    },
+    "LParamGlowC": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamEyeLOpen": {
+      "min": 0,
+      "max": 1.5
+    },
+    "ParamBrowLY": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamBrowLAngleSmoothing": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamBrowLAngle": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamBrowLY2": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamBrowLY3": {
+      "min": -1,
+      "max": 1
+    },
+    "ShockL": {
+      "min": -1,
+      "max": 1
+    },
+    "LEyeSquint": {
+      "min": 0,
+      "max": 1
+    },
+    "Divider8": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamMouthForm": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamMouthOpenY": {
+      "min": 0,
+      "max": 1
+    },
+    "JawOpen": {
+      "min": 0,
+      "max": 1
+    },
+    "TongueOut": {
+      "min": 0,
+      "max": 1
+    },
+    "Divider31": {
+      "min": -1,
+      "max": 1
+    },
+    "MouthX": {
+      "min": -1,
+      "max": 1
+    },
+    "MouthSmile_L": {
+      "min": 0,
+      "max": 1
+    },
+    "MouthSmile_R": {
+      "min": 0,
+      "max": 1
+    },
+    "Press": {
+      "min": 0,
+      "max": 1
+    },
+    "Mouthpucker": {
+      "min": 0,
+      "max": 1
+    },
+    "MouthFunnel": {
+      "min": 0,
+      "max": 1
+    },
+    "MouthPuckerWiden": {
+      "min": -1,
+      "max": 1
+    },
+    "CheeckPuff": {
+      "min": 0,
+      "max": 1
+    },
+    "CheeckPuff2": {
+      "min": 0,
+      "max": 1
+    },
+    "CheeckPuffR": {
+      "min": 0,
+      "max": 1
+    },
+    "CheeckPuffL": {
+      "min": 0,
+      "max": 1
+    },
+    "MouthPressLipOpen": {
+      "min": -1,
+      "max": 1
+    },
+    "MouthRollUpper": {
+      "min": 0,
+      "max": 1
+    },
+    "MouthRollLower": {
+      "min": 0,
+      "max": 1
+    },
+    "NoseNeer": {
+      "min": 0,
+      "max": 1
+    },
+    "PoutOffsetXL": {
+      "min": 0,
+      "max": 30
+    },
+    "PoutOffsetXR": {
+      "min": 0,
+      "max": 30
+    },
+    "ParamSilence": {
+      "min": 0,
+      "max": 1
+    },
+    "ParamA": {
+      "min": 0,
+      "max": 1
+    },
+    "ParamI": {
+      "min": 0,
+      "max": 1
+    },
+    "ParamU": {
+      "min": 0,
+      "max": 1
+    },
+    "ParamE": {
+      "min": 0,
+      "max": 1
+    },
+    "ParamO": {
+      "min": 0,
+      "max": 1
+    },
+    "Divider6": {
+      "min": -1,
+      "max": 1
+    },
+    "RShiftbuffer": {
+      "min": 0,
+      "max": 1
+    },
+    "RColorshift": {
+      "min": 0,
+      "max": 1
+    },
+    "REyeball1": {
+      "min": -1,
+      "max": 1
+    },
+    "REyeball2": {
+      "min": -1,
+      "max": 1
+    },
+    "REyeball3": {
+      "min": -1,
+      "max": 1
+    },
+    "REyeLashX1": {
+      "min": -1,
+      "max": 1
+    },
+    "REyeLashX2": {
+      "min": -1,
+      "max": 1
+    },
+    "REyes1": {
+      "min": -1,
+      "max": 1
+    },
+    "REyes2": {
+      "min": -1,
+      "max": 1
+    },
+    "RHighLight1": {
+      "min": -1,
+      "max": 1
+    },
+    "RHighLight2": {
+      "min": -1,
+      "max": 1
+    },
+    "RHighLight3": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider7": {
+      "min": -1,
+      "max": 1
+    },
+    "LEyeball1": {
+      "min": -1,
+      "max": 1
+    },
+    "LEyeball2": {
+      "min": -1,
+      "max": 1
+    },
+    "LEyeball3": {
+      "min": -1,
+      "max": 1
+    },
+    "LEyes1": {
+      "min": -1,
+      "max": 1
+    },
+    "LEyes2": {
+      "min": -1,
+      "max": 1
+    },
+    "LEyeLashX1": {
+      "min": -1,
+      "max": 1
+    },
+    "LEyeLashX2": {
+      "min": -1,
+      "max": 1
+    },
+    "LHighLight1": {
+      "min": -1,
+      "max": 1
+    },
+    "LHighLight2": {
+      "min": -1,
+      "max": 1
+    },
+    "LHighLight3": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider15": {
+      "min": -1,
+      "max": 1
+    },
+    "CheeksWiggleX": {
+      "min": -1,
+      "max": 1
+    },
+    "CheeksWiggleXR": {
+      "min": -1,
+      "max": 1
+    },
+    "CheeksWiggleXL": {
+      "min": -1,
+      "max": 1
+    },
+    "CheeksWiggleY": {
+      "min": -1,
+      "max": 1
+    },
+    "LipPhysics1": {
+      "min": -1,
+      "max": 1
+    },
+    "LipPhysics2": {
+      "min": -1,
+      "max": 1
+    },
+    "LipPhysics3": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamTongueUpDown": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamTongueWidth": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider11": {
+      "min": -1,
+      "max": 1
+    },
+    "FrontHairZ": {
+      "min": -1,
+      "max": 1
+    },
+    "FrontHairX1": {
+      "min": -1,
+      "max": 1
+    },
+    "FrontHairX2": {
+      "min": -1,
+      "max": 1
+    },
+    "FrontHairX3": {
+      "min": -1,
+      "max": 1
+    },
+    "FrontHairX4": {
+      "min": -1,
+      "max": 1
+    },
+    "FrontHairY1": {
+      "min": -1,
+      "max": 1
+    },
+    "FrontHairY2": {
+      "min": -1,
+      "max": 1
+    },
+    "FrontHairY3": {
+      "min": -1,
+      "max": 1
+    },
+    "FrontHairY4": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairX1": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairX2": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairX3": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairX4": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairY1": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairY2": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairY3": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairY4": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairLX1": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairRX1": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairRX2": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairRX3": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairRBS": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairLX2": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairLX3": {
+      "min": -1,
+      "max": 1
+    },
+    "SideHairLBS": {
+      "min": -1,
+      "max": 1
+    },
+    "LateSideHairX1": {
+      "min": -1,
+      "max": 1
+    },
+    "LateSideHairX2": {
+      "min": -1,
+      "max": 1
+    },
+    "LateSideHairX3": {
+      "min": -1,
+      "max": 1
+    },
+    "LateSideHairX4": {
+      "min": -1,
+      "max": 1
+    },
+    "LateSideHairX5": {
+      "min": -1,
+      "max": 1
+    },
+    "LateSideHairXBS": {
+      "min": -1,
+      "max": 1
+    },
+    "LateSideHairY1": {
+      "min": -1,
+      "max": 1
+    },
+    "LateSideHairY2": {
+      "min": -1,
+      "max": 1
+    },
+    "LateSideHairY3": {
+      "min": -1,
+      "max": 1
+    },
+    "LateSideHairY4": {
+      "min": -1,
+      "max": 1
+    },
+    "LateSideHairY5": {
+      "min": -1,
+      "max": 1
+    },
+    "LateSideHairYbs": {
+      "min": -1,
+      "max": 1
+    },
+    "LateHairZ": {
+      "min": -30,
+      "max": 30
+    },
+    "LateHairX1": {
+      "min": -1,
+      "max": 1
+    },
+    "LateHairX2": {
+      "min": -1,
+      "max": 1
+    },
+    "LateHairX3": {
+      "min": -1,
+      "max": 1
+    },
+    "LateHairX4": {
+      "min": -1,
+      "max": 1
+    },
+    "LateHairX5": {
+      "min": -1,
+      "max": 1
+    },
+    "LateHairY1": {
+      "min": -1,
+      "max": 1
+    },
+    "LateHairY2": {
+      "min": -1,
+      "max": 1
+    },
+    "LateHairY3": {
+      "min": -1,
+      "max": 1
+    },
+    "LateHairY4": {
+      "min": -1,
+      "max": 1
+    },
+    "LateHairY5": {
+      "min": -1,
+      "max": 1
+    },
+    "ShortPonytailX1": {
+      "min": -1,
+      "max": 1
+    },
+    "ShortPonytailX2": {
+      "min": -1,
+      "max": 1
+    },
+    "ShortPonytailXBS": {
+      "min": -1,
+      "max": 1
+    },
+    "ShortPonytailXBS2": {
+      "min": -1,
+      "max": 1
+    },
+    "ShortPonytailY": {
+      "min": -1,
+      "max": 1
+    },
+    "ShortPonytailY2": {
+      "min": -1,
+      "max": 1
+    },
+    "ShortPonytailYBS": {
+      "min": -1,
+      "max": 1
+    },
+    "ShortPonytailYBS2": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider9": {
+      "min": -1,
+      "max": 1
+    },
+    "Param35": {
+      "min": -1,
+      "max": 1
+    },
+    "Param44": {
+      "min": -1,
+      "max": 1
+    },
+    "LArm": {
+      "min": -1,
+      "max": 1
+    },
+    "LForearm": {
+      "min": -1,
+      "max": 1
+    },
+    "LWrist": {
+      "min": -1,
+      "max": 1
+    },
+    "LHand": {
+      "min": -1,
+      "max": 1
+    },
+    "LHand2": {
+      "min": -1,
+      "max": 1
+    },
+    "LSleeveX1": {
+      "min": -1,
+      "max": 1
+    },
+    "LSleeveX2": {
+      "min": -1,
+      "max": 1
+    },
+    "LSleeveX3": {
+      "min": -1,
+      "max": 1
+    },
+    "LSleeveY": {
+      "min": -1,
+      "max": 1
+    },
+    "LSleeveY2": {
+      "min": -1,
+      "max": 1
+    },
+    "LSleeveY3": {
+      "min": -1,
+      "max": 1
+    },
+    "LRibbonX1": {
+      "min": -1,
+      "max": 1
+    },
+    "LRibbonX2": {
+      "min": -1,
+      "max": 1
+    },
+    "LRibbonX3": {
+      "min": -1,
+      "max": 1
+    },
+    "LRibbonX4": {
+      "min": -1,
+      "max": 1
+    },
+    "LRibbonY1": {
+      "min": -1,
+      "max": 1
+    },
+    "LRibbonY2": {
+      "min": -1,
+      "max": 1
+    },
+    "LRibbonY3": {
+      "min": -1,
+      "max": 1
+    },
+    "LRibbonY4": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider10": {
+      "min": -1,
+      "max": 1
+    },
+    "Param25": {
+      "min": -1,
+      "max": 1
+    },
+    "RArm": {
+      "min": -1,
+      "max": 1
+    },
+    "RForearm": {
+      "min": -1,
+      "max": 1
+    },
+    "RWrist": {
+      "min": -1,
+      "max": 1
+    },
+    "RHand": {
+      "min": -1,
+      "max": 1
+    },
+    "RHand2": {
+      "min": -1,
+      "max": 1
+    },
+    "RSleeveX1": {
+      "min": -1,
+      "max": 1
+    },
+    "RSleeveX2": {
+      "min": -1,
+      "max": 1
+    },
+    "RSleeveX3": {
+      "min": -1,
+      "max": 1
+    },
+    "RSleeveX4": {
+      "min": -1,
+      "max": 1
+    },
+    "RSleeveY1": {
+      "min": -1,
+      "max": 1
+    },
+    "RSleeveY2": {
+      "min": -1,
+      "max": 1
+    },
+    "RSleeveY3": {
+      "min": -1,
+      "max": 1
+    },
+    "RRibbonX1": {
+      "min": -1,
+      "max": 1
+    },
+    "RRibbonX2": {
+      "min": -1,
+      "max": 1
+    },
+    "RRibbonX3": {
+      "min": -1,
+      "max": 1
+    },
+    "RRibbonX4": {
+      "min": -1,
+      "max": 1
+    },
+    "RRibbonY1": {
+      "min": -1,
+      "max": 1
+    },
+    "RRibbonY2": {
+      "min": -1,
+      "max": 1
+    },
+    "RRibbonY3": {
+      "min": -1,
+      "max": 1
+    },
+    "RRibbonY4": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider18": {
+      "min": -1,
+      "max": 1
+    },
+    "ChestX1": {
+      "min": -1,
+      "max": 1
+    },
+    "ChestX2": {
+      "min": -1,
+      "max": 1
+    },
+    "ChestX3": {
+      "min": -1,
+      "max": 1
+    },
+    "ChestXBS": {
+      "min": -1,
+      "max": 1
+    },
+    "ChestY1": {
+      "min": -1,
+      "max": 1
+    },
+    "ChestY2": {
+      "min": -1,
+      "max": 1
+    },
+    "ChestY3": {
+      "min": -1,
+      "max": 1
+    },
+    "ChestY4": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider12": {
+      "min": -1,
+      "max": 1
+    },
+    "Shine": {
+      "min": -1,
+      "max": 1
+    },
+    "ShineX": {
+      "min": -1,
+      "max": 1
+    },
+    "ShineBIG": {
+      "min": -1,
+      "max": 1
+    },
+    "Hat_XA": {
+      "min": -1,
+      "max": 1
+    },
+    "Hat_XB": {
+      "min": -1,
+      "max": 1
+    },
+    "Hat_XC": {
+      "min": -1,
+      "max": 1
+    },
+    "Hat_YA": {
+      "min": -1,
+      "max": 1
+    },
+    "Hat_YB": {
+      "min": -1,
+      "max": 1
+    },
+    "Hat_YC": {
+      "min": -1,
+      "max": 1
+    },
+    "RBowX8": {
+      "min": -1,
+      "max": 1
+    },
+    "RBowX5": {
+      "min": -1,
+      "max": 1
+    },
+    "RBowX6": {
+      "min": -1,
+      "max": 1
+    },
+    "RBowX7": {
+      "min": -1,
+      "max": 1
+    },
+    "RBowX1": {
+      "min": -1,
+      "max": 1
+    },
+    "RBowX2": {
+      "min": -1,
+      "max": 1
+    },
+    "RBowX3": {
+      "min": -1,
+      "max": 1
+    },
+    "RBowX4": {
+      "min": -1,
+      "max": 1
+    },
+    "LBowX1": {
+      "min": -1,
+      "max": 1
+    },
+    "LowX2": {
+      "min": -1,
+      "max": 1
+    },
+    "LBowX3": {
+      "min": -1,
+      "max": 1
+    },
+    "LBowX4": {
+      "min": -1,
+      "max": 1
+    },
+    "RJewelry1": {
+      "min": -1,
+      "max": 1
+    },
+    "RJewelry2": {
+      "min": -1,
+      "max": 1
+    },
+    "RJewelry3": {
+      "min": -1,
+      "max": 1
+    },
+    "LJewelry1": {
+      "min": -1,
+      "max": 1
+    },
+    "LJewelry2": {
+      "min": -1,
+      "max": 1
+    },
+    "LJewelry3": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider23": {
+      "min": -1,
+      "max": 1
+    },
+    "ribbonX1": {
+      "min": -1,
+      "max": 1
+    },
+    "ribbonX2": {
+      "min": -1,
+      "max": 1
+    },
+    "ribbonX3": {
+      "min": -1,
+      "max": 1
+    },
+    "ribbonX4": {
+      "min": -1,
+      "max": 1
+    },
+    "ribbonY1": {
+      "min": -1,
+      "max": 1
+    },
+    "ribbonY2": {
+      "min": -1,
+      "max": 1
+    },
+    "ribbonY3": {
+      "min": -1,
+      "max": 1
+    },
+    "ribbonY4": {
+      "min": -1,
+      "max": 1
+    },
+    "ribbonX5": {
+      "min": -1,
+      "max": 1
+    },
+    "ribbonX7": {
+      "min": -1,
+      "max": 1
+    },
+    "ribbonX6": {
+      "min": -1,
+      "max": 1
+    },
+    "ribbonY5": {
+      "min": -1,
+      "max": 1
+    },
+    "ribbonY6": {
+      "min": -1,
+      "max": 1
+    },
+    "ribbonY7": {
+      "min": -1,
+      "max": 1
+    },
+    "Hat2pha": {
+      "min": -1,
+      "max": 1
+    },
+    "Hat2phB": {
+      "min": -1,
+      "max": 1
+    },
+    "Hat2phC": {
+      "min": -1,
+      "max": 1
+    },
+    "Hat2phD": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider20": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtX1": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtX2": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtX3": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtX4": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtSpecial": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtSpecial2": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtY": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtY2": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtY3": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtY4": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtY5": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtYBS": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtY6": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtY7": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtY9": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtY8": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtLayerX1": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtLayerX2": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtLayerX3": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtLayerX4": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtLayerX5": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtLayerX6": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtLayerY1": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtLayerY2": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtLayerY3": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtLayerY4": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtLayerY5": {
+      "min": -1,
+      "max": 1
+    },
+    "SkirtLayerY6": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider14": {
+      "min": -1,
+      "max": 1
+    },
+    "LaceRX": {
+      "min": -1,
+      "max": 1
+    },
+    "LaceRX2": {
+      "min": -1,
+      "max": 1
+    },
+    "LaceRX3": {
+      "min": -1,
+      "max": 1
+    },
+    "LaceLX1": {
+      "min": -1,
+      "max": 1
+    },
+    "LaceLX2": {
+      "min": -1,
+      "max": 1
+    },
+    "LaceLX3": {
+      "min": -1,
+      "max": 1
+    },
+    "LaceX1": {
+      "min": -1,
+      "max": 1
+    },
+    "LaceX2": {
+      "min": -1,
+      "max": 1
+    },
+    "LaceX3": {
+      "min": -1,
+      "max": 1
+    },
+    "LaceY1": {
+      "min": -1,
+      "max": 1
+    },
+    "LaceY2": {
+      "min": -1,
+      "max": 1
+    },
+    "LaceY3": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider13": {
+      "min": -1,
+      "max": 1
+    },
+    "LControl": {
+      "min": -1,
+      "max": 1
+    },
+    "RFlip": {
+      "min": -1,
+      "max": 1
+    },
+    "RFlip2": {
+      "min": -1,
+      "max": 1
+    },
+    "LEar1": {
+      "min": -1,
+      "max": 1
+    },
+    "LEar2": {
+      "min": -1,
+      "max": 1
+    },
+    "LEar3": {
+      "min": -1,
+      "max": 1
+    },
+    "RControl": {
+      "min": -1,
+      "max": 1
+    },
+    "LFlip": {
+      "min": -1,
+      "max": 1
+    },
+    "LFlip2": {
+      "min": -1,
+      "max": 1
+    },
+    "REar1": {
+      "min": -1,
+      "max": 1
+    },
+    "REar2": {
+      "min": -1,
+      "max": 1
+    },
+    "REar3": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider33": {
+      "min": -1,
+      "max": 1
+    },
+    "Param11": {
+      "min": 0,
+      "max": 8
+    },
+    "MicroGlows": {
+      "min": 0,
+      "max": 1
+    },
+    "SweatBurst1": {
+      "min": 0,
+      "max": 1
+    },
+    "SweatBurst2": {
+      "min": 0,
+      "max": 1
+    },
+    "SweatBurst3": {
+      "min": 0,
+      "max": 1
+    },
+    "SweatBurst4": {
+      "min": 0,
+      "max": 1
+    },
+    "SweatBurst5": {
+      "min": 0,
+      "max": 1
+    },
+    "SweatBurst6": {
+      "min": 0,
+      "max": 1
+    },
+    "Sweat1": {
+      "min": 0,
+      "max": 1
+    },
+    "Sweat2": {
+      "min": 0,
+      "max": 1
+    },
+    "WingOpenClose": {
+      "min": -1,
+      "max": 1
+    },
+    "WingSpread": {
+      "min": -1,
+      "max": 1
+    },
+    "FeatherPhysics1": {
+      "min": -1,
+      "max": 1
+    },
+    "FeatherPhysics2": {
+      "min": -1,
+      "max": 1
+    },
+    "WingRotation": {
+      "min": -1,
+      "max": 1
+    },
+    "WingOpenClose2": {
+      "min": -1,
+      "max": 1
+    },
+    "WingSpread2": {
+      "min": -1,
+      "max": 1
+    },
+    "FeatherPhysics3": {
+      "min": -1,
+      "max": 1
+    },
+    "FeatherPhysics4": {
+      "min": -1,
+      "max": 1
+    },
+    "WingRotation2": {
+      "min": -1,
+      "max": 1
+    },
+    "Param140": {
+      "min": 0,
+      "max": 1
+    },
+    "Param137": {
+      "min": 0,
+      "max": 1
+    },
+    "Param139": {
+      "min": 0,
+      "max": 1
+    },
+    "Param138": {
+      "min": -1,
+      "max": 1
+    },
+    "SHOCKEYE": {
+      "min": -1,
+      "max": 1
+    },
+    "Param135": {
+      "min": -1,
+      "max": 1
+    },
+    "Param6": {
+      "min": -1,
+      "max": 1
+    },
+    "Param7": {
+      "min": -1,
+      "max": 1
+    },
+    "Param132": {
+      "min": -1,
+      "max": 1
+    },
+    "Param133": {
+      "min": -1,
+      "max": 1
+    },
+    "Angry": {
+      "min": 0,
+      "max": 1
+    },
+    "Param136": {
+      "min": 0,
+      "max": 1
+    },
+    "Angry2": {
+      "min": 0,
+      "max": 1
+    },
+    "Angry3": {
+      "min": 0,
+      "max": 1
+    },
+    "AniEyerolling": {
+      "min": 0,
+      "max": 30
+    },
+    "Ani1": {
+      "min": -1,
+      "max": 1
+    },
+    "SWITCHA": {
+      "min": 0,
+      "max": 1
+    },
+    "Ani2": {
+      "min": -1,
+      "max": 1
+    },
+    "Param141": {
+      "min": 0,
+      "max": 1
+    },
+    "Param142": {
+      "min": 0,
+      "max": 1
+    },
+    "Divider24": {
+      "min": -1,
+      "max": 1
+    },
+    "F1Anikey": {
+      "min": 0,
+      "max": 1
+    },
+    "F2Anikey": {
+      "min": 0,
+      "max": 1
+    },
+    "F3Anikey": {
+      "min": 0,
+      "max": 1
+    },
+    "Colorflicker5": {
+      "min": 0,
+      "max": 1
+    },
+    "Glintshift5": {
+      "min": 0,
+      "max": 1
+    },
+    "Colorflicker6": {
+      "min": 0,
+      "max": 1
+    },
+    "Glintshift6": {
+      "min": 0,
+      "max": 1
+    },
+    "Colorflicker7": {
+      "min": 0,
+      "max": 1
+    },
+    "Glintshift8": {
+      "min": 0,
+      "max": 1
+    },
+    "Colorflicker8": {
+      "min": 0,
+      "max": 1
+    },
+    "Glintshift7": {
+      "min": 0,
+      "max": 1
+    },
+    "Divider25": {
+      "min": -1,
+      "max": 1
+    },
+    "LittleFlower1": {
+      "min": 0,
+      "max": 1
+    },
+    "LittleFlower2": {
+      "min": 0,
+      "max": 1
+    },
+    "LittleFlower9": {
+      "min": -1,
+      "max": 1
+    },
+    "LittleFlower3": {
+      "min": 0,
+      "max": 1
+    },
+    "LittleFlower4": {
+      "min": 0,
+      "max": 1
+    },
+    "LittleFlower10": {
+      "min": -1,
+      "max": 1
+    },
+    "LittleFlower5": {
+      "min": 0,
+      "max": 1
+    },
+    "LittleFlower6": {
+      "min": 0,
+      "max": 1
+    },
+    "LittleFlower11": {
+      "min": 0,
+      "max": 1
+    },
+    "LittleFlower13": {
+      "min": -1,
+      "max": 1
+    },
+    "LittleFlower12": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider28": {
+      "min": -1,
+      "max": 1
+    },
+    "Param12": {
+      "min": 0,
+      "max": 1
+    },
+    "Param13": {
+      "min": 0,
+      "max": 1
+    },
+    "AngryMove": {
+      "min": 0,
+      "max": 1
+    },
+    "AngryMove3": {
+      "min": 0,
+      "max": 1
+    },
+    "AngryMove2": {
+      "min": -1,
+      "max": 1
+    },
+    "AngryMove4": {
+      "min": -1,
+      "max": 1
+    },
+    "AngryMove5": {
+      "min": 0,
+      "max": 1
+    },
+    "AngryMove8": {
+      "min": 0,
+      "max": 1
+    },
+    "AngryMove6": {
+      "min": -1,
+      "max": 1
+    },
+    "AngryMove7": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider16": {
+      "min": -1,
+      "max": 1
+    },
+    "Divider22": {
+      "min": -1,
+      "max": 1
+    },
+    "Param31": {
+      "min": -1,
+      "max": 1
+    },
+    "Param32": {
+      "min": -1,
+      "max": 1
+    },
+    "Param27": {
+      "min": -1,
+      "max": 1
+    },
+    "Param28": {
+      "min": 0,
+      "max": 1
+    },
+    "RCry": {
+      "min": 0,
+      "max": 1
+    },
+    "RCryKey": {
+      "min": 0,
+      "max": 1
+    },
+    "RCry2": {
+      "min": 0,
+      "max": 1
+    },
+    "Param29": {
+      "min": -1,
+      "max": 1
+    },
+    "Param30": {
+      "min": 0,
+      "max": 1
+    },
+    "LCry": {
+      "min": 0,
+      "max": 1
+    },
+    "LCryKey": {
+      "min": 0,
+      "max": 1
+    },
+    "LCry3": {
+      "min": 0,
+      "max": 1
+    },
+    "Startwinkle": {
+      "min": -1,
+      "max": 1
+    },
+    "Startwinkle2": {
+      "min": -1,
+      "max": 1
+    },
+    "Param55": {
+      "min": 0,
+      "max": 1
+    },
+    "Param56": {
+      "min": 0,
+      "max": 1
+    },
+    "Param58": {
+      "min": 0,
+      "max": 1
+    },
+    "Param57": {
+      "min": 0,
+      "max": 1
+    },
+    "Param52": {
+      "min": -1,
+      "max": 1
+    },
+    "Param_Angle_Rotation84": {
+      "min": -45,
+      "max": 45
+    },
+    "Param_Angle_Rotation85": {
+      "min": -45,
+      "max": 45
+    },
+    "Param_Angle_Rotation86": {
+      "min": -45,
+      "max": 45
+    },
+    "Param_Angle_Rotation87": {
+      "min": -45,
+      "max": 45
+    },
+    "Param_Angle_Rotation88": {
+      "min": -45,
+      "max": 45
+    },
+    "Param_Angle_Rotation89": {
+      "min": -45,
+      "max": 45
+    },
+    "Param51": {
+      "min": -1,
+      "max": 1
+    },
+    "Param45": {
+      "min": -1,
+      "max": 1
+    },
+    "Param46": {
+      "min": -1,
+      "max": 1
+    },
+    "Param47": {
+      "min": -1,
+      "max": 1
+    },
+    "Param48": {
+      "min": -1,
+      "max": 1
+    },
+    "Param49": {
+      "min": -1,
+      "max": 1
+    },
+    "Param37": {
+      "min": 0,
+      "max": 1
+    },
+    "Param38": {
+      "min": 0,
+      "max": 1
+    },
+    "Param40": {
+      "min": 0,
+      "max": 1
+    },
+    "Param36": {
+      "min": -1,
+      "max": 1
+    },
+    "Param39": {
+      "min": -1,
+      "max": 1
+    },
+    "Param41": {
+      "min": -1,
+      "max": 1
+    },
+    "Param42": {
+      "min": -1,
+      "max": 1
+    },
+    "Param43": {
+      "min": -1,
+      "max": 1
+    },
+    "Param62": {
+      "min": -1,
+      "max": 1
+    },
+    "Param59": {
+      "min": -1,
+      "max": 1
+    },
+    "Param60": {
+      "min": -1,
+      "max": 1
+    },
+    "Param61": {
+      "min": -1,
+      "max": 1
+    },
+    "GemReflection": {
+      "min": -1,
+      "max": 1
+    },
+    "GemHighlightx": {
+      "min": -1,
+      "max": 1
+    },
+    "GemHighlighty": {
+      "min": -1,
+      "max": 1
+    },
+    "KiraA": {
+      "min": -1,
+      "max": 1
+    },
+    "KiraB": {
+      "min": -1,
+      "max": 1
+    },
+    "KiraC": {
+      "min": -1,
+      "max": 1
+    },
+    "KiraD": {
+      "min": -1,
+      "max": 1
+    },
+    "ParamBreath": {
+      "min": 0,
+      "max": 1
+    }
+  },
+  "motions": [
+    "抚胸手打开",
+    "抚胸手关闭",
+    "竖手指打开",
+    "竖手指关闭",
+    "狗尾巴草打开",
+    "狗尾巴草关闭",
+    "Idle"
+  ],
+  "expressions": [
+    "兔牙",
+    "加载",
+    "单片眼镜",
+    "圈圈眼",
+    "屑",
+    "流泪",
+    "爱心眼",
+    "脱鞋",
+    "脸红",
+    "钢盆",
+    "裙长切换",
+    "黑框眼镜",
+    "黑脸",
+    "＞＜",
+    "体型1",
+    "体型2",
+    "默认体型",
+    "前倾",
+    "尾巴开关",
+    "流冷汗",
+    "胸口衣服"
+  ],
+  "forms": [
+    0,
+    1,
+    2
+  ]
+}
