@@ -51,8 +51,8 @@ node tools/motion-graph-build.mjs verify
    import/export 的歧义文件按 ESM 解析，而 ESM 禁止 HTML 注释；浏览器 `<script>`
    走的是 Script 目标，以 `.cjs` 检查与之一致）。
 4. **回归**：`node tools/dev-server/index.mjs --port 5332` 后访问
-   `/dsh-l2d/motion-graph.html?selftest=1`，tab_title 应为十组全绿
-   （validate-ok roundtrip-ok sim resizers-ok ctx-ok combo-ok panels-ok console-ok chips-ok jsonpv-ok）。
+   `/dsh-l2d/motion-graph.html?selftest=1`，tab_title 应为十一组全绿
+   （validate-ok roundtrip-ok sim resizers-ok ctx-ok combo-ok panels-ok console-ok chips-ok jsonpv-ok i18n-ok）。
 
 ## 如何抽取下一个模块（规程）
 
@@ -75,7 +75,10 @@ node tools/motion-graph-build.mjs verify
 | `panel-layers.js` | `var PanelLayers = {...}`（含头注释） | 监看浮窗图层管理，localStorage `dsh-mg-panels.v1` |
 | `hint-bar.js` | `var HintBar = {...}`（含头注释） | 画布操作指南条收起/展开，localStorage 持久化 |
 | `rail-chips.js` | `var RailChips = {...}`（含头注释） | 左右栏收起为悬浮 chip，localStorage `dsh-mg-rail-chips.v1` |
+| `i18n.js` | `var I18n = {...}` + `var tr`（紧跟 `NODE_W` 声明） | 界面中/英/日三语切换：三份同键字典、`tr(key, params)`、缺键回落中文、回执 reason 代码映射（未知代码原样显示）；语言选择存 localStorage `dsh-l2d.lang`，未选择时按 `?lang=` → 浏览器语言 → 中文。只翻译界面文案，节点自定义名、预设名、参数/动作 ID 与导出 JSON 一律不随语言变化（selftest `i18n-ok` 校验三语导出逐字节一致） |
 
-两个模块都依赖同 `<script>` 作用域内的前置声明（`esc`、`$$`、`localStorage` 等）
+新增界面文案时：在 `i18n.js` 三份字典里加同一个键（selftest 会检出缺键），静态 HTML 用 `data-i18n` / `data-i18n-title` / `data-i18n-aria` / `data-i18n-ph`，脚本里用 `tr('键')`；动态渲染的区域需在 `UI.onLangChange` 中重绘。
+
+各模块都依赖同 `<script>` 作用域内的前置声明（`esc`、`$$`、`localStorage` 等）
 与后置引用（`UI`、`Demo` 等），运行期才解析，因此按模板中的原声明顺序内联即可，
 无需（也不得）引入 import/export——否则会改变作用域语义。

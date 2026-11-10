@@ -118,6 +118,16 @@ button, input, select, textarea { font-family:inherit; }
 .btn.danger { color:var(--danger); border-color:color-mix(in srgb,var(--danger) 45%,var(--line)); }
 .btn .ico { font-size:13px; line-height:1; }
 .btn.icon-only { width:32px; padding:6px 0; }
+.lang-select {
+  flex:none; height:28px; max-width:96px; padding:0 6px; cursor:pointer;
+  background:var(--surface); color:var(--ink); border:0.5px solid var(--mg-border-strong);
+  border-radius:var(--r-sm); font:400 12px/1 var(--font);
+}
+.lang-select:hover { border-color:color-mix(in srgb,var(--ink) 24%,var(--line)); }
+.lang-select:focus-visible { outline:2px solid var(--mg-focus-outer); outline-offset:1px; }
+/* 英/日文按钮文字较长：顶栏放不下时由 UI.fitTopbar 加 compact，退为图标按钮（与 ≤1100px 断点同效果） */
+#topbar.compact .top-actions .btn .lbl, #topbar.compact .ver-badge { display:none; }
+#topbar.compact .top-actions .btn { padding:6px 9px; }
 #validate-badge {
   display:inline-flex; align-items:center; gap:6px; flex:none;
   font:600 10.5px var(--mono); padding:6px 9px; border-radius:var(--r-sm);
@@ -169,7 +179,9 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
   color:var(--gc); background:color-mix(in srgb,var(--gc) 14%,transparent); }
 .lib-item .glyph svg { width:14px; height:14px; }
 .lib-item .txt { font-size:12px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.lib-item .en { margin-left:auto; font:500 9px var(--mono); color:var(--ink3); white-space:nowrap; }
+.lib-item .en { margin-left:auto; font:500 9px var(--mono); color:var(--ink3); white-space:nowrap; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+/* 节点类型项：英文默认标题完整显示，译名过长时由右侧译名截断 */
+.lib-item[data-type] .txt { flex-shrink:0; }
 .lib-item .combo-del {
   flex:none; width:18px; height:18px; margin-left:4px; border-radius:4px;
   border:1px solid var(--mg-border-strong); background:transparent; color:var(--ink3);
@@ -183,6 +195,8 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
   font:600 9px/1 var(--mono); letter-spacing:.04em; cursor:pointer; display:grid; place-items:center;
 }
 .preset-add:hover { color:var(--ok); border-color:color-mix(in srgb,var(--ok) 55%,var(--line)); }
+/* 「+」与可隐藏的文字分两段（窄屏只留「+」）：改为单行 flex，避免 grid 把两段排成两行 */
+.preset-add { display:inline-flex; align-items:center; white-space:nowrap; }
 
 /* ---- 三栏收起：分栏边缘折叠按钮（锚在 #main 上，不随面板内容滚动）+ 收起态悬浮 chip ---- */
 .rail-collapse {
@@ -273,7 +287,8 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
 .node-icon svg { width:15px; height:15px; }
 .node-name { min-width:0; flex:1; }
 .node-title { font-size:12.5px; font-weight:600; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.node-type { font:500 9px/1.3 var(--mono); letter-spacing:.07em; color:var(--ink2); text-transform:uppercase; }
+.node-title, .node-type { display:block; }
+.node-type { font:500 9px/1.3 var(--mono); letter-spacing:.07em; color:var(--ink2); text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .node-flag { font:600 9px var(--mono); color:var(--ink3); border:1px solid var(--mg-border-strong); border-radius:4px; padding:2px 4px; flex:none; }
 .node-body { padding:1px 10px 8px; }
 .node-preview { font:11px var(--mono); color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -531,6 +546,8 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
    =========================================================================== */
 @media (max-width:1100px) {
   :root { --rail-w:200px; --insp-w:264px; }
+  .ver-badge { display:none; }
+  .preset-add .pa-txt { display:none; }
   .doc-meta input { width:92px; }
   .top-actions .btn .lbl { display:none; }
   .top-actions .btn { padding:6px 9px; }
@@ -576,30 +593,31 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
     <label>MODEL <input id="doc-model" type="text" value="大肥鱼" spellcheck="false"></label>
   </div>
   <div class="top-actions">
-    <button class="btn" id="btn-sim" title="模拟动作触发（纯本地预览）"><span class="ico">▶</span><span class="lbl">模拟触发</span></button>
-    <button class="btn" id="btn-monitor" title="Live2D 监看：宿主在线时显示真实模型执行画面"><span class="ico">◉</span><span class="lbl">监看</span></button>
-    <button class="btn" id="btn-exec" title="执行监视控制台：设置页运行节点图后自动推送执行回执时间线"><span class="ico">▤</span><span class="lbl">执行</span></button>
-    <button class="btn" id="btn-validate" title="结构校验"><span class="ico">✓</span><span class="lbl">结构校验</span></button>
-    <button class="btn" id="btn-json" title="JSON 预览：只读，随画布实时刷新" aria-pressed="false"><span class="ico">{}</span><span class="lbl">JSON</span></button>
-    <button class="btn" id="btn-export" title="导出 JSON"><span class="ico">⇩</span><span class="lbl">导出</span></button>
-    <button class="btn" id="btn-import" title="导入 JSON"><span class="ico">⇧</span><span class="lbl">导入</span></button>
-    <button class="btn icon-only" id="btn-menu" title="更多"><span class="ico">⋯</span></button>
+    <button class="btn" id="btn-sim" title="模拟动作触发（纯本地预览）" data-i18n-title="top.sim.title"><span class="ico">▶</span><span class="lbl" data-i18n="top.sim.lbl">模拟触发</span></button>
+    <button class="btn" id="btn-monitor" title="Live2D 监看：宿主在线时显示真实模型执行画面" data-i18n-title="top.monitor.title"><span class="ico">◉</span><span class="lbl" data-i18n="top.monitor.lbl">监看</span></button>
+    <button class="btn" id="btn-exec" title="执行监视控制台：设置页运行节点图后自动推送执行回执时间线" data-i18n-title="top.exec.title"><span class="ico">▤</span><span class="lbl" data-i18n="top.exec.lbl">执行</span></button>
+    <button class="btn" id="btn-validate" title="结构校验" data-i18n-title="top.validate.title"><span class="ico">✓</span><span class="lbl" data-i18n="top.validate.lbl">结构校验</span></button>
+    <button class="btn" id="btn-json" title="JSON 预览：只读，随画布实时刷新" data-i18n-title="top.json.title" aria-pressed="false"><span class="ico">{}</span><span class="lbl">JSON</span></button>
+    <button class="btn" id="btn-export" title="导出 JSON" data-i18n-title="top.export.title"><span class="ico">⇩</span><span class="lbl" data-i18n="top.export.lbl">导出</span></button>
+    <button class="btn" id="btn-import" title="导入 JSON" data-i18n-title="top.import.title"><span class="ico">⇧</span><span class="lbl" data-i18n="top.import.lbl">导入</span></button>
+    <select id="lang-select" class="lang-select" title="界面语言" aria-label="界面语言" data-i18n-title="lang.aria" data-i18n-aria="lang.aria"></select>
+    <button class="btn icon-only" id="btn-menu" title="更多" data-i18n-title="top.menu.title" data-i18n-aria="top.menu.title"><span class="ico" aria-hidden="true">⋯</span></button>
   </div>
-  <div id="validate-badge" title="点击查看校验详情"><span class="dot"></span><span class="lbl">未校验</span></div>
+  <div id="validate-badge" title="点击查看校验详情" data-i18n-title="badge.title"><span class="dot"></span><span class="lbl">未校验</span></div>
 </header>
 
 <main id="main">
-  <button class="rail-collapse" id="lib-collapse" title="收起节点库（画布扩宽，悬浮 chip 可拖动/恢复）">&laquo;</button>
+  <button class="rail-collapse" id="lib-collapse" title="收起节点库（画布扩宽，悬浮 chip 可拖动/恢复）" data-i18n-title="lib.collapse.title" data-i18n-aria="lib.collapse.title">&laquo;</button>
   <aside id="library">
     <p class="panel-kicker">NODE LIBRARY</p>
-    <h1 class="panel-title">节点库</h1>
-    <p class="panel-sub">拖入画布，或单击追加节点。设计层辅助节点仅存于 meta.editor。</p>
+    <h1 class="panel-title" data-i18n="lib.title">节点库</h1>
+    <p class="panel-sub" data-i18n="lib.sub">拖入画布，或单击追加节点。设计层辅助节点仅存于 meta.editor。</p>
     <div id="lib-groups"></div>
     <div id="lib-combos"></div>
     <div id="lib-presets"></div>
   </aside>
 
-  <div class="col-resizer" id="rz-lib" role="separator" aria-orientation="vertical" aria-label="调整节点库面板宽度" title="拖拽调整宽度 · 双击复位"></div>
+  <div class="col-resizer" id="rz-lib" role="separator" aria-orientation="vertical" aria-label="调整节点库面板宽度" title="拖拽调整宽度 · 双击复位" data-i18n-aria="rz.lib.aria" data-i18n-title="rz.col.title"></div>
 
   <section id="canvas-wrap">
     <div id="canvas">
@@ -610,82 +628,81 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
       <div id="marquee"></div>
     </div>
     <div id="canvas-hint">
-      <button id="hint-toggle" title="收起操作指南（可从「操作指南 ?」小标签恢复）">?</button>
+      <button id="hint-toggle" title="收起操作指南（可从「操作指南 ?」小标签恢复）" data-i18n-title="hint.toggle.title" data-i18n-aria="hint.toggle.title">?</button>
       <div class="hint-body">
-      <div class="hint-row"><b>GRAPH CANVAS</b> · DFS 前序编译 / 每 8 步一段 · 22px 点阵网格 · 拖拽端口连线 · 单击连线选中删除 · 右键节点可删除/复制/禁用</div>
-      <div class="hint-row"><b>操作</b>
-        <span>空白左键拖拽 框选</span><span>中键拖拽 平移</span><span>滚轮 缩放</span>
-        <span><kbd>Shift</kbd>+拖拽 框选</span><span><kbd>Del</kbd> 删除</span>
-        <span><kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd> 复制粘贴</span>
-        <span><kbd>Ctrl</kbd>+<kbd>0</kbd> 适配</span>
-        <span>选中多节点 → 右键「存为组合事件」</span>
+      <div class="hint-row"><b>GRAPH CANVAS</b> · <span data-i18n="hint.canvas">DFS 前序编译 / 每 8 步一段 · 22px 点阵网格 · 拖拽端口连线 · 单击连线选中删除 · 右键节点可删除/复制/禁用</span></div>
+      <div class="hint-row"><b data-i18n="hint.controls">操作</b>
+        <span data-i18n="hint.leftDrag">空白左键拖拽 框选</span><span data-i18n="hint.midDrag">中键拖拽 平移</span><span data-i18n="hint.wheel">滚轮 缩放</span>
+        <span><kbd>Shift</kbd>+<span data-i18n="hint.shiftDrag">拖拽 框选</span></span><span><kbd>Del</kbd> <span data-i18n="hint.del">删除</span></span>
+        <span><kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd> <span data-i18n="hint.copyPaste">复制粘贴</span></span>
+        <span><kbd>Ctrl</kbd>+<kbd>0</kbd> <span data-i18n="hint.fit">适配</span></span>
+        <span data-i18n="hint.combo">选中多节点 → 右键「存为组合事件」</span>
       </div>
-      <div class="hint-row"><b>端口</b>
-        <span class="legend"><i style="background:var(--port-flow)"></i>执行流 flow（同色才可连）</span>
-        <span class="legend"><i style="background:var(--port-signal)"></i>信号 signal</span>
-        <span class="legend"><i style="background:var(--port-data)"></i>数据 data</span>
+      <div class="hint-row"><b data-i18n="hint.ports">端口</b>
+        <span class="legend"><i style="background:var(--port-flow)"></i><span data-i18n="port.flowLegend">执行流 flow（同色才可连）</span></span>
+        <span class="legend"><i style="background:var(--port-signal)"></i><span data-i18n="port.signal">信号 signal</span></span>
+        <span class="legend"><i style="background:var(--port-data)"></i><span data-i18n="port.data">数据 data</span></span>
       </div>
       </div>
     </div>
-    <div id="hint-chip" title="展开操作指南">操作指南 ?</div>
+    <div id="hint-chip" title="展开操作指南" data-i18n-title="hint.chip.title" data-i18n="hint.chip">操作指南 ?</div>
     <div id="sim-panel">
       <div class="sp-head"><span class="sp-title">LOCAL SIMULATION</span>
-        <span><button class="fp-btn" data-fp-collapse="sim-panel" title="收起/展开">—</button>
-        <button class="sp-close" id="sim-close" title="停止">×</button></span></div>
+        <span><button class="fp-btn" data-fp-collapse="sim-panel" title="收起/展开" data-i18n-title="common.collapse" data-i18n-aria="common.collapse">—</button>
+        <button class="sp-close" id="sim-close" title="停止" data-i18n-title="sim.stop" data-i18n-aria="sim.stop">×</button></span></div>
       <div id="sim-track"><div id="sim-fill"></div></div>
       <div id="sim-step">待触发</div>
-      <div id="sim-note">纯本地预览：不调 LLM、不调后端、不提交 Runtime 动作队列。Graph Cache 命中不跳过播放。</div>
+      <div id="sim-note" data-i18n="sim.note">纯本地预览：不调 LLM、不调后端、不提交 Runtime 动作队列。Graph Cache 命中不跳过播放。</div>
     </div>
-    <div id="minimap-wrap"><div class="mm-head">MINIMAP<button class="fp-btn" data-fp-collapse="minimap-wrap" title="收起/展开">—</button></div><canvas id="minimap" width="368" height="224"></canvas></div>
+    <div id="minimap-wrap"><div class="mm-head">MINIMAP<button class="fp-btn" data-fp-collapse="minimap-wrap" title="收起/展开" data-i18n-title="common.collapse" data-i18n-aria="common.collapse">—</button></div><canvas id="minimap" width="368" height="224"></canvas></div>
     <div id="exec-console">
       <div class="ec-head"><b>EXECUTION CONSOLE</b>
-        <button class="fp-btn" data-fp-collapse="exec-console" title="收起/展开">—</button></div>
+        <button class="fp-btn" data-fp-collapse="exec-console" title="收起/展开" data-i18n-title="common.collapse" data-i18n-aria="common.collapse">—</button></div>
       <div class="ec-body" id="exec-console-body">
-        <div class="ec-empty">等待执行数据：从设置页运行节点图后自动刷新</div>
+        <div class="ec-empty" data-i18n="exec.empty">等待执行数据：从设置页运行节点图后自动刷新</div>
       </div>
     </div>
-    <div id="json-preview" role="region" aria-label="JSON 预览">
+    <div id="json-preview" role="region" aria-label="JSON 预览" data-i18n-aria="jp.aria">
       <div class="jp-head"><b>JSON PREVIEW</b><span class="jp-meta" id="json-preview-meta"></span>
-        <button class="fp-btn" id="json-preview-copy" title="复制 JSON" aria-label="复制 JSON">⧉</button>
-        <button class="fp-btn" data-fp-collapse="json-preview" title="收起/展开">—</button>
-        <button class="fp-btn" id="json-preview-close" title="关闭" aria-label="关闭 JSON 预览">×</button></div>
+        <button class="fp-btn" id="json-preview-copy" title="复制 JSON" aria-label="复制 JSON" data-i18n-title="jp.copy" data-i18n-aria="jp.copy">⧉</button>
+        <button class="fp-btn" data-fp-collapse="json-preview" title="收起/展开" data-i18n-title="common.collapse" data-i18n-aria="common.collapse">—</button>
+        <button class="fp-btn" id="json-preview-close" title="关闭" aria-label="关闭 JSON 预览" data-i18n-title="common.close" data-i18n-aria="jp.close">×</button></div>
       <pre class="jp-body" id="json-preview-body"></pre>
     </div>
     <div id="zoombar">
-      <button id="zoom-out" title="缩小">−</button>
+      <button id="zoom-out" title="缩小" data-i18n-title="zoom.out" data-i18n-aria="zoom.out">−</button>
       <span class="zoom-val num" id="zoom-val">100%</span>
-      <button id="zoom-in" title="放大">+</button>
-      <button class="fit" id="zoom-fit" title="适配全部">FIT</button>
-      <button id="layers-btn" title="监看图层：置顶 / 隐藏 / 收起 / 调序">☰</button>
+      <button id="zoom-in" title="放大" data-i18n-title="zoom.in" data-i18n-aria="zoom.in">+</button>
+      <button class="fit" id="zoom-fit" title="适配全部" data-i18n-title="zoom.fit">FIT</button>
+      <button id="layers-btn" title="监看图层：置顶 / 隐藏 / 收起 / 调序" data-i18n-title="layers.btn" data-i18n-aria="layers.btn">☰</button>
     </div>
     <div id="layers-pop"></div>
   </section>
 
-  <div class="col-resizer" id="rz-insp" role="separator" aria-orientation="vertical" aria-label="调整属性面板宽度" title="拖拽调整宽度 · 双击复位"></div>
+  <div class="col-resizer" id="rz-insp" role="separator" aria-orientation="vertical" aria-label="调整属性面板宽度" title="拖拽调整宽度 · 双击复位" data-i18n-aria="rz.insp.aria" data-i18n-title="rz.col.title"></div>
 
-  <button class="rail-collapse" id="insp-collapse" title="收起属性栏（画布扩宽，悬浮 chip 可拖动/恢复）">&raquo;</button>
+  <button class="rail-collapse" id="insp-collapse" title="收起属性栏（画布扩宽，悬浮 chip 可拖动/恢复）" data-i18n-title="insp.collapse.title" data-i18n-aria="insp.collapse.title">&raquo;</button>
   <aside id="inspector"><div id="ins-root"></div></aside>
 </main>
 
 <footer id="statusbar">
   <span id="status-text">就绪 · 已载入默认示例图</span>
   <div id="status-track"><div id="status-fill"></div></div>
-  <span id="status-counts">节点 <b id="c-nodes">0</b> · 连线 <b id="c-edges">0</b> · 段 <b id="c-segs">0</b></span>
+  <span id="status-counts"><span data-i18n="status.nodes">节点</span> <b id="c-nodes">0</b> · <span data-i18n="status.edges">连线</span> <b id="c-edges">0</b> · <span data-i18n="status.segs">段</span> <b id="c-segs">0</b></span>
 </footer>
 
 <div id="menu-pop"></div>
 <div id="node-menu"></div>
 <div id="monitor-win">
       <div class="mw-head"><b>LIVE2D MONITOR</b><span class="mw-src">/dsh-l2d/pet.html</span>
-        <button class="fp-btn" data-fp-collapse="monitor-win" title="收起/展开">—</button>
-        <button class="btn icon-only" id="monitor-close" title="关闭监看"><span class="ico">×</span></button></div>
-  <iframe id="monitor-frame" title="Live2D 模型监看"></iframe>
-  <div id="monitor-fallback" class="hidden"><b>宿主未在线</b><br>Live2D 监看需要宿主（或 DevServer）提供 <code>/dsh-l2d/pet.html</code>；file:// 直开或服务不可达时无法嵌入真实模型。
-  动作时序预览请用顶部「模拟触发」（纯本地，不依赖宿主）。</div>
+        <button class="fp-btn" data-fp-collapse="monitor-win" title="收起/展开" data-i18n-title="common.collapse" data-i18n-aria="common.collapse">—</button>
+        <button class="btn icon-only" id="monitor-close" title="关闭监看" data-i18n-title="monitor.close" data-i18n-aria="monitor.close"><span class="ico">×</span></button></div>
+  <iframe id="monitor-frame" title="Live2D 模型监看" data-i18n-title="monitor.frame"></iframe>
+  <div id="monitor-fallback" class="hidden"><b data-i18n="monitor.offline">宿主未在线</b><br><span data-i18n="monitor.need">Live2D 监看需要宿主（或 DevServer）提供</span> <code>/dsh-l2d/pet.html</code><span data-i18n="monitor.why">；file:// 直开或服务不可达时无法嵌入真实模型。动作时序预览请用顶部「模拟触发」（纯本地，不依赖宿主）。</span></div>
 </div>
 <div id="modal-layer"><div class="modal" id="modal-box"></div></div>
 <div id="toast"></div>
-<div class="dock-resizer" id="rz-dock" role="separator" aria-orientation="horizontal" aria-label="调整 JSON 面板高度" title="拖拽调整高度 · 双击复位"></div>
+<div class="dock-resizer" id="rz-dock" role="separator" aria-orientation="horizontal" aria-label="调整 JSON 面板高度" title="拖拽调整高度 · 双击复位" data-i18n-aria="rz.dock.aria" data-i18n-title="rz.row.title"></div>
 <pre id="mg-selftest"></pre>
 <pre id="mg-export"></pre>
 <pre id="mg-error"></pre>
@@ -709,6 +726,9 @@ var esc = function (s) {
   });
 };
 var NODE_W = 208, PORT_Y = 46, NODE_H = 96, DOT = 22;
+
+<!-- BUILD:SPLIT i18n -->
+<!-- BUILD:END i18n -->
 
 /* 线性功能图标（自绘 SVG path，非装饰性堆砌、无 Emoji） */
 var ICON_PATHS = {
@@ -756,9 +776,9 @@ var Capability = {
    ------------------------------------------------------------------------- */
 var NodeDef = {
   groups: [
-    { key:'event',  label:'事件节点', en:'EVENT',  color:'var(--event)',  items:['trigger','workspace'] },
-    { key:'logic',  label:'逻辑节点', en:'LOGIC',  color:'var(--logic)',  items:['condition','gate','delay'] },
-    { key:'action', label:'动作节点', en:'ACTION', color:'var(--action)', items:['motion','expression','pose','look'] }
+    { key:'event',  label:'事件节点', lk:'group.event',  en:'EVENT',  color:'var(--event)',  items:['trigger','workspace'] },
+    { key:'logic',  label:'逻辑节点', lk:'group.logic',  en:'LOGIC',  color:'var(--logic)',  items:['condition','gate','delay'] },
+    { key:'action', label:'动作节点', lk:'group.action', en:'ACTION', color:'var(--action)', items:['motion','expression','pose','look'] }
   ],
   portTypes: [
     { key:'flow',   label:'执行流 flow',   color:'var(--port-flow)' },
@@ -785,6 +805,8 @@ var NodeDef = {
     for (var i=0;i<this.groups.length;i++) if (this.groups[i].key===g) return this.groups[i].color;
     return 'var(--preview)';
   },
+  /* 类型显示名（界面语言）；内部键 type 与默认节点标题 defs[type].label 不随语言变化 */
+  typeName: function (type) { return I18n.has('type.' + type) ? tr('type.' + type) : String(type); },
   isCompilable: function (type) { return !!(this.defs[type] && this.defs[type].gtype); },
   gtype: function (type) { return this.defs[type] ? this.defs[type].gtype : null; },
   defaults: function (type) {
@@ -803,54 +825,54 @@ var NodeDef = {
   },
   /* 通用字段（契约 §5.3）：设计层元数据，只存 meta.editor，不写入 graph.nodes 白名单字段 */
   commonFields: function () { return [
-    { key:'label',          label:'节点标题',       kind:'text' },
-    { key:'priority',       label:'执行优先级',     kind:'select', options:Capability.priorities,
-      hint:'影响导出 segments 的段优先级（合法值 BACKGROUND/NORMAL/FORCE）' },
-    { key:'cooldownMs',     label:'冷却时间 ms',    kind:'number', min:0, max:600000, step:1,
-      hint:'设计层标注 · 不写入导出动作字段' },
-    { key:'execState',      label:'执行状态',       kind:'select', options:Capability.execStates,
-      hint:'设计层标注 · 本地模拟不修改该值' },
-    { key:'modelWhitelist', label:'模型白名单',     kind:'text',
-      hint:'逗号分隔 · 设计层标注，仅存 meta.editor' },
-    { key:'portType',       label:'端口类型',       kind:'select', options:['flow','signal','data'],
-      hint:'同色端口才可连线；改色后已有连线不自动断开' },
-    { key:'disabled',       label:'禁用节点（不参与编译）', kind:'checkbox' }
+    { key:'label',          label:tr('f.label'),       kind:'text' },
+    { key:'priority',       label:tr('f.priority'),     kind:'select', options:Capability.priorities,
+      hint:tr('f.priority.hint') },
+    { key:'cooldownMs',     label:tr('f.cooldown'),    kind:'number', min:0, max:600000, step:1,
+      hint:tr('f.cooldown.hint') },
+    { key:'execState',      label:tr('f.execState'),       kind:'select', options:Capability.execStates,
+      hint:tr('f.execState.hint') },
+    { key:'modelWhitelist', label:tr('f.whitelist'),     kind:'text',
+      hint:tr('f.whitelist.hint') },
+    { key:'portType',       label:tr('f.portType'),       kind:'select', options:['flow','signal','data'],
+      hint:tr('f.portType.hint') },
+    { key:'disabled',       label:tr('f.disabled'), kind:'checkbox' }
   ]; },
   /* 类型专属字段声明 —— Inspector 由此动态生成控件 */
   fields: function (type) {
     switch (type) {
       case 'expression': return [
-        { key:'name', label:'表情名', kind:'select', options:Capability.expressions,
-          hint:'MODEL_EXPRESSIONS 白名单（21 项），禁止自由输入' },
-        { key:'clear', label:'清除表情 clear', kind:'checkbox' },
-        { key:'stepDelayMs', label:'步前延时 delayMs', kind:'number', min:0, max:5000, step:10 }
+        { key:'name', label:tr('f.expr.name'), kind:'select', options:Capability.expressions,
+          hint:tr('f.expr.name.hint') },
+        { key:'clear', label:tr('f.clear'), kind:'checkbox' },
+        { key:'stepDelayMs', label:tr('f.stepDelay'), kind:'number', min:0, max:5000, step:10 }
       ];
       case 'motion': return [
-        { key:'name', label:'动作组', kind:'select', options:Capability.motionGroups,
-          hint:'MODEL_MOTION_GROUPS 白名单（6 项）' },
-        { key:'closeMotion', label:'收招动作（自动配对）', kind:'readonly',
-          hint:'PAIRED_CLOSES 自动派生，不可手填以保证校验通过' },
-        { key:'closeAfterMs', label:'收招延迟 ms', kind:'number', min:300, max:12000, step:100 },
-        { key:'stepDelayMs', label:'步前延时 delayMs', kind:'number', min:0, max:5000, step:10 }
+        { key:'name', label:tr('f.motion.name'), kind:'select', options:Capability.motionGroups,
+          hint:tr('f.motion.name.hint') },
+        { key:'closeMotion', label:tr('f.closeMotion'), kind:'readonly',
+          hint:tr('f.closeMotion.hint') },
+        { key:'closeAfterMs', label:tr('f.closeAfter'), kind:'number', min:300, max:12000, step:100 },
+        { key:'stepDelayMs', label:tr('f.stepDelay'), kind:'number', min:0, max:5000, step:10 }
       ];
       case 'pose': return [
-        { key:'poseRight', label:'右手 right', kind:'select', options:[''].concat(Capability.poseValues) },
-        { key:'poseLeft',  label:'左手 left',  kind:'select', options:[''].concat(Capability.poseValues) },
-        { key:'stepDelayMs', label:'步前延时 delayMs', kind:'number', min:0, max:5000, step:10 }
+        { key:'poseRight', label:tr('f.poseRight'), kind:'select', options:[''].concat(Capability.poseValues) },
+        { key:'poseLeft',  label:tr('f.poseLeft'),  kind:'select', options:[''].concat(Capability.poseValues) },
+        { key:'stepDelayMs', label:tr('f.stepDelay'), kind:'number', min:0, max:5000, step:10 }
       ];
       case 'look': return [
-        { key:'x', label:'视线 x (-1~1)', kind:'number', min:-1, max:1, step:0.01 },
-        { key:'y', label:'视线 y (-1~1)', kind:'number', min:-1, max:1, step:0.01 },
-        { key:'stepDelayMs', label:'步前延时 delayMs', kind:'number', min:0, max:5000, step:10 }
+        { key:'x', label:tr('f.lookX'), kind:'number', min:-1, max:1, step:0.01 },
+        { key:'y', label:tr('f.lookY'), kind:'number', min:-1, max:1, step:0.01 },
+        { key:'stepDelayMs', label:tr('f.stepDelay'), kind:'number', min:0, max:5000, step:10 }
       ];
       case 'delay': return [
-        { key:'delayMs', label:'延时 ms (0 < n ≤ 5000)', kind:'number', min:1, max:5000, step:10,
-          hint:'delay 不是 step，编译时累加并入下一动作节点的 delayMs' }
+        { key:'delayMs', label:tr('f.delayMs'), kind:'number', min:1, max:5000, step:10,
+          hint:tr('f.delayMs.hint') }
       ];
-      case 'gate':      return [{ key:'expr', label:'条件表达式（设计层）', kind:'text', hint:'仅存 meta.editor，不进 graph.nodes' }];
-      case 'condition': return [{ key:'expr', label:'判定条件（设计层）', kind:'text', hint:'仅存 meta.editor' }];
-      case 'workspace': return [{ key:'state', label:'工作区状态（设计层）', kind:'text' }];
-      case 'trigger':   return [{ key:'event', label:'事件名（设计层）', kind:'text' }];
+      case 'gate':      return [{ key:'expr', label:tr('f.gate.expr'), kind:'text', hint:tr('f.gate.expr.hint') }];
+      case 'condition': return [{ key:'expr', label:tr('f.cond.expr'), kind:'text', hint:tr('f.metaOnly') }];
+      case 'workspace': return [{ key:'state', label:tr('f.ws.state'), kind:'text' }];
+      case 'trigger':   return [{ key:'event', label:tr('f.trigger.event'), kind:'text' }];
       default: return [];
     }
   },
@@ -964,7 +986,7 @@ var Cache = {
     return { hit:false, data:this.value };
   },
   invalidate: function () { this.key=''; this.value=null; },
-  note: function () { return 'Graph Cache 仅缓存编译结果 · 命中不跳过实际播放（HIT ' + this.hits + ' / MISS ' + this.misses + '）'; },
+  note: function () { return tr('cache.note', { hits:this.hits, misses:this.misses }); },
   derivedKeys: ['cacheStatus','lastValidatedAt','resolvedBinding','validation','compiled','runtimeState','executionState','cacheHit']
 };
 
@@ -988,9 +1010,9 @@ var Preferences = {
   reducedMotion: (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || false,
   showGrid:true, snap:false,
   shortcuts:[
-    ['空白左键拖拽','框选（替换选择）'], ['Shift + 拖拽','框选'], ['中键拖拽','平移'],
-    ['滚轮','缩放'], ['Ctrl / ⌘ + C','复制选中节点'], ['Ctrl / ⌘ + V','粘贴节点'], ['Delete / Backspace','删除选中'],
-    ['Ctrl / ⌘ + A','全选节点'], ['Ctrl / ⌘ + 0','适配画布'], ['Escape','取消 / 关闭']
+    ['sc.leftDrag.k','sc.leftDrag.d'], ['sc.shiftDrag.k','sc.shiftDrag.d'], ['sc.midDrag.k','sc.midDrag.d'],
+    ['sc.wheel.k','sc.wheel.d'], ['Ctrl / ⌘ + C','sc.copy.d'], ['Ctrl / ⌘ + V','sc.paste.d'], ['Delete / Backspace','sc.del.d'],
+    ['Ctrl / ⌘ + A','sc.all.d'], ['Ctrl / ⌘ + 0','sc.fit.d'], ['Escape','sc.esc.d']
   ]
 };
 
@@ -1219,7 +1241,7 @@ var Serializer = {
   import: function (text) {
     var doc;
     try { doc = JSON.parse(text); }
-    catch (err) { return { ok:false, errors:['JSON 解析失败：' + (err && err.message || err)] }; }
+    catch (err) { return { ok:false, errors:[tr('err.jsonParse', { msg:(err && err.message || err) })] }; }
     /* 导入重验：不信任文件内缓存状态 */
     var chk = Validator.check(doc);
     if (!chk.ok) return { ok:false, errors:chk.errors };
@@ -1257,58 +1279,58 @@ var Validator = {
     return life;
   },
   checkGraph: function (graph, errors) {
-    if (!this.isPlain(graph)) { errors.push('graph 必须是对象'); return; }
+    if (!this.isPlain(graph)) { errors.push(tr('v.graphObj')); return; }
     var roots = graph.roots, nodes = graph.nodes;
-    if (!Array.isArray(roots) || !roots.length) errors.push('graph.roots 不能为空');
-    if (!Array.isArray(nodes) || !nodes.length) { errors.push('graph.nodes 不能为空'); return; }
-    if (nodes.length > Capability.maxGraphNodes) errors.push('graph.nodes 最多 ' + Capability.maxGraphNodes + ' 个');
+    if (!Array.isArray(roots) || !roots.length) errors.push(tr('v.rootsEmpty'));
+    if (!Array.isArray(nodes) || !nodes.length) { errors.push(tr('v.nodesEmpty')); return; }
+    if (nodes.length > Capability.maxGraphNodes) errors.push(tr('v.nodesMax', { n:Capability.maxGraphNodes }));
     Object.keys(graph).forEach(function (k) {
-      if (k !== 'roots' && k !== 'nodes') errors.push('graph 未知字段 ' + k);
+      if (k !== 'roots' && k !== 'nodes') errors.push(tr('v.graphUnknown', { k:k }));
     });
     var byId = new Map();
     nodes.forEach(function (node, i) {
       var at = 'graph.nodes[' + i + ']';
-      if (!Validator.isPlain(node)) { errors.push(at + ' 必须是对象'); return; }
-      if (typeof node.id !== 'string' || !node.id) { errors.push(at + '.id 必须是非空字符串'); return; }
-      if (byId.has(node.id)) { errors.push(at + ' id 重复：' + node.id); return; }
-      if (Capability.nodeTypes.indexOf(node.type) < 0) { errors.push(at + ' type 不受支持：' + String(node.type)); return; }
+      if (!Validator.isPlain(node)) { errors.push(tr('v.mustObj', { at:at })); return; }
+      if (typeof node.id !== 'string' || !node.id) { errors.push(tr('v.idStr', { at:at })); return; }
+      if (byId.has(node.id)) { errors.push(tr('v.idDup', { at:at, id:node.id })); return; }
+      if (Capability.nodeTypes.indexOf(node.type) < 0) { errors.push(tr('v.typeBad', { at:at, type:String(node.type) })); return; }
       Object.keys(node).forEach(function (k) {
-        if (Capability.nodeAllowedKeys.indexOf(k) < 0) errors.push(at + ' 未知字段 ' + k);
+        if (Capability.nodeAllowedKeys.indexOf(k) < 0) errors.push(tr('v.unknownField', { at:at, k:k }));
       });
       if ((node.type === 'expression' || node.type === 'motion') && (typeof node.name !== 'string' || !node.name)) {
-        errors.push(at + ' ' + node.type + ' 缺 name');
+        errors.push(tr('v.missingName', { at:at, type:node.type }));
       }
       if (node.type === 'pose') {
         if (!Validator.isPlain(node.pose) || (node.pose.right === undefined && node.pose.left === undefined)) {
-          errors.push(at + ' pose 需要 {right/left} 至少一侧');
+          errors.push(tr('v.poseSide', { at:at }));
         } else {
           ['right','left'].forEach(function (side) {
             if (node.pose[side] !== undefined && Capability.poseValues.indexOf(node.pose[side]) < 0) {
-              errors.push(at + ' pose.' + side + ' 非法：' + String(node.pose[side]));
+              errors.push(tr('v.poseBad', { at:at, side:side, v:String(node.pose[side]) }));
             }
           });
         }
       }
       if (node.type === 'look' && (!Number.isFinite(Number(node.x)) || !Number.isFinite(Number(node.y)))) {
-        errors.push(at + ' look 需要 x/y 数字');
+        errors.push(tr('v.lookXY', { at:at }));
       }
       if (node.type === 'delay') {
         var d = Number(node.delayMs);
-        if (!Number.isFinite(d) || d <= 0 || d > 5000) errors.push(at + ' delay 需要 0 < delayMs <= 5000');
+        if (!Number.isFinite(d) || d <= 0 || d > 5000) errors.push(tr('v.delayRange', { at:at }));
       } else if (node.delayMs !== undefined) {
         var d2 = Number(node.delayMs);
-        if (!Number.isFinite(d2) || d2 < 0 || d2 > 5000) errors.push(at + ' delayMs 必须是 0~5000 的数字');
+        if (!Number.isFinite(d2) || d2 < 0 || d2 > 5000) errors.push(tr('v.delayMsRange', { at:at }));
       }
-      if (node.next !== undefined && !Array.isArray(node.next)) errors.push(at + '.next 必须是数组');
+      if (node.next !== undefined && !Array.isArray(node.next)) errors.push(tr('v.nextArr', { at:at }));
       byId.set(node.id, node);
     });
     if (errors.length) return;
     byId.forEach(function (node, id) {
       (Array.isArray(node.next) ? node.next : []).forEach(function (t) {
-        if (!byId.has(t)) errors.push('节点 ' + id + ' 的 next 引用不存在：' + t);
+        if (!byId.has(t)) errors.push(tr('v.nextMissing', { id:id, t:t }));
       });
     });
-    (Array.isArray(roots) ? roots : []).forEach(function (r) { if (!byId.has(r)) errors.push('roots 引用不存在：' + r); });
+    (Array.isArray(roots) ? roots : []).forEach(function (r) { if (!byId.has(r)) errors.push(tr('v.rootMissing', { r:r })); });
     if (errors.length) return;
 
     /* 三色 DFS 环检测：显式栈 + 深度上限 */
@@ -1319,12 +1341,12 @@ var Validator = {
       color.set(start, 1);
       var stack = [[start, 0]];
       while (stack.length && !cyclic) {
-        if (stack.length > 256) { errors.push('graph 深度超过上限 256'); cyclic = true; break; }
+        if (stack.length > 256) { errors.push(tr('v.depth')); cyclic = true; break; }
         var top = stack[stack.length-1], id = top[0], nx = byId.get(id).next || [];
         if (top[1] < nx.length) {
           var t = nx[top[1]]; top[1] += 1;
           var c = color.get(t);
-          if (c === 1) { errors.push('graph 存在环：' + id + ' → ' + t); cyclic = true; break; }
+          if (c === 1) { errors.push(tr('v.cycle', { a:id, b:t })); cyclic = true; break; }
           if (c === 0 && byId.has(t)) { color.set(t, 1); stack.push([t, 0]); }
         } else { color.set(id, 2); stack.pop(); }
       }
@@ -1341,82 +1363,82 @@ var Validator = {
       var cur = queue.shift(), nx2 = byId.get(cur).next || [];
       for (var i=0;i<nx2.length;i++) if (byId.has(nx2[i]) && !reach.has(nx2[i])) { reach.add(nx2[i]); queue.push(nx2[i]); }
     }
-    Array.from(byId.keys()).forEach(function (id) { if (!reach.has(id)) errors.push('节点不可从 roots 到达：' + id); });
+    Array.from(byId.keys()).forEach(function (id) { if (!reach.has(id)) errors.push(tr('v.unreachable', { id:id })); });
   },
   checkStep: function (step, at, errors) {
-    if (!this.isPlain(step)) { errors.push(at + ' 不是对象'); return; }
-    Object.keys(step).forEach(function (k) { if (Capability.stepKeys.indexOf(k) < 0) errors.push(at + ' 未知字段 ' + k); });
-    if (Capability.stepKinds.indexOf(step.kind) < 0) { errors.push(at + ' kind 非法：' + String(step.kind)); return; }
+    if (!this.isPlain(step)) { errors.push(tr('v.notObj', { at:at })); return; }
+    Object.keys(step).forEach(function (k) { if (Capability.stepKeys.indexOf(k) < 0) errors.push(tr('v.unknownField', { at:at, k:k })); });
+    if (Capability.stepKinds.indexOf(step.kind) < 0) { errors.push(tr('v.kindBad', { at:at, k:String(step.kind) })); return; }
     if (step.delayMs !== undefined && !(typeof step.delayMs === 'number' && Number.isFinite(step.delayMs) && step.delayMs >= 0 && step.delayMs <= 5000)) {
-      errors.push(at + ' delayMs 必须是 0~5000 的数字');
+      errors.push(tr('v.delayMsRange', { at:at }));
     }
     var numRange = function (v, a, b) { return typeof v === 'number' && Number.isFinite(v) && v >= a && v <= b; };
     if (step.kind === 'expression') {
       if (step.clear === true) { /* clear 跳过 name 校验 */ }
-      else if (Capability.expressions.indexOf(step.name) < 0) errors.push(at + ' 表情名不存在：' + String(step.name));
+      else if (Capability.expressions.indexOf(step.name) < 0) errors.push(tr('v.exprMissing', { at:at, n:String(step.name) }));
     }
     if (step.kind === 'motion') {
-      if (Capability.motionGroups.indexOf(step.name) < 0) errors.push(at + ' 动作组不存在或不允许手动播：' + String(step.name));
+      if (Capability.motionGroups.indexOf(step.name) < 0) errors.push(tr('v.motionMissing', { at:at, n:String(step.name) }));
       var pair = Capability.pairedCloses[step.name];
       if (step.closeMotion !== undefined) {
-        if (!pair) errors.push(at + ' 这个动作没有关闭配对，不能写 closeMotion');
-        else if (step.closeMotion !== pair) errors.push(at + ' closeMotion 必须是 ' + pair + '，实际 ' + step.closeMotion);
-        if (step.closeAfterMs !== undefined && !numRange(step.closeAfterMs, 300, 12000)) errors.push(at + ' closeAfterMs 必须是 300~12000 的数字');
+        if (!pair) errors.push(tr('v.noPair', { at:at }));
+        else if (step.closeMotion !== pair) errors.push(tr('v.pairMismatch', { at:at, p:pair, a:step.closeMotion }));
+        if (step.closeAfterMs !== undefined && !numRange(step.closeAfterMs, 300, 12000)) errors.push(tr('v.closeAfter', { at:at }));
       }
     }
     if (step.kind === 'pose') {
-      if (!this.isPlain(step.pose) || !Object.keys(step.pose).length) errors.push(at + ' pose 至少给一侧');
+      if (!this.isPlain(step.pose) || !Object.keys(step.pose).length) errors.push(tr('v.poseOne', { at:at }));
       else Object.keys(step.pose).forEach(function (k) {
-        if (k !== 'right' && k !== 'left') errors.push(at + ' pose 未知侧 ' + k);
-        else if (Capability.poseValues.indexOf(step.pose[k]) < 0) errors.push(at + ' pose.' + k + ' 取值非法：' + String(step.pose[k]));
+        if (k !== 'right' && k !== 'left') errors.push(tr('v.poseUnknownSide', { at:at, k:k }));
+        else if (Capability.poseValues.indexOf(step.pose[k]) < 0) errors.push(tr('v.poseValue', { at:at, k:k, v:String(step.pose[k]) }));
       });
     }
     if (step.kind === 'look') {
-      if (!numRange(step.x, -1, 1)) errors.push(at + ' look.x 必须是 -1~1 的数字');
-      if (!numRange(step.y, -1, 1)) errors.push(at + ' look.y 必须是 -1~1 的数字');
+      if (!numRange(step.x, -1, 1)) errors.push(tr('v.lookRange', { at:at, axis:'x' }));
+      if (!numRange(step.y, -1, 1)) errors.push(tr('v.lookRange', { at:at, axis:'y' }));
     }
     if (step.timeoutMs !== undefined) {
-      if (!numRange(step.timeoutMs, 0, 8000)) errors.push(at + ' timeoutMs 必须是 0~8000 的数字');
-      else if (step.group === undefined) errors.push(at + ' timeoutMs 必须同时给 group');
+      if (!numRange(step.timeoutMs, 0, 8000)) errors.push(tr('v.timeoutRange', { at:at }));
+      else if (step.group === undefined) errors.push(tr('v.timeoutGroup', { at:at }));
     }
-    if (step.mode === 'parallel' && step.group === undefined) errors.push(at + ' mode=parallel 必须同时给 group');
-    if (step.name !== undefined && typeof step.name !== 'string') errors.push(at + ' name 必须是字符串');
+    if (step.mode === 'parallel' && step.group === undefined) errors.push(tr('v.parallelGroup', { at:at }));
+    if (step.name !== undefined && typeof step.name !== 'string') errors.push(tr('v.nameStr', { at:at }));
   },
   checkSegments: function (segments, errors) {
-    if (!Array.isArray(segments) || !segments.length) { errors.push('segments 不能为空'); return; }
-    if (segments.length > Capability.maxSegments) errors.push('segments 最多 ' + Capability.maxSegments + ' 段');
+    if (!Array.isArray(segments) || !segments.length) { errors.push(tr('v.segEmpty')); return; }
+    if (segments.length > Capability.maxSegments) errors.push(tr('v.segMax', { n:Capability.maxSegments }));
     segments.slice(0, Capability.maxSegments).forEach(function (seg, si) {
       var at = 'segments[' + si + ']';
-      if (!Validator.isPlain(seg)) { errors.push(at + ' 必须是对象'); return; }
-      Object.keys(seg).forEach(function (k) { if (['chain','priority','bubble'].indexOf(k) < 0) errors.push(at + ' 未知字段 ' + k); });
-      if (Capability.priorities.indexOf(seg.priority || 'NORMAL') < 0) errors.push(at + '.priority 非法');
+      if (!Validator.isPlain(seg)) { errors.push(tr('v.mustObj', { at:at })); return; }
+      Object.keys(seg).forEach(function (k) { if (['chain','priority','bubble'].indexOf(k) < 0) errors.push(tr('v.unknownField', { at:at, k:k })); });
+      if (Capability.priorities.indexOf(seg.priority || 'NORMAL') < 0) errors.push(tr('v.prioBad', { at:at }));
       if (seg.bubble !== undefined && (typeof seg.bubble !== 'string' || seg.bubble.length > Capability.maxBubble)) {
-        errors.push(at + '.bubble 最多 ' + Capability.maxBubble + ' 字符');
+        errors.push(tr('v.bubbleMax', { at:at, n:Capability.maxBubble }));
       }
-      if (!Array.isArray(seg.chain) || !seg.chain.length) { errors.push(at + '.chain 不能为空'); return; }
-      if (seg.chain.length > Capability.maxStepsPerSegment) errors.push(at + '.chain 最多 ' + Capability.maxStepsPerSegment + ' 步');
+      if (!Array.isArray(seg.chain) || !seg.chain.length) { errors.push(tr('v.chainEmpty', { at:at })); return; }
+      if (seg.chain.length > Capability.maxStepsPerSegment) errors.push(tr('v.chainMax', { at:at, n:Capability.maxStepsPerSegment }));
       seg.chain.slice(0, Capability.maxStepsPerSegment).forEach(function (step, i) {
         Validator.checkStep(step, at + '.chain[' + i + ']', errors);
       });
       var life = Validator.estimateLifeMs(seg.chain);
-      if (life > Capability.maxLifeMs) errors.push(at + ' 估算时长 ' + life + 'ms 超过上限 ' + Capability.maxLifeMs + 'ms');
+      if (life > Capability.maxLifeMs) errors.push(tr('v.life', { at:at, life:life, max:Capability.maxLifeMs }));
     });
   },
   check: function (doc) {
     var errors = [], warnings = [];
-    if (!this.isPlain(doc)) return { ok:false, errors:['分享 JSON 必须是对象'], warnings:warnings };
+    if (!this.isPlain(doc)) return { ok:false, errors:[tr('v.docObj')], warnings:warnings };
     Object.keys(doc).forEach(function (k) {
-      if (Capability.topKeys.indexOf(k) < 0) errors.push('未知顶层字段 ' + k);
+      if (Capability.topKeys.indexOf(k) < 0) errors.push(tr('v.topUnknown', { k:k }));
     });
-    if (doc.schemaVersion !== 1) errors.push('schemaVersion 必须是 1，收到：' + String(doc.schemaVersion));
-    if (doc.kind !== 'dsh-l2d-nodegraph') errors.push('kind 必须是 dsh-l2d-nodegraph，收到：' + String(doc.kind));
-    if (typeof doc.name !== 'string' || !doc.name.trim()) errors.push('name 必须是非空字符串');
+    if (doc.schemaVersion !== 1) errors.push(tr('v.schema', { v:String(doc.schemaVersion) }));
+    if (doc.kind !== 'dsh-l2d-nodegraph') errors.push(tr('v.kind', { v:String(doc.kind) }));
+    if (typeof doc.name !== 'string' || !doc.name.trim()) errors.push(tr('v.name'));
     var mb = this.isPlain(doc.modelBinding) ? doc.modelBinding : {};
-    Object.keys(mb).forEach(function (k) { if (Capability.bindingKeys.indexOf(k) < 0) errors.push('modelBinding 未知字段 ' + k); });
+    Object.keys(mb).forEach(function (k) { if (Capability.bindingKeys.indexOf(k) < 0) errors.push(tr('v.mbUnknown', { k:k })); });
     var mode = mb.bindingMode === undefined ? 'any' : mb.bindingMode;
-    if (['strict','any'].indexOf(mode) < 0) errors.push('modelBinding.bindingMode 必须是 strict 或 any');
-    if (mode === 'strict' && !mb.modelId && !mb.modelHash) errors.push('bindingMode=strict 需要至少提供 modelId 或 modelHash');
-    if (doc.graph === undefined && doc.segments === undefined) errors.push('graph 与 segments 至少提供一个');
+    if (['strict','any'].indexOf(mode) < 0) errors.push(tr('v.mbMode'));
+    if (mode === 'strict' && !mb.modelId && !mb.modelHash) errors.push(tr('v.strictNeeds'));
+    if (doc.graph === undefined && doc.segments === undefined) errors.push(tr('v.graphOrSeg'));
     if (doc.graph !== undefined) this.checkGraph(doc.graph, errors);
     if (doc.segments !== undefined) this.checkSegments(doc.segments, errors);
 
@@ -1424,10 +1446,10 @@ var Validator = {
     Graph.edges.forEach(function (e) {
       var a = Graph.byId(e.from), b = Graph.byId(e.to);
       if (!a || !b) return;
-      if (a.props.portType !== b.props.portType) warnings.push('异色连线：' + a.label + ' (' + a.props.portType + ') → ' + b.label + ' (' + b.props.portType + ')');
+      if (a.props.portType !== b.props.portType) warnings.push(tr('w.portMismatch', { a:a.label, pa:a.props.portType, b:b.label, pb:b.props.portType }));
     });
     var disabled = Graph.nodes.filter(function (n) { return n.disabled; }).length;
-    if (disabled) warnings.push(disabled + ' 个节点已禁用，不参与编译（graph 中已省略）');
+    if (disabled) warnings.push(tr('w.disabled', { n:disabled }));
     return { ok:errors.length === 0, errors:errors, warnings:warnings };
   }
 };
@@ -1484,8 +1506,8 @@ var JsonPreview = {
   },
   copy: function () {
     var text = Serializer.exportText();
-    var done = function () { UI.toast('JSON 已复制到剪贴板', 'ok'); };
-    var fail = function () { UI.toast('复制失败：浏览器不允许访问剪贴板，可用「导出」手动复制', 'err'); };
+    var done = function () { UI.toast(tr('jp.copied'), 'ok'); };
+    var fail = function () { UI.toast(tr('jp.copyFail'), 'err'); };
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fail);
       else fail();
@@ -1509,8 +1531,22 @@ var ExecConsole = {
   badgeCls: function (outcome) {
     return ['completed','rejected','stopped'].indexOf(outcome) >= 0 ? outcome : 'pending';
   },
+  /* 已推送记录（最多 MAX_ROWS 条）：切换界面语言时按新语言重绘 */
+  records: [],
   push: function (record) {
     if (!record || typeof record !== 'object') return;
+    this.records.push(record);
+    if (this.records.length > this.MAX_ROWS) this.records.shift();
+    this.render(record);
+  },
+  rerender: function () {
+    var body = document.getElementById('exec-console-body');
+    if (!body || !this.records.length) return;
+    body.innerHTML = '';
+    var self = this;
+    this.records.forEach(function (r) { self.render(r); });
+  },
+  render: function (record) {
     var body = document.getElementById('exec-console-body');
     if (!body) return;
     var empty = body.querySelector('.ec-empty');
@@ -1519,23 +1555,26 @@ var ExecConsole = {
     var self = this;
     var group = document.createElement('div');
     group.className = 'ec-group';
-    var html = '<div class="ec-exec"><b>' + esc(String(record.name || '节点图执行')) + '</b>' +
+    var html = '<div class="ec-exec"><b>' + esc(String(record.name || tr('exec.defaultName'))) + '</b>' +
       '<span class="num">' + esc(String(record.executionId || '')) + '</span>' +
       '<span class="ec-badge ec-' + this.badgeCls(String(record.status || 'pending')) + '">' +
-        esc(String(record.status || 'pending')) + '</span>' +
-      '<span class="ec-tail num">done ' + esc(String(record.completedSegments != null ? record.completedSegments : 0)) +
-        ' / remain ' + esc(String(record.remainingSegments != null ? record.remainingSegments : 0)) + '</span></div>';
+        esc(I18n.outcome(String(record.status || 'pending'))) + '</span>' +
+      '<span class="ec-tail num">' + esc(tr('exec.progress', {
+        d:String(record.completedSegments != null ? record.completedSegments : 0),
+        r:String(record.remainingSegments != null ? record.remainingSegments : 0) })) + '</span></div>';
     (Array.isArray(record.receipts) ? record.receipts : []).forEach(function (r) {
       var rc = (r && r.receipt) || {};
       var outcome = String(rc.outcome || (rc.accepted ? 'completed' : 'pending'));
       var dur = (rc.at != null && started) ? Number(rc.at) - started : null;
-      var tail = (dur != null && isFinite(dur) && dur >= 0) ? (Math.round(dur) + 'ms') : String(rc.reason || rc.outcome || '');
+      /* reason 永远是英文代码：有词条显示译文，未知代码原样显示；原代码保留在 title 便于排查 */
+      var tail = (dur != null && isFinite(dur) && dur >= 0) ? (Math.round(dur) + 'ms')
+        : (rc.reason ? I18n.reason(rc.reason) : I18n.outcome(rc.outcome || ''));
       html += '<div class="ec-row" data-exec="' + esc(String(record.executionId || '')) + '">' +
         '<span class="num">#' + esc(String(r && r.batch != null ? r.batch : '?')) + '</span>' +
-        '<span class="ec-badge ec-' + self.badgeCls(outcome) + '">' + esc(outcome) + '</span>' +
-        '<span class="num">attempts ' + esc(String(r && r.attempts != null ? r.attempts : 0)) + '</span>' +
-        '<span class="num">' + esc(String(r && r.sourceSegments != null ? r.sourceSegments : 0)) + ' seg</span>' +
-        '<span class="ec-tail">' + esc(tail) + '</span></div>';
+        '<span class="ec-badge ec-' + self.badgeCls(outcome) + '">' + esc(I18n.outcome(outcome)) + '</span>' +
+        '<span class="num">' + esc(tr('exec.attempts', { n:String(r && r.attempts != null ? r.attempts : 0) })) + '</span>' +
+        '<span class="num">' + esc(tr('exec.seg', { n:String(r && r.sourceSegments != null ? r.sourceSegments : 0) })) + '</span>' +
+        '<span class="ec-tail"' + (rc.reason ? ' title="' + esc(String(rc.reason)) + '"' : '') + '>' + esc(tail) + '</span></div>';
     });
     group.innerHTML = html;
     body.insertBefore(group, body.firstChild);
@@ -1596,22 +1635,46 @@ var UI = {
     JsonPreview.init();
     HintBar.init();
     RailChips.init();
+    I18n.onChange(function () { UI.onLangChange(); });
+    this.fitTopbar();
+    window.addEventListener('resize', function () { UI.fitTopbar(); });
     this.applyViewport(); this.refreshAll();
     this.updateBadge(Validator.check(Serializer.build()));
   },
+
+  /* ---- 界面语言切换：只重绘界面文字，不触碰图数据（导出 JSON 逐字节不变） ---- */
+  onLangChange: function () {
+    this.toggleMenu(false); this.toggleNodeMenu(false);
+    this.renderLibrary(); this.refreshAll();
+    var lp = document.getElementById('layers-pop');
+    if (lp && lp.classList.contains('show')) PanelLayers.renderList();
+    RailChips.relabel();
+    ExecConsole.rerender();
+    if (!Runtime.running) $('#sim-step').textContent = tr('sim.idle');
+    this.fitTopbar();
+    this.status(tr('status.lang'));
+  },
+  fitTopbar: function () {
+    var tb = document.getElementById('topbar');
+    if (!tb) return;
+    tb.classList.remove('compact');
+    if (tb.scrollWidth > tb.clientWidth + 1) tb.classList.add('compact');
+  },
+  /* 分组标题：中/日显示「译名 / EN」，英文界面只显示译名，避免重复 */
+  groupHead: function (label, en) { return I18n.lang === 'en' ? label : label + ' / ' + en; },
 
   /* ---- Node Library ---- */
   renderLibrary: function () {
     var html = '';
     NodeDef.groups.forEach(function (g) {
       html += '<div class="lib-group"><div class="lib-head" style="--gc:'+g.color+'">'+
-        '<span class="swatch"></span><span>'+esc(g.label)+' / '+esc(g.en)+'</span>'+
+        '<span class="swatch"></span><span>'+esc(UI.groupHead(tr(g.lk), g.en))+'</span>'+
         '<span class="count">'+g.items.length+'</span></div>';
       g.items.forEach(function (t) {
         var d = NodeDef.defs[t];
-        html += '<div class="lib-item" draggable="true" data-type="'+t+'" title="'+esc(d.label+' · '+d.cn)+'" '+
+        html += '<div class="lib-item" draggable="true" data-type="'+t+'" title="'+esc(d.label+' · '+NodeDef.typeName(t))+'" '+
           'style="--gc:'+g.color+'"><span class="glyph">'+icon(d.icon,14)+'</span>'+
-          '<span class="txt">'+esc(d.label)+'</span><span class="en">'+esc(d.cn)+'</span></div>';
+          '<span class="txt">'+esc(d.label)+'</span><span class="en">'+esc(I18n.lang === 'en' ? '' : NodeDef.typeName(t))+'</span></div>';
       });
       html += '</div>';
     });
@@ -1632,18 +1695,18 @@ var UI = {
     var box = $('#lib-combos');
     if (!box) return;
     var list = Combos.all();
-    var head = '<div class="lib-group"><div class="lib-head" style="--gc:var(--accent)"><span class="swatch"></span><span>组合事件 / COMBO</span><span class="count">' + list.length + '</span></div>';
+    var head = '<div class="lib-group"><div class="lib-head" style="--gc:var(--accent)"><span class="swatch"></span><span>' + esc(UI.groupHead(tr('lib.combos'), 'COMBO')) + '</span><span class="count">' + list.length + '</span></div>';
     if (!list.length) {
-      box.innerHTML = head + '<p class="panel-sub" style="margin:4px 2px 0">框选多个节点 → 右键「存为组合事件」，即可一键复用。</p></div>';
+      box.innerHTML = head + '<p class="panel-sub" style="margin:4px 2px 0">' + esc(tr('lib.combosEmpty')) + '</p></div>';
       return;
     }
     var html = head;
     list.forEach(function (c) {
-      html += '<div class="lib-item combo-item" draggable="true" data-combo="' + esc(c.name) + '" title="' + esc(c.name) + ' · 单击实例化到画布中心 / 拖入画布落点">' +
+      html += '<div class="lib-item combo-item" draggable="true" data-combo="' + esc(c.name) + '" title="' + esc(tr('lib.comboItem', { name:c.name })) + '">' +
         '<span class="glyph" style="--gc:var(--accent)">' + icon('workspace', 14) + '</span>' +
         '<span class="txt">' + esc(c.name) + '</span>' +
         '<span class="en">' + c.nodes.length + 'N/' + c.edges.length + 'E</span>' +
-        '<button class="combo-del" data-del-combo="' + esc(c.name) + '" title="删除组合">×</button></div>';
+        '<button class="combo-del" data-del-combo="' + esc(c.name) + '" title="' + esc(tr('lib.comboDel')) + '" aria-label="' + esc(tr('lib.comboDel')) + '">×</button></div>';
     });
     html += '</div>';
     box.innerHTML = html;
@@ -1661,14 +1724,14 @@ var UI = {
       b.addEventListener('click', function () {
         Combos.del(b.dataset.delCombo);
         UI.renderCombos();
-        UI.toast('组合「' + b.dataset.delCombo + '」已删除');
+        UI.toast(tr('toast.comboDeleted', { name:b.dataset.delCombo }));
       });
     });
   },
   saveComboFromSelection: function (name) {
     var ids = Array.from(Graph.selection);
     var nodes = ids.map(function (id) { return Graph.byId(id); }).filter(Boolean);
-    if (nodes.length < 2) { this.toast('请先选中至少 2 个节点再存为组合', 'err'); return false; }
+    if (nodes.length < 2) { this.toast(tr('toast.comboNeed2'), 'err'); return false; }
     var idxMap = {};
     nodes.forEach(function (n, i) { idxMap[n.id] = i; });
     var x0 = Math.min.apply(null, nodes.map(function (n) { return n.pos.x; }));
@@ -1685,12 +1748,12 @@ var UI = {
     };
     Combos.save(combo);
     this.renderCombos();
-    this.toast('组合「' + name + '」已保存（' + nodes.length + ' 节点 / ' + combo.edges.length + ' 连线）', 'ok');
+    this.toast(tr('toast.comboSaved', { name:name, n:nodes.length, e:combo.edges.length }), 'ok');
     return true;
   },
   instantiateCombo: function (name) {
     var combo = Combos.byName(name);
-    if (!combo) { this.toast('组合不存在或已被删除', 'err'); return false; }
+    if (!combo) { this.toast(tr('toast.comboMissing'), 'err'); return false; }
     var created = [];
     var minX = Math.min.apply(null, combo.nodes.map(function (d) { return d.dx; }));
     var minY = Math.min.apply(null, combo.nodes.map(function (d) { return d.dy; }));
@@ -1714,28 +1777,27 @@ var UI = {
     Graph.selection = new Set(created.map(function (n) { return n.id; }));
     Graph.selectedEdge = null;
     this.refreshAll();
-    this.toast('已实例化组合「' + name + '」（' + created.length + ' 节点 / ' + (combo.edges.length - skipped) + ' 连线）', 'ok');
-    if (skipped) this.toast(skipped + ' 条连线因端口类型不匹配被跳过', 'err');
+    this.toast(tr('toast.comboPlaced', { name:name, n:created.length, e:(combo.edges.length - skipped) }), 'ok');
+    if (skipped) this.toast(tr('toast.wiresSkipped', { n:skipped }), 'err');
     /* 实例化后自动跑结构校验：有错误时 toast 报数 + 状态条提示 */
     var chk = Validator.check(Serializer.build());
     if (!chk.ok) {
-      this.toast('实例化后校验发现 ' + chk.errors.length + ' 项错误', 'err');
-      this.status('组合实例化完成，但校验发现 ' + chk.errors.length + ' 项错误：' + chk.errors[0]);
+      this.toast(tr('toast.placedErrors', { n:chk.errors.length }), 'err');
+      this.status(tr('status.placedErrors', { n:chk.errors.length, first:chk.errors[0] }));
     }
     return true;
   },
   openComboModal: function () {
-    if (Graph.selection.size < 2) { this.toast('先选中至少 2 个节点（Shift+拖拽框选）', 'err'); return; }
+    if (Graph.selection.size < 2) { this.toast(tr('toast.comboSelect2'), 'err'); return; }
     var self = this;
-    this.openModal('<h2>存为组合事件</h2><p class="sub">选中的 ' + Graph.selection.size + ' 个节点及其内部连线将存为可复用组合；' +
-      '实例化时展开为普通节点与连线，导出 JSON 语义不变。</p>' +
-      '<div class="modal-section"><div class="field"><label>组合名称</label>' +
-      '<input id="combo-name" type="text" placeholder="如：打招呼三连" spellcheck="false"></div></div>' +
-      '<div class="modal-actions"><button class="btn primary" id="combo-save">保存组合</button>' +
-      '<button class="btn" data-close>取消</button></div>');
+    this.openModal('<h2>' + esc(tr('combo.title')) + '</h2><p class="sub">' + esc(tr('combo.sub', { n:Graph.selection.size })) + '</p>' +
+      '<div class="modal-section"><div class="field"><label>' + esc(tr('combo.name')) + '</label>' +
+      '<input id="combo-name" type="text" placeholder="' + esc(tr('combo.ph')) + '" spellcheck="false"></div></div>' +
+      '<div class="modal-actions"><button class="btn primary" id="combo-save">' + esc(tr('combo.save')) + '</button>' +
+      '<button class="btn" data-close>' + esc(tr('common.cancel')) + '</button></div>');
     $('#combo-save').addEventListener('click', function () {
       var name = ($('#combo-name').value || '').trim();
-      if (!name) { self.toast('请输入组合名称', 'err'); return; }
+      if (!name) { self.toast(tr('toast.comboNameReq'), 'err'); return; }
       if (self.saveComboFromSelection(name)) self.closeModal();
     });
     var inp = $('#combo-name');
@@ -1749,12 +1811,12 @@ var UI = {
     var box = $('#lib-presets');
     if (!box) return;
     var list = Slots.all();
-    var head = '<div class="lib-group"><div class="lib-head" style="--gc:var(--preview)"><span class="swatch"></span><span>预设库 / PRESETS</span>' +
+    var head = '<div class="lib-group"><div class="lib-head" style="--gc:var(--preview)"><span class="swatch"></span><span>' + esc(UI.groupHead(tr('lib.presets'), 'PRESETS')) + '</span>' +
       '<span class="count">' + list.length + '</span>' +
-      '<button class="preset-add" id="preset-add" title="保存当前画布为预设（按 modelId 存入槽位）">+ 存当前</button></div>';
+      '<button class="preset-add" id="preset-add" title="' + esc(tr('lib.presetAdd.title')) + '" aria-label="' + esc(tr('lib.presetAdd.title')) + '">+<span class="pa-txt"> ' + esc(tr('lib.presetAdd')) + '</span></button></div>';
     var html = head;
     if (!list.length) {
-      html += '<p class="panel-sub" style="margin:4px 2px 0">暂无预设：点「+ 存当前」把整张画布存为可复用预设，随后一键载入。</p></div>';
+      html += '<p class="panel-sub" style="margin:4px 2px 0">' + esc(tr('lib.presetsEmpty')) + '</p></div>';
       box.innerHTML = html;
       var addBtn0 = $('#preset-add');
       if (addBtn0) addBtn0.addEventListener('click', function () { UI.openSlots(true); });
@@ -1770,11 +1832,11 @@ var UI = {
           : (doc.graph && Array.isArray(doc.graph.nodes) ? doc.graph.nodes.length : 0);
         meta = cnt + 'N · ' + String(doc.name || '');
       } catch (err) { /* 保留 '?' */ }
-      html += '<div class="lib-item preset-item" data-preset="' + esc(it.slot) + '" title="' + esc(it.slot) + ' · 单击载入（当前画布将被替换）">' +
+      html += '<div class="lib-item preset-item" data-preset="' + esc(it.slot) + '" title="' + esc(tr('lib.presetItem', { name:it.slot })) + '">' +
         '<span class="glyph" style="--gc:var(--preview)">' + icon('workspace', 14) + '</span>' +
         '<span class="txt">' + esc(it.slot) + '</span>' +
         '<span class="en">' + esc(meta) + '</span>' +
-        '<button class="combo-del" data-del-preset="' + esc(it.slot) + '" title="删除预设">×</button></div>';
+        '<button class="combo-del" data-del-preset="' + esc(it.slot) + '" title="' + esc(tr('lib.presetDel')) + '" aria-label="' + esc(tr('lib.presetDel')) + '">×</button></div>';
     });
     html += '</div>';
     box.innerHTML = html;
@@ -1788,7 +1850,7 @@ var UI = {
       b.addEventListener('click', function () {
         Slots.del(b.dataset.delPreset);
         UI.renderPresets();
-        UI.toast('预设「' + b.dataset.delPreset + '」已删除');
+        UI.toast(tr('toast.presetDeleted', { name:b.dataset.delPreset }));
       });
     });
     var add = $('#preset-add');
@@ -1797,7 +1859,7 @@ var UI = {
   PRESET_BACKUP_SLOT: '载入前自动备份',
   loadPreset: function (slot) {
     var raw = Slots.load(slot);
-    if (!raw) { this.toast('预设不存在或已被删除', 'err'); return false; }
+    if (!raw) { this.toast(tr('toast.presetMissing'), 'err'); return false; }
     if (!Graph.nodes.length) { this.applyPreset(slot); return true; }
     var pn = '?', pname = '';
     try {
@@ -1807,14 +1869,14 @@ var UI = {
         : (doc.graph && Array.isArray(doc.graph.nodes) ? doc.graph.nodes.length : 0);
       pname = String(doc.name || '');
     } catch (err) { /* 保留 '?' */ }
-    this.openModal('<h2>载入预设「' + esc(slot) + '」？</h2>' +
-      '<p class="sub">载入会替换整张画布。编辑器没有撤销，如需保留当前内容，请先备份。</p>' +
+    this.openModal('<h2>' + esc(tr('preset.title', { name:slot })) + '</h2>' +
+      '<p class="sub">' + esc(tr('preset.sub')) + '</p>' +
       '<div class="preset-confirm-stats">' +
-      '<div>当前画布<b class="num">' + Graph.nodes.length + ' 节点 · ' + Graph.edges.length + ' 连线</b></div>' +
-      '<div>预设内容<b class="num">' + esc(String(pn)) + ' 节点' + (pname ? ' · ' + esc(pname) : '') + '</b></div></div>' +
-      '<div class="modal-actions"><button class="btn" data-close>取消</button>' +
-      '<button class="btn" id="preset-backup-load">备份当前后载入</button>' +
-      '<button class="btn primary" id="preset-confirm">替换并载入</button></div>');
+      '<div>' + esc(tr('preset.current')) + '<b class="num">' + esc(tr('preset.countNE', { n:Graph.nodes.length, e:Graph.edges.length })) + '</b></div>' +
+      '<div>' + esc(tr('preset.incoming')) + '<b class="num">' + esc(tr('preset.countN', { n:String(pn) })) + (pname ? ' · ' + esc(pname) : '') + '</b></div></div>' +
+      '<div class="modal-actions"><button class="btn" data-close>' + esc(tr('common.cancel')) + '</button>' +
+      '<button class="btn" id="preset-backup-load">' + esc(tr('preset.backupLoad')) + '</button>' +
+      '<button class="btn primary" id="preset-confirm">' + esc(tr('preset.confirm')) + '</button></div>');
     $('#preset-confirm').addEventListener('click', function () { UI.closeModal(); UI.applyPreset(slot); });
     $('#preset-backup-load').addEventListener('click', function () {
       Slots.save(UI.PRESET_BACKUP_SLOT, Serializer.exportText());
@@ -1825,11 +1887,11 @@ var UI = {
   },
   applyPreset: function (slot, backedUp) {
     var raw = Slots.load(slot);
-    if (!raw) { this.toast('预设不存在或已被删除', 'err'); return; }
+    if (!raw) { this.toast(tr('toast.presetMissing'), 'err'); return; }
     IO.applyText(raw, true);
     this.renderPresets();
-    this.toast('已载入预设「' + slot + '」' + (backedUp ? ' · 原画布已备份到「' + this.PRESET_BACKUP_SLOT + '」' : ''), 'ok');
-    this.status('已载入预设「' + slot + '」');
+    this.toast(tr('toast.presetLoaded', { name:slot }) + (backedUp ? tr('toast.presetBackedUp', { slot:this.PRESET_BACKUP_SLOT }) : ''), 'ok');
+    this.status(tr('toast.presetLoaded', { name:slot }));
   },
   appendNode: function (type) {
     var c = this.canvas.getBoundingClientRect();
@@ -1838,7 +1900,7 @@ var UI = {
                 y:(c.height*0.38 - Graph.viewport.y)/Graph.viewport.k + n*22 };
     var node = Graph.addNode(type, pos);
     Graph.selection = new Set([node.id]); Graph.selectedEdge = null;
-    this.refreshAll(); this.toast('已追加节点 ' + NodeDef.defs[type].label, 'ok');
+    this.refreshAll(); this.toast(tr('toast.nodeAdded', { type:NodeDef.typeName(type) }), 'ok');
   },
 
   /* ---- Viewport ---- */
@@ -1884,13 +1946,13 @@ var UI = {
         '<div class="node-band"></div>'+
         '<div class="node-head"><span class="node-icon">'+icon(d.icon,15)+'</span>'+
         '<span class="node-name"><span class="node-title">'+esc(n.label)+'</span>'+
-        '<span class="node-type">'+esc(d.label)+'</span></span>'+
+        '<span class="node-type">'+esc(NodeDef.typeName(n.type))+'</span></span>'+
         '<span class="node-flag">'+esc(flag)+'</span></div>'+
         '<div class="node-body"><div class="node-preview">'+esc(NodeDef.preview(n))+'</div></div>'+
         '<div class="node-foot"><span>IN · '+esc(n.props.portType)+'</span>'+
         '<span class="pill">'+esc(n.props.priority)+'</span><span>OUT</span></div>'+
-        '<span class="port in" data-port="in" title="输入端口"></span>'+
-        '<span class="port out" data-port="out" title="输出端口（拖出连线）"></span></div>';
+        '<span class="port in" data-port="in" title="'+esc(tr('port.in'))+'"></span>'+
+        '<span class="port out" data-port="out" title="'+esc(tr('port.out'))+'"></span></div>';
     });
     this.nodesEl.innerHTML = html;
   },
@@ -1954,13 +2016,13 @@ var UI = {
     if (f.kind === 'select') {
       h += '<select '+id+'>';
       (f.options||[]).forEach(function (o) {
-        h += '<option value="'+esc(o)+'"'+(String(val)===String(o)?' selected':'')+'>'+esc(o === '' ? '（不设置）' : o)+'</option>';
+        h += '<option value="'+esc(o)+'"'+(String(val)===String(o)?' selected':'')+'>'+esc(o === '' ? tr('field.unset') : o)+'</option>';
       });
       h += '</select>';
     } else if (f.kind === 'checkbox') {
-      h += '<label class="check-row"><input type="checkbox" '+id+(val?' checked':'')+'> 启用</label>';
+      h += '<label class="check-row"><input type="checkbox" '+id+(val?' checked':'')+'> '+esc(tr('field.enable'))+'</label>';
     } else if (f.kind === 'readonly') {
-      h += '<input type="text" value="'+esc(val || '（无配对）')+'" readonly>';
+      h += '<input type="text" value="'+esc(val || tr('field.noPair'))+'" readonly>';
     } else if (f.kind === 'number') {
       h += '<input type="number" '+id+' value="'+esc(val)+'"'+
         (f.min!==undefined?' min="'+f.min+'"':'')+(f.max!==undefined?' max="'+f.max+'"':'')+
@@ -1981,67 +2043,66 @@ var UI = {
     if (sel.length === 1) {
       var n = sel[0], d = NodeDef.defs[n.type];
       html += '<div class="ins-head"><div class="kicker">INSPECTOR / NODE</div>'+
-        '<h2>'+esc(n.label)+'</h2><p>'+esc(d.label+' · '+d.cn)+' · '+esc(n.type)+'<br>'+
-        (NodeDef.isCompilable(n.type) ? '编译类型 graph.type = '+esc(NodeDef.gtype(n.type)) : '设计层辅助节点 · 不进 graph.nodes')+'</p></div>';
-      html += '<div class="ins-section"><h3>类型专属字段</h3>';
+        '<h2>'+esc(n.label)+'</h2><p>'+esc(d.label+' · '+NodeDef.typeName(n.type))+' · '+esc(n.type)+'<br>'+
+        esc(NodeDef.isCompilable(n.type) ? tr('ins.compiled', { t:NodeDef.gtype(n.type) }) : tr('ins.aux'))+'</p></div>';
+      html += '<div class="ins-section"><h3>'+esc(tr('ins.typeFields'))+'</h3>';
       NodeDef.fields(n.type).forEach(function (f) { html += UI.fieldHTML(f, n.props[f.key]); });
-      html += '</div><div class="ins-section"><h3>通用字段 · 设计层</h3>';
+      html += '</div><div class="ins-section"><h3>'+esc(tr('ins.commonFields'))+'</h3>';
       var common = NodeDef.commonFields();
       common.forEach(function (f) {
         var val = f.key === 'disabled' ? n.disabled : (f.key === 'label' ? n.label : n.props[f.key]);
         html += UI.fieldHTML(f, val);
       });
-      html += '<div class="hint">坐标 x='+n.pos.x+' y='+n.pos.y+' 仅存 meta.editor.pos，不写入 graph.nodes</div></div>';
+      html += '<div class="hint">'+esc(tr('ins.coords', { x:n.pos.x, y:n.pos.y }))+'</div></div>';
       html += '<div class="ins-actions">'+
-        '<button class="btn" data-act="disable">'+ (n.disabled?'启用节点':'禁用节点') +'</button>'+
-        '<button class="btn" data-act="dup">复制</button>'+
-        '<button class="btn danger" data-act="del">删除</button></div>';
+        '<button class="btn" data-act="disable">'+ esc(tr(n.disabled?'act.enableNode':'act.disableNode')) +'</button>'+
+        '<button class="btn" data-act="dup">'+esc(tr('act.dup'))+'</button>'+
+        '<button class="btn danger" data-act="del">'+esc(tr('common.delete'))+'</button></div>';
     } else if (sel.length > 1) {
-      html += '<div class="ins-head"><div class="kicker">INSPECTOR / MULTI</div><h2>已选 '+sel.length+' 个节点</h2>'+
-        '<p>批量操作。属性编辑请单选节点。</p></div>'+
-        '<div class="ins-actions"><button class="btn" data-act="combo">存为组合事件</button><button class="btn" data-act="dup">复制选中</button>'+
-        '<button class="btn" data-act="disable-all">全部禁用</button>'+
-        '<button class="btn danger" data-act="del-all">删除选中</button></div>';
+      html += '<div class="ins-head"><div class="kicker">INSPECTOR / MULTI</div><h2>'+esc(tr('ins.multi', { n:sel.length }))+'</h2>'+
+        '<p>'+esc(tr('ins.multiSub'))+'</p></div>'+
+        '<div class="ins-actions"><button class="btn" data-act="combo">'+esc(tr('act.combo'))+'</button><button class="btn" data-act="dup">'+esc(tr('act.dupSel'))+'</button>'+
+        '<button class="btn" data-act="disable-all">'+esc(tr('act.disableAll'))+'</button>'+
+        '<button class="btn danger" data-act="del-all">'+esc(tr('act.delSel'))+'</button></div>';
     } else {
       html += '<div class="ins-head"><div class="kicker">INSPECTOR / DOCUMENT</div><h2>'+esc(Binding.name)+'</h2>'+
-        '<p>文档设置与图统计。单击画布节点编辑其属性。</p></div>';
-      html += '<div class="ins-section"><h3>文档与绑定</h3>'+
-        UI.fieldHTML({key:'__name',label:'图名称 name',kind:'text'}, Binding.name)+
-        UI.fieldHTML({key:'__model',label:'模型 modelId',kind:'text'}, Binding.modelId)+
-        UI.fieldHTML({key:'__mode',label:'绑定模式 bindingMode',kind:'select',options:['any','strict'],
-          hint:'strict 时至少提供 modelId 或 modelHash'}, Binding.bindingMode)+
-        UI.fieldHTML({key:'__prio',label:'默认执行优先级',kind:'select',options:Capability.priorities}, Binding.docPriority)+
+        '<p>'+esc(tr('ins.docSub'))+'</p></div>';
+      html += '<div class="ins-section"><h3>'+esc(tr('ins.docBinding'))+'</h3>'+
+        UI.fieldHTML({key:'__name',label:tr('f.docName'),kind:'text'}, Binding.name)+
+        UI.fieldHTML({key:'__model',label:tr('f.docModel'),kind:'text'}, Binding.modelId)+
+        UI.fieldHTML({key:'__mode',label:tr('f.docMode'),kind:'select',options:['any','strict'],
+          hint:tr('f.docMode.hint')}, Binding.bindingMode)+
+        UI.fieldHTML({key:'__prio',label:tr('f.docPrio'),kind:'select',options:Capability.priorities}, Binding.docPriority)+
         '</div>';
-      html += '<div class="ins-section"><h3>图统计</h3><div class="stat-grid">'+
+      html += '<div class="ins-section"><h3>'+esc(tr('ins.stats'))+'</h3><div class="stat-grid">'+
         '<div class="stat"><div class="v num">'+Graph.nodes.length+'</div><div class="k">DESIGN NODES</div></div>'+
         '<div class="stat"><div class="v num">'+Graph.edges.length+'</div><div class="k">EDGES</div></div>'+
         '<div class="stat"><div class="v num">'+c.graph.nodes.length+'</div><div class="k">GRAPH NODES</div></div>'+
         '<div class="stat"><div class="v num">'+c.segments.length+'</div><div class="k">SEGMENTS</div></div>'+
-        '</div><div class="hint" style="margin-top:9px">辅助节点 '+ (Graph.nodes.length - c.graph.nodes.length) +
-        ' 个只存 meta.editor；segments 为执行真源。</div></div>';
-      html += '<div class="ins-section"><h3>校验结果</h3>'+UI.validationHTML(chk)+'</div>';
-      html += '<div class="ins-note">'+esc(Cache.note())+'<br>导出顶层 7 字段 · graph.nodes 仅 5 类 · 坐标只存 meta.editor.pos</div>';
-      html += '<div class="ins-actions"><button class="btn" data-act="layout">自动布局</button>'+
-        '<button class="btn" data-act="fit">适配视图</button>'+
-        '<button class="btn" data-act="clear">清空画布</button></div>';
+        '</div><div class="hint" style="margin-top:9px">'+esc(tr('ins.auxNote', { n:(Graph.nodes.length - c.graph.nodes.length) }))+'</div></div>';
+      html += '<div class="ins-section"><h3>'+esc(tr('ins.validation'))+'</h3>'+UI.validationHTML(chk)+'</div>';
+      html += '<div class="ins-note">'+esc(Cache.note())+'<br>'+esc(tr('ins.exportNote'))+'</div>';
+      html += '<div class="ins-actions"><button class="btn" data-act="layout">'+esc(tr('act.layout'))+'</button>'+
+        '<button class="btn" data-act="fit">'+esc(tr('act.fit'))+'</button>'+
+        '<button class="btn" data-act="clear">'+esc(tr('act.clear'))+'</button></div>';
     }
     root.innerHTML = html;
   },
   validationHTML: function (chk) {
     if (chk.ok) {
-      return '<div class="ok-banner">✓ 通过校验 · ' + chk.warnings.length + ' 条提示</div>' +
+      return '<div class="ok-banner">' + esc(tr('val.ok', { n:chk.warnings.length })) + '</div>' +
         (chk.warnings.length ? '<ul class="err-list warn-list" style="margin-top:9px">' +
           chk.warnings.map(function (w) { return '<li>'+esc(w)+'</li>'; }).join('') + '</ul>' : '');
     }
     return '<div class="ok-banner" style="color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--line));'+
-      'background:color-mix(in srgb,var(--danger) 9%,transparent)">✕ ' + chk.errors.length + ' 项错误</div>'+
+      'background:color-mix(in srgb,var(--danger) 9%,transparent)">' + esc(tr('val.errors', { n:chk.errors.length })) + '</div>'+
       '<ul class="err-list" style="margin-top:9px">'+chk.errors.map(function (e) { return '<li>'+esc(e)+'</li>'; }).join('')+'</ul>'+
       (chk.warnings.length ? '<ul class="err-list warn-list" style="margin-top:9px">'+chk.warnings.map(function (w) { return '<li>'+esc(w)+'</li>'; }).join('')+'</ul>' : '');
   },
   updateBadge: function (chk) {
     var el = $('#validate-badge');
     el.className = chk.ok ? 'ok' : 'bad';
-    el.querySelector('.lbl').textContent = chk.ok ? '通过校验' : (chk.errors.length + ' 项错误');
+    el.querySelector('.lbl').textContent = chk.ok ? tr('badge.ok') : tr('badge.errors', { n:chk.errors.length });
     this.lastValidation = chk;
   },
   renderStatus: function () {
@@ -2178,21 +2239,21 @@ var UI = {
     var self = this;
     var multiSel = Graph.selection.size >= 2 && Graph.selection.has(n.id);
     pop.innerHTML =
-      '<button class="mi" data-act="del" style="color:var(--danger)">删除节点<span class="g">Del</span></button>' +
-      '<button class="mi" data-act="dup">复制节点<span class="g">Ctrl+C/V</span></button>' +
-      '<button class="mi" data-act="toggle">' + (n.disabled ? '启用节点' : '禁用节点') + '</button>' +
-      (multiSel ? '<button class="mi" data-act="combo">存为组合事件（已选 ' + Graph.selection.size + ' 个）</button>' : '') +
+      '<button class="mi" data-act="del" style="color:var(--danger)">' + esc(tr('menu.delNode')) + '<span class="g">Del</span></button>' +
+      '<button class="mi" data-act="dup">' + esc(tr('menu.dupNode')) + '<span class="g">Ctrl+C/V</span></button>' +
+      '<button class="mi" data-act="toggle">' + esc(tr(n.disabled ? 'act.enableNode' : 'act.disableNode')) + '</button>' +
+      (multiSel ? '<button class="mi" data-act="combo">' + esc(tr('menu.comboN', { n:Graph.selection.size })) + '</button>' : '') +
       '<div class="sep"></div>' +
-      '<button class="mi" data-act="inspect">在属性面板查看</button>';
+      '<button class="mi" data-act="inspect">' + esc(tr('menu.inspect')) + '</button>';
     $$('#node-menu .mi').forEach(function (b) {
       b.addEventListener('click', function () {
         var act = b.dataset.act;
         self.toggleNodeMenu(false);
-        if (act === 'del') { Graph.removeNodes([n.id]); self.refreshAll(); self.status('节点已删除'); }
+        if (act === 'del') { Graph.removeNodes([n.id]); self.refreshAll(); self.status(tr('status.nodeDeleted')); }
         else if (act === 'dup') { self.copySelection(); self.paste(); }
         else if (act === 'toggle') {
           n.disabled = !n.disabled; Cache.invalidate(); self.refreshAll();
-          self.status(n.disabled ? '节点已禁用（导出时跳过）' : '节点已启用');
+          self.status(tr(n.disabled ? 'status.nodeDisabled' : 'status.nodeEnabled'));
         }
         else if (act === 'combo') { self.openComboModal(); }
         else if (act === 'inspect') { Graph.selection = new Set([n.id]); Graph.selectedEdge = null; self.refreshAll(); }
@@ -2207,14 +2268,14 @@ var UI = {
     var pop = $('#node-menu');
     var self = this;
     pop.innerHTML =
-      '<button class="mi" data-act="del" style="color:var(--danger)">删除连线<span class="g">Del</span></button>' +
-      '<button class="mi" data-act="sel">选中连线</button>';
+      '<button class="mi" data-act="del" style="color:var(--danger)">' + esc(tr('menu.delEdge')) + '<span class="g">Del</span></button>' +
+      '<button class="mi" data-act="sel">' + esc(tr('menu.selEdge')) + '</button>';
     $$('#node-menu .mi').forEach(function (b) {
       b.addEventListener('click', function () {
         var act = b.dataset.act;
         self.toggleNodeMenu(false);
-        if (act === 'del') { Graph.removeEdge(edgeId); self.refreshAll(); self.status('连线已删除'); }
-        else if (act === 'sel') { self.status('已选中连线 ' + edgeId + ' · 按 Delete 删除'); }
+        if (act === 'del') { Graph.removeEdge(edgeId); self.refreshAll(); self.status(tr('status.edgeDeleted')); }
+        else if (act === 'sel') { self.status(tr('status.edgeSelected', { id:edgeId })); }
       });
     });
     pop.classList.add('show');
@@ -2239,7 +2300,7 @@ var UI = {
     }).catch(function () {
       frame.removeAttribute('src');
       fb.classList.remove('hidden');
-      self.status('Live2D 监看不可达：宿主未在线（本地预览用模拟触发）');
+      self.status(tr('status.monitorUnreachable'));
     });
   },
 
@@ -2253,22 +2314,22 @@ var UI = {
   },
 
   menuItems: [
-    { label:'自动布局', act:'layout' }, { label:'适配视图 (Ctrl+0)', act:'fit' },
-    { label:'恢复默认示例图', act:'demo' }, { sep:true },
-    { label:'保存槽位（按 modelId）', act:'slots' },
-    { label:'JSON 预览', act:'jsonpv' },
-    { label:'导出 JSON', act:'export' }, { label:'导入 JSON', act:'import' },
+    { lk:'mi.layout', act:'layout' }, { lk:'mi.fit', act:'fit' },
+    { lk:'mi.demo', act:'demo' }, { sep:true },
+    { lk:'mi.slots', act:'slots' },
+    { lk:'mi.jsonpv', act:'jsonpv' },
+    { lk:'mi.export', act:'export' }, { lk:'mi.import', act:'import' },
     { sep:true },
-    { label:'切换浅/深色主题', act:'theme' }, { label:'切换点阵网格', act:'grid' },
-    { label:'键盘快捷键', act:'keys' }, { label:'校验详情', act:'validate' },
-    { sep:true }, { label:'清空画布', act:'clear', danger:true }
+    { lk:'mi.theme', act:'theme' }, { lk:'mi.grid', act:'grid' },
+    { lk:'mi.keys', act:'keys' }, { lk:'mi.validate', act:'validate' },
+    { sep:true }, { lk:'mi.clear', act:'clear', danger:true }
   ],
   toggleMenu: function (force) {
     var pop = $('#menu-pop'), show = force === undefined ? !pop.classList.contains('show') : force;
     if (show) {
       pop.innerHTML = UI.menuItems.map(function (m, i) {
         return m.sep ? '<div class="sep"></div>' :
-          '<button class="mi" data-mi="'+i+'"'+(m.danger?' style="color:var(--danger)"':'')+'>'+esc(m.label)+'</button>';
+          '<button class="mi" data-mi="'+i+'"'+(m.danger?' style="color:var(--danger)"':'')+'>'+esc(tr(m.lk))+'</button>';
       }).join('');
       $$('#menu-pop .mi').forEach(function (b) {
         b.addEventListener('click', function () { UI.menuAction(UI.menuItems[Number(b.dataset.mi)].act); UI.toggleMenu(false); });
@@ -2289,11 +2350,11 @@ var UI = {
       case 'theme':
         Preferences.theme = Preferences.theme === 'dark' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-theme', Preferences.theme);
-        UI.renderMinimap(); UI.toast('已切换'+(Preferences.theme==='dark'?'深色':'浅色')+'主题'); break;
+        UI.renderMinimap(); UI.toast(tr(Preferences.theme==='dark' ? 'toast.themeDark' : 'toast.themeLight')); break;
       case 'grid': Preferences.showGrid = !Preferences.showGrid; UI.applyViewport(); break;
       case 'keys': UI.openKeys(); break;
       case 'clear':
-        Graph.clear(); UI.refreshAll(); UI.status('画布已清空'); UI.toast('画布已清空'); break;
+        Graph.clear(); UI.refreshAll(); UI.status(tr('status.cleared')); UI.toast(tr('status.cleared')); break;
     }
   },
 
@@ -2316,7 +2377,7 @@ var UI = {
         var w = UI.toWorld(e.clientX, e.clientY);
         var n = Graph.addNode(t, { x:w.x-NODE_W/2, y:w.y-PORT_Y });
         Graph.selection = new Set([n.id]); Graph.selectedEdge = null;
-        UI.refreshAll(); UI.toast('已拖入节点 ' + NodeDef.defs[t].label, 'ok');
+        UI.refreshAll(); UI.toast(tr('toast.dropped', { type:NodeDef.typeName(t) }), 'ok');
       } else if (t && t.indexOf('combo:') === 0) {
         UI.instantiateCombo(t.slice(6));
       } else if (t && t.indexOf('{') >= 0) { IO.applyText(t); }
@@ -2330,7 +2391,7 @@ var UI = {
       if (g) {
         Graph.selectedEdge = g.dataset.edge; Graph.selection.clear();
         UI.renderWires(); UI.renderNodes(); UI.renderInspector();
-        UI.status('已选中连线 ' + g.dataset.edge + ' · 按 Delete 删除');
+        UI.status(tr('status.edgeSelected', { id:g.dataset.edge }));
       }
     });
     document.addEventListener('click', function (e) {
@@ -2432,7 +2493,7 @@ var UI = {
       var targetEl = document.elementFromPoint(e.clientX, e.clientY);
       var nodeEl = targetEl && targetEl.closest ? targetEl.closest('.node') : null;
       if (nodeEl) UI.finishLink(nodeEl.dataset.id);
-      else UI.toast('连线未落到节点输入端口，已取消');
+      else UI.toast(tr('toast.linkCancelled'));
       this.link = null; this.canvas.classList.remove('linking'); this.renderWires();
     }
     if (this.marquee) {
@@ -2445,10 +2506,10 @@ var UI = {
       });
       $('#marquee').style.display = 'none'; this.marquee = null;
       this.renderNodes(); this.renderInspector();
-      UI.status('框选 ' + Graph.selection.size + ' 个节点');
+      UI.status(tr('status.marquee', { n:Graph.selection.size }));
     }
     if (this.drag) {
-      if (this.drag.kind === 'node' && this.drag.moved) { Cache.invalidate(); UI.status('节点已移动 · 坐标写入 meta.editor'); }
+      if (this.drag.kind === 'node' && this.drag.moved) { Cache.invalidate(); UI.status(tr('status.moved')); }
       if (this.drag.kind === 'pan') this.canvas.classList.remove('panning');
       this.drag = null;
       this.renderInspector(); this.updateBadge(Validator.check(Serializer.build()));
@@ -2462,17 +2523,17 @@ var UI = {
   },
   finishLink: function (toId) {
     var from = this.link.from, a = Graph.byId(from), b = Graph.byId(toId);
-    if (!a || !b || from === toId) { this.toast('无效连线', 'err'); return; }
+    if (!a || !b || from === toId) { this.toast(tr('toast.invalidLink'), 'err'); return; }
     if (a.props.portType !== b.props.portType) {
-      this.toast('端口类型不同（' + a.props.portType + ' ↔ ' + b.props.portType + '）：同色才可连', 'err'); return;
+      this.toast(tr('toast.portMismatch', { a:a.props.portType, b:b.props.portType }), 'err'); return;
     }
     /* 重连替换：目标输入端口原有连线先移除 */
     var removed = 0;
     Graph.edges = Graph.edges.filter(function (e) { if (e.to === toId) { removed++; return false; } return true; });
     var e = Graph.addEdge(from, toId);
-    if (!e) { this.toast('该连线已存在'); return; }
+    if (!e) { this.toast(tr('toast.linkExists')); return; }
     Cache.invalidate();
-    this.toast(removed ? ('重连替换：移除 ' + removed + ' 条旧连线') : '已建立连线', 'ok');
+    this.toast(removed ? tr('toast.relinked', { n:removed }) : tr('toast.linked'), 'ok');
     this.refreshAll();
   },
   onKey: function (e) {
@@ -2486,24 +2547,24 @@ var UI = {
     if (mod && e.key.toLowerCase() === 'a') { Graph.selection = new Set(Graph.nodes.map(function(n){return n.id;})); Graph.selectedEdge=null; UI.renderNodes(); UI.renderInspector(); e.preventDefault(); return; }
     if (mod && e.key === '0') { UI.fitView(); e.preventDefault(); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') {
-      if (Graph.selectedEdge) { Graph.removeEdge(Graph.selectedEdge); UI.refreshAll(); UI.status('连线已删除'); }
-      else if (Graph.selection.size) { Graph.removeNodes(Array.from(Graph.selection)); UI.refreshAll(); UI.status('节点已删除'); }
+      if (Graph.selectedEdge) { Graph.removeEdge(Graph.selectedEdge); UI.refreshAll(); UI.status(tr('status.edgeDeleted')); }
+      else if (Graph.selection.size) { Graph.removeNodes(Array.from(Graph.selection)); UI.refreshAll(); UI.status(tr('status.nodeDeleted')); }
       e.preventDefault();
     }
   },
   copySelection: function () {
     var ids = Array.from(Graph.selection);
-    if (!ids.length) { this.toast('未选中节点'); return; }
+    if (!ids.length) { this.toast(tr('toast.noSelection')); return; }
     var s = new Set(ids);
     Graph.clipboard = {
       nodes: ids.map(function (id) { var n = Graph.byId(id); return n ? deep(n) : null; }).filter(Boolean),
       edges: Graph.edges.filter(function (e) { return s.has(e.from) && s.has(e.to); }).map(deep)
     };
-    this.toast('已复制 ' + Graph.clipboard.nodes.length + ' 个节点');
+    this.toast(tr('toast.copied', { n:Graph.clipboard.nodes.length }));
   },
   paste: function () {
     var cb = Graph.clipboard;
-    if (!cb || !cb.nodes.length) { this.toast('剪贴板为空'); return; }
+    if (!cb || !cb.nodes.length) { this.toast(tr('toast.clipEmpty')); return; }
     var map = {}, added = [];
     cb.nodes.forEach(function (n) {
       var id = Graph.uid('n'); map[n.id] = id;
@@ -2513,7 +2574,7 @@ var UI = {
     });
     cb.edges.forEach(function (e) { if (map[e.from] && map[e.to]) Graph.addEdge(map[e.from], map[e.to]); });
     Graph.selection = new Set(added); Graph.selectedEdge = null;
-    this.refreshAll(); this.toast('已粘贴 ' + added.length + ' 个节点', 'ok');
+    this.refreshAll(); this.toast(tr('toast.pasted', { n:added.length }), 'ok');
   },
 
   /* ---- Inspector event delegation ---- */
@@ -2552,10 +2613,10 @@ var UI = {
       else if (act === 'disable-all') { ids.forEach(function(id){var n=Graph.byId(id);if(n)n.disabled=true;}); UI.refreshAll(); }
       else if (act === 'dup') { UI.copySelection(); UI.paste(); }
       else if (act === 'combo') UI.openComboModal();
-      else if (act === 'del' || act === 'del-all') { Graph.removeNodes(ids); UI.refreshAll(); UI.status('节点已删除'); }
+      else if (act === 'del' || act === 'del-all') { Graph.removeNodes(ids); UI.refreshAll(); UI.status(tr('status.nodeDeleted')); }
       else if (act === 'layout') Layout.run();
       else if (act === 'fit') UI.fitView();
-      else if (act === 'clear') { Graph.clear(); UI.refreshAll(); UI.status('画布已清空'); }
+      else if (act === 'clear') { Graph.clear(); UI.refreshAll(); UI.status(tr('status.cleared')); }
     };
     root.addEventListener('input', handler);
     root.addEventListener('change', handler);
@@ -2571,41 +2632,37 @@ var UI = {
   openValidation: function () {
     var chk = Validator.check(Serializer.build());
     this.updateBadge(chk);
-    this.openModal('<h2>结构校验</h2><p class="sub">复刻 validateNodegraph / validateGraph / validateActionSequence 的本地校验器。'+
-      '检查：顶层 7 字段白名单、无环、roots 可达、悬空 next、必填字段、段步上限、'+
-      'expression/motion 名称白名单、pose/look 取值域、总时长上限。</p>'+
+    this.openModal('<h2>'+esc(tr('mv.title'))+'</h2><p class="sub">'+esc(tr('mv.sub'))+'</p>'+
       this.validationHTML(chk)+
-      '<div class="modal-section"><div class="sub" style="margin:0">当前导出文档顶层字段：<code>'+
+      '<div class="modal-section"><div class="sub" style="margin:0">'+esc(tr('mv.topKeys'))+'<code>'+
       esc(Object.keys(Serializer.build()).join(', '))+'</code></div></div>'+
-      '<div class="modal-actions"><button class="btn" data-close>关闭</button></div>');
+      '<div class="modal-actions"><button class="btn" data-close>'+esc(tr('common.close'))+'</button></div>');
   },
   openExport: function () {
     var chk = Validator.check(Serializer.build());
     var text = Serializer.exportText();
-    if (!chk.ok) this.toast('导出仍会生成，但当前文档有 ' + chk.errors.length + ' 项校验错误', 'err');
-    this.openModal('<h2>导出 JSON · Schema v1</h2><p class="sub">顶层严格 7 字段；graph.nodes 只允许 5 类；'+
-      '坐标与辅助节点完整存于 meta.editor。' + (chk.ok ? '校验：<b style="color:var(--ok)">通过</b>' : '校验：<b style="color:var(--danger)">'+chk.errors.length+' 项错误</b>')+'</p>'+
+    if (!chk.ok) this.toast(tr('toast.exportErrors', { n:chk.errors.length }), 'err');
+    this.openModal('<h2>'+esc(tr('exp.title'))+'</h2><p class="sub">'+esc(tr('exp.sub'))+' '+esc(tr('exp.check'))+
+      (chk.ok ? '<b style="color:var(--ok)">'+esc(tr('exp.pass'))+'</b>' : '<b style="color:var(--danger)">'+esc(tr('badge.errors', { n:chk.errors.length }))+'</b>')+'</p>'+
       '<textarea id="export-text" readonly spellcheck="false">'+esc(text)+'</textarea>'+
       '<div class="modal-actions">'+
-      '<button class="btn" id="exp-copy">复制到剪贴板</button>'+
-      '<button class="btn" id="exp-slot">保存到槽位</button>'+
-      '<button class="btn primary" id="exp-download">下载 .json</button>'+
-      '<button class="btn" data-close>关闭</button></div>');
+      '<button class="btn" id="exp-copy">'+esc(tr('exp.copy'))+'</button>'+
+      '<button class="btn" id="exp-slot">'+esc(tr('exp.slot'))+'</button>'+
+      '<button class="btn primary" id="exp-download">'+esc(tr('exp.download'))+'</button>'+
+      '<button class="btn" data-close>'+esc(tr('common.close'))+'</button></div>');
     $('#exp-copy').addEventListener('click', function () { IO.copy(text); });
     $('#exp-download').addEventListener('click', function () { IO.download(text); });
     $('#exp-slot').addEventListener('click', function () { UI.closeModal(); UI.openSlots(true); });
   },
   openImport: function () {
-    this.openModal('<h2>导入 JSON</h2><p class="sub">支持文件选择、拖拽文件到画布、粘贴文本。'+
-      '优先读 meta.editor 还原完整画布；无 meta.editor 时用 graph/segments 反推线性视图。'+
-      '文件内缓存/校验派生字段一律丢弃并重新校验。</p>'+
-      '<div class="modal-actions" style="justify-content:flex-start"><button class="btn" id="imp-file">选择文件…</button>'+
+    this.openModal('<h2>'+esc(tr('imp.title'))+'</h2><p class="sub">'+esc(tr('imp.sub'))+'</p>'+
+      '<div class="modal-actions" style="justify-content:flex-start"><button class="btn" id="imp-file">'+esc(tr('imp.file'))+'</button>'+
       '<input type="file" id="imp-file-input" accept=".json,application/json,text/plain" class="hidden"></div>'+
-      '<div class="drop-zone" id="imp-drop">或将 .json 文件拖到此处 / 画布</div>'+
-      '<div class="modal-section"><div class="field"><label>粘贴 JSON 文本</label>'+
+      '<div class="drop-zone" id="imp-drop">'+esc(tr('imp.drop'))+'</div>'+
+      '<div class="modal-section"><div class="field"><label>'+esc(tr('imp.paste'))+'</label>'+
       '<textarea id="imp-text" spellcheck="false" placeholder="{ &quot;schemaVersion&quot;: 1, ... }"></textarea></div>'+
-      '<div class="modal-actions"><button class="btn primary" id="imp-apply">从文本导入</button>'+
-      '<button class="btn" data-close>取消</button></div></div>');
+      '<div class="modal-actions"><button class="btn primary" id="imp-apply">'+esc(tr('imp.apply'))+'</button>'+
+      '<button class="btn" data-close>'+esc(tr('common.cancel'))+'</button></div></div>');
     var fi = $('#imp-file-input');
     $('#imp-file').addEventListener('click', function () { fi.click(); });
     fi.addEventListener('change', function () { if (fi.files[0]) IO.readFile(fi.files[0]); });
@@ -2621,28 +2678,28 @@ var UI = {
   },
   openSlots: function (presave) {
     var items = Slots.all();
-    var html = '<h2>本地槽位 · modelId = '+esc(Binding.modelId || '(空)')+'</h2>'+
-      '<p class="sub">按 modelId 分槽：每个模型可分别保存多个 JSON，互不覆盖。'+
-      (Slots.available ? '当前使用 localStorage。' : 'localStorage 不可用，已降级为内存槽位（刷新即失效）。')+'</p>'+
+    var html = '<h2>'+esc(tr('slots.title', { m:(Binding.modelId || tr('slots.emptyModel')) }))+'</h2>'+
+      '<p class="sub">'+esc(tr('slots.sub'))+' '+
+      esc(tr(Slots.available ? 'slots.ls' : 'slots.mem'))+'</p>'+
       '<div class="modal-section" style="border-top:0;margin-top:0;padding-top:0"><div class="field">'+
-      '<label>保存当前图为槽位</label><div style="display:flex;gap:8px">'+
+      '<label>'+esc(tr('slots.saveCurrent'))+'</label><div style="display:flex;gap:8px">'+
       '<input type="text" id="slot-name" value="'+esc(Binding.name)+'" spellcheck="false">'+
-      '<button class="btn primary" id="slot-save">保存</button></div>'+
-      '<div class="hint">键：mg-lab:v1:&lt;modelId&gt;:&lt;槽名&gt;</div></div></div>'+
-      '<div class="modal-section"><h3 style="font:600 10px var(--mono);color:var(--ink2);margin:0 0 10px">已存槽位 ('+items.length+')</h3>'+
+      '<button class="btn primary" id="slot-save">'+esc(tr('common.save'))+'</button></div>'+
+      '<div class="hint">'+esc(tr('slots.keyHint'))+'</div></div></div>'+
+      '<div class="modal-section"><h3 style="font:600 10px var(--mono);color:var(--ink2);margin:0 0 10px">'+esc(tr('slots.saved', { n:items.length }))+'</h3>'+
       '<div class="slot-list">'+ (items.length ? items.map(function (it, i) {
         var when = ''; try { when = JSON.parse(it.raw).name || ''; } catch (err) { when = ''; }
         return '<div class="slot-row"><span class="sn">'+esc(it.slot)+'</span><span class="sd">'+esc(when)+'</span>'+
-          '<button class="btn" data-load="'+i+'">载入</button><button class="btn danger" data-del="'+i+'">删除</button></div>';
-      }).join('') : '<div class="sub" style="margin:0">暂无槽位</div>') + '</div></div>'+
-      '<div class="modal-actions"><button class="btn" data-close>关闭</button></div>';
+          '<button class="btn" data-load="'+i+'">'+esc(tr('common.load'))+'</button><button class="btn danger" data-del="'+i+'">'+esc(tr('common.delete'))+'</button></div>';
+      }).join('') : '<div class="sub" style="margin:0">'+esc(tr('slots.none'))+'</div>') + '</div></div>'+
+      '<div class="modal-actions"><button class="btn" data-close>'+esc(tr('common.close'))+'</button></div>';
     this.openModal(html);
     var list = items;
     $('#slot-save').addEventListener('click', function () {
       var s = $('#slot-name').value.trim() || Binding.name;
       Slots.save(s, Serializer.exportText());
       UI.renderPresets();
-      UI.toast('已保存到槽位 ' + s, 'ok'); UI.openSlots();
+      UI.toast(tr('toast.slotSaved', { name:s }), 'ok'); UI.openSlots();
     });
     $$('#modal-box [data-load]').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -2651,15 +2708,17 @@ var UI = {
       });
     });
     $$('#modal-box [data-del]').forEach(function (b) {
-      b.addEventListener('click', function () { Slots.del(list[Number(b.dataset.del)].slot); UI.renderPresets(); UI.toast('槽位已删除'); UI.openSlots(); });
+      b.addEventListener('click', function () { Slots.del(list[Number(b.dataset.del)].slot); UI.renderPresets(); UI.toast(tr('toast.slotDeleted')); UI.openSlots(); });
     });
     if (presave) { /* 从导出面板跳转：聚焦槽名输入 */ setTimeout(function(){ var s=$('#slot-name'); if(s) s.focus(); },0); }
   },
   openKeys: function () {
-    this.openModal('<h2>键盘快捷键</h2><p class="sub">全部为本地交互，不触发任何网络请求。</p>'+
+    this.openModal('<h2>'+esc(tr('keys.title'))+'</h2><p class="sub">'+esc(tr('keys.sub'))+'</p>'+
       '<div class="slot-list">'+Preferences.shortcuts.map(function (p) {
-        return '<div class="slot-row"><span class="sn">'+esc(p[0])+'</span><span class="sd">'+esc(p[1])+'</span></div>';
-      }).join('')+'</div><div class="modal-actions"><button class="btn" data-close>关闭</button></div>');
+        /* 以 sc. 开头的是词条键，其余是按键名原文（Ctrl / ⌘ + C 等不翻译） */
+        var k = p[0].indexOf('sc.') === 0 ? tr(p[0]) : p[0];
+        return '<div class="slot-row"><span class="sn">'+esc(k)+'</span><span class="sd">'+esc(tr(p[1]))+'</span></div>';
+      }).join('')+'</div><div class="modal-actions"><button class="btn" data-close>'+esc(tr('common.close'))+'</button></div>');
   },
   bindModal: function () {
     $('#modal-layer').addEventListener('click', function (e) { if (e.target.id === 'modal-layer') UI.closeModal(); });
@@ -2678,11 +2737,11 @@ var IO = {
       a.href = url; a.download = safe + '.json';
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-      UI.toast('已下载 ' + a.download, 'ok');
-    } catch (err) { UI.toast('下载失败：' + err.message, 'err'); }
+      UI.toast(tr('toast.downloaded', { name:a.download }), 'ok');
+    } catch (err) { UI.toast(tr('toast.downloadFail', { msg:err.message }), 'err'); }
   },
   copy: function (text) {
-    var done = function () { UI.toast('已复制 JSON 到剪贴板', 'ok'); };
+    var done = function () { UI.toast(tr('jp.copied'), 'ok'); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, function () { IO.copyFallback(text, done); });
     } else IO.copyFallback(text, done);
@@ -2693,28 +2752,28 @@ var IO = {
       ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
       document.body.appendChild(ta); ta.select();
       document.execCommand('copy'); document.body.removeChild(ta); done();
-    } catch (err) { UI.toast('复制失败，请在文本框中手动选择复制', 'err'); }
+    } catch (err) { UI.toast(tr('toast.copyFail'), 'err'); }
   },
   readFile: function (file) {
     var reader = new FileReader();
     reader.onload = function () { IO.applyText(String(reader.result), true); };
-    reader.onerror = function () { UI.toast('文件读取失败', 'err'); };
+    reader.onerror = function () { UI.toast(tr('toast.readFail'), 'err'); };
     reader.readAsText(file, 'utf-8');
   },
   applyText: function (text, closeFirst) {
-    if (!text || !text.trim()) { UI.toast('导入内容为空', 'err'); return; }
+    if (!text || !text.trim()) { UI.toast(tr('toast.importEmpty'), 'err'); return; }
     var res = Serializer.import(text);
     if (!res.ok) {
-      UI.toast('导入失败：' + res.errors.length + ' 项错误（详见校验）', 'err');
-      UI.openModal('<h2>导入失败</h2><p class="sub">文档未通过导入重验，画布保持不变（不信任文件内缓存状态）。</p>'+
+      UI.toast(tr('toast.importFail', { n:res.errors.length }), 'err');
+      UI.openModal('<h2>'+esc(tr('impf.title'))+'</h2><p class="sub">'+esc(tr('impf.sub'))+'</p>'+
         '<ul class="err-list">'+res.errors.map(function (e) { return '<li>'+esc(e)+'</li>'; }).join('')+'</ul>'+
-        '<div class="modal-actions"><button class="btn" data-close>关闭</button></div>');
+        '<div class="modal-actions"><button class="btn" data-close>'+esc(tr('common.close'))+'</button></div>');
       return;
     }
     if (closeFirst) UI.closeModal();
     UI.refreshAll();
-    UI.status('导入成功 · ' + Graph.nodes.length + ' 节点 / ' + Graph.edges.length + ' 连线');
-    UI.toast('导入成功：已还原完整画布（meta.editor 优先）', 'ok');
+    UI.status(tr('status.imported', { n:Graph.nodes.length, e:Graph.edges.length }));
+    UI.toast(tr('toast.imported'), 'ok');
   }
 };
 
@@ -2723,7 +2782,7 @@ var IO = {
    ------------------------------------------------------------------------- */
 var Layout = {
   run: function () {
-    if (!Graph.nodes.length) { UI.toast('画布为空'); return; }
+    if (!Graph.nodes.length) { UI.toast(tr('toast.canvasEmpty')); return; }
     var byId = new Map(); Graph.nodes.forEach(function (n) { byId.set(n.id, n); });
     var indeg = new Map(), adj = {};
     Graph.nodes.forEach(function (n) { indeg.set(n.id, 0); adj[n.id] = []; });
@@ -2751,7 +2810,7 @@ var Layout = {
       n.pos.x = 70 + l*268; n.pos.y = 70 + cols[l]*150; cols[l] += 1;
     });
     Cache.invalidate(); UI.refreshAll(); UI.fitView();
-    UI.toast('自动布局完成', 'ok');
+    UI.toast(tr('toast.layoutDone'), 'ok');
   }
 };
 
@@ -2777,21 +2836,20 @@ var RuntimeCtl = {
   stop: function () {
     Runtime.stop(); UI.renderNodes(); UI.renderWires();
     $('#sim-panel').classList.remove('show');
-    UI.status('模拟已停止', 0);
+    UI.status(tr('status.simStopped'), 0);
   },
   start: function () {
     if (Runtime.running) return;
     var r = Cache.get(Compiler.key(), function () { return Compiler.compile(); });
     Runtime.cacheHit = r.hit;
     var c = r.data;
-    if (!c.steps.length) { UI.toast('没有可模拟的动作步（请先添加动作节点）', 'err'); return; }
+    if (!c.steps.length) { UI.toast(tr('toast.simNoSteps'), 'err'); return; }
     Runtime.stop();
     Runtime.running = true; Runtime.index = 0;
     Runtime.sequence = c.steps.map(function (s, i) { return { step:s, nodeId:c.stepSources[i] }; });
     $('#sim-panel').classList.add('show');
-    $('#sim-note').textContent = 'Graph Cache ' + (r.hit ? 'HIT（复用编译结果）' : 'MISS（重新编译）') +
-      ' · 播放不跳过任何一步 · 不调 LLM / 后端 / Runtime 队列';
-    UI.status('本地模拟开始 · ' + Runtime.sequence.length + ' 步 / ' + c.segments.length + ' 段', 0);
+    $('#sim-note').textContent = tr('sim.noteRun', { cache:tr(r.hit ? 'sim.cacheHit' : 'sim.cacheMiss') });
+    UI.status(tr('status.simStart', { s:Runtime.sequence.length, g:c.segments.length }), 0);
     this.tick();
   },
   tick: function () {
@@ -2799,9 +2857,9 @@ var RuntimeCtl = {
     var seq = Runtime.sequence;
     if (Runtime.index >= seq.length) {
       Runtime.stop(); UI.renderNodes(); UI.renderWires();
-      $('#sim-step').textContent = '✓ 播放完成 · ' + seq.length + ' / ' + seq.length;
-      UI.status('模拟完成 · ' + seq.length + ' 步全部播放（缓存命中未跳过）', 100);
-      UI.toast('模拟完成 · ' + Cache.note(), 'ok');
+      $('#sim-step').textContent = tr('sim.done', { n:seq.length });
+      UI.status(tr('status.simDone', { n:seq.length }), 100);
+      UI.toast(tr('toast.simDone', { note:Cache.note() }), 'ok');
       return;
     }
     var cur = seq[Runtime.index], next = seq[Runtime.index+1];
@@ -2820,7 +2878,7 @@ var RuntimeCtl = {
     var t = cur.step, label = t.kind + (t.name ? ' · ' + t.name : (t.pose ? ' · ' + JSON.stringify(t.pose) : (t.x !== undefined ? ' · x'+t.x+' y'+t.y : '')));
     $('#sim-step').textContent = (Runtime.index+1) + ' / ' + seq.length + ' · ' + label;
     var pct = ((Runtime.index+1)/seq.length)*100;
-    UI.status('模拟 ' + (Runtime.index+1) + ' / ' + seq.length + ' · ' + label, pct);
+    UI.status(tr('status.simStep', { i:(Runtime.index+1), n:seq.length, label:label }), pct);
     Runtime.index += 1;
     Runtime.timer = setTimeout(function () { RuntimeCtl.tick(); }, Preferences.reducedMotion ? 220 : 780);
   }
@@ -2850,8 +2908,8 @@ var Demo = {
     Binding.name = '挥手打招呼'; Binding.modelId = '大肥鱼'; Binding.bindingMode = 'any'; Binding.docPriority = 'NORMAL';
     Cache.invalidate();
     UI.applyViewport(); UI.refreshAll();
-    UI.status('已恢复默认示例图 · 可立即导出 / 模拟 / 校验');
-    UI.toast('默认示例图已载入', 'ok');
+    UI.status(tr('status.demo'));
+    UI.toast(tr('toast.demo'), 'ok');
   }
 };
 
@@ -3104,6 +3162,53 @@ function runSelfTest() {
       return { ok:ok, visible:visible, same:same, live:live, inLayers:inLayers, off:off };
     } catch (e) { return { ok:false, error:String(e) }; }
   })();
+  /* 第十一组：界面三语 i18n —— ①三语键集合一致；②逐语言切换后关键元素文字改变、<html lang> 同步；
+     ③同一张图在中/英/日下导出 JSON 逐字节一致（只翻译显示名，ID/类型键/默认标题不变）；
+     ④遍历各模态/菜单/检查器取词后零缺键；⑤缺键回退可检出；⑥reason 代码映射与未知代码原样显示。
+     全程 persist:false，不写 localStorage；结束恢复原语言 */
+  var i18nT = (function () {
+    try {
+      var prev = I18n.lang;
+      var audit = I18n.audit();
+      I18n.missing = {};
+      var exportsBy = {}, texts = {}, langAttr = {};
+      var sample = function () {
+        return [ $('#btn-sim .lbl').textContent, $('.panel-title').textContent,
+          $('#validate-badge .lbl').textContent, $('#btn-validate').title, $('#lib-groups .lib-head').textContent ];
+      };
+      var ids = Graph.nodes.map(function (n) { return n.id; });
+      I18n.LOCALES.forEach(function (l) {
+        I18n.set(l, { persist:false });
+        exportsBy[l] = Serializer.exportText();
+        texts[l] = sample();
+        langAttr[l] = document.documentElement.getAttribute('lang');
+        /* 走一遍动态取词路径，缺键会记入 I18n.missing */
+        if (ids.length) { Graph.selection = new Set([ids[0]]); UI.renderInspector(); }
+        if (ids.length > 1) { Graph.selection = new Set(ids.slice(0, 2)); UI.renderInspector(); }
+        Graph.selection.clear(); UI.renderInspector();
+        UI.openValidation(); UI.closeModal(); UI.openImport(); UI.closeModal();
+        UI.openSlots(); UI.closeModal(); UI.openKeys(); UI.closeModal();
+        UI.toggleMenu(true); UI.toggleMenu(false); PanelLayers.renderList();
+        UI.validationHTML({ ok:false, errors:['x'], warnings:['y'] });
+        ExecConsole.rerender();
+      });
+      var exportSame = exportsBy['zh-CN'] === exportsBy.en && exportsBy.en === exportsBy.ja;
+      var differs = function (a, b) { return a.every(function (x, i) { return x !== b[i]; }); };
+      var changed = differs(texts['zh-CN'], texts.en) && differs(texts.en, texts.ja) && differs(texts['zh-CN'], texts.ja);
+      var langOk = langAttr['zh-CN'] === 'zh-CN' && langAttr.en === 'en' && langAttr.ja === 'ja';
+      var missingKeys = Object.keys(I18n.missing);
+      I18n.set('en', { persist:false });
+      var probe = '__selftest.missing__';
+      var fallback = tr(probe) === probe && I18n.missing['en:' + probe] === true;
+      delete I18n.missing['en:' + probe];
+      var reasonOk = I18n.reason('invalid-form-index') === 'Invalid form index' &&
+        I18n.reason('__no_such_reason__') === '__no_such_reason__';
+      I18n.set(prev, { persist:false });
+      var ok = audit.ok && exportSame && changed && langOk && !missingKeys.length && fallback && reasonOk;
+      return { ok:ok, keys:audit.size, audit:audit.ok, auditDiff:audit.diff, exportSame:exportSame, changed:changed,
+        langAttr:langOk, missing:missingKeys, fallback:fallback, reason:reasonOk };
+    } catch (e) { return { ok:false, error:String(e) }; }
+  })();
   var doc = Serializer.build();
   var result = {
     validate: v,
@@ -3120,7 +3225,8 @@ function runSelfTest() {
     panels: panelsT,
     console: consoleT,
     chips: chipsT,
-    jsonPreview: jsonT
+    jsonPreview: jsonT,
+    i18n: i18nT
   };
   $('#mg-selftest').textContent = JSON.stringify(result, null, 2);
   $('#mg-export').textContent = Serializer.exportText();
@@ -3139,6 +3245,9 @@ function runSelfTest() {
       'hint=' + chipsT.hint + '/libChip=' + chipsT.libChip + '/inspChip=' + chipsT.inspChip + '/presets=' + chipsT.presets + '/marquee=' + chipsT.marquee + '/panMid=' + chipsT.panMid) + ')')
     + ' jsonpv-' + (jsonT.ok ? 'ok' : 'FAIL(' + (jsonT.error ? 'err=' + jsonT.error :
       'vis=' + jsonT.visible + '/same=' + jsonT.same + '/live=' + jsonT.live + '/layers=' + jsonT.inLayers + '/off=' + jsonT.off) + ')')
+    + ' i18n-' + (i18nT.ok ? 'ok' : 'FAIL(' + (i18nT.error ? 'err=' + i18nT.error :
+      'audit=' + i18nT.audit + '/export=' + i18nT.exportSame + '/changed=' + i18nT.changed + '/lang=' + i18nT.langAttr +
+      '/missing=' + (i18nT.missing || []).length + '/fallback=' + i18nT.fallback + '/reason=' + i18nT.reason) + ')')
     + (rt.diff.length ? ' diff=' + rt.diff.join('|') : '');
 }
 
@@ -3151,6 +3260,7 @@ window.addEventListener('error', function (ev) {
 });
 function boot() {
   document.documentElement.setAttribute('data-theme', Preferences.theme);
+  I18n.init();      // 先定界面语言（静态 DOM 取词），UI.init 渲染动态文字时直接用当前语言
   UI.init();        // 先建立 DOM 引用与事件绑定，再装配数据
   Demo.load();      // 默认示例图（UI 引用已就绪）
   window.__MG_READY__ = true;
