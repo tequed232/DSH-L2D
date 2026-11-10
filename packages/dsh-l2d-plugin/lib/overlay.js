@@ -485,7 +485,7 @@
 
     chipEl = document.createElement('div');
     chipEl.className = 'l2d-chip';
-    chipEl.title = '点击切换情境 · 拖动角色可移动';
+    chipEl.title = '实时性能 · 点击切换情境 · 拖动角色可移动';
 
     var gear = document.createElement('button');
     gear.className = 'l2d-gear';
@@ -543,6 +543,7 @@
     startSettingsWatch();
     startAiPoll();
     startAgentPoll();
+    startPerfChip(); // UI4：chip 常驻 FPS/分辨率实时读数
   }
 
   function usePlaceholder() {
@@ -654,6 +655,48 @@
     spring.raf = requestAnimationFrame(loop);
   }
 
+  // ---- 性能上屏 chip：常驻显示渲染 FPS + 画布分辨率（替换原「待机」状态文字常驻）----
+  // FPS 数据源 = 渲染包 window.DSH_L2D.getInfo().frames 差分（真实渲染帧率，走渲染帧循环计数，
+  // 不是 vsync 计数）；模型未就绪 getInfo 返回 null 时显示「— fps」。每秒刷新一次。
+  // 情境切换（手动/环境层）时闪现情境名 2 秒保留反馈，之后回到性能读数。
+  var perfChip = { timer: 0, lastFrames: -1, flashUntil: 0, flashText: '' };
+
+  function paintPerfChip() {
+    if (!chipEl) return;
+    if (Date.now() < perfChip.flashUntil) {
+      chipEl.textContent = perfChip.flashText;
+      return;
+    }
+    var info = null;
+    try {
+      var L = window.DSH_L2D;
+      info = L && typeof L.getInfo === 'function' ? L.getInfo() : null;
+    } catch (e) { info = null; }
+    var fpsText = '—';
+    if (info && typeof info.frames === 'number') {
+      if (perfChip.lastFrames >= 0) {
+        var df = info.frames - perfChip.lastFrames;
+        if (df >= 0 && df <= 999) fpsText = String(df);
+      }
+      perfChip.lastFrames = info.frames;
+    }
+    var w = canvasEl ? canvasEl.width : 0;
+    var h = canvasEl ? canvasEl.height : 0;
+    chipEl.textContent = fpsText + ' fps · ' + w + '×' + h;
+  }
+
+  function flashChipState(state) {
+    perfChip.flashText = LABEL[state] || String(state || '');
+    perfChip.flashUntil = Date.now() + 2000;
+    paintPerfChip();
+  }
+
+  function startPerfChip() {
+    if (perfChip.timer) return;
+    paintPerfChip();
+    perfChip.timer = setInterval(paintPerfChip, 1000);
+  }
+
   function applyPrefs() {
     if (!root) return;
     root.className = prefs.state;
@@ -661,7 +704,8 @@
     pos.x = typeof prefs.left === 'number' ? prefs.left : null;
     pos.y = typeof prefs.top === 'number' ? prefs.top : null;
     applyPos();
-    if (chipEl) chipEl.textContent = LABEL[prefs.state] || '待机';
+    // chip 常驻改为性能读数；情境名只闪现 2 秒（UI4：性能监控上屏替换待机文字）
+    flashChipState(prefs.state);
   }
 
   function setState(next) {
@@ -671,7 +715,7 @@
     pushL2dLog({ comp: 'stage', state: next });
     persist();
     if (root) root.className = next;
-    if (chipEl) chipEl.textContent = LABEL[next] || next;
+    flashChipState(next); // chip 常驻为性能读数，情境名闪现 2 秒（UI4）
     say(BUBBLE[next] && BUBBLE[next][Math.floor(Math.random() * BUBBLE[next].length)]);
   }
 
@@ -4749,7 +4793,7 @@
     pushL2dLog({ comp: 'stage', state: next });
     // 不写 localStorage：远离/回归是瞬态，别让下次启动卡在 away；手动切换仍由 setState 持久化
     if (root) root.className = next;
-    if (chipEl) chipEl.textContent = LABEL[next] || next;
+    flashChipState(next); // chip 常驻为性能读数，情境名闪现 2 秒（UI4）
     env.lastStateAt = Date.now();
     postEnvPresence('state'); // conversation/work/idle 切换时上报（≥1s 节流）
   }
