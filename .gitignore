@@ -45,6 +45,9 @@ data/
 !apps/stage-web/src/data/**
 _test-models/
 
-# 按模型清单（live2d-ids.json 只含 ID 元数据，但按方案从授权角度决定是否入库；
-# 本地生成不提交，授权待主理人裁定）
-docs/nodegraph/models/
+# 按模型清单与分区表：授权模型资源不入库。
+# 文档中每模型 JSON 可入库（不是授权素材；modelId 以 .2048 结尾，会撞到上面的 **/*.2048/）。
+# 只放行 docs/nodegraph/models/**/*.json。
+!docs/nodegraph/models/
+!docs/nodegraph/models/**/
+!docs/nodegraph/models/**/*.json

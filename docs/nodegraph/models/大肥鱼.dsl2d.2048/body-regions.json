@@ -1,0 +1,7570 @@
+{
+  "schemaVersion": 1,
+  "modelId": "大肥鱼.dsl2d.2048",
+  "sources": [
+    "docs/nodegraph/live2d-ids.json",
+    "docs/nodegraph/live2d-catalog.json",
+    "docs/nodegraph/LIVE2D-CATALOG.md",
+    "docs/LABEL-AUDIT-CLASSIFIED.md",
+    "docs/Capability-Profile-大肥鱼.dsl2d.2048.md",
+    "tools/w3-registry/registry.json",
+    "packages/renderer/src/app/motion-director.ts（motionsShareArm / poseParams）",
+    "packages/renderer/src/app/lappmodel.ts 与 icubismupdater.ts（帧内应用顺序）",
+    "本地授权模型的 physics3 / exp3 / motion3（只读，未复制入库）"
+  ],
+  "policy": {
+    "expressionLayerSeparateFromFace": true,
+    "physicsOutputsReadOnly": true,
+    "bridgeMayWritePhysicsOutputs": false,
+    "lipSyncRedLine": [
+      "ParamMouthOpenY"
+    ],
+    "note": "每个参数必须且只能出现在一个 region、shared、unassigned 或 expressionLayer。物理输出一律只读，bridge 不可写；bridge 只写对应物理组的输入。表情是独立一层，不占神态模块。"
+  },
+  "regions": {
+    "hair": {
+      "label": "头发",
+      "params": [
+        "FrontHairZ",
+        "FrontHairX1",
+        "FrontHairX2",
+        "FrontHairX3",
+        "FrontHairX4",
+        "FrontHairY1",
+        "FrontHairY2",
+        "FrontHairY3",
+        "FrontHairY4",
+        "SideHairX1",
+        "SideHairX2",
+        "SideHairX3",
+        "SideHairX4",
+        "SideHairY1",
+        "SideHairY2",
+        "SideHairY3",
+        "SideHairY4",
+        "SideHairLX1",
+        "SideHairRX1",
+        "SideHairRX2",
+        "SideHairRX3",
+        "SideHairRBS",
+        "SideHairLX2",
+        "SideHairLX3",
+        "SideHairLBS",
+        "LateSideHairX1",
+        "LateSideHairX2",
+        "LateSideHairX3",
+        "LateSideHairX4",
+        "LateSideHairX5",
+        "LateSideHairXBS",
+        "LateSideHairY1",
+        "LateSideHairY2",
+        "LateSideHairY3",
+        "LateSideHairY4",
+        "LateSideHairY5",
+        "LateSideHairYbs",
+        "LateHairZ",
+        "LateHairX1",
+        "LateHairX2",
+        "LateHairX3",
+        "LateHairX4",
+        "LateHairX5",
+        "LateHairY1",
+        "LateHairY2",
+        "LateHairY3",
+        "LateHairY4",
+        "LateHairY5",
+        "ShortPonytailX1",
+        "ShortPonytailX2",
+        "ShortPonytailXBS",
+        "ShortPonytailXBS2",
+        "ShortPonytailY",
+        "ShortPonytailY2",
+        "ShortPonytailYBS",
+        "ShortPonytailYBS2",
+        "Param137",
+        "Param139"
+      ],
+      "motions": [],
+      "expressions": [],
+      "physicsOutputs": [
+        "FrontHairX1",
+        "FrontHairX2",
+        "FrontHairX3",
+        "FrontHairX4",
+        "FrontHairY1",
+        "FrontHairY2",
+        "FrontHairY3",
+        "FrontHairY4",
+        "SideHairX1",
+        "SideHairX2",
+        "SideHairX3",
+        "SideHairX4",
+        "SideHairY1",
+        "SideHairY2",
+        "SideHairY3",
+        "SideHairY4",
+        "SideHairLX1",
+        "SideHairRX1",
+        "SideHairRX2",
+        "SideHairRX3",
+        "SideHairRBS",
+        "SideHairLX2",
+        "SideHairLX3",
+        "SideHairLBS",
+        "LateSideHairX1",
+        "LateSideHairX2",
+        "LateSideHairX3",
+        "LateSideHairX4",
+        "LateSideHairX5",
+        "LateSideHairY1",
+        "LateSideHairY2",
+        "LateSideHairY3",
+        "LateSideHairY4",
+        "LateSideHairY5",
+        "LateHairZ",
+        "LateHairX1",
+        "LateHairX2",
+        "LateHairX3",
+        "LateHairX4",
+        "LateHairX5",
+        "LateHairY1",
+        "LateHairY2",
+        "LateHairY3",
+        "LateHairY4",
+        "LateHairY5",
+        "ShortPonytailX1",
+        "ShortPonytailX2",
+        "ShortPonytailXBS",
+        "ShortPonytailXBS2",
+        "ShortPonytailY",
+        "ShortPonytailY2",
+        "ShortPonytailYBS",
+        "ShortPonytailYBS2"
+      ]
+    },
+    "face": {
+      "label": "神态（脸、眼、嘴；不含表情层）",
+      "params": [
+        "ParamAngleX",
+        "ParamAngleY",
+        "ParamAngleZ",
+        "AngleXbs",
+        "AngleYbs",
+        "AngleX",
+        "AngleY",
+        "AngleZ",
+        "Emotion",
+        "Emotion2",
+        "EyeSmile",
+        "ParamEyeBallX",
+        "ParamEyeBallY",
+        "PupilX",
+        "PupilY",
+        "BrowInnerUp",
+        "RParamGlowA",
+        "RParamGlowB",
+        "RParamGlowC",
+        "ParamEyeROpen",
+        "ParamBrowRY",
+        "ParamBrowRAngleSmoothing",
+        "ParamBrowRAngle",
+        "ParamBrowRY2",
+        "ParamBrowRY3",
+        "ShockR",
+        "REyeSquint",
+        "LParamGlowA",
+        "LParamGlowB",
+        "LParamGlowC",
+        "ParamEyeLOpen",
+        "ParamBrowLY",
+        "ParamBrowLAngleSmoothing",
+        "ParamBrowLAngle",
+        "ParamBrowLY2",
+        "ParamBrowLY3",
+        "ShockL",
+        "LEyeSquint",
+        "ParamMouthForm",
+        "ParamMouthOpenY",
+        "JawOpen",
+        "TongueOut",
+        "MouthX",
+        "MouthSmile_L",
+        "MouthSmile_R",
+        "Press",
+        "Mouthpucker",
+        "MouthFunnel",
+        "MouthPuckerWiden",
+        "CheeckPuff",
+        "CheeckPuff2",
+        "CheeckPuffR",
+        "CheeckPuffL",
+        "MouthPressLipOpen",
+        "MouthRollUpper",
+        "MouthRollLower",
+        "NoseNeer",
+        "PoutOffsetXL",
+        "PoutOffsetXR",
+        "ParamSilence",
+        "ParamA",
+        "ParamI",
+        "ParamU",
+        "ParamE",
+        "ParamO",
+        "RShiftbuffer",
+        "RColorshift",
+        "REyeball1",
+        "REyeball2",
+        "REyeball3",
+        "REyeLashX1",
+        "REyeLashX2",
+        "REyes1",
+        "REyes2",
+        "RHighLight1",
+        "RHighLight2",
+        "RHighLight3",
+        "LEyeball1",
+        "LEyeball2",
+        "LEyeball3",
+        "LEyes1",
+        "LEyes2",
+        "LEyeLashX1",
+        "LEyeLashX2",
+        "LHighLight1",
+        "LHighLight2",
+        "LHighLight3",
+        "CheeksWiggleX",
+        "CheeksWiggleXR",
+        "CheeksWiggleXL",
+        "CheeksWiggleY",
+        "LipPhysics1",
+        "LipPhysics2",
+        "LipPhysics3",
+        "ParamTongueUpDown",
+        "ParamTongueWidth",
+        "Param11",
+        "SweatBurst1",
+        "SweatBurst2",
+        "SweatBurst3",
+        "SweatBurst4",
+        "SweatBurst5",
+        "SweatBurst6",
+        "Sweat1",
+        "Sweat2",
+        "SHOCKEYE",
+        "Param135",
+        "Param6",
+        "Param7",
+        "Param132",
+        "Param133",
+        "Angry",
+        "Angry2",
+        "Angry3",
+        "AniEyerolling",
+        "Param12",
+        "Param13",
+        "AngryMove",
+        "AngryMove3",
+        "AngryMove2",
+        "AngryMove4",
+        "AngryMove5",
+        "AngryMove8",
+        "AngryMove6",
+        "AngryMove7",
+        "Param31",
+        "Param32",
+        "Param27",
+        "Param28",
+        "RCry",
+        "RCryKey",
+        "RCry2",
+        "Param29",
+        "Param30",
+        "LCry",
+        "LCryKey",
+        "LCry3",
+        "Startwinkle",
+        "Startwinkle2"
+      ],
+      "motions": [
+        "Idle"
+      ],
+      "expressions": [],
+      "physicsOutputs": [
+        "ParamAngleX",
+        "ParamAngleY",
+        "ParamAngleZ",
+        "AngleXbs",
+        "AngleYbs",
+        "Emotion",
+        "Emotion2",
+        "PupilX",
+        "PupilY",
+        "RParamGlowA",
+        "RParamGlowB",
+        "RParamGlowC",
+        "ParamBrowRAngleSmoothing",
+        "ParamBrowRAngle",
+        "ParamBrowRY2",
+        "ParamBrowRY3",
+        "ShockR",
+        "LParamGlowA",
+        "LParamGlowB",
+        "ParamBrowLAngleSmoothing",
+        "ParamBrowLAngle",
+        "ParamBrowLY2",
+        "ParamBrowLY3",
+        "ShockL",
+        "Press",
+        "CheeckPuff2",
+        "CheeckPuffR",
+        "CheeckPuffL",
+        "PoutOffsetXL",
+        "PoutOffsetXR",
+        "REyeball1",
+        "REyeball2",
+        "REyeball3",
+        "REyeLashX1",
+        "REyeLashX2",
+        "REyes1",
+        "REyes2",
+        "RHighLight1",
+        "RHighLight2",
+        "RHighLight3",
+        "LEyeball1",
+        "LEyeball2",
+        "LEyeball3",
+        "LEyes1",
+        "LEyes2",
+        "LEyeLashX1",
+        "LEyeLashX2",
+        "LHighLight1",
+        "LHighLight2",
+        "LHighLight3",
+        "CheeksWiggleX",
+        "CheeksWiggleXR",
+        "CheeksWiggleXL",
+        "CheeksWiggleY",
+        "LipPhysics1",
+        "LipPhysics2",
+        "LipPhysics3",
+        "ParamTongueUpDown",
+        "ParamTongueWidth"
+      ]
+    },
+    "hands": {
+      "label": "手部",
+      "params": [
+        "Movement1",
+        "Movement2",
+        "Movement3",
+        "Param35",
+        "Param44",
+        "LArm",
+        "LForearm",
+        "LWrist",
+        "LHand",
+        "LHand2",
+        "LSleeveX1",
+        "LSleeveX2",
+        "LSleeveX3",
+        "LSleeveY",
+        "LSleeveY2",
+        "LSleeveY3",
+        "LRibbonX1",
+        "LRibbonX2",
+        "LRibbonX3",
+        "LRibbonX4",
+        "LRibbonY1",
+        "LRibbonY2",
+        "LRibbonY3",
+        "LRibbonY4",
+        "Param25",
+        "RArm",
+        "RForearm",
+        "RWrist",
+        "RHand",
+        "RHand2",
+        "RSleeveX1",
+        "RSleeveX2",
+        "RSleeveX3",
+        "RSleeveX4",
+        "RSleeveY1",
+        "RSleeveY2",
+        "RSleeveY3",
+        "RRibbonX1",
+        "RRibbonX2",
+        "RRibbonX3",
+        "RRibbonX4",
+        "RRibbonY1",
+        "RRibbonY2",
+        "RRibbonY3",
+        "RRibbonY4",
+        "Param51",
+        "Param45",
+        "Param46",
+        "Param47",
+        "Param48",
+        "Param49",
+        "Param38",
+        "Param40",
+        "Param36",
+        "Param39",
+        "Param41",
+        "Param42",
+        "Param43",
+        "Param62",
+        "Param59",
+        "Param60",
+        "Param61"
+      ],
+      "motions": [
+        "抚胸手打开",
+        "抚胸手关闭",
+        "竖手指打开",
+        "竖手指关闭",
+        "狗尾巴草打开",
+        "狗尾巴草关闭"
+      ],
+      "expressions": [],
+      "physicsOutputs": [
+        "Param35",
+        "Param44",
+        "LArm",
+        "LForearm",
+        "LWrist",
+        "LHand",
+        "LHand2",
+        "LSleeveX1",
+        "LSleeveX2",
+        "LSleeveX3",
+        "LSleeveY",
+        "LSleeveY2",
+        "LSleeveY3",
+        "LRibbonX1",
+        "LRibbonX2",
+        "LRibbonX3",
+        "LRibbonX4",
+        "Param25",
+        "RArm",
+        "RForearm",
+        "RWrist",
+        "RHand",
+        "RHand2",
+        "RSleeveX1",
+        "RSleeveX2",
+        "RSleeveX3",
+        "RSleeveY1",
+        "RSleeveY2",
+        "RSleeveY3",
+        "RRibbonX1",
+        "RRibbonX2",
+        "RRibbonX3",
+        "RRibbonX4",
+        "Param45",
+        "Param46",
+        "Param47",
+        "Param48",
+        "Param49"
+      ]
+    },
+    "torso": {
+      "label": "腰部躯干",
+      "params": [
+        "Clothes1",
+        "Clothes3",
+        "ParamBodyAngleX",
+        "ParamBodyAngleY",
+        "Param50",
+        "Param53",
+        "Param54",
+        "ParamBodyAngleZ",
+        "HipAngleZ",
+        "HipAngleX",
+        "HipAngleY",
+        "ShoulderY",
+        "ShoulderZ",
+        "ShoulderX",
+        "ShoulderYy",
+        "HipZ1",
+        "HipZ2",
+        "ParamBodyAngleX2",
+        "ParamBodyAngleY2",
+        "HipAngleX2",
+        "ParamHipAngleZ",
+        "ParamHipAngleZ2",
+        "HipAngleYUP",
+        "HipAngleYDOWN",
+        "HipAngleXq",
+        "ParamBodyAngleRX",
+        "ParamBodyAngleRY",
+        "ParamBodyAngleRZ",
+        "PositionX",
+        "PositionY",
+        "PositionZ",
+        "LeanInput",
+        "ChestX1",
+        "ChestX2",
+        "ChestX3",
+        "ChestXBS",
+        "ChestY1",
+        "ChestY2",
+        "ChestY3",
+        "ChestY4",
+        "SkirtX1",
+        "SkirtX2",
+        "SkirtX3",
+        "SkirtX4",
+        "SkirtSpecial",
+        "SkirtSpecial2",
+        "SkirtY",
+        "SkirtY2",
+        "SkirtY3",
+        "SkirtY4",
+        "SkirtY5",
+        "SkirtYBS",
+        "SkirtY6",
+        "SkirtY7",
+        "SkirtY9",
+        "SkirtY8",
+        "SkirtLayerX1",
+        "SkirtLayerX2",
+        "SkirtLayerX3",
+        "SkirtLayerX4",
+        "SkirtLayerX5",
+        "SkirtLayerX6",
+        "SkirtLayerY1",
+        "SkirtLayerY2",
+        "SkirtLayerY3",
+        "SkirtLayerY4",
+        "SkirtLayerY5",
+        "SkirtLayerY6",
+        "LaceRX",
+        "LaceRX2",
+        "LaceRX3",
+        "LaceLX1",
+        "LaceLX2",
+        "LaceLX3",
+        "LaceX1",
+        "LaceX2",
+        "LaceX3",
+        "LaceY1",
+        "LaceY2",
+        "LaceY3",
+        "Param138",
+        "ParamBreath"
+      ],
+      "motions": [],
+      "expressions": [
+        "裙长切换",
+        "前倾",
+        "胸口衣服"
+      ],
+      "physicsOutputs": [
+        "ParamBodyAngleX",
+        "ParamBodyAngleY",
+        "Param50",
+        "Param53",
+        "Param54",
+        "ParamBodyAngleZ",
+        "HipAngleZ",
+        "HipAngleX",
+        "HipAngleY",
+        "ShoulderY",
+        "ShoulderZ",
+        "HipZ1",
+        "HipZ2",
+        "ParamBodyAngleX2",
+        "ParamBodyAngleY2",
+        "HipAngleX2",
+        "ParamHipAngleZ",
+        "ParamHipAngleZ2",
+        "HipAngleYUP",
+        "HipAngleYDOWN",
+        "ParamBodyAngleRX",
+        "ChestX1",
+        "ChestX2",
+        "ChestX3",
+        "ChestXBS",
+        "ChestY1",
+        "ChestY2",
+        "ChestY3",
+        "ChestY4",
+        "SkirtX1",
+        "SkirtX2",
+        "SkirtX3",
+        "SkirtX4",
+        "SkirtSpecial",
+        "SkirtSpecial2",
+        "SkirtY",
+        "SkirtY2",
+        "SkirtY3",
+        "SkirtY4",
+        "SkirtY5",
+        "SkirtYBS",
+        "SkirtY6",
+        "SkirtY7",
+        "SkirtY9",
+        "SkirtY8",
+        "SkirtLayerX1",
+        "SkirtLayerX2",
+        "SkirtLayerX3",
+        "SkirtLayerX4",
+        "SkirtLayerX5",
+        "SkirtLayerX6",
+        "SkirtLayerY1",
+        "SkirtLayerY2",
+        "SkirtLayerY3",
+        "SkirtLayerY4",
+        "SkirtLayerY5",
+        "LaceRX",
+        "LaceRX2",
+        "LaceRX3",
+        "LaceLX1",
+        "LaceLX2",
+        "LaceLX3",
+        "LaceX1",
+        "LaceX2",
+        "LaceX3",
+        "LaceY1",
+        "LaceY2",
+        "LaceY3"
+      ]
+    },
+    "legs": {
+      "label": "腿部",
+      "params": [
+        "Clothes4",
+        "LEGAngleZ2",
+        "Param33"
+      ],
+      "motions": [],
+      "expressions": [
+        "脱鞋"
+      ],
+      "physicsOutputs": [
+        "LEGAngleZ2",
+        "Param33"
+      ]
+    }
+  },
+  "expressionLayer": {
+    "note": "表情单独一层，不占神态（face）模块。key1–key13 是表情开关，只归本层。表情也可能写入其他模块的参数（如 Clothes1/2/3/4/5、LeanInput），那些参数仍留在原模块或 shared，但由本层记录写入方式。",
+    "params": [
+      "key1",
+      "key2",
+      "key3",
+      "key4",
+      "key5",
+      "key6",
+      "key7",
+      "key8",
+      "key9",
+      "key10",
+      "key11",
+      "key12",
+      "key13"
+    ],
+    "expressions": [
+      {
+        "name": "兔牙",
+        "file": "Exp3/兔牙.exp3.json",
+        "writes": [
+          {
+            "param": "key9",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "加载",
+        "file": "Exp3/加载.exp3.json",
+        "writes": [
+          {
+            "param": "key8",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "单片眼镜",
+        "file": "Exp3/单片眼镜.exp3.json",
+        "writes": [
+          {
+            "param": "key12",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "圈圈眼",
+        "file": "Exp3/圈圈眼.exp3.json",
+        "writes": [
+          {
+            "param": "key3",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          },
+          {
+            "param": "key4",
+            "value": 0,
+            "blend": "Add",
+            "outOfRange": false
+          },
+          {
+            "param": "key5",
+            "value": 0,
+            "blend": "Add",
+            "outOfRange": false
+          },
+          {
+            "param": "key6",
+            "value": 0,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "屑",
+        "file": "Exp3/屑屑眼.exp3.json",
+        "writes": [
+          {
+            "param": "key3",
+            "value": 0,
+            "blend": "Add",
+            "outOfRange": false
+          },
+          {
+            "param": "key5",
+            "value": 0,
+            "blend": "Add",
+            "outOfRange": false
+          },
+          {
+            "param": "key6",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "流泪",
+        "file": "Exp3/流泪.exp3.json",
+        "writes": [
+          {
+            "param": "key2",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "爱心眼",
+        "file": "Exp3/爱心眼.exp3.json",
+        "writes": [
+          {
+            "param": "key4",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "脱鞋",
+        "file": "Exp3/脱鞋.exp3.json",
+        "writes": [
+          {
+            "param": "Clothes4",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "脸红",
+        "file": "Exp3/脸红.exp3.json",
+        "writes": [
+          {
+            "param": "key7",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "钢盆",
+        "file": "Exp3/钢盆.exp3.json",
+        "writes": [
+          {
+            "param": "key10",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "裙长切换",
+        "file": "Exp3/裙子切换.exp3.json",
+        "writes": [
+          {
+            "param": "Clothes1",
+            "value": -1,
+            "blend": "Add",
+            "outOfRange": true
+          }
+        ]
+      },
+      {
+        "name": "黑框眼镜",
+        "file": "Exp3/黑框眼镜.exp3.json",
+        "writes": [
+          {
+            "param": "key11",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "黑脸",
+        "file": "Exp3/黑脸.exp3.json",
+        "writes": [
+          {
+            "param": "key1",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "＞＜",
+        "file": "Exp3/＞＜.exp3.json",
+        "writes": [
+          {
+            "param": "key3",
+            "value": 0,
+            "blend": "Add",
+            "outOfRange": false
+          },
+          {
+            "param": "key4",
+            "value": 0,
+            "blend": "Add",
+            "outOfRange": false
+          },
+          {
+            "param": "key5",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          },
+          {
+            "param": "key6",
+            "value": 0,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "体型1",
+        "file": "Exp3/体型1.exp3.json",
+        "writes": [
+          {
+            "param": "Clothes2",
+            "value": 0.4000000059604645,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "体型2",
+        "file": "Exp3/体型2.exp3.json",
+        "writes": [
+          {
+            "param": "Clothes2",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "默认体型",
+        "file": "Exp3/默认体型.exp3.json",
+        "writes": [
+          {
+            "param": "Clothes2",
+            "value": 0,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "前倾",
+        "file": "Exp3/前倾.exp3.json",
+        "writes": [
+          {
+            "param": "LeanInput",
+            "value": -30,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "尾巴开关",
+        "file": "Exp3/尾巴开关.exp3.json",
+        "writes": [
+          {
+            "param": "Clothes5",
+            "value": -1,
+            "blend": "Add",
+            "outOfRange": true
+          }
+        ]
+      },
+      {
+        "name": "流冷汗",
+        "file": "Exp3/流冷汗.exp3.json",
+        "writes": [
+          {
+            "param": "key13",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      },
+      {
+        "name": "胸口衣服",
+        "file": "Exp3/胸口衣服.exp3.json",
+        "writes": [
+          {
+            "param": "Clothes3",
+            "value": 1,
+            "blend": "Add",
+            "outOfRange": false
+          }
+        ]
+      }
+    ],
+    "conflicts": [
+      {
+        "params": [
+          "key3",
+          "key4",
+          "key5",
+          "key6"
+        ],
+        "expressions": [
+          "圈圈眼",
+          "屑",
+          "＞＜",
+          "爱心眼"
+        ],
+        "reason": "圈圈眼 / 屑 / 爱心眼 / ＞＜ 都用 Add 写 key3–key6 的不同组合。屑不写 key4，爱心眼只写 key4=1、不把其余键归零。若运行时允许多个表情叠加，会同时点亮多种眼型；即使单表情切换，Add 在淡出未完成时也会短暂叠值。建议这四者互斥，切换时先淡出旧表情。"
+      },
+      {
+        "params": [
+          "Clothes2"
+        ],
+        "expressions": [
+          "体型1",
+          "体型2",
+          "默认体型"
+        ],
+        "reason": "体型1 / 体型2 / 默认体型都用 Add 写 Clothes2。默认体型值为 0，Add 0 本身不贡献；靠旧表情淡出才能回默认。与 l2d_set_form 同时用会叠加或互相覆盖。仲裁：形态指令优先，且三个体型表情互斥。"
+      },
+      {
+        "params": [
+          "LeanInput"
+        ],
+        "expressions": [
+          "前倾"
+        ],
+        "regionOwners": [
+          "torso"
+        ],
+        "reason": "表情「前倾」对 LeanInput 做 Add -30。该参数属于腰部躯干模块（torso.lean / ext.body.lean_forward），也是多条躯干/头发/裙子物理的输入。Add -30 在当前值已经非 0 时会超出或叠偏。仲裁：躯干模块（bridge / 节点）优先，把「前倾」当作躯干指令而不是可叠加表情；不要与 LeanInput 直写同时生效。"
+      }
+    ]
+  },
+  "shared": [
+    {
+      "param": "Clothes2",
+      "name": "2. 大小变",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "owners": [
+        "hair",
+        "torso",
+        "legs",
+        "hands",
+        "face"
+      ],
+      "arbiter": "form",
+      "blend": "overwrite",
+      "reason": "形态总开关（forms 与 l2d_set_form 写 Clothes2）。物理组「前发Y/侧发Y/后发Y/帽子 Y/大小变透明参数/尾巴」把它当作输入。表情「体型1/体型2/默认体型」也以 Add 写入。仲裁：形态指令（l2d_set_form / l2d_change_form）优先于表情层，采用覆盖而非叠加；不要让两个体型表情同时生效。"
+    },
+    {
+      "param": "Param",
+      "name": "大小变位置",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "owners": [
+        "hair",
+        "torso",
+        "legs"
+      ],
+      "arbiter": "form",
+      "blend": "overwrite",
+      "reason": "中文名「大小变位置」，与 Clothes2（2. 大小变）成对，未见动作/表情曲线写入。跟随形态一起覆盖，不按部位分别写。"
+    },
+    {
+      "param": "Param34",
+      "name": "大小变透明参数",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "owners": [
+        "hair",
+        "torso",
+        "legs"
+      ],
+      "arbiter": "physics",
+      "blend": "physics",
+      "reason": "中文名「大小变透明参数」，是物理组「大小变透明参数」的输出，输入仅为 Clothes2。只读，bridge 不可写；由形态变化经物理驱动。"
+    }
+  ],
+  "unassigned": [
+    {
+      "id": "Paramshuiyin7",
+      "name": "-----下面是按键-----",
+      "groupName": "开关",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名是分隔线「-----下面是按键-----」，但物理组「情绪联动」把它列为输入之一（与双眉一起写出 Press）。仍按分隔符处理，不归入神态；bridge 不要写它。"
+    },
+    {
+      "id": "Divider1",
+      "name": "■■■■■■■■■■■■■",
+      "groupName": "开关",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「开关」中的分隔符（■■■■■■■■■■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider3",
+      "name": "■■■■■■■■■■■■■",
+      "groupName": "开关",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「开关」中的分隔符（■■■■■■■■■■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Clothes5",
+      "name": "5. 尾巴",
+      "groupName": "开关",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「5. 尾巴」，表情「尾巴开关」以 Add 写入 -1；尾巴不在头发/神态/手部/腰部躯干/腿部五个模块的定义内。"
+    },
+    {
+      "id": "Paramshuiyin8",
+      "name": "-----按键到此结束-----",
+      "groupName": "开关",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名是分隔线「-----按键到此结束-----」，无实际控制语义。"
+    },
+    {
+      "id": "Param2",
+      "name": "辅助参数",
+      "groupName": "身体轴",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名仅为「辅助参数」，无动作/表情/能力通道写入证据，无法判定所属模块。"
+    },
+    {
+      "id": "AngleXbs3",
+      "name": "角度 Xbs +15",
+      "groupName": "身体轴",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「角度 Xbs +15」，默认值已是 30，未见动作/表情写入，也不是物理输入或输出，疑似烘焙参考，无法判定。"
+    },
+    {
+      "id": "AngleXbs2",
+      "name": "角度 Xbs -15",
+      "groupName": "身体轴",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「角度 Xbs -15」，默认值已是 -30，未见动作/表情写入，也不是物理输入或输出，疑似烘焙参考，无法判定。"
+    },
+    {
+      "id": "AngleYbs2",
+      "name": "角度 Ybs",
+      "groupName": "身体轴",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「角度 Ybs」，未见动作/表情写入，也不是物理输入或输出，无法判定。"
+    },
+    {
+      "id": "Divider19",
+      "name": "■■■■■身体物理■■■■",
+      "groupName": "身体轴",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「身体轴」中的分隔符（■■■■■身体物理■■■■），无实际控制语义。"
+    },
+    {
+      "id": "IDLE",
+      "name": "IDLE",
+      "groupName": "控制器",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "控制器组里的 IDLE 总开关，未见七个入库动作或 21 个表情写入，不专属五区。"
+    },
+    {
+      "id": "Divider4",
+      "name": "■■■■■■■■右眼■■■■■■",
+      "groupName": "眼睛",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「眼睛」中的分隔符（■■■■■■■■右眼■■■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider5",
+      "name": "■■■■■■■■左眼■■■■■■",
+      "groupName": "眼睛",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「眼睛」中的分隔符（■■■■■■■■左眼■■■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider8",
+      "name": "■■■■■■■■嘴■■■■■■",
+      "groupName": "嘴",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「嘴」中的分隔符（■■■■■■■■嘴■■■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider31",
+      "name": "■■■■■■■■VB■■■■",
+      "groupName": "VB",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「VB」中的分隔符（■■■■■■■■VB■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider6",
+      "name": "<<<<<<物理■■■■■■",
+      "groupName": "五官物理",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「五官物理」中的分隔符（<<<<<<物理■■■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider7",
+      "name": "■■■■■■物理>>>>>>",
+      "groupName": "五官物理",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「五官物理」中的分隔符（■■■■■■物理>>>>>>），无实际控制语义。"
+    },
+    {
+      "id": "Divider15",
+      "name": "■■■ 口物理 ■■■",
+      "groupName": "五官物理",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「五官物理」中的分隔符（■■■ 口物理 ■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider11",
+      "name": "■■■■■■■■头发物理■■■",
+      "groupName": "前发物理",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「前发物理」中的分隔符（■■■■■■■■头发物理■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider9",
+      "name": "■■■■■■■■左手臂■■■■",
+      "groupName": "手臂",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「手臂」中的分隔符（■■■■■■■■左手臂■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider10",
+      "name": "■■■■■■■■右手臂■■■■",
+      "groupName": "手臂",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「手臂」中的分隔符（■■■■■■■■右手臂■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider18",
+      "name": "■■■■■■■■胸■■■■",
+      "groupName": "胸",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「胸」中的分隔符（■■■■■■■■胸■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider12",
+      "name": "■■■■■■■■头配饰■■■■",
+      "groupName": "头配饰",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「头配饰」中的分隔符（■■■■■■■■头配饰■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Shine",
+      "name": "闪光",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ShineX",
+      "name": "闪光旋转",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ShineBIG",
+      "name": "闪光大小",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "Hat_XA",
+      "name": "帽子 XA",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "Hat_XB",
+      "name": "帽子 XB",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "Hat_XC",
+      "name": "帽子 XC",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "Hat_YA",
+      "name": "帽子 YA",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "Hat_YB",
+      "name": "帽子 YB",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "Hat_YC",
+      "name": "帽子 YC",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "RBowX8",
+      "name": "<-配饰X1",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "RBowX5",
+      "name": "<-配饰X2",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "RBowX6",
+      "name": "<-配饰X3",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "RBowX7",
+      "name": "<-配饰X4",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "RBowX1",
+      "name": "<-配饰X1",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "RBowX2",
+      "name": "<-配饰X2",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "RBowX3",
+      "name": "<-配饰X3",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "RBowX4",
+      "name": "<-配饰X4",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "LBowX1",
+      "name": ">-配饰X1",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "LowX2",
+      "name": ">-配饰X2",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "LBowX3",
+      "name": ">-配饰X3",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "LBowX4",
+      "name": ">-配饰X4",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "RJewelry1",
+      "name": "< 耳环 A",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "RJewelry2",
+      "name": "< 耳环 B",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "RJewelry3",
+      "name": "< 耳环 C",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "LJewelry1",
+      "name": "> 耳环 A",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "LJewelry2",
+      "name": "> 耳环 B",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "LJewelry3",
+      "name": "> 耳环 C",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "Divider23",
+      "name": "■■■■■■■■■■■■",
+      "groupName": "头配饰",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「头配饰」中的分隔符（■■■■■■■■■■■■），无实际控制语义。"
+    },
+    {
+      "id": "ribbonX1",
+      "name": "缎带X1",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ribbonX2",
+      "name": "缎带X2",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ribbonX3",
+      "name": "缎带X3",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ribbonX4",
+      "name": "缎带X4",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ribbonY1",
+      "name": "缎带Y1",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ribbonY2",
+      "name": "缎带Y2",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ribbonY3",
+      "name": "缎带Y3",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ribbonY4",
+      "name": "缎带Y4",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ribbonX5",
+      "name": "缎带X1",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ribbonX7",
+      "name": "缎带X2",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ribbonX6",
+      "name": "缎带X3",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ribbonY5",
+      "name": "缎带Y1",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ribbonY6",
+      "name": "缎带Y2",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "ribbonY7",
+      "name": "缎带Y3",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "Hat2pha",
+      "name": "帽子尖 PHA",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "Hat2phB",
+      "name": "帽子尖 PHB",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "Hat2phC",
+      "name": "帽子尖 PHC",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "Hat2phD",
+      "name": "帽子尖 PHD",
+      "groupName": "头配饰",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「头配饰」（帽、发饰、耳环、头缎带、闪光等）。物理输入主要来自头部角度（神态模块的 Angle/ParamAngle 系列）和呼吸，但不属于头发或神态的可写参数。物理输出只读。"
+    },
+    {
+      "id": "Divider20",
+      "name": "■■■■■■■■裙子■■■■",
+      "groupName": "裙子",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「裙子」中的分隔符（■■■■■■■■裙子■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider14",
+      "name": "■■■■■■■■上衣■■■■",
+      "groupName": "上衣",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「上衣」中的分隔符（■■■■■■■■上衣■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider13",
+      "name": "■■■■■■■■兽耳■■■■",
+      "groupName": "兽耳",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「兽耳」中的分隔符（■■■■■■■■兽耳■■■■），无实际控制语义。"
+    },
+    {
+      "id": "LControl",
+      "name": "< Control",
+      "groupName": "兽耳",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
+    },
+    {
+      "id": "RFlip",
+      "name": "< Flip x",
+      "groupName": "兽耳",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
+    },
+    {
+      "id": "RFlip2",
+      "name": "< Flip y",
+      "groupName": "兽耳",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
+    },
+    {
+      "id": "LEar1",
+      "name": "<兽耳PHA",
+      "groupName": "兽耳",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
+    },
+    {
+      "id": "LEar2",
+      "name": "<兽耳PHB",
+      "groupName": "兽耳",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
+    },
+    {
+      "id": "LEar3",
+      "name": "<兽耳PHC",
+      "groupName": "兽耳",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
+    },
+    {
+      "id": "RControl",
+      "name": "> Control",
+      "groupName": "兽耳",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
+    },
+    {
+      "id": "LFlip",
+      "name": "> Flip x",
+      "groupName": "兽耳",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
+    },
+    {
+      "id": "LFlip2",
+      "name": "> Flip y",
+      "groupName": "兽耳",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
+    },
+    {
+      "id": "REar1",
+      "name": ">兽耳PHA",
+      "groupName": "兽耳",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
+    },
+    {
+      "id": "REar2",
+      "name": ">兽耳PHB",
+      "groupName": "兽耳",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
+    },
+    {
+      "id": "REar3",
+      "name": ">兽耳PHC",
+      "groupName": "兽耳",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「兽耳」。物理由头角度、眉毛和眼开合驱动，但兽耳不在五个模块定义内；标签审计里「鲸鳍耳发翼是否由 Ear 族驱动」也尚未视觉确认。只读（多为物理输出），bridge 不可写物理输出。"
+    },
+    {
+      "id": "Divider33",
+      "name": "■■■■■■■■动画■■■■",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「待机动画」中的分隔符（■■■■■■■■动画■■■■），无实际控制语义。"
+    },
+    {
+      "id": "MicroGlows",
+      "name": "话筒光",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「话筒光」，道具特效，未见入库动作/表情写入，不在五区内。"
+    },
+    {
+      "id": "WingOpenClose",
+      "name": "翅膀开合",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「翅膀开合」，翅膀附件，不在五区内。"
+    },
+    {
+      "id": "WingSpread",
+      "name": "翅膀舒展",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「翅膀舒展」，翅膀附件，不在五区内。"
+    },
+    {
+      "id": "FeatherPhysics1",
+      "name": "羽毛物理1",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「羽毛物理1」，翅膀/羽毛附件，不在五区内。未见对应 physics3 输出记录，名称含物理但 catalog.physicsOutput=false。"
+    },
+    {
+      "id": "FeatherPhysics2",
+      "name": "羽毛物理2",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「羽毛物理2」，翅膀/羽毛附件，不在五区内。"
+    },
+    {
+      "id": "WingRotation",
+      "name": "翅膀旋转",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「翅膀旋转」，翅膀附件，不在五区内。"
+    },
+    {
+      "id": "WingOpenClose2",
+      "name": "翅膀开合",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「翅膀开合」，翅膀附件，不在五区内。"
+    },
+    {
+      "id": "WingSpread2",
+      "name": "翅膀舒展",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「翅膀舒展」，翅膀附件，不在五区内。"
+    },
+    {
+      "id": "FeatherPhysics3",
+      "name": "羽毛物理1",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「羽毛物理1」，翅膀/羽毛附件，不在五区内。"
+    },
+    {
+      "id": "FeatherPhysics4",
+      "name": "羽毛物理2",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「羽毛物理2」，翅膀/羽毛附件，不在五区内。"
+    },
+    {
+      "id": "WingRotation2",
+      "name": "翅膀旋转",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「翅膀旋转」，翅膀附件，不在五区内。"
+    },
+    {
+      "id": "Param140",
+      "name": "加载",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「加载」。表情「加载」实际写的是 key8，不是本参数；本参数未见入库动作/表情写入，视为独立加载动画部件，不归入神态。"
+    },
+    {
+      "id": "Param136",
+      "name": "钱",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「钱」，特效部件，未见入库动作/表情写入，不在五区内。"
+    },
+    {
+      "id": "Ani1",
+      "name": "动画1",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「动画1」，过泛，未见入库动作/表情写入。"
+    },
+    {
+      "id": "SWITCHA",
+      "name": "开关A",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「开关A」，过泛，未见入库动作/表情写入。"
+    },
+    {
+      "id": "Ani2",
+      "name": "动画2",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「动画2」，过泛，未见入库动作/表情写入。"
+    },
+    {
+      "id": "Param141",
+      "name": "闪光 1",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「闪光 1」，特效，未见入库动作/表情写入，不在五区内。"
+    },
+    {
+      "id": "Param142",
+      "name": "闪光 2",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「闪光 2」，特效，未见入库动作/表情写入，不在五区内。"
+    },
+    {
+      "id": "Divider24",
+      "name": "■■■■■■逸散的光点■■■■",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「待机动画」中的分隔符（■■■■■■逸散的光点■■■■），无实际控制语义。"
+    },
+    {
+      "id": "F1Anikey",
+      "name": "花1动画开关",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「花1动画开关」，飘花特效，不在五区内。"
+    },
+    {
+      "id": "F2Anikey",
+      "name": "花2动画开关",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「花2动画开关」，飘花特效，不在五区内。"
+    },
+    {
+      "id": "F3Anikey",
+      "name": "花3动画开关",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「花3动画开关」，飘花特效，不在五区内。"
+    },
+    {
+      "id": "Colorflicker5",
+      "name": "1眼光显隐",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「1眼光显隐」，逸散光点特效，不在五区内。"
+    },
+    {
+      "id": "Glintshift5",
+      "name": "1眼光移动",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「1眼光移动」，逸散光点特效，不在五区内。"
+    },
+    {
+      "id": "Colorflicker6",
+      "name": "2眼光显隐",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「2眼光显隐」，逸散光点特效，不在五区内。"
+    },
+    {
+      "id": "Glintshift6",
+      "name": "2眼光移动",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「2眼光移动」，逸散光点特效，不在五区内。"
+    },
+    {
+      "id": "Colorflicker7",
+      "name": "3眼光显隐",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「3眼光显隐」，逸散光点特效，不在五区内。"
+    },
+    {
+      "id": "Glintshift8",
+      "name": "3眼光移动",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「3眼光移动」，逸散光点特效，不在五区内。"
+    },
+    {
+      "id": "Colorflicker8",
+      "name": "4眼光显隐",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「4眼光显隐」，逸散光点特效，不在五区内。"
+    },
+    {
+      "id": "Glintshift7",
+      "name": "4眼光移动",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「4眼光移动」，逸散光点特效，不在五区内。"
+    },
+    {
+      "id": "Divider25",
+      "name": "■■■■■■飘花特效■■■■",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「待机动画」中的分隔符（■■■■■■飘花特效■■■■），无实际控制语义。"
+    },
+    {
+      "id": "LittleFlower1",
+      "name": "小花飘落1",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「小花飘落1」，飘花特效，不在五区内。"
+    },
+    {
+      "id": "LittleFlower2",
+      "name": "小花显隐1",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「小花显隐1」，飘花特效，不在五区内。"
+    },
+    {
+      "id": "LittleFlower9",
+      "name": "小花左右",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「小花左右」，飘花特效，不在五区内。"
+    },
+    {
+      "id": "LittleFlower3",
+      "name": "小花飘落2",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「小花飘落2」，飘花特效，不在五区内。"
+    },
+    {
+      "id": "LittleFlower4",
+      "name": "小花显隐2",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「小花显隐2」，飘花特效，不在五区内。"
+    },
+    {
+      "id": "LittleFlower10",
+      "name": "小花左右",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「小花左右」，飘花特效，不在五区内。"
+    },
+    {
+      "id": "LittleFlower5",
+      "name": "小花飘落3",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「小花飘落3」，飘花特效，不在五区内。"
+    },
+    {
+      "id": "LittleFlower6",
+      "name": "小花显隐3",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「小花显隐3」，飘花特效，不在五区内。"
+    },
+    {
+      "id": "LittleFlower11",
+      "name": "花形变",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「花形变」，飘花特效，不在五区内。"
+    },
+    {
+      "id": "LittleFlower13",
+      "name": "花旋转",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「花旋转」，飘花特效，不在五区内。"
+    },
+    {
+      "id": "LittleFlower12",
+      "name": "花左右",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「花左右」，飘花特效，不在五区内。"
+    },
+    {
+      "id": "Divider28",
+      "name": "■■■■■■生气■■■■",
+      "groupName": "待机动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「待机动画」中的分隔符（■■■■■■生气■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider16",
+      "name": "■■■■■■■■眼睛动画■■■■■■",
+      "groupName": "眼睛动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「眼睛动画」中的分隔符（■■■■■■■■眼睛动画■■■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Divider22",
+      "name": "■■■■■■■■动画■■■■",
+      "groupName": "眼睛动画",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组「眼睛动画」中的分隔符（■■■■■■■■动画■■■■），无实际控制语义。"
+    },
+    {
+      "id": "Param55",
+      "name": "光1",
+      "groupName": "尾巴",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组在「尾巴」、中文名「光1」。Idle 写入；手部成对动作未写此参数。motion-director 明确把 Param56/57 排除在手臂冲突判定之外（视为共用光效）。未经渲染探针无法判定视觉上属于尾巴还是手部/待机，故不归入五区。冲突建议：手部动作播放期间由动作覆盖，Idle 仅在无手部动作时写；不要当手臂姿态骨来做互斥。"
+    },
+    {
+      "id": "Param56",
+      "name": "光2",
+      "groupName": "尾巴",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组在「尾巴」、中文名「光2」。Idle 以及全部 6 个手部成对动作都写入 Param56/Param57；Idle 还写入 Param55/Param58。motion-director 明确把 Param56/57 排除在手臂冲突判定之外（视为共用光效）。未经渲染探针无法判定视觉上属于尾巴还是手部/待机，故不归入五区。冲突建议：手部动作播放期间由动作覆盖，Idle 仅在无手部动作时写；不要当手臂姿态骨来做互斥。"
+    },
+    {
+      "id": "Param58",
+      "name": "光3",
+      "groupName": "尾巴",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组在「尾巴」、中文名「光3」。Idle 写入；手部成对动作未写此参数。motion-director 明确把 Param56/57 排除在手臂冲突判定之外（视为共用光效）。未经渲染探针无法判定视觉上属于尾巴还是手部/待机，故不归入五区。冲突建议：手部动作播放期间由动作覆盖，Idle 仅在无手部动作时写；不要当手臂姿态骨来做互斥。"
+    },
+    {
+      "id": "Param57",
+      "name": "光4",
+      "groupName": "尾巴",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "cdi3 分组在「尾巴」、中文名「光4」。Idle 以及全部 6 个手部成对动作都写入 Param56/Param57；Idle 还写入 Param55/Param58。motion-director 明确把 Param56/57 排除在手臂冲突判定之外（视为共用光效）。未经渲染探针无法判定视觉上属于尾巴还是手部/待机，故不归入五区。冲突建议：手部动作播放期间由动作覆盖，Idle 仅在无手部动作时写；不要当手臂姿态骨来做互斥。"
+    },
+    {
+      "id": "Param52",
+      "name": "尾巴翻面",
+      "groupName": "尾巴",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组与中文名均为尾巴，且是物理组「尾巴」的输出。尾巴不在五个模块定义内。只读，bridge 不可写。"
+    },
+    {
+      "id": "Param_Angle_Rotation84",
+      "name": "[0]尾巴",
+      "groupName": "尾巴",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组与中文名均为尾巴，且是物理组「尾巴」的输出。尾巴不在五个模块定义内。只读，bridge 不可写。"
+    },
+    {
+      "id": "Param_Angle_Rotation85",
+      "name": "[1]尾巴",
+      "groupName": "尾巴",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组与中文名均为尾巴，且是物理组「尾巴」的输出。尾巴不在五个模块定义内。只读，bridge 不可写。"
+    },
+    {
+      "id": "Param_Angle_Rotation86",
+      "name": "[2]尾巴",
+      "groupName": "尾巴",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组与中文名均为尾巴，且是物理组「尾巴」的输出。尾巴不在五个模块定义内。只读，bridge 不可写。"
+    },
+    {
+      "id": "Param_Angle_Rotation87",
+      "name": "[3]尾巴",
+      "groupName": "尾巴",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组与中文名均为尾巴，且是物理组「尾巴」的输出。尾巴不在五个模块定义内。只读，bridge 不可写。"
+    },
+    {
+      "id": "Param_Angle_Rotation88",
+      "name": "[4]尾巴",
+      "groupName": "尾巴",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组与中文名均为尾巴，且是物理组「尾巴」的输出。尾巴不在五个模块定义内。只读，bridge 不可写。"
+    },
+    {
+      "id": "Param_Angle_Rotation89",
+      "name": "[5]尾巴",
+      "groupName": "尾巴",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组与中文名均为尾巴，且是物理组「尾巴」的输出。尾巴不在五个模块定义内。只读，bridge 不可写。"
+    },
+    {
+      "id": "Param37",
+      "name": "动画开关",
+      "groupName": "动画参数",
+      "physicsOutput": false,
+      "bridgeWritable": true,
+      "reason": "中文名「动画开关」，过泛，未见入库动作/表情写入，无法判定所属模块。"
+    },
+    {
+      "id": "GemReflection",
+      "name": "宝石反光",
+      "groupName": "闪光",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「闪光」（宝石反光/高光或 Kira）。物理输入来自躯干角或头部角，属于饰品特效，不在五区内。物理输出只读。"
+    },
+    {
+      "id": "GemHighlightx",
+      "name": "宝石高光 x",
+      "groupName": "闪光",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「闪光」（宝石反光/高光或 Kira）。物理输入来自躯干角或头部角，属于饰品特效，不在五区内。物理输出只读。"
+    },
+    {
+      "id": "GemHighlighty",
+      "name": "宝石高光 y",
+      "groupName": "闪光",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「闪光」（宝石反光/高光或 Kira）。物理输入来自躯干角或头部角，属于饰品特效，不在五区内。物理输出只读。"
+    },
+    {
+      "id": "KiraA",
+      "name": "闪光 A",
+      "groupName": "闪光",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「闪光」（宝石反光/高光或 Kira）。物理输入来自躯干角或头部角，属于饰品特效，不在五区内。物理输出只读。"
+    },
+    {
+      "id": "KiraB",
+      "name": "闪光 B",
+      "groupName": "闪光",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「闪光」（宝石反光/高光或 Kira）。物理输入来自躯干角或头部角，属于饰品特效，不在五区内。物理输出只读。"
+    },
+    {
+      "id": "KiraC",
+      "name": "闪光 C",
+      "groupName": "闪光",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「闪光」（宝石反光/高光或 Kira）。物理输入来自躯干角或头部角，属于饰品特效，不在五区内。物理输出只读。"
+    },
+    {
+      "id": "KiraD",
+      "name": "闪光 D",
+      "groupName": "闪光",
+      "physicsOutput": true,
+      "bridgeWritable": false,
+      "reason": "cdi3 分组「闪光」（宝石反光/高光或 Kira）。物理输入来自躯干角或头部角，属于饰品特效，不在五区内。物理输出只读。"
+    }
+  ],
+  "physicsGroups": [
+    {
+      "id": "PhysicsSetting1",
+      "name": "OX",
+      "inputs": [
+        {
+          "param": "AngleX",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ParamAngleX"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting2",
+      "name": "OY",
+      "inputs": [
+        {
+          "param": "AngleY",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ParamAngleY"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting3",
+      "name": "OZ",
+      "inputs": [
+        {
+          "param": "AngleZ",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ParamAngleZ"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting4",
+      "name": "身体X",
+      "inputs": [
+        {
+          "param": "PositionX",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "ParamBodyAngleX"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting5",
+      "name": "Positon",
+      "inputs": [
+        {
+          "param": "PositionX",
+          "weight": 47,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionZ",
+          "weight": 24,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "ParamBodyAngleRX"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting6",
+      "name": "Lean input",
+      "inputs": [
+        {
+          "param": "LeanInput",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "Param50"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting7",
+      "name": "Lean input Shadow",
+      "inputs": [
+        {
+          "param": "LeanInput",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "Param53"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting8",
+      "name": "身体Y",
+      "inputs": [
+        {
+          "param": "PositionY",
+          "weight": 30,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBreath",
+          "weight": 2,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 68,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "ParamBodyAngleY"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting9",
+      "name": "身体Z",
+      "inputs": [
+        {
+          "param": "PositionZ",
+          "weight": 70,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionX",
+          "weight": 10,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "ParamBodyAngleZ"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting10",
+      "name": "肩膀Y",
+      "inputs": [
+        {
+          "param": "PositionY",
+          "weight": 64,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 30,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "ShoulderY"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting11",
+      "name": "肩膀Z",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 85,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 52,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "ShoulderZ"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting12",
+      "name": "盆骨X",
+      "inputs": [
+        {
+          "param": "PositionX",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionZ",
+          "weight": 26,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "HipAngleX"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting13",
+      "name": "盆骨X 缓动",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 49,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionY",
+          "weight": 10,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionZ",
+          "weight": 41,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "HipAngleX2"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting14",
+      "name": "盆骨Y",
+      "inputs": [
+        {
+          "param": "PositionY",
+          "weight": 98,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 0,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBreath",
+          "weight": 2,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "HipAngleY"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting15",
+      "name": "盆骨Z",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionY",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "HipAngleZ"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting16",
+      "name": "盆骨Z(2)",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionY",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "ParamHipAngleZ2"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting17",
+      "name": "双腿 Z",
+      "inputs": [
+        {
+          "param": "HipAngleX",
+          "weight": 23,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionZ",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "LEGAngleZ2"
+      ],
+      "outputRegion": "legs",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting18",
+      "name": "盆骨Z缓动",
+      "inputs": [
+        {
+          "param": "PositionX",
+          "weight": 10,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionY",
+          "weight": 15,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "HipAngleZ",
+          "weight": 47,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 4,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "ParamHipAngleZ"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting19",
+      "name": "盆骨Z 1",
+      "inputs": [
+        {
+          "param": "HipAngleZ",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "HipZ1"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting20",
+      "name": "盆骨Z 2",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 50,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 50,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "HipZ2"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting21",
+      "name": "身体X左右缓动",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 80,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "ParamBodyAngleX2"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting22",
+      "name": "身体X上下缓动",
+      "inputs": [
+        {
+          "param": "PositionX",
+          "weight": 70,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionY",
+          "weight": 30,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "HipAngleYDOWN",
+        "HipAngleYUP"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting23",
+      "name": "身体Y缓动",
+      "inputs": [
+        {
+          "param": "PositionY",
+          "weight": 45,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionZ",
+          "weight": 0,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 11,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "ParamBodyAngleY2"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting24",
+      "name": "<眼珠",
+      "inputs": [
+        {
+          "param": "ParamEyeROpen",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "REyeball1",
+        "REyeball2"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting25",
+      "name": ">眼珠",
+      "inputs": [
+        {
+          "param": "ParamEyeLOpen",
+          "weight": 100,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LEyeball1",
+        "LEyeball2"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting26",
+      "name": "EYE透视Y",
+      "inputs": [
+        {
+          "param": "ParamEyeBallY",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "PupilY"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting27",
+      "name": "EYE透视X",
+      "inputs": [
+        {
+          "param": "ParamAngleX",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "PupilX"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting28",
+      "name": "<眼眶",
+      "inputs": [
+        {
+          "param": "ParamEyeROpen",
+          "weight": 50,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "EyeSmile",
+          "weight": 21,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "REyes1",
+        "REyes2"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting29",
+      "name": ">眼眶",
+      "inputs": [
+        {
+          "param": "ParamEyeLOpen",
+          "weight": 50,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "EyeSmile",
+          "weight": 21,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LEyes1",
+        "LEyes2"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting30",
+      "name": "<睫毛",
+      "inputs": [
+        {
+          "param": "ParamEyeROpen",
+          "weight": 90,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "EyeSmile",
+          "weight": 10,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "REyeLashX1",
+        "REyeLashX2"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting31",
+      "name": ">睫毛",
+      "inputs": [
+        {
+          "param": "ParamEyeLOpen",
+          "weight": 90,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "EyeSmile",
+          "weight": 10,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LEyeLashX1",
+        "LEyeLashX2"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting32",
+      "name": "> 眼球缩放",
+      "inputs": [
+        {
+          "param": "ParamEyeLOpen",
+          "weight": 80,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LEyeball3"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting33",
+      "name": "< 眼球缩放",
+      "inputs": [
+        {
+          "param": "ParamEyeROpen",
+          "weight": 80,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "REyeball3"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting34",
+      "name": ">  眉毛上下link",
+      "inputs": [
+        {
+          "param": "ParamBrowLY",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ParamBrowLY3"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting35",
+      "name": "<  眉毛上下link",
+      "inputs": [
+        {
+          "param": "ParamBrowRY",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ParamBrowRY3"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting36",
+      "name": "<  眉毛上下 缓动",
+      "inputs": [
+        {
+          "param": "ParamBrowRY",
+          "weight": 68,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "BrowInnerUp",
+          "weight": 13,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "REyeSquint",
+          "weight": 19,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ParamBrowRY2"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting37",
+      "name": ">  眉毛上下 缓动",
+      "inputs": [
+        {
+          "param": "ParamBrowLY",
+          "weight": 68,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "BrowInnerUp",
+          "weight": 13,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "LEyeSquint",
+          "weight": 19,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ParamBrowLY2"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting38",
+      "name": "BrowAngle <<input",
+      "inputs": [
+        {
+          "param": "ParamBrowRY",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamMouthForm",
+          "weight": 0,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ParamBrowRAngleSmoothing"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting39",
+      "name": "BrowAngle <<output",
+      "inputs": [
+        {
+          "param": "ParamBrowRAngleSmoothing",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ParamBrowRAngle"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting40",
+      "name": "BrowAngle >>",
+      "inputs": [
+        {
+          "param": "ParamBrowLY",
+          "weight": 50,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamMouthForm",
+          "weight": 50,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ParamBrowLAngleSmoothing"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting41",
+      "name": "BrowAngle >>output",
+      "inputs": [
+        {
+          "param": "ParamBrowLAngleSmoothing",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ParamBrowLAngle"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting42",
+      "name": "<  Shock R",
+      "inputs": [
+        {
+          "param": "ParamBrowRY",
+          "weight": 53,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamBrowRAngle",
+          "weight": 47,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ShockR"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting43",
+      "name": "<  Shock L",
+      "inputs": [
+        {
+          "param": "ParamBrowLY",
+          "weight": 53,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamBrowLAngle",
+          "weight": 47,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ShockL"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting44",
+      "name": "L-高光特效",
+      "inputs": [
+        {
+          "param": "ParamEyeLOpen",
+          "weight": 100,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ShockL",
+          "weight": 0,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LHighLight1",
+        "LHighLight2",
+        "LHighLight3"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting45",
+      "name": "R-高光特效",
+      "inputs": [
+        {
+          "param": "ParamEyeROpen",
+          "weight": 87,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ShockR",
+          "weight": 0,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "RHighLight1",
+        "RHighLight2",
+        "RHighLight3"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting46",
+      "name": "情绪联动",
+      "inputs": [
+        {
+          "param": "ParamBrowLY",
+          "weight": 33,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamBrowRY",
+          "weight": 33,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "Paramshuiyin7",
+          "weight": 33,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "unassigned"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "bucket": "unassigned"
+        }
+      ],
+      "outputs": [
+        "Press"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting47",
+      "name": "脸颊抖动 X",
+      "inputs": [
+        {
+          "param": "ParamMouthForm",
+          "weight": 63,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "CheeckPuff",
+          "weight": 37,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "CheeksWiggleXL",
+        "CheeksWiggleXR"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting48",
+      "name": "脸颊抖动 Y",
+      "inputs": [
+        {
+          "param": "JawOpen",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "Mouthpucker",
+          "weight": 19,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamMouthOpenY",
+          "weight": 56,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "CheeksWiggleY"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting49",
+      "name": "脸颊抖动 XX",
+      "inputs": [
+        {
+          "param": "MouthX",
+          "weight": 50,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "CheeksWiggleX"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting50",
+      "name": "前发X",
+      "inputs": [
+        {
+          "param": "ParamAngleX",
+          "weight": 100,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleZ",
+          "weight": 52,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "FrontHairX1",
+        "FrontHairX2",
+        "FrontHairX3",
+        "FrontHairX4"
+      ],
+      "outputRegion": "hair",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting51",
+      "name": "前发Y",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 5,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamAngleY",
+          "weight": 50,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "Clothes2",
+          "weight": 15,
+          "type": "X",
+          "reflect": true,
+          "bucket": "shared"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 35,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "bucket": "shared"
+        }
+      ],
+      "outputs": [
+        "FrontHairY1",
+        "FrontHairY2",
+        "FrontHairY3",
+        "FrontHairY4"
+      ],
+      "outputRegion": "hair",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting52",
+      "name": "侧发R",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 10,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "AngleX",
+          "weight": 24,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "AngleY",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "AngleZ",
+          "weight": 29,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "SideHairRX1",
+        "SideHairRX2",
+        "SideHairRX3",
+        "SideHairRBS"
+      ],
+      "outputRegion": "hair",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting53",
+      "name": "侧发L",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleRX",
+          "weight": 30,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBreath",
+          "weight": 10,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "SideHairLX1",
+        "SideHairLX2",
+        "SideHairLX3",
+        "SideHairLBS"
+      ],
+      "outputRegion": "hair",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting54",
+      "name": "侧发X",
+      "inputs": [
+        {
+          "param": "ParamAngleX",
+          "weight": 100,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleZ",
+          "weight": 60,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "SideHairX1",
+        "SideHairX2",
+        "SideHairX3",
+        "SideHairX4"
+      ],
+      "outputRegion": "hair",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting55",
+      "name": "侧发Y",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 40,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "AngleY",
+          "weight": 55,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "Clothes2",
+          "weight": 15,
+          "type": "X",
+          "reflect": true,
+          "bucket": "shared"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 30,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "bucket": "shared"
+        }
+      ],
+      "outputs": [
+        "SideHairY1",
+        "SideHairY2",
+        "SideHairY3",
+        "SideHairY4"
+      ],
+      "outputRegion": "hair",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting56",
+      "name": "后侧发R",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 6,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "AngleX",
+          "weight": 53,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "AngleY",
+          "weight": 41,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "AngleZ",
+          "weight": 51,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LateSideHairY1",
+        "LateSideHairY2",
+        "LateSideHairY3",
+        "LateSideHairY4",
+        "LateSideHairY5"
+      ],
+      "outputRegion": "hair",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting57",
+      "name": "后侧发L",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 10,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "AngleX",
+          "weight": 50,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "AngleY",
+          "weight": 30,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "AngleZ",
+          "weight": 26,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LateSideHairX1",
+        "LateSideHairX2",
+        "LateSideHairX3",
+        "LateSideHairX4",
+        "LateSideHairX5"
+      ],
+      "outputRegion": "hair",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting58",
+      "name": "后发 Z",
+      "inputs": [
+        {
+          "param": "ParamAngleZ",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LateHairZ"
+      ],
+      "outputRegion": "hair",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting59",
+      "name": "后发X",
+      "inputs": [
+        {
+          "param": "ParamAngleX",
+          "weight": 80,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleZ",
+          "weight": 40,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LateHairX1",
+        "LateHairX2",
+        "LateHairX3",
+        "LateHairX4",
+        "LateHairX5"
+      ],
+      "outputRegion": "hair",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting60",
+      "name": "短后发X",
+      "inputs": [
+        {
+          "param": "AngleX",
+          "weight": 100,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "AngleZ",
+          "weight": 60,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ShortPonytailX1",
+        "ShortPonytailX2",
+        "ShortPonytailXBS",
+        "ShortPonytailXBS2"
+      ],
+      "outputRegion": "hair",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting61",
+      "name": "后发Y",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 26,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "AngleY",
+          "weight": 70,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "Clothes2",
+          "weight": 15,
+          "type": "X",
+          "reflect": false,
+          "bucket": "shared"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 15,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "bucket": "shared"
+        }
+      ],
+      "outputs": [
+        "LateHairY1",
+        "LateHairY2",
+        "LateHairY3",
+        "LateHairY4",
+        "LateHairY5"
+      ],
+      "outputRegion": "hair",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting62",
+      "name": "短后发Y",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 5,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "AngleY",
+          "weight": 80,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "Clothes1",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ShortPonytailY",
+        "ShortPonytailY2",
+        "ShortPonytailYBS",
+        "ShortPonytailYBS2"
+      ],
+      "outputRegion": "hair",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting63",
+      "name": "闪光",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 38,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "Shine",
+        "ShineX",
+        "ShineBIG"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting64",
+      "name": "胸X",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 80,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 20,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "ChestX1",
+        "ChestX2",
+        "ChestX3",
+        "ChestXBS"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting65",
+      "name": "胸Y",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 10,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionY",
+          "weight": 92,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 0,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 8,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "ChestY1",
+        "ChestY2",
+        "ChestY3"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting66",
+      "name": "胸Y ↓",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 0,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionY",
+          "weight": 60,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 40,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "ChestY4"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting67",
+      "name": "裙子X 摆动",
+      "inputs": [
+        {
+          "param": "HipAngleX",
+          "weight": 50,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 25,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "SkirtX1",
+        "SkirtX2",
+        "SkirtX3",
+        "SkirtX4",
+        "SkirtSpecial",
+        "SkirtSpecial2"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting68",
+      "name": "裙子Y",
+      "inputs": [
+        {
+          "param": "PositionY",
+          "weight": 40,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBreath",
+          "weight": 3,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "Clothes1",
+          "weight": 20,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "SkirtY",
+        "SkirtY2",
+        "SkirtY3",
+        "SkirtYBS",
+        "SkirtY4",
+        "SkirtY5"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting69",
+      "name": "裙子Y(2)",
+      "inputs": [
+        {
+          "param": "PositionY",
+          "weight": 30,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBreath",
+          "weight": 3,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "Clothes1",
+          "weight": 21,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "SkirtY6",
+        "SkirtY7",
+        "SkirtY9",
+        "SkirtY8"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting70",
+      "name": "裙子层级 X",
+      "inputs": [
+        {
+          "param": "HipAngleZ",
+          "weight": 0,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "HipAngleX",
+          "weight": 50,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "SkirtLayerX1",
+        "SkirtLayerX2",
+        "SkirtLayerX3",
+        "SkirtLayerX4",
+        "SkirtLayerX5",
+        "SkirtLayerX6"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting71",
+      "name": "裙子层级 Y",
+      "inputs": [
+        {
+          "param": "HipAngleY",
+          "weight": 100,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "SkirtLayerY1",
+        "SkirtLayerY2",
+        "SkirtLayerY3",
+        "SkirtLayerY4",
+        "SkirtLayerY5"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting72",
+      "name": "左臂",
+      "inputs": [
+        {
+          "param": "PositionY",
+          "weight": 48,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBreath",
+          "weight": 5,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 52,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 10,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "LArm",
+        "LForearm",
+        "LWrist"
+      ],
+      "outputRegion": "hands",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting73",
+      "name": "右臂",
+      "inputs": [
+        {
+          "param": "PositionY",
+          "weight": 48,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBreath",
+          "weight": 5,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 52,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 10,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "RArm",
+        "RForearm",
+        "RWrist"
+      ],
+      "outputRegion": "hands",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting74",
+      "name": "左手",
+      "inputs": [
+        {
+          "param": "PositionX",
+          "weight": 48,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionY",
+          "weight": 37,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionZ",
+          "weight": 0,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "LHand",
+        "LHand2"
+      ],
+      "outputRegion": "hands",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting75",
+      "name": "右手",
+      "inputs": [
+        {
+          "param": "PositionX",
+          "weight": 48,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionY",
+          "weight": 37,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionZ",
+          "weight": 0,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "RHand",
+        "RHand2"
+      ],
+      "outputRegion": "hands",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting76",
+      "name": "左袖子 X",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 5,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 73,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 20,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "LSleeveX1",
+        "LSleeveX2",
+        "LSleeveX3"
+      ],
+      "outputRegion": "hands",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting77",
+      "name": "左袖子 Y",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 5,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionY",
+          "weight": 73,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "LSleeveY",
+        "LSleeveY2",
+        "LSleeveY3"
+      ],
+      "outputRegion": "hands",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting78",
+      "name": "右袖子 X",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 5,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 73,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 20,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "RSleeveX1",
+        "RSleeveX2",
+        "RSleeveX3"
+      ],
+      "outputRegion": "hands",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting79",
+      "name": "右袖子 Y",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 5,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleY",
+          "weight": 73,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "RSleeveY1",
+        "RSleeveY2",
+        "RSleeveY3"
+      ],
+      "outputRegion": "hands",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting80",
+      "name": "右飘带",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 34,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionY",
+          "weight": 31,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionZ",
+          "weight": 22,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "RRibbonX1",
+        "RRibbonX2",
+        "RRibbonX3",
+        "RRibbonX4"
+      ],
+      "outputRegion": "hands",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting81",
+      "name": "左飘带",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 34,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionY",
+          "weight": 31,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionZ",
+          "weight": 22,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "LRibbonX1",
+        "LRibbonX2",
+        "LRibbonX3",
+        "LRibbonX4"
+      ],
+      "outputRegion": "hands",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting82",
+      "name": "<-兽耳Conrol OUT",
+      "inputs": [
+        {
+          "param": "ParamBrowRY",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LControl"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting83",
+      "name": "<-兽耳 PH",
+      "inputs": [
+        {
+          "param": "LControl",
+          "weight": 30,
+          "type": "X",
+          "reflect": false,
+          "bucket": "unassigned"
+        },
+        {
+          "param": "AngleX",
+          "weight": 20,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "AngleY",
+          "weight": 15,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "AngleZ",
+          "weight": 27,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamBreath",
+          "weight": 3,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamEyeROpen",
+          "weight": 35,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "unassigned"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "LEar1",
+        "LEar2",
+        "LEar3"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting84",
+      "name": ">-兽耳Conrol OUT",
+      "inputs": [
+        {
+          "param": "ParamBrowLY",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "RControl"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting85",
+      "name": ">-兽耳 PH",
+      "inputs": [
+        {
+          "param": "RControl",
+          "weight": 30,
+          "type": "X",
+          "reflect": false,
+          "bucket": "unassigned"
+        },
+        {
+          "param": "AngleX",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "AngleY",
+          "weight": 15,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "AngleZ",
+          "weight": 27,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamBreath",
+          "weight": 3,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamEyeLOpen",
+          "weight": 35,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "unassigned"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "REar1",
+        "REar2",
+        "REar3"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting86",
+      "name": "< 兽耳 Flip a",
+      "inputs": [
+        {
+          "param": "LControl",
+          "weight": 0,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "unassigned"
+        },
+        {
+          "param": "ParamAngleX",
+          "weight": 50,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "unassigned"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "RFlip"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting87",
+      "name": "> 兽耳 Flip a",
+      "inputs": [
+        {
+          "param": "RControl",
+          "weight": 0,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "unassigned"
+        },
+        {
+          "param": "ParamAngleX",
+          "weight": 50,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "unassigned"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LFlip"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting88",
+      "name": "< 兽耳 Flip b",
+      "inputs": [
+        {
+          "param": "ParamAngleY",
+          "weight": 50,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "LControl",
+          "weight": 50,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "unassigned"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "bucket": "unassigned"
+        }
+      ],
+      "outputs": [
+        "RFlip2"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting89",
+      "name": "> 兽耳 Flip b",
+      "inputs": [
+        {
+          "param": "ParamAngleY",
+          "weight": 50,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "RControl",
+          "weight": 50,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "unassigned"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "bucket": "unassigned"
+        }
+      ],
+      "outputs": [
+        "LFlip2"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting90",
+      "name": "Lip PH",
+      "inputs": [
+        {
+          "param": "ParamMouthForm",
+          "weight": 60,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamMouthOpenY",
+          "weight": 40,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LipPhysics1",
+        "LipPhysics2",
+        "LipPhysics3"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting91",
+      "name": "鼓脸",
+      "inputs": [
+        {
+          "param": "CheeckPuff",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "CheeckPuffR",
+        "CheeckPuffL"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting92",
+      "name": "鼓脸-附带效果",
+      "inputs": [
+        {
+          "param": "CheeckPuff",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "CheeckPuff2"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting93",
+      "name": "花边 <",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 65,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionY",
+          "weight": 25,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 50,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 10,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "LaceRX",
+        "LaceRX2",
+        "LaceRX3"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting94",
+      "name": "花边 >",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 65,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "PositionY",
+          "weight": 25,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 50,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 10,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "LaceLX1",
+        "LaceLX2",
+        "LaceLX3"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting95",
+      "name": "< 头配饰",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 5,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamAngleX",
+          "weight": 52,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleY",
+          "weight": 48,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleZ",
+          "weight": 40,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "RBowX1",
+        "RBowX2",
+        "RBowX3",
+        "RBowX4"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting96",
+      "name": "< 头配饰 长",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 5,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamAngleX",
+          "weight": 52,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleY",
+          "weight": 48,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleZ",
+          "weight": 40,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "RBowX8",
+        "RBowX5",
+        "RBowX6",
+        "RBowX7"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting97",
+      "name": "> 头配饰",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 5,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamAngleX",
+          "weight": 52,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleY",
+          "weight": 48,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleZ",
+          "weight": 40,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LBowX1",
+        "LowX2",
+        "LBowX3",
+        "LBowX4"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting98",
+      "name": "XBS",
+      "inputs": [
+        {
+          "param": "AngleX",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "AngleXbs",
+        "PoutOffsetXL",
+        "PoutOffsetXR"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting99",
+      "name": "YBS",
+      "inputs": [
+        {
+          "param": "AngleY",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "AngleYbs"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting100",
+      "name": "Emotion 过渡",
+      "inputs": [
+        {
+          "param": "ParamBrowRY",
+          "weight": 30,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamBrowLY",
+          "weight": 30,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamMouthForm",
+          "weight": 20,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "Emotion2"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting101",
+      "name": "Emotion",
+      "inputs": [
+        {
+          "param": "Emotion2",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "Emotion"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting102",
+      "name": "光效A-眨眼",
+      "inputs": [
+        {
+          "param": "ParamEyeROpen",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "RParamGlowA"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting103",
+      "name": "光效A-眨眼 L",
+      "inputs": [
+        {
+          "param": "ParamEyeLOpen",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LParamGlowA"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting104",
+      "name": "光效B-X",
+      "inputs": [
+        {
+          "param": "AngleY",
+          "weight": 40,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamEyeBallX",
+          "weight": 0,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamEyeBallY",
+          "weight": 60,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "RParamGlowB",
+        "LParamGlowB"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting105",
+      "name": "光效C-y",
+      "inputs": [
+        {
+          "param": "AngleY",
+          "weight": 57,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamEyeBallY",
+          "weight": 38,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "RParamGlowC"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting106",
+      "name": "舌头-开闭",
+      "inputs": [
+        {
+          "param": "ParamMouthOpenY",
+          "weight": 100,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ParamTongueUpDown"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting107",
+      "name": "舌头-开闭(2)",
+      "inputs": [
+        {
+          "param": "ParamMouthOpenY",
+          "weight": 68,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamMouthForm",
+          "weight": 32,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ParamTongueWidth"
+      ],
+      "outputRegion": "face",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting108",
+      "name": "闪光 1",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 30,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamAngleX",
+          "weight": 19,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleY",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleZ",
+          "weight": 26,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "KiraA",
+        "KiraB"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting109",
+      "name": "闪光 2",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 35,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamAngleX",
+          "weight": 19,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleY",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleZ",
+          "weight": 26,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "KiraC",
+        "KiraD"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting110",
+      "name": "耳环>",
+      "inputs": [
+        {
+          "param": "ParamAngleX",
+          "weight": 62,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleY",
+          "weight": 22,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleZ",
+          "weight": 56,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "LJewelry1",
+        "LJewelry2",
+        "LJewelry3"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting111",
+      "name": "耳环<",
+      "inputs": [
+        {
+          "param": "ParamAngleX",
+          "weight": 62,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleY",
+          "weight": 22,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleZ",
+          "weight": 56,
+          "type": "Angle",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "RJewelry1",
+        "RJewelry2",
+        "RJewelry3"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting112",
+      "name": "宝石反光-闪烁",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 45,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleY",
+          "weight": 45,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 10,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "GemReflection"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting113",
+      "name": "宝石高光-追踪 X",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 80,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "GemHighlightx"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting114",
+      "name": "宝石高光-追踪 Y",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleY",
+          "weight": 80,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "GemHighlighty"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting115",
+      "name": "头缎带 x",
+      "inputs": [
+        {
+          "param": "ParamAngleX",
+          "weight": 80,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleZ",
+          "weight": 60,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ribbonX1",
+        "ribbonX2",
+        "ribbonX3",
+        "ribbonX4"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting116",
+      "name": "头缎带 Y",
+      "inputs": [
+        {
+          "param": "ParamAngleY",
+          "weight": 84,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamBreath",
+          "weight": 5,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "ribbonY1",
+        "ribbonY2",
+        "ribbonY3",
+        "ribbonY4"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting117",
+      "name": "帽子 X",
+      "inputs": [
+        {
+          "param": "ParamAngleX",
+          "weight": 84,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleZ",
+          "weight": 31,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "Hat_XA",
+        "Hat_XB",
+        "Hat_XC"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting118",
+      "name": "帽子 Y",
+      "inputs": [
+        {
+          "param": "ParamAngleY",
+          "weight": 70,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "Clothes2",
+          "weight": 15,
+          "type": "X",
+          "reflect": false,
+          "bucket": "shared"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 15,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "bucket": "shared"
+        },
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "Hat_YA",
+        "Hat_YB",
+        "Hat_YC"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting119",
+      "name": "帽子蕾丝边 X",
+      "inputs": [
+        {
+          "param": "ParamAngleX",
+          "weight": 48,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleZ",
+          "weight": 18,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ribbonX5",
+        "ribbonX7",
+        "ribbonX6"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting120",
+      "name": "帽子蕾丝边 Y",
+      "inputs": [
+        {
+          "param": "ParamAngleY",
+          "weight": 80,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "ribbonY5",
+        "ribbonY6",
+        "ribbonY7"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting121",
+      "name": "帽子尖 ph",
+      "inputs": [
+        {
+          "param": "ParamAngleX",
+          "weight": 45,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleY",
+          "weight": 45,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        },
+        {
+          "param": "ParamAngleZ",
+          "weight": 80,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "face"
+        }
+      ],
+      "outputs": [
+        "Hat2pha",
+        "Hat2phB",
+        "Hat2phC",
+        "Hat2phD"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting122",
+      "name": "外套花边XZ",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 80,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 50,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "LaceX1",
+        "LaceX2",
+        "LaceX3"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting123",
+      "name": "外套花边Y",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleY",
+          "weight": 80,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "LaceY1",
+        "LaceY2",
+        "LaceY3"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting124",
+      "name": "动作手 Z",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "Param25"
+      ],
+      "outputRegion": "hands",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting125",
+      "name": "Lean 缓动",
+      "inputs": [
+        {
+          "param": "LeanInput",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "Param54"
+      ],
+      "outputRegion": "torso",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting126",
+      "name": "并腿",
+      "inputs": [
+        {
+          "param": "HipAngleX",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "Param33"
+      ],
+      "outputRegion": "legs",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting127",
+      "name": "大小变透明参数",
+      "inputs": [
+        {
+          "param": "Clothes2",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "shared"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "shared"
+        }
+      ],
+      "outputs": [
+        "Param34"
+      ],
+      "outputRegion": "shared",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting128",
+      "name": "手臂开关物理",
+      "inputs": [
+        {
+          "param": "Movement1",
+          "weight": 30,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "hands"
+        },
+        {
+          "param": "Movement2",
+          "weight": 30,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "hands"
+        },
+        {
+          "param": "Movement3",
+          "weight": 30,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "hands"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "hands"
+        }
+      ],
+      "outputs": [
+        "Param35"
+      ],
+      "outputRegion": "hands",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting129",
+      "name": "左臂z",
+      "inputs": [
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 100,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "Param44"
+      ],
+      "outputRegion": "hands",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting130",
+      "name": "尾巴",
+      "inputs": [
+        {
+          "param": "ParamBreath",
+          "weight": 15,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 40,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 30,
+          "type": "Angle",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "LeanInput",
+          "weight": 40,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "Clothes2",
+          "weight": 30,
+          "type": "X",
+          "reflect": false,
+          "bucket": "shared"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "bucket": "shared"
+        }
+      ],
+      "outputs": [
+        "Param_Angle_Rotation84",
+        "Param_Angle_Rotation85",
+        "Param_Angle_Rotation86",
+        "Param_Angle_Rotation87",
+        "Param_Angle_Rotation88",
+        "Param52",
+        "Param_Angle_Rotation89"
+      ],
+      "outputRegion": "unassigned",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    },
+    {
+      "id": "PhysicsSetting131",
+      "name": "狗尾巴物理",
+      "inputs": [
+        {
+          "param": "Param42",
+          "weight": 50,
+          "type": "X",
+          "reflect": true,
+          "bucket": "region",
+          "region": "hands"
+        },
+        {
+          "param": "ParamBodyAngleX",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleY",
+          "weight": 20,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        },
+        {
+          "param": "ParamBodyAngleZ",
+          "weight": 10,
+          "type": "X",
+          "reflect": false,
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "inputModules": [
+        {
+          "bucket": "region",
+          "region": "hands"
+        },
+        {
+          "bucket": "region",
+          "region": "torso"
+        }
+      ],
+      "outputs": [
+        "Param45",
+        "Param46",
+        "Param47",
+        "Param48",
+        "Param49"
+      ],
+      "outputRegion": "hands",
+      "outputsReadOnly": true,
+      "bridgeWritable": false
+    }
+  ],
+  "motions": [
+    {
+      "group": "抚胸手打开",
+      "file": "Animation/默认手切举手.motion3.json",
+      "writes": [
+        "Movement2",
+        "Param56",
+        "Param57",
+        "Param62",
+        "Param59",
+        "Param60",
+        "Param61"
+      ],
+      "regionsTouched": [
+        "hands"
+      ],
+      "alsoWrites": [
+        {
+          "param": "Param56",
+          "bucket": "unassigned"
+        },
+        {
+          "param": "Param57",
+          "bucket": "unassigned"
+        }
+      ]
+    },
+    {
+      "group": "抚胸手关闭",
+      "file": "Animation/举手切默认手.motion3.json",
+      "writes": [
+        "Movement2",
+        "Param56",
+        "Param57",
+        "Param62",
+        "Param59",
+        "Param60",
+        "Param61"
+      ],
+      "regionsTouched": [
+        "hands"
+      ],
+      "alsoWrites": [
+        {
+          "param": "Param56",
+          "bucket": "unassigned"
+        },
+        {
+          "param": "Param57",
+          "bucket": "unassigned"
+        }
+      ]
+    },
+    {
+      "group": "竖手指打开",
+      "file": "Animation/竖手指切出来动画.motion3.json",
+      "writes": [
+        "Movement1",
+        "Movement3",
+        "Param56",
+        "Param57",
+        "Param40",
+        "Param36",
+        "Param39",
+        "Param41",
+        "Param42",
+        "Param43"
+      ],
+      "regionsTouched": [
+        "hands"
+      ],
+      "alsoWrites": [
+        {
+          "param": "Param56",
+          "bucket": "unassigned"
+        },
+        {
+          "param": "Param57",
+          "bucket": "unassigned"
+        }
+      ]
+    },
+    {
+      "group": "竖手指关闭",
+      "file": "Animation/竖手指切回默认.motion3.json",
+      "writes": [
+        "Movement3",
+        "Param56",
+        "Param57",
+        "Param40",
+        "Param36",
+        "Param39",
+        "Param41",
+        "Param42",
+        "Param43"
+      ],
+      "regionsTouched": [
+        "hands"
+      ],
+      "alsoWrites": [
+        {
+          "param": "Param56",
+          "bucket": "unassigned"
+        },
+        {
+          "param": "Param57",
+          "bucket": "unassigned"
+        }
+      ]
+    },
+    {
+      "group": "狗尾巴草打开",
+      "file": "Animation/狗尾草切换出来.motion3.json",
+      "writes": [
+        "Movement1",
+        "Movement3",
+        "Param56",
+        "Param57",
+        "Param36",
+        "Param39",
+        "Param41",
+        "Param42",
+        "Param43"
+      ],
+      "regionsTouched": [
+        "hands"
+      ],
+      "alsoWrites": [
+        {
+          "param": "Param56",
+          "bucket": "unassigned"
+        },
+        {
+          "param": "Param57",
+          "bucket": "unassigned"
+        }
+      ]
+    },
+    {
+      "group": "狗尾巴草关闭",
+      "file": "Animation/狗尾草切回默认手.motion3.json",
+      "writes": [
+        "Movement1",
+        "Param56",
+        "Param57",
+        "Param36",
+        "Param39",
+        "Param41",
+        "Param42",
+        "Param43"
+      ],
+      "regionsTouched": [
+        "hands"
+      ],
+      "alsoWrites": [
+        {
+          "param": "Param56",
+          "bucket": "unassigned"
+        },
+        {
+          "param": "Param57",
+          "bucket": "unassigned"
+        }
+      ]
+    },
+    {
+      "group": "Idle",
+      "file": "Animation/IDLE.motion3.json",
+      "writes": [
+        "ShockR",
+        "ShockL",
+        "Param11",
+        "SweatBurst1",
+        "SweatBurst2",
+        "SweatBurst3",
+        "SweatBurst4",
+        "Divider22",
+        "Param31",
+        "Param32",
+        "Param27",
+        "Param28",
+        "RCry",
+        "Param29",
+        "Param30",
+        "LCry",
+        "Startwinkle",
+        "Param55",
+        "Param56",
+        "Param58",
+        "Param57"
+      ],
+      "regionsTouched": [
+        "face"
+      ],
+      "alsoWrites": [
+        {
+          "param": "Divider22",
+          "bucket": "unassigned"
+        },
+        {
+          "param": "Param55",
+          "bucket": "unassigned"
+        },
+        {
+          "param": "Param56",
+          "bucket": "unassigned"
+        },
+        {
+          "param": "Param58",
+          "bucket": "unassigned"
+        },
+        {
+          "param": "Param57",
+          "bucket": "unassigned"
+        }
+      ]
+    }
+  ],
+  "motionArmConflicts": {
+    "source": "packages/renderer/src/app/motion-director.ts motionsShareArm",
+    "note": "只按姿态骨相交判断，Param56/57 等共用光效不参与。",
+    "pairs": [
+      {
+        "a": "竖手指",
+        "b": "狗尾巴草",
+        "shareArm": true,
+        "sharedPoseParams": [
+          "Param36",
+          "Param39",
+          "Param41",
+          "Param42",
+          "Param43"
+        ],
+        "advice": "不可同时打开。预览或 LLM 要切到另一个时，先走对应关闭动作做手臂收尾，不要清空全身。"
+      },
+      {
+        "a": "抚胸手",
+        "b": "竖手指",
+        "shareArm": false,
+        "advice": "抚胸手用左臂，可与右臂动作共存。"
+      },
+      {
+        "a": "抚胸手",
+        "b": "狗尾巴草",
+        "shareArm": false,
+        "advice": "抚胸手用左臂，可与右臂动作共存。"
+      }
+    ]
+  },
+  "engineGroups": {
+    "eyeBlink": {
+      "ids": [
+        "ParamEyeROpen",
+        "ParamEyeLOpen"
+      ],
+      "note": "眨眼组，引擎可接管"
+    },
+    "lipSync": {
+      "ids": [
+        "ParamMouthOpenY"
+      ],
+      "note": "口型红线，行为/节点/bridge 不得写。SDK 在物理之后（order 700）应用。"
+    },
+    "lipSyncCatalog": [
+      "ParamMouthOpenY",
+      "ParamMouthOpen",
+      "ParamMouthForm"
+    ]
+  },
+  "counts": {
+    "totalParams": 509,
+    "physicsOutputs": 292,
+    "regions": {
+      "hair": {
+        "params": 58,
+        "physicsOutputs": 53,
+        "writable": 5,
+        "motions": 0,
+        "expressionsWritingThisRegion": 0
+      },
+      "face": {
+        "params": 139,
+        "physicsOutputs": 59,
+        "writable": 80,
+        "motions": 1,
+        "expressionsWritingThisRegion": 0
+      },
+      "hands": {
+        "params": 62,
+        "physicsOutputs": 38,
+        "writable": 24,
+        "motions": 6,
+        "expressionsWritingThisRegion": 0
+      },
+      "torso": {
+        "params": 82,
+        "physicsOutputs": 68,
+        "writable": 14,
+        "motions": 0,
+        "expressionsWritingThisRegion": 3
+      },
+      "legs": {
+        "params": 3,
+        "physicsOutputs": 2,
+        "writable": 1,
+        "motions": 0,
+        "expressionsWritingThisRegion": 1
+      }
+    },
+    "expressionLayerParams": 13,
+    "shared": 3,
+    "unassigned": 149,
+    "unassignedPhysicsOutputs": 71,
+    "physicsGroups": 131,
+    "assignedSum": 509,
+    "complete": true
+  }
+}
