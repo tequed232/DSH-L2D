@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { createAiInbox } from './ai-inbox.mjs';
 
 // ---------------------------------------------------------------- 基线（flag 关 = legacy 行为）
@@ -505,6 +506,123 @@ assert.equal(inbox.post({ id: 999 }).ok, false);
   t.box.poll({ consumerId: 'pageB' }); // pageB 接管 → pageA 未回执 call 写 lease-taken-over
   assert.equal(await p, null, '接管失败回执 → null 落轮询');
   console.log('SB8 接管失败回执通知 ok');
+}
+
+
+// ---------------------------------------------------------------- 指令派发租约（多标签页 / 前台抢占 / 过期转移）
+function makeTabs(overrides = {}) {
+  let now = 5000;
+  const diags = [];
+  const box = createAiInbox({ leaseTtlMs: 3000, leaseEnabled: () => true, now: () => now, diag: (m) => diags.push(m), ...overrides });
+  return { box, diags, tick(ms) { now += ms; }, poll: (id, fg) => box.poll({ consumerId: id, foreground: fg }) };
+}
+
+// L1 三个标签页：同一时刻只有一个持有者，其余返回空 + no-lease；指令只发给持有者
+{
+  const t = makeTabs();
+  const a = t.poll('tabA', false);
+  assert.ok(a.lease.token);
+  for (let i = 0; i < 5; i++) {
+    t.box.call('l2d_act', { i });
+    t.tick(400);
+    const b = t.poll('tabB', false);
+    const c = t.poll('tabC', false);
+    assert.deepEqual([b.calls.length, b.reason, c.calls.length, c.reason], [0, 'no-lease', 0, 'no-lease']);
+    assert.equal(b.lease.status, 'held');
+    assert.ok(b.lease.expiresInMs > 0 && b.lease.expiresInMs <= 3000);
+    const got = t.poll('tabA', false);
+    assert.equal(got.calls.length, 1, '持有者心跳续期并取到指令');
+    assert.equal(got.lease.token, a.lease.token);
+  }
+  assert.equal(t.box.leaseInfo().epoch, 1);
+  console.log('L1 多标签页单一持有者 ok');
+}
+
+// L2 前台抢占后台：后台持有者已领出未回执的指令写明确失败；旧 token 回执被 fence；前台之间不互抢
+{
+  const t = makeTabs();
+  const bg = t.poll('bgTab', false);
+  t.box.call('l2d_regions_act', {});
+  const issued = t.poll('bgTab', false).calls;
+  assert.equal(issued.length, 1);
+  t.box.call('l2d_act', {}); // 还在队列里、没领出
+  const fg = t.poll('fgTab', true);
+  assert.equal(fg.lease.epoch, 2, '前台页立即接管');
+  assert.deepEqual(fg.calls.map((c) => c.name), ['l2d_act'], '队列里的指令发给新持有者');
+  assert.deepEqual(t.box.read(issued[0].id).result, { ok: false, reason: 'lease-taken-over' }, '已领出未回执 → 明确失败');
+  assert.equal(t.box.post({ id: issued[0].id, token: bg.lease.token, result: { ok: true } }).reason, 'fenced');
+  assert.equal(t.poll('bgTab', false).reason, 'no-lease', '后台页不能抢回');
+  assert.equal(t.poll('fg2', true).reason, 'no-lease', '前台页不抢前台持有者');
+  // 持有者切到后台 → 另一个前台页可抢
+  t.poll('fgTab', false);
+  assert.equal(t.poll('fg2', true).lease.epoch, 3);
+  assert.ok(t.diags.some((d) => /foreground-preempt/.test(d)));
+  console.log('L2 前台抢占后台 ok');
+}
+
+// L3 过期转移：约 3 秒没续期 → 下一个页面接手；未过期前不转移
+{
+  const t = makeTabs();
+  t.poll('tabA', true);
+  t.box.call('x', {});
+  const pending = t.poll('tabA', true).calls[0];
+  t.tick(2900);
+  assert.equal(t.poll('tabB', true).reason, 'no-lease', '2.9s 内仍归 A');
+  t.tick(200);
+  const b = t.poll('tabB', false);
+  assert.equal(b.lease.epoch, 2, '超过 3s 未续期 → 交给 B（后台页也能接）');
+  assert.deepEqual(t.box.read(pending.id).result, { ok: false, reason: 'lease-taken-over' });
+  assert.ok(t.diags.some((d) => /lease expired/.test(d)));
+  console.log('L3 过期转移 ok');
+}
+
+// L4 持有者过期后回来、期间没人接手：同 token 续上，已领出的指令照常回执
+{
+  const t = makeTabs();
+  const a = t.poll('tabA', false);
+  t.box.call('slow', {});
+  const c = t.poll('tabA', false).calls[0];
+  t.tick(10000); // 后台节流，很久没 poll
+  const back = t.poll('tabA', false);
+  assert.equal(back.lease.token, a.lease.token);
+  assert.equal(t.box.post({ id: c.id, token: a.lease.token, result: { ok: true } }).ok, true);
+  assert.deepEqual(t.box.read(c.id).result, { ok: true });
+  console.log('L4 过期后原持有者续上 ok');
+}
+
+// L5 回执晚到不误判失联：ownedStaleMs 单独配置（宿主 60s）；超过才写失败
+{
+  const t = makeTabs({ ownedStaleMs: 60000 });
+  t.poll('tabA', true);
+  t.box.call('awaitDone', {});
+  const c = t.poll('tabA', true).calls[0];
+  for (let i = 0; i < 40; i++) { t.tick(1000); t.poll('tabA', true); }
+  assert.deepEqual(t.box.read(c.id), { ready: false }, '40s 仍在等回执，没有误判');
+  for (let i = 0; i < 25; i++) { t.tick(1000); t.poll('tabA', true); }
+  assert.equal(t.box.read(c.id).result.reason, 'lease-taken-over');
+  console.log('L5 回执晚到保留期 ok');
+}
+
+// L6 旧 overlay（不带 foreground）视作后台：不抢占；无 consumerId 永远 no-lease
+{
+  const t = makeTabs();
+  t.poll('tabA', false);
+  assert.equal(t.box.poll({ consumerId: 'legacy' }).reason, 'no-lease');
+  assert.equal(t.box.poll().reason, 'no-lease');
+  console.log('L6 旧 overlay 降级 ok');
+}
+
+// L7 接线：宿主默认开租约（只有显式 false 才关）、TTL 3s；/ai/poll 读 fg；overlay 带 visibilityState
+{
+  const idx = fs.readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const ov = fs.readFileSync(new URL('./overlay.js', import.meta.url), 'utf8');
+  assert.match(idx, /leaseEnabled: \(\) => readSettings\(\)\.consumerLeaseEnabled !== false/);
+  assert.match(idx, /leaseTtlMs: 3000/);
+  assert.match(idx, /consumerLeaseEnabled: \{ type: 'boolean', default: true/);
+  assert.match(idx, /foreground = sp\.get\('fg'\) === '1'/);
+  assert.match(ov, /'&fg=' \+ \(aiPageForeground\(\) \? '1' : '0'\)/);
+  assert.match(ov, /document\.visibilityState === 'visible'/);
+  console.log('L7 宿主 / overlay 接线 ok');
 }
 
 console.log('ai-inbox ok');

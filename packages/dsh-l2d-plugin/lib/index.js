@@ -183,7 +183,7 @@ const SETTINGS_SHAPE = {
   petWindow: { type: 'string', default: 'off', description: '桌宠独立窗：off 关闭（页内浮层）/ only 独立透明窗（页内浮层停用，重启生效）' },
   reverseEnabled: { type: 'boolean', default: true, description: '反向桥：模型交互事件回流宿主（l2d-reverse-state.json + /ai/poll 搭车）' },
   workspaceForeground: { type: 'boolean', default: false, description: '工作区快照：读取前台应用进程名（默认关；仅本机、不取标题/路径/内容）' },
-  consumerLeaseEnabled: { type: 'boolean', default: false, description: '消费者租约：/ai/poll 单消费者接管 + /ai/result token fencing，默认关' },
+  consumerLeaseEnabled: { type: 'boolean', default: true, description: '指令派发租约：/ai/poll 只发给持有租约的那个页面（前台优先，3 秒未续期转移）+ /ai/result token fencing，默认开' },
 };
 
 let z = null;
@@ -212,7 +212,7 @@ export const Config = z
       petWindow: z.string().default('off').description('桌宠独立窗：off 关闭（页内浮层）/ only 独立透明窗（页内浮层停用，重启生效）').extra('volatile', true),
       reverseEnabled: z.boolean().default(true).description('反向桥：模型交互事件回流宿主（l2d-reverse-state.json + /ai/poll 搭车）').extra('volatile', true),
       workspaceForeground: z.boolean().default(false).description('工作区快照：读取前台应用进程名（默认关；仅本机、不取标题/路径/内容）').extra('volatile', true),
-      consumerLeaseEnabled: z.boolean().default(false).description('消费者租约：/ai/poll 单消费者接管 + /ai/result token fencing，默认关').extra('volatile', true),
+      consumerLeaseEnabled: z.boolean().default(true).description('指令派发租约：/ai/poll 只发给持有租约的那个页面（前台优先，3 秒未续期转移）+ /ai/result token fencing，默认开').extra('volatile', true),
     })
   : { ...SETTINGS_SHAPE };
 
@@ -1007,10 +1007,13 @@ export function apply(root, config = {}) {
     // 而且失败可重建，不会因为连接断了就哑掉。
     // 消费者租约（M1-d3）：flag 按调用时读取（settings volatile，热切换零重启），
     // 不得在构造时烘焙。TTL/宽容期与 READY 文档 §1.1 一致。
+    // 指令派发租约默认开：只有显式设成 false 才退回旧的「谁先 poll 谁拿走」。
+    // TTL 3s（overlay 每 400ms poll 一次即心跳）；已领出未回执的指令保留 60s（blend 排队 / awaitFinish 回执会晚到）。
     const aiInbox = createAiInbox({
-      leaseTtlMs: 15000,
+      leaseTtlMs: 3000,
+      ownedStaleMs: 60000,
       legacyGraceMs: 30 * 60 * 1000,
-      leaseEnabled: () => readSettings().consumerLeaseEnabled === true,
+      leaseEnabled: () => readSettings().consumerLeaseEnabled !== false,
       diag,
     });
     const reverseLog = createReverseLog({ diag });
@@ -1121,14 +1124,18 @@ export function apply(root, config = {}) {
     route('/dsh-l2d/ai/poll', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       // 消费者身份：新 overlay 带 ?consumer=<页面自生成 id>（version 仅诊断）；旧 overlay 无参数 → 空队列降级
+      // fg=1：页面在前台（document.visibilityState==='visible'），可抢占后台页面的租约
       let consumerId = '';
+      let foreground = false;
       try {
-        consumerId = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('consumer') || '');
+        const sp = new URL(req.url, 'http://127.0.0.1').searchParams;
+        consumerId = String(sp.get('consumer') || '');
+        foreground = sp.get('fg') === '1';
       } catch {
         consumerId = '';
       }
       // 搭车：把反向桥事件摘要一并带给页面，overlay 可并入 l2d_get_state
-      const polled = aiInbox.poll({ consumerId });
+      const polled = aiInbox.poll({ consumerId, foreground });
       polled.reverse = reverseLog.snapshot();
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(polled), 'utf8'));
     });

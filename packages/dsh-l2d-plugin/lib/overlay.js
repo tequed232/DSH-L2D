@@ -5686,12 +5686,27 @@
     });
   }
 
+  /** 页面是否在前台：前台页面优先拿指令派发租约。 */
+  function aiPageForeground() {
+    try {
+      return typeof document !== 'undefined' && document.visibilityState === 'visible';
+    } catch (e) {
+      return false;
+    }
+  }
+
   function startAiPoll() {
     if (aiPollTimer) return;
+    // 切回前台立即参与下一轮租约（不等降频计数走完）
+    try {
+      document.addEventListener('visibilitychange', function () {
+        if (aiPageForeground()) aiPollHoldTicks = 0;
+      });
+    } catch (e) { /* 无 document 的环境忽略 */ }
     aiPollTimer = setInterval(function () {
       if (aiPollHoldTicks > 0) { aiPollHoldTicks--; return; } // 租约被他人持有：降频轮询
       if (!window.DSH_L2D_AI) return;
-      fetch('/dsh-l2d/ai/poll?consumer=' + encodeURIComponent(__aiConsumerId) + '&version=' + encodeURIComponent(__bootTag || ''), { cache: 'no-store' })
+      fetch('/dsh-l2d/ai/poll?consumer=' + encodeURIComponent(__aiConsumerId) + '&fg=' + (aiPageForeground() ? '1' : '0') + '&version=' + encodeURIComponent(__bootTag || ''), { cache: 'no-store' })
         .then(function (r) {
           return r.ok ? r.json() : null;
         })
@@ -5702,8 +5717,9 @@
             if (d.lease.token) {
               __aiLeaseToken = d.lease.token; // 接管/续期发放的新凭证（含接管后 token 轮换）
               __aiLeaseEpoch = d.lease.epoch || 0;
-            } else if (d.lease.status === 'held') {
-              aiPollHoldTicks = 4; // 他人持租约：拉长下次 poll 间隔
+            } else if (d.lease.status === 'held' || d.reason === 'no-lease') {
+              // 他人持租约：后台页拉长下次 poll 间隔；前台页不降频（随时可能抢占后台持有者）
+              aiPollHoldTicks = aiPageForeground() ? 0 : 4;
             }
           }
           if (!d || !d.calls || !d.calls.length) return;

@@ -187,8 +187,15 @@ function resolveInside(baseDir, relRaw) {
   return full;
 }
 
-/** AI 指令队列：与 DSH 插件宿主共用 ai-inbox，回执语义保持一致 */
-const aiInbox = createAiInbox();
+/**
+ * AI 指令队列：与 DSH 插件宿主共用 ai-inbox，回执语义保持一致。
+ * 指令派发租约与宿主一样默认开（只发给一个页面、前台优先、3 秒未续期转移）；DSH_L2D_LEASE=0 关。
+ */
+const aiInbox = createAiInbox({
+  leaseTtlMs: 3000,
+  ownedStaleMs: 60000,
+  leaseEnabled: () => process.env.DSH_L2D_LEASE !== '0',
+});
 
 // 节点图执行入口（SPEC §4 第 4 行）的单批下发回调：与插件宿主同一份实现
 //（nodegraph.createInboxActExecutor），走本进程 aiInbox 的 l2d_act 下发链路；
@@ -506,7 +513,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (urlPath === '/ai/poll') {
-    return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(aiInbox.poll()), 'utf8'));
+    const sp = new URL(req.url, 'http://127.0.0.1').searchParams;
+    const polled = aiInbox.poll({ consumerId: String(sp.get('consumer') || ''), foreground: sp.get('fg') === '1' });
+    return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(polled), 'utf8'));
   }
 
   if (urlPath === '/ai/result') {

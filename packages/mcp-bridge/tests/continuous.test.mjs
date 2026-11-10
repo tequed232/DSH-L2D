@@ -76,7 +76,13 @@ const claimant = {
 };
 const claimantTimer = setInterval(async () => {
   let calls = [];
-  try { calls = (await fetchJson(`${baseUrl}/ai/poll`)).body.calls || []; } catch { return; }
+  // dev-server 默认开指令派发租约：带实例 id 申请/续期，回执附带 token
+  let token = '';
+  try {
+    const body = (await fetchJson(`${baseUrl}/ai/poll?consumer=claimant&fg=1`)).body;
+    calls = body.calls || [];
+    token = (body.lease && body.lease.token) || '';
+  } catch { return; }
   for (const c of calls) {
     claimant.served++;
     const callId = c.id;
@@ -87,7 +93,7 @@ const claimantTimer = setInterval(async () => {
     // exec 同步受理回执（result 通道，模拟 acceptedAct）
     await fetchJson(`${baseUrl}/ai/result`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: callId, result: { ok: true, accepted: true, settled: false, outcome: 'pending', runId: callId } }),
+      body: JSON.stringify({ id: callId, token, result: { ok: true, accepted: true, settled: false, outcome: 'pending', runId: callId } }),
     }).catch(() => {});
     // 模拟执行耗时后 end 回执（event 通道，模拟 armActEnd → finishAct）
     setTimeout(() => {
@@ -95,7 +101,7 @@ const claimantTimer = setInterval(async () => {
       claimant.inFlight.delete(callId);
       fetchJson(`${baseUrl}/ai/result`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: callId, event: { type: 'action-done', phase: 'end', callId, runId: callId, source: 'ai', steps: 1, ts: Date.now() } }),
+        body: JSON.stringify({ id: callId, token, event: { type: 'action-done', phase: 'end', callId, runId: callId, source: 'ai', steps: 1, ts: Date.now() } }),
       }).catch(() => {});
     }, 20 + Math.floor(Math.random() * 40));
   }

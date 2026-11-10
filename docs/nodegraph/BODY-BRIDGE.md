@@ -111,6 +111,8 @@ HTTP（宿主先静态校验，再经 aiInbox 交给 overlay 仲裁）：
 
 MCP：`l2d_regions_get / act / release`、`l2d_accessory_set`、`l2d_face_vocab`、`l2d_face_compose`、`l2d_face_describe`。LLM 侧默认 `onBusy:'blend'`、`cut:'next'`；工具说明里用中文写清三个 cut 的用途（now 情绪突变、next 说话停顿处换动作、after 不想打断）。
 
+派发：bridge 指令与其它 AI 指令一样经 aiInbox 的 `/ai/poll` 下发，只发给持有**指令派发租约**的那个 overlay（宿主默认开，设置 `consumerLeaseEnabled:false` 关）：页面带实例 id 和是否前台（`fg=1` 即 `document.visibilityState==='visible'`）去申请 / 续期；同一时刻只有一个持有者，前台页面可抢占后台页面；约 3 秒没续期就过期，交给下一个页面。未持有租约的 poll 返回空 `calls` 并带 `reason:'no-lease'`。租约转移时，已领出未回执的指令写明确失败 `{ok:false, reason:'lease-taken-over'}`（不重发：指令可能已在旧页执行到一半）。
+
 旧接口：`l2d_play_motion` 走 blend，回执形状不变（排队时等出队后再返回；被顶掉返回 `{ok:false, reason:'superseded', status:'conflict', group}`）；`l2d_set_expression` 保持占用即拒（`onBusy:'reject'`），回执 `{ok}` / `{ok:false, error}` 不变。
 
 ## 7. 失败原因码
