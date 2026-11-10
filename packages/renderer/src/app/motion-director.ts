@@ -72,6 +72,32 @@ export function motionsShareArm(a: string, b: string): boolean {
   return intersect(left.poseParams, right.poseParams);
 }
 
+/**
+ * 即将播放 group 前，需要先收尾的关闭动作。
+ * 只收与 group 共用手臂、且当前为 open 的槽；同槽自己的打开/关闭不算。
+ * 调用方应按返回顺序 awaitFinish 播完这些关闭，再播 group。不要全身清零。
+ */
+export function closesToPlayBefore(group: string, slotStates: Record<string, string> | null | undefined): string[] {
+  if (!group) return [];
+  const states = slotStates || {};
+  const out: string[] = [];
+  const incoming = slotForGroup(group);
+  for (const slot of PAIRED_SLOTS) {
+    if ((states[slot.base] || 'closed') !== 'open') continue;
+    if (incoming && incoming.base === slot.base) continue;
+    if (motionsShareArm(slot.openGroup, group)) out.push(slot.closeGroup);
+  }
+  return out;
+}
+
+/**
+ * 该动作组对应的姿态骨。非成对动作返回空数组（调用方应自行决定清哪些参数）。
+ */
+export function poseParamsForGroup(group: string): string[] {
+  const slot = slotForGroup(group);
+  return slot ? slot.poseParams.slice() : [];
+}
+
 export class MotionDirector {
   private states = new Map<string, 'open' | 'closed'>();
 

@@ -72,16 +72,21 @@ export interface PoseRequest {
   left?: PoseSideName;
 }
 
-function mergedPose(req: PoseRequest): PoseValues {
-  const values: PoseValues = { ...REST };
-  const right = req.right || 'rest';
-  const left = req.left || 'rest';
-  if (!PRESETS[right] || !PRESETS[left]) return values;
-  for (const id of ['Param36', 'Param39', 'Param40', 'Param41', 'Param42', 'Param43']) {
-    values[id] = PRESETS[right][id];
+const RIGHT_POSE_IDS = ['Param36', 'Param39', 'Param40', 'Param41', 'Param42', 'Param43'];
+const LEFT_POSE_IDS = ['Param59', 'Param60', 'Param61', 'Param62'];
+
+function mergedPose(req: PoseRequest, base: PoseValues = REST): PoseValues {
+  const values: PoseValues = { ...base };
+  // 未点名的一侧保持 base（收养终态时可叠加另一只手臂）；setPose 仍传 REST 作 base，缺省即 rest。
+  if (req.right) {
+    const preset = PRESETS[req.right];
+    if (!preset) return values;
+    for (const id of RIGHT_POSE_IDS) values[id] = preset[id];
   }
-  for (const id of ['Param59', 'Param60', 'Param61', 'Param62']) {
-    values[id] = PRESETS[left][id];
+  if (req.left) {
+    const preset = PRESETS[req.left];
+    if (!preset) return values;
+    for (const id of LEFT_POSE_IDS) values[id] = preset[id];
   }
   return values;
 }
@@ -135,9 +140,10 @@ export class PoseController {
     this.hold(next);
   }
 
-  /** Loop 动作在 duration 处回卷，终态直接采用动作曲线上实测到的终点。 */
+  /** Loop 动作在 duration 处回卷，终态直接采用动作曲线上实测到的终点。
+   * 只覆盖点名的一侧，另一侧保持当前姿势，避免右臂收尾冲掉左臂（叠加预览）。 */
   public adoptPreset(req: PoseRequest): void {
-    this.hold(mergedPose(req));
+    this.hold(mergedPose(req, this.current));
   }
 
   public resetToRest(): void {

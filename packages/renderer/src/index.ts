@@ -14,7 +14,7 @@ import type { LAppModel } from './app/lappmodel';
 import { ParamInjector, parameterIndexOf } from './app/param-injector';
 import { isHostable } from './app/param-host-policy';
 import { EmotionRouter, EmotionIntent, EmotionSignal } from './app/emotion-router';
-import { MotionDirector, motionsShareArm } from './app/motion-director';
+import { MotionDirector, motionsShareArm, closesToPlayBefore, poseParamsForGroup } from './app/motion-director';
 import { PoseController, POSE_IDS } from './app/pose-controller';
 import { FacialBridge, type FacialFrame, type FacialSemantic } from './app/facial-bridge.ts';
 import { SHADER_SOURCES } from './shaders';
@@ -748,7 +748,7 @@ function emitActionCompletion(
   actionCompletionBus.emit(event);
 }
 
-export { closeMotionsOnPreempt, preemptedYandere, motionsShareArm, motionResultKind };
+export { closeMotionsOnPreempt, preemptedYandere, motionsShareArm, closesToPlayBefore, motionResultKind };
 
 /** 动作诊断，不参与渲染决策。 */
 let motionDiag = { group: 'none', startedAt: 0, playing: false };
@@ -1595,7 +1595,9 @@ export async function playMotionAsync(
 
   // 动作独占标志：动作播放期间姿势层完全不写，避免互抢。
   // Loop 动作不会触发结束回调，所以用动作时长定时交还。
-  injector.clear(POSE_IDS);
+  // 只清本动作共用的姿态骨，另一只手臂的 injector 值保留，避免叠加预览被全身清零。
+  const armPoseIds = poseParamsForGroup(target);
+  injector.clear(armPoseIds.length ? armPoseIds : [...POSE_IDS]);
   poseOwnedByMotion = true;
   let finished: Promise<void> | null = null;
   let finishResolve: (() => void) | null = null;
@@ -2658,6 +2660,7 @@ const api = {
   closeMotionsOnPreempt,
   preemptedYandere,
   motionsShareArm,
+  closesToPlayBefore,
   motionResultKind,
   noteActMotion,
   // [M1-d2] 手势时间线动作面（embodied.timeline flag，默认关）

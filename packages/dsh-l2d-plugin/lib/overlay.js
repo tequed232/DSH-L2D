@@ -2350,6 +2350,46 @@
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
   }
 
+  /**
+   * l2d_play_motion 的手臂让位：新旧动作共用手臂时，先按槽位播放对应「关闭」，
+   * 再播新动作。不共用则直接播，不做全身重置、不清表情和体型。
+   * 判定走渲染包 motionsShareArm / closesToPlayBefore（PR #4 状态机）。
+   */
+  function closesForIncomingMotion(L, group) {
+    var slots = L && L.getMotionSlots ? L.getMotionSlots() : {};
+    if (L && typeof L.closesToPlayBefore === 'function') {
+      var planned = L.closesToPlayBefore(group, slots);
+      return Array.isArray(planned) ? planned : [];
+    }
+    var share = L && typeof L.motionsShareArm === 'function'
+      ? function (a, b) { return !!L.motionsShareArm(a, b); }
+      : null;
+    if (!share || !slots) return [];
+    var closes = [];
+    Object.keys(slots).forEach(function (base) {
+      if (slots[base] !== 'open') return;
+      if (group === base || group === base + '打开' || group === base + '关闭') return;
+      if (share(base + '打开', group)) closes.push(base + '关闭');
+    });
+    return closes;
+  }
+
+  function playMotionYieldingSharedArm(L, group, opts) {
+    var closes = closesForIncomingMotion(L, group);
+    var play = function () { return L.playMotionAsync(group, opts); };
+    if (!closes.length) return play();
+    var seq = Promise.resolve();
+    closes.forEach(function (name) {
+      seq = seq.then(function () {
+        return L.playMotionAsync(name, { awaitFinish: true, interrupt: true });
+      });
+    });
+    return seq.then(play).then(function (result) {
+      if (result && typeof result === 'object') result.yieldedCloses = closes;
+      return result;
+    });
+  }
+
   function closesToFlush(chain) {
     var L = window.DSH_L2D;
     var shares = L && typeof L.motionsShareArm === 'function'
@@ -5372,12 +5412,18 @@
           }
           case 'l2d_play_motion': {
             if (!L.playMotionAsync) return { ok: false, reason: 'motion-unavailable' };
-            return L.playMotionAsync(String(a.group || ''), {
+            var motionGroup = String(a.group || '');
+            var motionOpts = {
               index: Number(a.index || 0),
               awaitFinish: a.awaitFinish === true,
-            }).then(function (r) {
-              if (r.status === 'ok') return { ok: true, status: r.status, group: r.group, slot: r.slot, dir: r.dir };
-              return { ok: false, reason: r.reason || r.status, status: r.status, group: r.group };
+            };
+            return Promise.resolve(playMotionYieldingSharedArm(L, motionGroup, motionOpts)).then(function (r) {
+              if (!r) return { ok: false, reason: 'empty' };
+              var yielded = Array.isArray(r.yieldedCloses) ? r.yieldedCloses : [];
+              if (r.status === 'ok') {
+                return { ok: true, status: r.status, group: r.group, slot: r.slot, dir: r.dir, yieldedCloses: yielded };
+              }
+              return { ok: false, reason: r.reason || r.status, status: r.status, group: r.group, yieldedCloses: yielded };
             });
           }
           case 'l2d_emote': {
