@@ -23,6 +23,22 @@ import {
   validateMotionGroup,
 } from './validate.mjs';
 import { readToolchainStatus } from './toolchain-status.mjs';
+import {
+  ACCESSORY_SET_DESCRIPTION,
+  BRIDGE_CUTS,
+  BRIDGE_ON_BUSY,
+  BRIDGE_PRIORITIES,
+  BRIDGE_REGIONS,
+  CUT_DESCRIPTION,
+  FACE_COMPOSE_DESCRIPTION,
+  FACE_DESCRIBE_DESCRIPTION,
+  FACE_VOCAB_DESCRIPTION,
+  ON_BUSY_DESCRIPTION,
+  REGIONS_GET_DESCRIPTION,
+  REGIONS_RELEASE_DESCRIPTION,
+  loadCapabilitiesForDescription,
+  regionsActDescription,
+} from './regions-tools.mjs';
 
 let cachedBase = '';
 
@@ -65,6 +81,8 @@ function toolResult(result) {
       result.reason === 'conflict' ||
       result.reason === 'priority-blocked' ||
       result.reason === 'pending' ||
+      result.reason === 'region-busy' ||
+      result.reason === 'expression-conflict' ||
       result.status === 'skipped' ||
       result.status === 'conflict');
   return {
@@ -92,7 +110,7 @@ server.registerTool(
 server.registerTool(
   'l2d_set_expression',
   {
-    description: '切换模型自带表情。名字必须是模型里真实存在的表情。',
+    description: '切换模型自带表情。名字必须是模型里真实存在的表情。内部走部位联动 bridge 的表情层：眼型等互斥表情被更高优先级联动占着时返回 expression-conflict；「前倾」「脱鞋」会转成躯干 / 腿部模块指令。',
     inputSchema: {
       name: z.string().describe('表情名'),
     },
@@ -109,7 +127,7 @@ server.registerTool(
 server.registerTool(
   'l2d_play_motion',
   {
-    description: '播放动作组。打开/关闭是成对状态，重复打开会得到 skipped，右臂冲突会得到 conflict。这是正常结果，换一个动作，不要原样重试。',
+    description: '播放动作组。打开/关闭是成对状态，重复打开会得到 skipped。内部走部位联动 bridge：动作所属模块（如 hands）正被另一条联动占着时返回 region-busy；要打开的动作与已打开的动作共用一只手臂时会先自动播放那个的关闭动作再打开（只收尾这一只手）。这些是正常结果，换一个动作或稍后再试，不要原样重试。',
     inputSchema: {
       group: z.string().describe('动作组名，例如 竖手指打开'),
       index: z.number().int().optional().describe('组内下标，默认 0'),
@@ -446,6 +464,178 @@ server.registerTool(
     },
   },
   async ({ index }) => toolResult(await forward('l2d_set_form', { index }, 3000)),
+);
+
+// ---------------------------------------------------------------- 部位联动 bridge
+// 直连宿主 /dsh-l2d/api/bridge/*（宿主先用 body-bridge.mjs 静态校验，再经 aiInbox 交给 overlay 仲裁）。
+// 工具说明由分区表生成：每个模块能做什么、可写哪些参数直接写在描述里。
+const regionsCaps = loadCapabilitiesForDescription();
+
+async function bridgeApi(pathAndQuery, init, timeoutMs) {
+  const base = await baseUrl();
+  if (!base) return { ok: false, reason: 'plugin-offline' };
+  try {
+    const res = await fetchTimeout(base + pathAndQuery, init, timeoutMs);
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { ok: false, reason: 'http-' + res.status };
+    }
+  } catch {
+    cachedBase = '';
+    return { ok: false, reason: 'unreachable' };
+  }
+}
+
+// 忙时策略 / 衔接（regions_act、accessory_set、face_compose 共用）。LLM 侧默认 blend + next。
+const busySchema = {
+  priority: z.enum([...BRIDGE_PRIORITIES]).optional().describe('LOW / NORMAL / HIGH / FORCE，默认 NORMAL'),
+  onBusy: z.enum([...BRIDGE_ON_BUSY]).optional().describe(ON_BUSY_DESCRIPTION),
+  cut: z.enum([...BRIDGE_CUTS]).optional().describe(CUT_DESCRIPTION),
+  fadeMs: z.number().int().min(200).max(400).optional().describe('交叉淡变时长，默认 300'),
+  waitMs: z.number().int().min(0).max(30000).optional().describe('最多等多久：wait 默认 3000，blend 默认 30000（after / 低优先级等播完时用得上）'),
+};
+
+const composeSchema = z.object({
+  dimensions: z
+    .union([z.record(z.string(), z.number().min(0).max(1)), z.array(z.object({ dimension: z.string(), intensity: z.number().min(0).max(1) }))])
+    .optional()
+    .describe('情绪维度强度，如 {慵懒:0.6, 挑逗:0.7}'),
+  units: z.record(z.string(), z.number().min(0).max(1)).optional().describe('直接给部件强度 {部件id: 0..1}'),
+  recipes: z.array(z.string()).optional().describe('叠加预设配方'),
+  side: z.enum(['L', 'R']).optional().describe('有方向的部件统一朝哪边'),
+  energy: z.number().min(0).max(1).optional().describe('摆动能量，默认按维度强度加权平均'),
+  expressions: z.array(z.string()).optional().describe('额外要一起开的表情（走表情层）'),
+  autoExpressions: z.boolean().optional().describe('维度强度过阈值时自动开伴随表情（脸红等），默认 true'),
+  enterMs: z.number().int().min(0).max(10000).optional().describe('渐入时长，默认 1000'),
+  holdMs: z.number().int().min(0).max(600000).optional().describe('保持多久后自动渐出；不给就一直保持'),
+});
+
+async function bridgeAct(route, body, opts) {
+  const out = { ...body, onBusy: opts.onBusy || 'blend' };
+  if (opts.priority) out.priority = opts.priority;
+  if (opts.cut) out.cut = opts.cut;
+  if (opts.fadeMs !== undefined) out.fadeMs = opts.fadeMs;
+  if (opts.waitMs !== undefined) out.waitMs = opts.waitMs;
+  if (opts.awaitDone) out.awaitDone = true;
+  const wait = out.onBusy === 'reject' ? 0 : opts.waitMs ?? (out.onBusy === 'wait' ? 3000 : 30000);
+  const budget = wait + (opts.awaitDone ? 20000 : 0) + 8000;
+  return bridgeApi(route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(out) }, budget);
+}
+
+server.registerTool(
+  'l2d_regions_get',
+  { description: REGIONS_GET_DESCRIPTION, inputSchema: z.object({}) },
+  async () => toolResult(await bridgeApi('/dsh-l2d/api/bridge/state', { cache: 'no-store' }, 8000)),
+);
+
+server.registerTool(
+  'l2d_regions_act',
+  {
+    description: regionsActDescription(regionsCaps),
+    inputSchema: {
+      steps: z
+        .array(
+          z.object({
+            region: z.enum([...BRIDGE_REGIONS]).optional().describe('模块：hair / face / hands / torso / legs（与 layer 二选一）'),
+            motion: z.string().optional().describe('该模块的动作组名（与 set 二选一）'),
+            index: z.number().int().min(0).optional(),
+            set: z.record(z.string(), z.number()).optional().describe('{参数ID: 目标值}，只能是该模块可写参数'),
+            durationMs: z.number().int().min(0).max(30000).optional().describe('插值时长，默认 0'),
+            layer: z.enum(['expression', 'form', 'accessory']).optional(),
+            expression: z.string().optional(),
+            item: z.string().optional().describe('layer=accessory 时的饰品 id'),
+            on: z.boolean().optional(),
+            form: z.number().int().min(0).max(2).optional(),
+            compose: composeSchema.optional().describe('region=face 时组合神态（见 l2d_face_compose）'),
+            mood: z.string().optional().describe('region=face 时用预设配方名'),
+          }),
+        )
+        .min(1)
+        .max(12),
+      ...busySchema,
+      awaitDone: z.boolean().optional().describe('true 时等所有模块 action-done 再返回'),
+    },
+  },
+  async ({ steps, priority, onBusy, cut, fadeMs, waitMs, awaitDone }) =>
+    toolResult(await bridgeAct('/dsh-l2d/api/bridge/act', { source: 'llm', steps }, { priority, onBusy, cut, fadeMs, waitMs, awaitDone })),
+);
+
+server.registerTool(
+  'l2d_accessory_set',
+  {
+    description: ACCESSORY_SET_DESCRIPTION,
+    inputSchema: {
+      items: z
+        .array(z.object({ item: z.string().describe('饰品 id，如 monocle / black-glasses / flower-1'), on: z.boolean().optional().describe('true 戴上（默认），false 摘下') }))
+        .min(1)
+        .max(16),
+      ...busySchema,
+      awaitDone: z.boolean().optional(),
+    },
+  },
+  async ({ items, priority, onBusy, cut, fadeMs, waitMs, awaitDone }) =>
+    toolResult(
+      await bridgeAct(
+        '/dsh-l2d/api/bridge/act',
+        { source: 'llm', steps: items.map((x) => ({ layer: 'accessory', item: x.item, on: x.on !== false })) },
+        { priority, onBusy, cut, fadeMs, waitMs, awaitDone },
+      ),
+    ),
+);
+
+server.registerTool(
+  'l2d_face_vocab',
+  { description: FACE_VOCAB_DESCRIPTION, inputSchema: z.object({}) },
+  async () => toolResult(await bridgeApi('/dsh-l2d/api/bridge/face/vocab', { cache: 'no-store' }, 8000)),
+);
+
+server.registerTool(
+  'l2d_face_compose',
+  {
+    description: FACE_COMPOSE_DESCRIPTION,
+    inputSchema: {
+      compose: composeSchema.optional(),
+      mood: z.string().optional().describe('预设配方名（与 compose 二选一）'),
+      ...busySchema,
+      awaitDone: z.boolean().optional(),
+    },
+  },
+  async ({ compose, mood, priority, onBusy, cut, fadeMs, waitMs, awaitDone }) => {
+    if (!compose && !mood) return toolResult({ ok: false, reason: 'invalid-command', message: '需要 compose 或 mood' });
+    const body = { source: 'llm' };
+    if (mood) body.mood = mood;
+    else body.compose = compose;
+    return toolResult(await bridgeAct('/dsh-l2d/api/bridge/face/compose', body, { priority, onBusy, cut, fadeMs, waitMs, awaitDone }));
+  },
+);
+
+server.registerTool(
+  'l2d_face_describe',
+  { description: FACE_DESCRIBE_DESCRIPTION, inputSchema: z.object({}) },
+  async () => toolResult(await bridgeApi('/dsh-l2d/api/bridge/face/describe', { cache: 'no-store' }, 8000)),
+);
+
+server.registerTool(
+  'l2d_regions_release',
+  {
+    description: REGIONS_RELEASE_DESCRIPTION,
+    inputSchema: {
+      commandId: z.string().max(64).optional().describe('l2d_regions_act 返回的 commandId（或排队 ticket）'),
+      region: z.enum([...BRIDGE_REGIONS]).optional(),
+    },
+  },
+  async ({ commandId, region }) => {
+    if (!commandId && !region) return toolResult({ ok: false, reason: 'invalid-command', message: '需要 commandId 或 region' });
+    return toolResult(
+      await bridgeApi(
+        '/dsh-l2d/api/bridge/release',
+        { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(commandId ? { commandId } : { region }) },
+        8000,
+      ),
+    );
+  },
 );
 
 // ---------------------------------------------------------------- AI 节点编辑

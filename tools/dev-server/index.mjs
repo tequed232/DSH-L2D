@@ -18,6 +18,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createAiInbox } from '../../packages/dsh-l2d-plugin/lib/ai-inbox.mjs';
+import { queryValidatedActions as queryActionsShared } from '../../packages/dsh-l2d-plugin/lib/actions-api.mjs';
 import {
   readMotionMode,
   writeMotionMode,
@@ -87,30 +88,11 @@ function argOf(flag) {
  * 供 overlay 用真实动作库替代「只读 model3.json Motion 组」的随机池。
  * 动态 import node:sqlite：宿主 Node <22.5 或 sqlite 不可用时降级空集，不影响服务器启动。
  */
-const ACTIONS_DB_FILE = path.join(ROOT, 'data', 'bootstrap-state.sqlite');
+const ACTIONS_DB_FILE = process.env.DSH_L2D_ACTIONS_DB || path.join(ROOT, 'data', 'bootstrap-state.sqlite');
 const ACTIONS_MODEL_ID = process.env.DSH_L2D_ACTIONS_MODEL_ID || '大肥鱼.dsl2d';
+// 动作库查询与宿主插件 /dsh-l2d/api/actions 共用 lib/actions-api.mjs（同一库、同一过滤口径）
 async function queryValidatedActions() {
-  try {
-    const { DatabaseSync } = await import('node:sqlite');
-    const db = new DatabaseSync(ACTIONS_DB_FILE, { readOnly: true });
-    try {
-      return db
-        .prepare(
-          `SELECT c.id AS chainId, d.id AS motionId, d.semantic_key AS semanticKey,
-                  d.emotion AS emotion, c.chain_json AS chainJson, b.adapter_json AS adapterJson
-           FROM action_chains c
-           JOIN motion_definitions d ON d.id = c.motion_id
-           JOIN motion_model_bindings b ON b.motion_id = d.id
-           WHERE d.status = 'validated' AND b.compatible = 1 AND b.model_id = ?
-           ORDER BY d.semantic_key`
-        )
-        .all(ACTIONS_MODEL_ID);
-    } finally {
-      db.close();
-    }
-  } catch {
-    return []; // 库缺失/损坏/无 sqlite → 空集（预期：当前 2 条 validated；tail-sway-happy 为 draft 会被过滤）
-  }
+  return queryActionsShared({ dbFile: ACTIONS_DB_FILE, modelId: ACTIONS_MODEL_ID });
 }
 
 function send(res, status, type, buf, cors = true) {
@@ -187,8 +169,15 @@ function resolveInside(baseDir, relRaw) {
   return full;
 }
 
-/** AI 指令队列：与 DSH 插件宿主共用 ai-inbox，回执语义保持一致 */
-const aiInbox = createAiInbox();
+/**
+ * AI 指令队列：与 DSH 插件宿主共用 ai-inbox，回执语义保持一致。
+ * 指令派发租约与宿主一样默认开（只发给一个页面、前台优先、3 秒未续期转移）；DSH_L2D_LEASE=0 关。
+ */
+const aiInbox = createAiInbox({
+  leaseTtlMs: 3000,
+  ownedStaleMs: 60000,
+  leaseEnabled: () => process.env.DSH_L2D_LEASE !== '0',
+});
 
 // 节点图执行入口（SPEC §4 第 4 行）的单批下发回调：与插件宿主同一份实现
 //（nodegraph.createInboxActExecutor），走本进程 aiInbox 的 l2d_act 下发链路；
@@ -506,7 +495,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (urlPath === '/ai/poll') {
-    return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(aiInbox.poll()), 'utf8'));
+    const sp = new URL(req.url, 'http://127.0.0.1').searchParams;
+    const polled = aiInbox.poll({ consumerId: String(sp.get('consumer') || ''), foreground: sp.get('fg') === '1' });
+    return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(polled), 'utf8'));
   }
 
   if (urlPath === '/ai/result') {

@@ -13,6 +13,14 @@
  *     调用方 read 立刻拿到明确失败，不复活重排（重发决策归调用方）。
  * 全部租约状态收敛在本闭包内（队列与租约同原子域），不持久化、不新建模块。
  *
+ * 指令派发租约（宿主默认开，TTL 3s）：
+ *   - poll 带 consumerId（页面实例 id）与 foreground（document.visibilityState==='visible'）；
+ *   - 同一时刻只有一个持有者；前台页面可抢占后台持有者的租约；持有者每次 poll 即心跳续期；
+ *   - 过期后交给下一个来 poll 的页面；原持有者过期后回来、期间没人接手 → 原 token 续上，已领出的指令不受影响；
+ *   - 未持有租约的 poll 返回空 calls 并带 reason:'no-lease'；
+ *   - 租约转移时，已领出未回执的指令写入明确失败 { ok:false, reason:'lease-taken-over' }（不静默丢弃、
+ *     也不重发——指令可能已在旧页执行到一半，重发决策归调用方）。
+ *
  * 完成事件订阅（PR-D，issue #33）：宿主 HttpActionExecutor 的 subscribeEvents deps。
  * 观察者是旁路通知——post 落账（event / result）即推送，事件仍留在 events Map 供
  * GET /ai/result 排空读取，call/poll/post/read 语义零改动（nodegraphExecutor 等
@@ -32,6 +40,9 @@ export function createAiInbox(options = {}) {
   const leaseTtlMs = options.leaseTtlMs || 15000;
   const legacyGraceMs = options.legacyGraceMs != null ? options.legacyGraceMs : 30 * 60 * 1000;
   const leaseEnabled = options.leaseEnabled || (() => false);
+  // 已领出未回执的指令最多保留多久（之后按失联写失败）；缺省 4×TTL。
+  // 宿主 TTL 只有 3s，但 blend 排队 / awaitFinish 的回执可能晚到数十秒，宿主单独传更长的值。
+  const ownedStaleMs = options.ownedStaleMs || leaseTtlMs * 4;
   const diag = options.diag || (() => {});
   const nowFn = options.now || (() => Date.now());
 
@@ -194,15 +205,18 @@ export function createAiInbox(options = {}) {
 
   // 接管：epoch 单调 +1、token 轮换（旧 token 即刻作废）；
   // 未回执 call 写入 lease-taken-over 失败回执（失联语义），不复活重排。
-  function takeover(consumerId, now) {
+  function takeover(consumerId, now, foreground, cause) {
     const epoch = ++leaseSeq;
+    const prev = lease;
     lease = {
       token: 'lease-' + epoch + '-' + Math.random().toString(36).slice(2, 10),
       consumerId,
       epoch,
+      foreground: foreground === true,
       acquiredAt: now,
       expiresAt: now + leaseTtlMs,
     };
+    if (prev) diag('ai/poll lease ' + (cause || 'takeover') + ' ' + maskId(prev.consumerId) + ' → ' + maskId(consumerId) + ' (' + ownedCalls.size + ' 条未回执写失败)');
     for (const id of ownedCalls.keys()) {
       if (!results.has(id)) {
         results.set(id, { ok: false, reason: 'lease-taken-over' });
@@ -219,7 +233,7 @@ export function createAiInbox(options = {}) {
   // 内存上限：任持期内超过 4×TTL 未回执的条目按失联处置，Map 不无界增长。
   function issueCalls(now) {
     for (const [id, rec] of ownedCalls) {
-      if (now - rec.polledAt > leaseTtlMs * 4) {
+      if (now - rec.polledAt > ownedStaleMs) {
         if (!results.has(id)) {
           results.set(id, { ok: false, reason: 'lease-taken-over' });
           notify(id, { kind: 'result', result: results.get(id) });
@@ -274,18 +288,35 @@ export function createAiInbox(options = {}) {
      */
     poll(query) {
       const consumerId = (query && query.consumerId) || '';
+      // foreground 只认显式 true：旧 overlay 不带，视作后台，不会抢占别人
+      const foreground = !!(query && query.foreground === true);
       if (!leaseEnabled()) {
         leaseArmed = false; // 重开 flag 时 grace 从头计时
         return { calls: queue.splice(0, queue.length) };
       }
       const now = nowFn();
       ensureArmed(now);
-      if (consumerId && (!lease || now >= lease.expiresAt)) return takeover(consumerId, now);
       if (lease && consumerId && consumerId === lease.consumerId) {
-        lease.expiresAt = now + leaseTtlMs; // 续期
+        // R2 心跳续期；过期后回来但期间没人接手 → 同一 token 续上（已领出的指令照常回执）
+        lease.expiresAt = now + leaseTtlMs;
+        lease.foreground = foreground;
         return issueCalls(now);
       }
-      return { calls: [], lease: { status: 'held', holder: lease ? maskId(lease.consumerId) : '' } };
+      if (consumerId && (!lease || now >= lease.expiresAt)) return takeover(consumerId, now, foreground, lease ? 'expired' : 'acquire');
+      // 前台抢占后台
+      if (consumerId && foreground && lease && !lease.foreground) return takeover(consumerId, now, foreground, 'foreground-preempt');
+      return {
+        calls: [],
+        reason: 'no-lease',
+        lease: { status: 'held', holder: lease ? maskId(lease.consumerId) : '', foreground: !!(lease && lease.foreground), expiresInMs: lease ? Math.max(0, lease.expiresAt - now) : 0 },
+      };
+    },
+
+    /** 只读：当前租约（诊断用，不含 token）。 */
+    leaseInfo() {
+      if (!leaseEnabled() || !lease) return { enabled: !!leaseEnabled(), holder: '' };
+      const now = nowFn();
+      return { enabled: true, holder: maskId(lease.consumerId), epoch: lease.epoch, foreground: lease.foreground, expired: now >= lease.expiresAt, expiresInMs: Math.max(0, lease.expiresAt - now), outstanding: ownedCalls.size };
     },
 
     /**

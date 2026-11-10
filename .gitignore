@@ -48,3 +48,14 @@ _test-models/
 # 按模型清单（live2d-ids.json 只含 ID 元数据，但按方案从授权角度决定是否入库；
 # 本地生成不提交，授权待主理人裁定）
 docs/nodegraph/models/
+
+# （cherry-pick 9abccd0 合并：放行须在上面的 docs/nodegraph/models/ 之后才生效）
+# 每模型目录下只放行明确的几份文档数据（modelId 以 .2048 结尾，会撞到上面的 **/*.2048/，所以目录也要放行）；
+# live2d-ids.json 与其它任何模型文件仍忽略。
+!docs/nodegraph/models/
+!docs/nodegraph/models/*/
+docs/nodegraph/models/*/*
+!docs/nodegraph/models/*/body-regions.json
+!docs/nodegraph/models/*/face-vocab.json
+!docs/nodegraph/models/*/face-units.json
+!docs/nodegraph/models/*/motion-cutpoints.json

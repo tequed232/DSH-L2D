@@ -22,6 +22,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAiInbox } from './ai-inbox.mjs';
+import { handleActionsRequest } from './actions-api.mjs';
 import { createWorkspaceAgentBridge } from './workspace-agent.mjs';
 import { createReverseLog } from './reverse-log.mjs';
 import { normalizePresencePayload, readEnvState, writeEnvState } from './env-state.mjs';
@@ -40,6 +41,7 @@ import { createRunRegistry } from './nodegraph-runs.mjs';
 import { deepseekChatJson, resolveDeepSeekKey } from './llm-channel.mjs';
 import { handleApplyOps, handleAiEdit, handleCatalog, handleGraphGet, NODEGRAPH_API_BODY_LIMIT } from './nodegraph-api.mjs';
 import { isReservedParam } from './param-guards.mjs';
+import { createBridgeApi, BRIDGE_API_BODY_LIMIT } from './body-bridge-api.mjs';
 import { allowedFromLive2dIds, isSafeModelId, loadLive2dIdsForModel } from './nodegraph-schema.mjs';
 import { ensureModelNodegraphs } from './nodegraph-templates.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
@@ -76,6 +78,8 @@ import { createGallerySource } from '../../mcp-bridge/gallery-source.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OVERLAY_FILE = path.join(PKG_ROOT, 'lib', 'overlay.js');
+/** 部位联动 bridge 规则核心：overlay 以 ES 模块动态 import 同一份文件（无 import，可直接发给浏览器）。 */
+const BODY_BRIDGE_FILE = path.join(PKG_ROOT, 'lib', 'body-bridge.mjs');
 
 const L2D_ROOT = process.env.DSH_L2D_ROOT || 'D:/Desktop/DSH-L2D';
 const MODEL_DIR =
@@ -180,7 +184,7 @@ const SETTINGS_SHAPE = {
   petWindow: { type: 'string', default: 'off', description: '桌宠独立窗：off 关闭（页内浮层）/ only 独立透明窗（页内浮层停用，重启生效）' },
   reverseEnabled: { type: 'boolean', default: true, description: '反向桥：模型交互事件回流宿主（l2d-reverse-state.json + /ai/poll 搭车）' },
   workspaceForeground: { type: 'boolean', default: false, description: '工作区快照：读取前台应用进程名（默认关；仅本机、不取标题/路径/内容）' },
-  consumerLeaseEnabled: { type: 'boolean', default: false, description: '消费者租约：/ai/poll 单消费者接管 + /ai/result token fencing，默认关' },
+  consumerLeaseEnabled: { type: 'boolean', default: true, description: '指令派发租约：/ai/poll 只发给持有租约的那个页面（前台优先，3 秒未续期转移）+ /ai/result token fencing，默认开' },
 };
 
 let z = null;
@@ -209,7 +213,7 @@ export const Config = z
       petWindow: z.string().default('off').description('桌宠独立窗：off 关闭（页内浮层）/ only 独立透明窗（页内浮层停用，重启生效）').extra('volatile', true),
       reverseEnabled: z.boolean().default(true).description('反向桥：模型交互事件回流宿主（l2d-reverse-state.json + /ai/poll 搭车）').extra('volatile', true),
       workspaceForeground: z.boolean().default(false).description('工作区快照：读取前台应用进程名（默认关；仅本机、不取标题/路径/内容）').extra('volatile', true),
-      consumerLeaseEnabled: z.boolean().default(false).description('消费者租约：/ai/poll 单消费者接管 + /ai/result token fencing，默认关').extra('volatile', true),
+      consumerLeaseEnabled: z.boolean().default(true).description('指令派发租约：/ai/poll 只发给持有租约的那个页面（前台优先，3 秒未续期转移）+ /ai/result token fencing，默认开').extra('volatile', true),
     })
   : { ...SETTINGS_SHAPE };
 
@@ -1004,10 +1008,13 @@ export function apply(root, config = {}) {
     // 而且失败可重建，不会因为连接断了就哑掉。
     // 消费者租约（M1-d3）：flag 按调用时读取（settings volatile，热切换零重启），
     // 不得在构造时烘焙。TTL/宽容期与 READY 文档 §1.1 一致。
+    // 指令派发租约默认开：只有显式设成 false 才退回旧的「谁先 poll 谁拿走」。
+    // TTL 3s（overlay 每 400ms poll 一次即心跳）；已领出未回执的指令保留 60s（blend 排队 / awaitFinish 回执会晚到）。
     const aiInbox = createAiInbox({
-      leaseTtlMs: 15000,
+      leaseTtlMs: 3000,
+      ownedStaleMs: 60000,
       legacyGraceMs: 30 * 60 * 1000,
-      leaseEnabled: () => readSettings().consumerLeaseEnabled === true,
+      leaseEnabled: () => readSettings().consumerLeaseEnabled !== false,
       diag,
     });
     const reverseLog = createReverseLog({ diag });
@@ -1118,14 +1125,18 @@ export function apply(root, config = {}) {
     route('/dsh-l2d/ai/poll', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       // 消费者身份：新 overlay 带 ?consumer=<页面自生成 id>（version 仅诊断）；旧 overlay 无参数 → 空队列降级
+      // fg=1：页面在前台（document.visibilityState==='visible'），可抢占后台页面的租约
       let consumerId = '';
+      let foreground = false;
       try {
-        consumerId = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('consumer') || '');
+        const sp = new URL(req.url, 'http://127.0.0.1').searchParams;
+        consumerId = String(sp.get('consumer') || '');
+        foreground = sp.get('fg') === '1';
       } catch {
         consumerId = '';
       }
       // 搭车：把反向桥事件摘要一并带给页面，overlay 可并入 l2d_get_state
-      const polled = aiInbox.poll({ consumerId });
+      const polled = aiInbox.poll({ consumerId, foreground });
       polled.reverse = reverseLog.snapshot();
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(polled), 'utf8'));
     });
@@ -1481,6 +1492,100 @@ export function apply(root, config = {}) {
         model = '';
       }
       nodegraphApiSend(res, handleCatalog(model, { getCurrentModelId }));
+    });
+
+    // ---------------------- 部位联动 bridge（docs/nodegraph/BODY-BRIDGE.md） ----------------------
+    // 占用状态权威只在 overlay（浏览器）里那一个 createBridge 实例；宿主只做静态校验（同一份
+    // body-bridge.mjs + 同一张 body-regions.json）并经 aiInbox 转发，与 l2d_act / 节点图 run 通道同一条。
+    const bridgeApi = createBridgeApi({
+      getCurrentModelId,
+      modelDir: MODEL_DIR, // 只用来现算未标注动作的衔接点兜底；结果不落盘
+      call: (name, args) => aiInbox.call(name, args),
+      read: (id) => aiInbox.read(id),
+    });
+    route('/dsh-l2d/body-bridge.mjs', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const buf = readIfExists(BODY_BRIDGE_FILE);
+      if (!buf) return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('body-bridge.mjs missing'));
+      sendBuffer(res, 200, MIME['.js'], buf);
+    });
+    route('/dsh-l2d/api/bridge/table', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      let model = '';
+      try {
+        model = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('model') || '');
+      } catch {
+        model = '';
+      }
+      nodegraphApiSend(res, bridgeApi.handleTable(model));
+    });
+    route('/dsh-l2d/api/bridge/state', async (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      try {
+        nodegraphApiSend(res, await bridgeApi.handleState());
+      } catch (err) {
+        diag('bridge state 异常: ' + String((err && err.message) || err));
+        nodegraphApiSend(res, { status: 500, payload: { ok: false, reason: 'internal-error' } });
+      }
+    });
+    const bridgeApiPost = (handler) => async (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'POST') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      let body;
+      try {
+        body = await readJsonBody(req, BRIDGE_API_BODY_LIMIT);
+      } catch {
+        return nodegraphApiSend(res, { status: 400, payload: { ok: false, reason: 'invalid-command', message: 'body 不是合法 JSON 或超过 32KB' } });
+      }
+      try {
+        nodegraphApiSend(res, await handler(body));
+      } catch (err) {
+        diag('bridge api 异常: ' + String((err && err.message) || err));
+        nodegraphApiSend(res, { status: 500, payload: { ok: false, reason: 'internal-error' } });
+      }
+    };
+    route('/dsh-l2d/api/bridge/act', bridgeApiPost((body) => bridgeApi.handleAct(body)));
+    route('/dsh-l2d/api/bridge/release', bridgeApiPost((body) => bridgeApi.handleRelease(body)));
+    // 神态组合：词典（宿主直读 face-units.json / face-vocab.json）、组合（= 一条 face compose 步的 act）、反推（overlay 读当前参数）
+    route('/dsh-l2d/api/bridge/face/vocab', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      let model = '';
+      try {
+        model = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('model') || '');
+      } catch {
+        model = '';
+      }
+      nodegraphApiSend(res, bridgeApi.handleFaceVocab(model));
+    });
+    route('/dsh-l2d/api/bridge/face/compose', bridgeApiPost((body) => bridgeApi.handleFaceCompose(body)));
+    route('/dsh-l2d/api/bridge/face/describe', async (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      try {
+        nodegraphApiSend(res, await bridgeApi.handleFaceDescribe());
+      } catch (err) {
+        diag('bridge face describe 异常: ' + String((err && err.message) || err));
+        nodegraphApiSend(res, { status: 500, payload: { ok: false, reason: 'internal-error' } });
+      }
+    });
+
+    // ------------------------------------------------------ 动作库只读 API
+    // overlay 启动时拉 validated 动作链。与 dev-server 的 /api/actions 同一实现（lib/actions-api.mjs）：
+    // 同一个库 <仓库根>/data/bootstrap-state.sqlite、同一过滤口径；库缺失时返回空集。
+    route('/dsh-l2d/api/actions', async (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      try {
+        const out = await handleActionsRequest(req.method);
+        if (out.status !== 200) return sendBuffer(res, out.status, 'text/plain; charset=utf-8', Buffer.from(out.text || ''));
+        sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(out.payload), 'utf8'));
+      } catch (err) {
+        diag('api/actions 异常: ' + String((err && err.message) || err));
+        sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, actions: [] }), 'utf8'));
+      }
     });
 
     // ------------------------------------------------------ 桌宠独立窗页面

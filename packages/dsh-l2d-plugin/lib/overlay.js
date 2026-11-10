@@ -1821,8 +1821,14 @@
     if (physics.bound) return;
     var L = window.DSH_L2D;
     if (!L || !L.setPreUpdate) return;
-    L.setPreUpdate(physicsTick);
+    // preLateUpdateHook 单槽：先推进部位联动 bridge（set 插值写入），再跑拖拽物理（拖拽时 AngleZ/Position 以拖拽为准）。
+    L.setPreUpdate(function () {
+      try { bodyBridgeFrame(); } catch (e) { /* bridge 异常不能打断渲染与拖拽物理 */ }
+      physicsTick();
+    });
     physics.bound = true;
+    // 宏任务里再拉 bridge：bindPhysics 可能在 IIFE 前半段被同步调用，那时 bodyBridge 还没初始化
+    setTimeout(loadBodyBridge, 0);
   }
 
   // ---------------------------------------------------------------- 命中判定（alpha 采样）
@@ -2761,7 +2767,7 @@
   }
 
   // ------------------------------------------------ 动作池读库接线（UI-FLOAT ⑤）
-  // 启动时经 GET /api/actions 拉取动作链（validated+compatible 由服务端过滤），
+  // 启动时经 GET /dsh-l2d/api/actions 拉取动作链（validated+compatible 由服务端过滤），
   // 失败静默降级（现有随机池照常）。链展开与参数白名单防线保持在此（写路径上游），
   // executePokeAction 的状态机语义不动。
   var dbActionRaw = [];     // /api/actions 原始行
@@ -2874,7 +2880,8 @@
   }
 
   function loadDbActions() {
-    fetch('/api/actions', { cache: 'no-store' })
+    // 插件前缀：dsh web 下由宿主 /dsh-l2d/api/actions 提供；dev-server 剥掉 /dsh-l2d 前缀后落到同一个 /api/actions
+    fetch('/dsh-l2d/api/actions', { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
         if (!data || data.ok !== true || !Array.isArray(data.actions)) return;
@@ -5277,6 +5284,384 @@
     emotionSensors.batteryBound = false; // 允许重新开启时再次绑定
   }
 
+  // ---------------------------------------------------------------- 部位联动 bridge（占用状态权威）
+  //
+  // 契约：docs/nodegraph/BODY-BRIDGE.md。规则代码是 lib/body-bridge.mjs（纯函数，宿主也用同一份做静态校验），
+  // 这里 import 它建**唯一**一个实例：谁占着 hair/face/hands/torso/legs、排队、抢占收尾、set 插值全在这里。
+  // 宿主 /dsh-l2d/api/bridge/* 经 aiInbox 下发 l2d_regions_act / get / release（与 l2d_act 同一条通道）。
+  //
+  // 帧相位（Live2D 同事约束，必须遵守）：bridge 写参数只在 preLateUpdateHook 里做——即 renderer 的
+  // setPreUpdate 回调（saveParameters 之后、UpdateScheduler 之前）。set 的 durationMs 插值也在这里逐帧推进。
+  // 写早了会被下一帧 loadParameters 盖掉，物理那一帧也读不到新输入。见 bodyBridgeFrame / bindPhysics。
+  var bodyBridge = {
+    core: null,
+    loading: null,
+    error: '',
+    calls: {},        // commandId → /ai/call 的 callId（action-done 回写到这个 id）
+    waiters: {},      // 排队 ticket → resolve（onBusy:'wait'）
+    doneWaiters: {},  // commandId:target → [resolve]（旧接口 awaitFinish 用）
+    motionWatch: {},  // executionId → { commandId, region, timer }
+    pumpTimer: 0,
+  };
+  var BODY_BRIDGE_MOTION_WATCHDOG_MS = 15000;
+
+  /** 包一层：classic script 里也能用 import()；Node vm 测试只解析不调用。 */
+  function bodyBridgeImport(url) {
+    return import(url);
+  }
+
+  function bodyBridgeNow() {
+    return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+  }
+
+  function bodyBridgeCtx() {
+    var L = window.DSH_L2D;
+    return {
+      now: bodyBridgeNow(),
+      slots: L && L.getMotionSlots ? L.getMotionSlots() : {},
+      read: function (ids) { return L && L.readParameters ? L.readParameters(ids) : {}; },
+    };
+  }
+
+  function loadBodyBridge() {
+    if (bodyBridge.core) return Promise.resolve(bodyBridge.core);
+    if (bodyBridge.loading) return bodyBridge.loading;
+    bodyBridge.loading = Promise.all([
+      bodyBridgeImport(versioned('/dsh-l2d/body-bridge.mjs')),
+      fetch('/dsh-l2d/api/bridge/table', { cache: 'no-store' }).then(function (r) { return r.json().catch(function () { return null; }); }),
+    ]).then(function (pair) {
+      var mod = pair[0];
+      var data = pair[1];
+      if (!mod || typeof mod.createBridge !== 'function') throw new Error('body-bridge 模块缺 createBridge');
+      if (!data || data.ok !== true || !data.table) throw new Error((data && data.message) || 'table-unavailable');
+      var L = window.DSH_L2D;
+      var share = L && typeof L.motionsShareArm === 'function'
+        ? function (a, b) { return !!L.motionsShareArm(a, b); }
+        : undefined;
+      bodyBridge.core = mod.createBridge(data.table, {
+        shareArm: share,
+        faceUnits: data.faceUnits || null,
+        motionCuts: data.motionCuts || null,
+        autoCuts: data.autoCuts || null,
+      });
+      bodyBridge.error = '';
+      if (L && L.onActionCompletion) L.onActionCompletion(onBodyBridgeCompletion);
+      return bodyBridge.core;
+    }).catch(function (err) {
+      bodyBridge.error = String(err && err.message ? err.message : err);
+      bodyBridge.loading = null; // 下次调用重试（表可能是后来生成的）
+      console.warn('[dsh-l2d] body-bridge 不可用：' + bodyBridge.error);
+      return null;
+    });
+    return bodyBridge.loading;
+  }
+
+  /** 回执里不带执行计划与内部事件（事件经 action-done 回写）。 */
+  function bodyBridgePublic(res) {
+    var out = {};
+    for (var k in res) {
+      if (Object.prototype.hasOwnProperty.call(res, k) && k !== 'plan' && k !== 'events' && k !== 'admitted' && k !== 'expired') out[k] = res[k];
+    }
+    return out;
+  }
+
+  /** 把核心产出的事件、出队、超时统一落地（事件按 commandId 找回 callId 回写 /ai/result）。 */
+  function drainBodyBridge(out) {
+    if (!out) return;
+    var evs = out.events || [];
+    for (var i = 0; i < evs.length; i++) {
+      var ev = evs[i];
+      var key = ev.commandId + ':' + (ev.region || ev.layer);
+      var ws = bodyBridge.doneWaiters[key];
+      if (ws) {
+        delete bodyBridge.doneWaiters[key];
+        for (var w = 0; w < ws.length; w++) ws[w](ev);
+      }
+      var callId = bodyBridge.calls[ev.commandId];
+      if (callId != null) {
+        var copy = {};
+        for (var ek in ev) if (Object.prototype.hasOwnProperty.call(ev, ek)) copy[ek] = ev[ek];
+        copy.callId = callId;
+        postActEvent(copy);
+      }
+    }
+    var adm = out.admitted || [];
+    for (var j = 0; j < adm.length; j++) {
+      var waiter = bodyBridge.waiters[adm[j].ticket];
+      delete bodyBridge.waiters[adm[j].ticket];
+      if (waiter) bodyBridge.calls[adm[j].commandId] = waiter.callId;
+      drainBodyBridge({ events: adm[j].events });
+      (function (res, wt) {
+        // 出队可能发生在渲染钩子里：执行放到下一个宏任务，不在帧内播动作
+        setTimeout(function () {
+          if (wt && wt.onAdmit) { wt.resolve(wt.onAdmit(res)); return; }
+          runBodyBridgePlan(res);
+          if (wt) wt.resolve(bodyBridgePublic(res));
+        }, 0);
+      })(adm[j], waiter);
+    }
+    // 超时出队 + 被同模块更新指令顶掉（superseded）：都给等待方一个失败回执
+    var exp = (out.expired || []).concat(out.superseded || []);
+    for (var x = 0; x < exp.length; x++) {
+      var wx = bodyBridge.waiters[exp[x].ticket];
+      delete bodyBridge.waiters[exp[x].ticket];
+      var fail = exp[x].ok === false ? exp[x] : { ok: false, reason: exp[x].reason || 'superseded', ticket: exp[x].ticket, by: exp[x].by };
+      if (wx) wx.resolve(wx.onFail ? wx.onFail(fail) : bodyBridgePublic(fail));
+    }
+    ensureBodyBridgePump();
+  }
+
+  /** 渲染暂停（页面隐藏）时 preLateUpdateHook 不跑：排队超时靠这个定时器判（不推进插值）。 */
+  function ensureBodyBridgePump() {
+    var core = bodyBridge.core;
+    var hasWaiters = false;
+    for (var k in bodyBridge.waiters) { if (Object.prototype.hasOwnProperty.call(bodyBridge.waiters, k)) { hasWaiters = true; break; } }
+    if (!core || !hasWaiters) {
+      if (bodyBridge.pumpTimer) { clearInterval(bodyBridge.pumpTimer); bodyBridge.pumpTimer = 0; }
+      return;
+    }
+    if (bodyBridge.pumpTimer) return;
+    bodyBridge.pumpTimer = setInterval(function () {
+      if (!bodyBridge.core) return;
+      drainBodyBridge(bodyBridge.core.pump(bodyBridgeCtx()));
+    }, 100);
+  }
+
+  function finishBodyBridge(commandId, target, phase, extra) {
+    var core = bodyBridge.core;
+    if (!core) return;
+    drainBodyBridge(core.complete(commandId, target, phase, extra, bodyBridgeCtx()));
+  }
+
+  function bodyBridgeHolds(commandId, region) {
+    var core = bodyBridge.core;
+    if (!core) return false;
+    var r = core.snapshot({ now: bodyBridgeNow() }).regions[region];
+    return !!(r && r.busy && r.commandId === commandId);
+  }
+
+  /** 渲染端真实完成事件（executionId = 'bridge:'+commandId）：自然收敛才算 end。 */
+  function onBodyBridgeCompletion(ev) {
+    if (!ev || typeof ev.executionId !== 'string' || ev.executionId.indexOf('bridge:') !== 0) return;
+    var watch = bodyBridge.motionWatch[ev.executionId];
+    if (!watch) return;
+    delete bodyBridge.motionWatch[ev.executionId];
+    clearTimeout(watch.timer);
+    var phase = ev.phase === 'failed' ? 'failed' : ev.phase === 'interrupted' ? 'interrupted' : 'end';
+    finishBodyBridge(watch.commandId, watch.region, phase, ev.reason ? { reason: ev.reason } : undefined);
+  }
+
+  /**
+   * 执行一条已受理指令的计划。动作/表情/形态在这里调渲染端；set 不在这里写——
+   * 只登记在核心里，由 bodyBridgeFrame 在 preLateUpdateHook 里逐帧写。
+   * 返回 { motionStart?: Promise<PlayMotionResult>, expressionOk?: boolean }（旧接口回执用）。
+   */
+  function runBodyBridgePlan(res) {
+    var L = window.DSH_L2D;
+    var id = res.commandId;
+    var info = {};
+    var plan = res.plan || [];
+    for (var i = 0; i < plan.length; i++) {
+      var step = plan[i];
+      if (step.kind === 'motion') {
+        info.motionStart = runBodyBridgeMotion(id, step);
+      } else if (step.kind === 'expression') {
+        var ok = true;
+        if (step.on) ok = !!(L && L.setExpression && L.setExpression(step.expression));
+        else if (step.wasActive && L && L.clearExpression) L.clearExpression();
+        info.expressionOk = ok;
+        finishBodyBridge(id, 'expression', ok ? 'end' : 'failed', ok ? undefined : { reason: 'unknown-expression' });
+      } else if (step.kind === 'form') {
+        if (step.clearExpression && L && L.clearExpression) L.clearExpression();
+        var fr = window.DSH_L2D_AI.exec('l2d_set_form', { index: step.form });
+        info.form = fr;
+        finishBodyBridge(id, 'form', fr && fr.ok ? 'end' : 'failed', fr && fr.ok ? undefined : { reason: (fr && fr.reason) || 'form-unavailable' });
+      }
+      // kind === 'set' / 'mood' / 'accessory'：写入全部交给 bodyBridgeFrame（preLateUpdateHook）
+    }
+    return info;
+  }
+
+  function runBodyBridgeMotion(id, step) {
+    var L = window.DSH_L2D;
+    var region = step.region;
+    var seq = Promise.resolve();
+    // 按手臂收尾：只关与新动作共用手臂的那个（判断来自渲染端 motionsShareArm），不清全身
+    (step.closeFirst || []).forEach(function (closeName) {
+      seq = seq.then(function () {
+        if (!bodyBridgeHolds(id, region) || !L || !L.playMotionAsync) return null;
+        return L.playMotionAsync(closeName, { awaitFinish: true });
+      });
+    });
+    return seq.then(function () {
+      if (!bodyBridgeHolds(id, region)) return { status: 'skipped', reason: 'preempted', group: step.motion };
+      if (!L || !L.playMotionAsync) {
+        finishBodyBridge(id, region, 'failed', { reason: 'motion-unavailable' });
+        return { status: 'failed', reason: 'motion-unavailable', group: step.motion };
+      }
+      var execId = 'bridge:' + id;
+      // 手势路径（motion-cutpoints.json handStates）：中间段按 offsetMs 依次打断接上；
+      // executionId / 看门狗只挂在最后一段（它才是这条指令的动作）
+      var chain = step.chain && step.chain.length ? step.chain : [{ motion: step.motion, offsetMs: 0 }];
+      var lastOffset = chain[chain.length - 1].offsetMs || 0;
+      for (var ci = 0; ci < chain.length - 1; ci++) {
+        (function (seg, first) {
+          var go = function () {
+            if (!bodyBridgeHolds(id, region)) return;
+            L.playMotionAsync(seg.motion, { awaitFinish: false, interrupt: first ? !!step.interrupt : true });
+          };
+          if (seg.offsetMs > 0) setTimeout(go, seg.offsetMs); else go();
+        })(chain[ci], ci === 0);
+      }
+      var playLast = function () {
+        if (!bodyBridgeHolds(id, region)) return Promise.resolve({ status: 'skipped', reason: 'preempted', group: step.motion });
+        return L.playMotionAsync(step.motion, {
+          index: step.index || 0,
+          awaitFinish: false,
+          executionId: execId,
+          interrupt: chain.length > 1 ? true : !!step.interrupt,
+        });
+      };
+      var lastP = lastOffset > 0 ? new Promise(function (res2) { setTimeout(function () { res2(playLast()); }, lastOffset); }) : playLast();
+      return lastP.then(function (r) {
+        if (r && r.status === 'skipped' && r.reason === 'preempted') return r;
+        var st = r && r.status;
+        if (st === 'ok') {
+          // 等渲染端自然完成事件；事件链路缺失时看门狗兜底结算（不冒充自然完成：带 note）
+          bodyBridge.motionWatch[execId] = {
+            commandId: id,
+            region: region,
+            timer: setTimeout(function () {
+              if (!bodyBridge.motionWatch[execId]) return;
+              delete bodyBridge.motionWatch[execId];
+              finishBodyBridge(id, region, 'end', { note: 'watchdog' });
+            }, BODY_BRIDGE_MOTION_WATCHDOG_MS),
+          };
+        } else if (st === 'skipped') {
+          finishBodyBridge(id, region, 'end', { note: (r && r.reason) || 'skipped' });
+        } else {
+          finishBodyBridge(id, region, 'failed', { reason: (r && (r.reason || r.status)) || 'motion-failed' });
+        }
+        return r;
+      }, function (err) {
+        finishBodyBridge(id, region, 'failed', { reason: String(err && err.message ? err.message : err) });
+        return { status: 'failed', reason: 'motion-failed', group: step.motion };
+      });
+    });
+  }
+
+  /**
+   * 每帧推进（挂在 renderer setPreUpdate = preLateUpdateHook 里，见 bindPhysics）：
+   * 核心算出本帧 set 插值值 → setParametersRuntime 写入。renderer injector 对叠加输入
+   * （AngleX/Y/Z、Position*、LeanInput、Movement*）在同一钩子的 apply('pre') 里写进模型，物理当帧可见；
+   * 其余参数按 injector 的 set 语义在 post 相位重放（见文档「帧相位」）。
+   */
+  function bodyBridgeFrame() {
+    var core = bodyBridge && bodyBridge.core;
+    if (!core || !core.busy()) return;
+    var L = window.DSH_L2D;
+    var out = core.frame(bodyBridgeCtx());
+    var writes = out.writes || {};
+    var any = false;
+    for (var k in writes) { if (Object.prototype.hasOwnProperty.call(writes, k)) { any = true; break; } }
+    if (any && L) {
+      // runtime 通道：bridge 已按分区表做了更严的白名单；口型红线与物理输出保护在 injector 里仍然生效
+      if (L.setParametersRuntime) L.setParametersRuntime(writes);
+      else if (L.setParameters) L.setParameters(writes);
+    }
+    // 神态预设退出完毕：以 weight 0 写一次，中和渲染端粘滞值（set 语义 current+(v-current)*0 = 不改），
+    // 让动作曲线与自动眨眼重新接管；渲染端没有按 id 清粘滞的导出，这是不改 renderer 的做法
+    var neutral = out.neutral || [];
+    if (neutral.length && L && L.setParametersRuntime) {
+      var zero = {};
+      for (var n = 0; n < neutral.length; n++) zero[neutral[n]] = 0;
+      L.setParametersRuntime(zero, 0);
+    }
+    if ((out.events && out.events.length) || (out.admitted && out.admitted.length) || (out.expired && out.expired.length)) {
+      drainBodyBridge(out);
+    }
+  }
+
+  /** l2d_regions_act：受理 / 排队 / 拒绝。返回 Promise（排队时等出队或超时）。 */
+  function bodyBridgeAct(command, callId) {
+    return loadBodyBridge().then(function (core) {
+      if (!core) return { ok: false, reason: 'bridge-unavailable', detail: bodyBridge.error };
+      var res = core.act(command, bodyBridgeCtx());
+      if (!res.ok) return bodyBridgePublic(res);
+      if (res.superseded && res.superseded.length) drainBodyBridge({ superseded: res.superseded });
+      if (res.queued) {
+        return new Promise(function (resolve) {
+          bodyBridge.waiters[res.ticket] = { resolve: resolve, callId: callId };
+          ensureBodyBridgePump();
+        });
+      }
+      if (callId != null) bodyBridge.calls[res.commandId] = callId;
+      drainBodyBridge({ events: res.events });
+      runBodyBridgePlan(res);
+      return bodyBridgePublic(res);
+    });
+  }
+
+  /** 等某指令某目标的 action-done（旧接口 awaitFinish 用）。 */
+  function waitBodyBridgeDone(commandId, target) {
+    return new Promise(function (resolve) {
+      var key = commandId + ':' + target;
+      (bodyBridge.doneWaiters[key] = bodyBridge.doneWaiters[key] || []).push(resolve);
+    });
+  }
+
+  /**
+   * 旧接口 l2d_set_expression → bridge 表情层指令（前倾 / 脱鞋 自动转模块指令）。
+   * 对外回执形状不变：{ok:true} / {ok:false, error:'<原因>: <名字>'}。
+   * bridge 不可用或表里没有这个表情 → 走原来的直连路径。
+   */
+  function legacyExpressionViaBridge(name, direct) {
+    return loadBodyBridge().then(function (core) {
+      if (!core || !core.compiled.expressions.has(name)) return direct();
+      // 旧表情接口保持「占用即拒」：回执是同步的 {ok, error}，没有排队语义
+      var res = core.act({ source: 'llm', priority: 'NORMAL', onBusy: 'reject', steps: [{ layer: 'expression', expression: name, on: true }] }, bodyBridgeCtx());
+      if (!res.ok) return { ok: false, error: res.reason + ': ' + name, reason: res.reason, busy: res.busy };
+      drainBodyBridge({ events: res.events });
+      var info = runBodyBridgePlan(res);
+      if (info.expressionOk === false) return { ok: false, error: 'unknown-expression: ' + name };
+      return { ok: true };
+    });
+  }
+
+  /**
+   * 旧接口 l2d_play_motion → bridge 模块指令（模块按表归属）。回执形状不变：
+   * {ok:true,status,group,slot,dir} / {ok:false,reason,status,group}。awaitFinish 时等该模块 action-done。
+   */
+  function legacyMotionViaBridge(group, index, awaitFinish, direct) {
+    return loadBodyBridge().then(function (core) {
+      var region = core ? core.compiled.motionRegion.get(group) : '';
+      if (!core || !region) return direct();
+      // 旧接口也走 blend（默认 cut:next）：手部忙时等衔接点，回执形状不变
+      var res = core.act({ source: 'llm', priority: 'NORMAL', onBusy: 'blend', steps: [{ region: region, motion: group, index: index }] }, bodyBridgeCtx());
+      var failShape = function (x) { return { ok: false, reason: x.reason, status: 'conflict', group: group, busy: x.busy }; };
+      if (!res.ok) return failShape(res);
+      if (res.superseded && res.superseded.length) drainBodyBridge({ superseded: res.superseded });
+      var start = function (adm) {
+        drainBodyBridge({ events: adm.events });
+        var done = awaitFinish ? waitBodyBridgeDone(adm.commandId, region) : null;
+        var info = runBodyBridgePlan(adm);
+        return Promise.resolve(info.motionStart).then(function (r) {
+          r = r || { status: 'failed', reason: 'motion-unavailable' };
+          if (r.status !== 'ok') return { ok: false, reason: r.reason || r.status, status: r.status, group: r.group || group };
+          var okRes = { ok: true, status: r.status, group: r.group, slot: r.slot, dir: r.dir };
+          return done ? done.then(function () { return okRes; }) : okRes;
+        });
+      };
+      if (res.queued) {
+        return new Promise(function (resolve) {
+          bodyBridge.waiters[res.ticket] = { resolve: resolve, callId: null, onAdmit: start, onFail: failShape };
+          ensureBodyBridgePump();
+        });
+      }
+      return start(res);
+    });
+  }
+
   // ---------------------------------------------------------------- AI 指令轮询
   //
   // 宿主侧 /dsh-l2d/ai/call 收到的指令入队，这里每 400ms 取一次并执行。
@@ -5302,12 +5687,27 @@
     });
   }
 
+  /** 页面是否在前台：前台页面优先拿指令派发租约。 */
+  function aiPageForeground() {
+    try {
+      return typeof document !== 'undefined' && document.visibilityState === 'visible';
+    } catch (e) {
+      return false;
+    }
+  }
+
   function startAiPoll() {
     if (aiPollTimer) return;
+    // 切回前台立即参与下一轮租约（不等降频计数走完）
+    try {
+      document.addEventListener('visibilitychange', function () {
+        if (aiPageForeground()) aiPollHoldTicks = 0;
+      });
+    } catch (e) { /* 无 document 的环境忽略 */ }
     aiPollTimer = setInterval(function () {
       if (aiPollHoldTicks > 0) { aiPollHoldTicks--; return; } // 租约被他人持有：降频轮询
       if (!window.DSH_L2D_AI) return;
-      fetch('/dsh-l2d/ai/poll?consumer=' + encodeURIComponent(__aiConsumerId) + '&version=' + encodeURIComponent(__bootTag || ''), { cache: 'no-store' })
+      fetch('/dsh-l2d/ai/poll?consumer=' + encodeURIComponent(__aiConsumerId) + '&fg=' + (aiPageForeground() ? '1' : '0') + '&version=' + encodeURIComponent(__bootTag || ''), { cache: 'no-store' })
         .then(function (r) {
           return r.ok ? r.json() : null;
         })
@@ -5318,8 +5718,9 @@
             if (d.lease.token) {
               __aiLeaseToken = d.lease.token; // 接管/续期发放的新凭证（含接管后 token 轮换）
               __aiLeaseEpoch = d.lease.epoch || 0;
-            } else if (d.lease.status === 'held') {
-              aiPollHoldTicks = 4; // 他人持租约：拉长下次 poll 间隔
+            } else if (d.lease.status === 'held' || d.reason === 'no-lease') {
+              // 他人持租约：后台页拉长下次 poll 间隔；前台页不降频（随时可能抢占后台持有者）
+              aiPollHoldTicks = aiPageForeground() ? 0 : 4;
             }
           }
           if (!d || !d.calls || !d.calls.length) return;
@@ -5367,17 +5768,54 @@
       try {
         switch (name) {
           case 'l2d_set_expression': {
-            var okExp = L.setExpression(String(a.name || ''));
-            return okExp ? { ok: true } : { ok: false, error: 'unknown-expression: ' + a.name };
+            // 内部转成 bridge 表情层指令（前倾 / 脱鞋 转模块指令）；bridge 不可用时走原直连路径
+            var expName = String(a.name || '');
+            return legacyExpressionViaBridge(expName, function () {
+              var okExp = L.setExpression(expName);
+              return okExp ? { ok: true } : { ok: false, error: 'unknown-expression: ' + a.name };
+            });
           }
           case 'l2d_play_motion': {
             if (!L.playMotionAsync) return { ok: false, reason: 'motion-unavailable' };
-            return L.playMotionAsync(String(a.group || ''), {
-              index: Number(a.index || 0),
-              awaitFinish: a.awaitFinish === true,
-            }).then(function (r) {
-              if (r.status === 'ok') return { ok: true, status: r.status, group: r.group, slot: r.slot, dir: r.dir };
-              return { ok: false, reason: r.reason || r.status, status: r.status, group: r.group };
+            // 内部转成 bridge 模块指令（动作按分区表归模块）；bridge 不可用 / 表里没有该动作时走原直连路径
+            var motionGroup = String(a.group || '');
+            var motionIndex = Number(a.index || 0);
+            var motionAwait = a.awaitFinish === true;
+            return legacyMotionViaBridge(motionGroup, motionIndex, motionAwait, function () {
+              return L.playMotionAsync(motionGroup, {
+                index: motionIndex,
+                awaitFinish: motionAwait,
+              }).then(function (r) {
+                if (r.status === 'ok') return { ok: true, status: r.status, group: r.group, slot: r.slot, dir: r.dir };
+                return { ok: false, reason: r.reason || r.status, status: r.status, group: r.group };
+              });
+            });
+          }
+          case 'l2d_regions_act': {
+            // 宿主 /dsh-l2d/api/bridge/act 已做静态校验；这里是占用权威（同一份规则再判一次占用）
+            return bodyBridgeAct(a.command || a, callId);
+          }
+          case 'l2d_regions_get': {
+            return loadBodyBridge().then(function (core) {
+              if (!core) return { ok: false, reason: 'bridge-unavailable', detail: bodyBridge.error };
+              var snap = core.snapshot(bodyBridgeCtx());
+              snap.ok = true;
+              snap.slots = L.getMotionSlots ? L.getMotionSlots() : null;
+              return snap;
+            });
+          }
+          case 'l2d_face_describe': {
+            return loadBodyBridge().then(function (core) {
+              if (!core) return { ok: false, reason: 'bridge-unavailable', detail: bodyBridge.error };
+              return core.describeFace(bodyBridgeCtx());
+            });
+          }
+          case 'l2d_regions_release': {
+            return loadBodyBridge().then(function (core) {
+              if (!core) return { ok: false, reason: 'bridge-unavailable', detail: bodyBridge.error };
+              var relOut = core.release({ commandId: a.commandId, region: a.region }, bodyBridgeCtx());
+              drainBodyBridge(relOut);
+              return bodyBridgePublic(relOut);
             });
           }
           case 'l2d_emote': {
@@ -5465,6 +5903,7 @@
             };
           }
           case 'l2d_reset': {
+            if (bodyBridge.core) bodyBridge.core.noteExpressionCleared();
             if (L.resetPerformance) return L.resetPerformance();
             var n = L.resetPose ? L.resetPose() : 0;
             if (L.clearExpression) L.clearExpression();
