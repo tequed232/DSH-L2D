@@ -24,8 +24,16 @@ import {
 } from './validate.mjs';
 import { readToolchainStatus } from './toolchain-status.mjs';
 import {
+  ACCESSORY_SET_DESCRIPTION,
+  BRIDGE_CUTS,
+  BRIDGE_ON_BUSY,
   BRIDGE_PRIORITIES,
   BRIDGE_REGIONS,
+  CUT_DESCRIPTION,
+  FACE_COMPOSE_DESCRIPTION,
+  FACE_DESCRIBE_DESCRIPTION,
+  FACE_VOCAB_DESCRIPTION,
+  ON_BUSY_DESCRIPTION,
   REGIONS_GET_DESCRIPTION,
   REGIONS_RELEASE_DESCRIPTION,
   loadCapabilitiesForDescription,
@@ -480,6 +488,42 @@ async function bridgeApi(pathAndQuery, init, timeoutMs) {
   }
 }
 
+// 忙时策略 / 衔接（regions_act、accessory_set、face_compose 共用）。LLM 侧默认 blend + next。
+const busySchema = {
+  priority: z.enum([...BRIDGE_PRIORITIES]).optional().describe('LOW / NORMAL / HIGH / FORCE，默认 NORMAL'),
+  onBusy: z.enum([...BRIDGE_ON_BUSY]).optional().describe(ON_BUSY_DESCRIPTION),
+  cut: z.enum([...BRIDGE_CUTS]).optional().describe(CUT_DESCRIPTION),
+  fadeMs: z.number().int().min(200).max(400).optional().describe('交叉淡变时长，默认 300'),
+  waitMs: z.number().int().min(0).max(30000).optional().describe('最多等多久：wait 默认 3000，blend 默认 30000（after / 低优先级等播完时用得上）'),
+};
+
+const composeSchema = z.object({
+  dimensions: z
+    .union([z.record(z.string(), z.number().min(0).max(1)), z.array(z.object({ dimension: z.string(), intensity: z.number().min(0).max(1) }))])
+    .optional()
+    .describe('情绪维度强度，如 {慵懒:0.6, 挑逗:0.7}'),
+  units: z.record(z.string(), z.number().min(0).max(1)).optional().describe('直接给部件强度 {部件id: 0..1}'),
+  recipes: z.array(z.string()).optional().describe('叠加预设配方'),
+  side: z.enum(['L', 'R']).optional().describe('有方向的部件统一朝哪边'),
+  energy: z.number().min(0).max(1).optional().describe('摆动能量，默认按维度强度加权平均'),
+  expressions: z.array(z.string()).optional().describe('额外要一起开的表情（走表情层）'),
+  autoExpressions: z.boolean().optional().describe('维度强度过阈值时自动开伴随表情（脸红等），默认 true'),
+  enterMs: z.number().int().min(0).max(10000).optional().describe('渐入时长，默认 1000'),
+  holdMs: z.number().int().min(0).max(600000).optional().describe('保持多久后自动渐出；不给就一直保持'),
+});
+
+async function bridgeAct(route, body, opts) {
+  const out = { ...body, onBusy: opts.onBusy || 'blend' };
+  if (opts.priority) out.priority = opts.priority;
+  if (opts.cut) out.cut = opts.cut;
+  if (opts.fadeMs !== undefined) out.fadeMs = opts.fadeMs;
+  if (opts.waitMs !== undefined) out.waitMs = opts.waitMs;
+  if (opts.awaitDone) out.awaitDone = true;
+  const wait = out.onBusy === 'reject' ? 0 : opts.waitMs ?? (out.onBusy === 'wait' ? 3000 : 30000);
+  const budget = wait + (opts.awaitDone ? 20000 : 0) + 8000;
+  return bridgeApi(route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(out) }, budget);
+}
+
 server.registerTool(
   'l2d_regions_get',
   { description: REGIONS_GET_DESCRIPTION, inputSchema: z.object({}) },
@@ -499,35 +543,78 @@ server.registerTool(
             index: z.number().int().min(0).optional(),
             set: z.record(z.string(), z.number()).optional().describe('{参数ID: 目标值}，只能是该模块可写参数'),
             durationMs: z.number().int().min(0).max(30000).optional().describe('插值时长，默认 0'),
-            layer: z.enum(['expression', 'form']).optional(),
+            layer: z.enum(['expression', 'form', 'accessory']).optional(),
             expression: z.string().optional(),
+            item: z.string().optional().describe('layer=accessory 时的饰品 id'),
             on: z.boolean().optional(),
             form: z.number().int().min(0).max(2).optional(),
+            compose: composeSchema.optional().describe('region=face 时组合神态（见 l2d_face_compose）'),
+            mood: z.string().optional().describe('region=face 时用预设配方名'),
           }),
         )
         .min(1)
         .max(12),
-      priority: z.enum([...BRIDGE_PRIORITIES]).optional().describe('LOW / NORMAL / HIGH / FORCE，默认 NORMAL'),
-      onBusy: z.enum(['reject', 'wait']).optional().describe('模块被占时：reject 立即返回 region-busy（默认），wait 排队'),
-      waitMs: z.number().int().min(0).max(30000).optional().describe('onBusy=wait 时最多等多久，默认 3000'),
+      ...busySchema,
       awaitDone: z.boolean().optional().describe('true 时等所有模块 action-done 再返回'),
     },
   },
-  async ({ steps, priority, onBusy, waitMs, awaitDone }) => {
-    const body = { source: 'llm', steps };
-    if (priority) body.priority = priority;
-    if (onBusy) body.onBusy = onBusy;
-    if (waitMs !== undefined) body.waitMs = waitMs;
-    if (awaitDone) body.awaitDone = true;
-    const budget = (onBusy === 'wait' ? (waitMs ?? 3000) : 0) + (awaitDone ? 20000 : 0) + 8000;
-    return toolResult(
-      await bridgeApi(
-        '/dsh-l2d/api/bridge/act',
-        { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) },
-        budget,
-      ),
-    );
+  async ({ steps, priority, onBusy, cut, fadeMs, waitMs, awaitDone }) =>
+    toolResult(await bridgeAct('/dsh-l2d/api/bridge/act', { source: 'llm', steps }, { priority, onBusy, cut, fadeMs, waitMs, awaitDone })),
+);
+
+server.registerTool(
+  'l2d_accessory_set',
+  {
+    description: ACCESSORY_SET_DESCRIPTION,
+    inputSchema: {
+      items: z
+        .array(z.object({ item: z.string().describe('饰品 id，如 monocle / black-glasses / flower-1'), on: z.boolean().optional().describe('true 戴上（默认），false 摘下') }))
+        .min(1)
+        .max(16),
+      ...busySchema,
+      awaitDone: z.boolean().optional(),
+    },
   },
+  async ({ items, priority, onBusy, cut, fadeMs, waitMs, awaitDone }) =>
+    toolResult(
+      await bridgeAct(
+        '/dsh-l2d/api/bridge/act',
+        { source: 'llm', steps: items.map((x) => ({ layer: 'accessory', item: x.item, on: x.on !== false })) },
+        { priority, onBusy, cut, fadeMs, waitMs, awaitDone },
+      ),
+    ),
+);
+
+server.registerTool(
+  'l2d_face_vocab',
+  { description: FACE_VOCAB_DESCRIPTION, inputSchema: z.object({}) },
+  async () => toolResult(await bridgeApi('/dsh-l2d/api/bridge/face/vocab', { cache: 'no-store' }, 8000)),
+);
+
+server.registerTool(
+  'l2d_face_compose',
+  {
+    description: FACE_COMPOSE_DESCRIPTION,
+    inputSchema: {
+      compose: composeSchema.optional(),
+      mood: z.string().optional().describe('预设配方名（与 compose 二选一）'),
+      ...busySchema,
+      awaitDone: z.boolean().optional(),
+    },
+  },
+  async ({ compose, mood, priority, onBusy, cut, fadeMs, waitMs, awaitDone }) => {
+    if (!compose && !mood) return toolResult({ ok: false, reason: 'invalid-command', message: '需要 compose 或 mood' });
+    const body = { source: 'llm' };
+    if (mood) body.mood = mood;
+    else body.compose = compose;
+    return toolResult(await bridgeAct('/dsh-l2d/api/bridge/face/compose', body, { priority, onBusy, cut, fadeMs, waitMs, awaitDone }));
+  },
+);
+
+server.registerTool(
+  'l2d_face_describe',
+  { description: FACE_DESCRIBE_DESCRIPTION, inputSchema: z.object({}) },
+  async () => toolResult(await bridgeApi('/dsh-l2d/api/bridge/face/describe', { cache: 'no-store' }, 8000)),
 );
 
 server.registerTool(
