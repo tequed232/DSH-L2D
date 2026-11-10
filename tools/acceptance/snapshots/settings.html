@@ -1,4 +1,12 @@
 <!doctype html>
+<!--
+  [退役过渡 · 2026-11]
+  本页与舞台页 SettingsPanel.vue（apps/stage-web）此前为双轨维护。
+  现设置能力正逐步并入 SettingsPanel.vue（运行时读数已接 /dsh-l2d/status.json），
+  本页进入退役过渡期：功能冻结、只修不增，后续版本将以 302 指向舞台页设置抽屉
+  （退役时点需用户确认）。新功能请一律加到 SettingsPanel.vue，不要再改本页。
+  依据：docs/UIUX_AUDIT.md §3、docs/UIUX_COMPONENT_MAPPING.md A 节。
+-->
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -1178,6 +1186,26 @@
 
       /* ===== BEGIN NODEGRAPH UI v1 ===== */
       /* Node-graph card controls (styles only). Tokens come from the marked block above. */
+      /* UI4：Lab 入口高亮（主强调色实底，扁平无渐变，走既有 token） */
+      .ng-lab-link {
+        text-decoration: none;
+        font-weight: 600;
+      }
+      /* UI4：运行状态栏——左状态文案 / 右强制暂停（运行中才显示） */
+      .ng-run-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--dsh-space-3);
+        margin-top: var(--dsh-space-2);
+        min-height: var(--studio-control-h-sm);
+      }
+      /* .btn 的显式 display 会压过 UA 的 [hidden]{display:none}，这里补回 */
+      .ng-run-bar button[hidden] { display: none; }
+      .ng-run-bar .hint {
+        flex: 1;
+        min-width: 0;
+      }
       .ng-file {
         height: var(--studio-control-h-sm);
         max-width: 240px;
@@ -1324,11 +1352,15 @@
         </div>
         <div class="ng-tri-state" id="ngTri-state" role="status" aria-live="polite"></div>
         <div class="dev-actions">
-          <a class="studio-menu-item" href="motion-graph.html">打开 Motion Graph Lab</a>
+          <a class="studio-btn is-primary ng-lab-link" href="motion-graph.html">打开 Motion Graph Lab</a>
           <input type="file" id="ngFile" accept=".json" class="ng-file" />
           <button class="btn studio-btn" type="button" id="ngImportBtn">导入节点图</button>
           <button class="btn studio-btn" type="button" id="ngRefreshBtn">刷新列表</button>
+        </div>
+        <div class="ng-run-bar">
           <span class="hint" id="ngMsg"></span>
+          <!-- UI4：强制暂停，运行中才显示；接 POST /dsh-l2d/nodegraphs/cancel?id=<executionId>，二次确认防误触 -->
+          <button class="btn studio-btn" type="button" id="ngCancelBtn" data-state="error" hidden>强制暂停</button>
         </div>
         <div class="ng-errors" id="ngErrors" hidden></div>
         <div class="ng-list" id="ngList"></div>
@@ -2563,6 +2595,58 @@
           var triBox = $('ngTri-state');
           var ngImported = false; // E13: Imported 为本次会话内存态，不持久化
           var lastItems = []; // 最近一次渲染的节点图列表，供 Validated 统计
+          // UI4：强制暂停——只对本页发起且在途的 run 生效；run 响应回传 executionId 后可取消
+          var cancelBtn = $('ngCancelBtn');
+          var runExecutionId = '';
+          var cancelConfirmTimer = 0;
+
+          function resetCancelConfirm() {
+            if (cancelConfirmTimer) {
+              window.clearTimeout(cancelConfirmTimer);
+              cancelConfirmTimer = 0;
+            }
+            cancelBtn.removeAttribute('data-confirm');
+            cancelBtn.textContent = '强制暂停';
+          }
+
+          cancelBtn.addEventListener('click', function () {
+            if (!runExecutionId) {
+              say('执行 ID 尚未回传，暂时无法暂停', true);
+              return;
+            }
+            // 防误触：首次点击进入确认态，3 秒不点自动回退
+            if (!cancelBtn.hasAttribute('data-confirm')) {
+              cancelBtn.setAttribute('data-confirm', '1');
+              cancelBtn.textContent = '确认暂停？';
+              cancelConfirmTimer = window.setTimeout(resetCancelConfirm, 3000);
+              return;
+            }
+            resetCancelConfirm();
+            cancelBtn.disabled = true;
+            say('正在请求强制暂停…', false);
+            fetch('/dsh-l2d/nodegraphs/cancel?id=' + encodeURIComponent(runExecutionId), {
+              method: 'POST',
+              cache: 'no-store'
+            })
+              .then(function (res) {
+                return res.json().catch(function () {
+                  return { ok: false, errors: ['HTTP ' + res.status + '（返回非 JSON）'] };
+                });
+              })
+              .then(function (d) {
+                if (d && d.ok) {
+                  say('已请求强制暂停 · 执行链将在下一批动作下发前停止', false);
+                } else {
+                  say('暂停失败：' + ((d && d.errors && d.errors[0]) || '未知原因') + '（路由未接入时会 404）', true);
+                }
+              })
+              .catch(function (err) {
+                say('暂停失败：' + reason(err), true);
+              })
+              .then(function () {
+                cancelBtn.disabled = false;
+              });
+          });
 
           function currentMode() {
             for (var i = 0; i < radios.length; i++) {
@@ -2694,6 +2778,10 @@
             btn.disabled = true;
             btn.textContent = '运行中…';
             say('正在运行节点图「' + (name || '') + '」…（渲染端最长等待 12 秒）', false);
+            // UI4：运行中显示强制暂停按钮（executionId 随 run 响应回传后可用）
+            runExecutionId = '';
+            resetCancelConfirm();
+            cancelBtn.hidden = false;
             fetch(NG_API.run + '?name=' + encodeURIComponent(name || ''), {
               method: 'POST',
               cache: 'no-store'
@@ -2705,6 +2793,8 @@
               })
               .then(function (d) {
                 var s = d && d.__status;
+                // UI4：run 响应回传 executionId（200 正常路径 / 409 busy 都带），供强制暂停关联
+                if (d && d.executionId) runExecutionId = String(d.executionId);
                 if (s === 409) {
                   // mode-blocked: prompt the original message and guide the user back
                   say((d && d.message) || '纯 LLM 模式下节点图不执行，请先切换到节点图模式', true);
@@ -2730,6 +2820,10 @@
               .then(function () {
                 running = false;
                 if (btn) { btn.disabled = false; btn.textContent = oldLabel; }
+                // UI4：运行结束（完成/停止/失败）→ 隐藏强制暂停按钮
+                runExecutionId = '';
+                resetCancelConfirm();
+                cancelBtn.hidden = true;
               });
           }
           function renderList(items) {
