@@ -48,3 +48,42 @@
 ## 五、Acceptance Status
 
 **PASS_WITH_WARNINGS** —— 三模型测试覆盖体态/动作/表情三方面全部完成且问题已修复（P1-P7 七项）；渲染加载三模型全绿；动作链编辑器全链路实测通过；#28/#33 修复完成待关闭（token）；#36 待人工裁决（材料就绪）。
+
+
+---
+
+# 附加轮：按单个模型编辑动作链（2026-11-10 13:50，用户方案落地）
+
+## 交付（两代理并行 + 主理人联调）
+
+### 后端（impl-mb-backend，7 commit 31c1f6a→2fb4085）
+- getCurrentModelId() 封装；loadLive2dIdsForModel（docs/nodegraph/models/<modelId>/live2d-ids.json，回退全局+model-catalog-missing 告警，mtime 缓存）；isSafeModelId（拦 .. 与分隔符，单个点放行——大肥鱼.dsl2d.2048 带点通过）
+- 校验按图绑定模型选清单（applyOps/apply-ops/ai-edit/导入/MCP 两工具，allowed 注入贯通）；strict 运行时强制 409 model-mismatch（registry.begin 之前，零动作下发，测试固化）；any 加 warning
+- graph ?model= 过滤（any 图列出 matches:false）；catalog 接口；新图默认 strict 绑当前模型
+- 10 组行为测试 + dev-server e2e 6/6；AI-EDIT-API.md/NODE-SCHEMA.json 更新
+- 三模型目录真实生成：大肥鱼.dsl2d.2048（509 参/7 动作组/21 表情/forms[0,1,2]）、miku（141 参/Scene1/8 表情，FileReferences 空目录扫描回退）、丰川祥子（30 参/客服小祥）
+
+### 前端（impl-mb-frontend，6ad5857）
+- 顶栏模型选择器（切换=切工作区）；列表 ?model= 过滤；新建图 strict 绑定+删写死 modelId:/x27大肥鱼/x27/n- 字段下拉目录驱动（清单外标红/无清单退手动+提示）；跨模型图弹窗+切换按钮；旧图绑定按钮
+- ai-edit 带 modelId + 409 双按钮处理；i18n 三语 30 键；selftest 第 15 组 modelTest（8 断言）
+- build verify IDENTICAL；selftest 15 组全绿；TUTORIAL.md 新章节（全文无大肥鱼，示例 demo-model）
+
+### 主理人联调（8b457d8）
+- dev-server 接入 catalog?model=X 与 graph ?model=（handleCatalog deps.modelId 键名修正）；真实接口冒烟：无参→大肥鱼.dsl2d.2048 清单、?model=miku→8 表情+Scene1、../etc→400 拒
+
+## 专项验收对照（用户方案六条验收标准）
+1. ✅ 选中模型 A 只能看到编辑新建 A 的动作链，下拉只有 A 的资源
+2. ✅ strict 绑 A 的图在 B 上运行 → 409 model-mismatch 零动作下发，前端双按钮处理
+3. ✅ 模型无目录仍可用（回退全局+警告，前端退手动输入+提示）
+4. ✅ AI 编辑按当前模型清单生成/校验（提示词用该模型清单）
+5. ✅ 后端测试 10 组 + 前端 selftest 15 组 + build verify 全过
+6. ⏳ 8 个 workshop 模型清单生成待后端代理后续轮（已解压盘点：0~415 motion 多样性压力集）
+
+## 已知边界
+- live2d-ids.json 授权处置待用户裁定（本地生成不入库，models/ 已 .gitignore）
+- 编辑器内 Validator 仍静态白名单（目录驱动 UI 层），校验动态化由后端 409 兜底
+- workshop 8 模型清单生成待续（工具已泛化，一条命令一个模型）
+- dev-server 无当前模型概念进 strict 闸门（闸门只在宿主 run 路由）
+
+## Acceptance Status
+PASS_WITH_WARNINGS —— 方案后端+前端+联调全部落地；workshop 批量清单与 live2d-ids.json 授权处置为遗留待办。
