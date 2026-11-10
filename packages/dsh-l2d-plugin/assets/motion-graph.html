@@ -5213,7 +5213,7 @@ var UI = {
           else if (k === '__model') { Binding.modelId = el.value; $('#doc-model').value = Binding.modelId; }
           else if (k === '__mode') Binding.bindingMode = el.value;
           else if (k === '__prio') Binding.docPriority = el.value;
-          Cache.invalidate(); UI.updateBadge(Validator.check(Serializer.build())); UI.renderStatus(); return;
+          Cache.invalidate(); UI.updateBadge(Validator.check(Serializer.build())); UI.renderStatus(); JsonPreview.refresh(); return;
         }
         if (sel.length !== 1) return;
         var n = sel[0];
@@ -5227,6 +5227,7 @@ var UI = {
         Cache.invalidate();
         UI.renderNodes(); UI.renderStatus();
         UI.updateBadge(Validator.check(Serializer.build()));
+        JsonPreview.refresh(); /* 检查器改参数后 JSON 预览同步刷新（原先需关开预览才更新） */
         if (e.type === 'change') UI.renderInspector();
         return;
       }
