@@ -2043,7 +2043,19 @@ export function apply(root, config = {}) {
       const registry = new WorkBuddyWorkspaceRegistry({ db: bridgeDb, agentClient: localAgentClient });
       const sessions = new WorkBuddySessionController({ db: bridgeDb, agentClient: localAgentClient });
       const workspaceManager = new Live2DWorkspaceManager({ registry, sessions });
-      const executor = new HttpActionExecutor({ baseUrl: bridgeOrigin });
+      const executor = new HttpActionExecutor({
+        baseUrl: bridgeOrigin,
+        // 真实完成事件订阅（PR-D，issue #33）：ai-inbox 观察者——overlay 的 action-done
+        // 回执 post 落账即推送，executor 订阅路径直接返回终态，免去 /ai/result 轮询延迟。
+        // 订阅不可达 / 拒绝落账 / deadline（30s 兜底）→ resolve null，executor 自动落轮询
+        // 降级（fail-closed：订阅只是延迟优化，完成判定不依赖它）。
+        subscribeEvents: (callId, onEvent, opts) => aiInbox.subscribeCompletion(callId, onEvent, opts),
+        // 释放宽限（PR-D release 降级路径 / ownership 残留复查用）：1000ms。
+        // 取值依据：仅在降级路径生效（真实完成事件 + 出口干净时零等待），常规节拍不受影响；
+        // Loop 动作 / 老渲染包等不齐事件的场景按队列动作秒级时长给 1s 收尾缓冲，
+        // 既覆盖 ownership 释放延迟，也不显著拖慢串行队列（test 用 5ms 只是测试加速值）。
+        releaseGraceMs: 1000,
+      });
       // queue 的 repo 门面：bridge_actions 持久化（重启恢复 B17 / 幂等 B15 / 背压 32）。
       const queueRepo = {
         insertRequest: (request) => insertBridgeRequest(bridgeDb, request),

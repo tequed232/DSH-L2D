@@ -12,6 +12,16 @@
  *   - 接管时对未回执 call 写入 { ok:false, reason:'lease-taken-over' }，
  *     调用方 read 立刻拿到明确失败，不复活重排（重发决策归调用方）。
  * 全部租约状态收敛在本闭包内（队列与租约同原子域），不持久化、不新建模块。
+ *
+ * 完成事件订阅（PR-D，issue #33）：宿主 HttpActionExecutor 的 subscribeEvents deps。
+ * 观察者是旁路通知——post 落账（event / result）即推送，事件仍留在 events Map 供
+ * GET /ai/result 排空读取，call/poll/post/read 语义零改动（nodegraphExecutor 等
+ * 轮询消费者不受影响）。subscribeCompletion 是 action-done 终态等待器：
+ *   - event 通道 end / interrupted / failed → resolve 终态（executor 订阅路径直接返回）；
+ *   - result 通道拒绝（ok:false，拒绝回执无 event）→ resolve(null)，executor 落轮询
+ *     即时拿到拒绝，不等 deadline；
+ *   - signal abort / deadline（缺省 30s，防 executor 无 signal 时订阅挂死）→ resolve(null)
+ *     落轮询降级（fail-closed：订阅永远只是延迟优化，不是完成判定的唯一路径）。
  */
 
 export function createAiInbox(options = {}) {
@@ -29,6 +39,9 @@ export function createAiInbox(options = {}) {
   const queue = [];
   const results = new Map();
   const events = new Map();
+  // 完成事件观察者（PR-D）：Number(id) -> Set<cb>；cb 收到 {kind:'event',event} 或 {kind:'result',result}。
+  // 旁路通知，不消费数据；生命周期由调用方 unsubscribe / subscribeCompletion 内部三重清理兜底。
+  const observers = new Map();
 
   // 租约状态（flag 关时不读写，保证逐路径等价基线）
   let leaseSeq = 0;        // epoch 计数器，单调整数从 1 起
@@ -51,6 +64,126 @@ export function createAiInbox(options = {}) {
     return s.length > 6 ? s.slice(0, 6) + '…' : s;
   }
 
+  // 落账通知（PR-D）：快照遍历，观察者异常不反噬 post 路径。
+  function notify(id, entry) {
+    const set = observers.get(Number(id));
+    if (!set || !set.size) return;
+    for (const cb of [...set]) {
+      try {
+        cb(entry);
+      } catch {
+        /* 观察者故障不阻断回执落账 */
+      }
+    }
+  }
+
+  // ---- 完成事件订阅（PR-D）实现体：闭包函数声明，对象字面量仅引用（不受解构/this 影响）----
+
+  /** 旁路观察：不消费数据；注册时补交付存量未排空 events。signal abort 自动退订。 */
+  function observeById(id, cb, opts = {}) {
+    const key = Number(id);
+    if (typeof cb !== 'function') return () => {};
+    let set = observers.get(key);
+    if (!set) {
+      set = new Set();
+      observers.set(key, set);
+    }
+    set.add(cb);
+    // 存量补交付：只补 event（result 不补——subscribeCompletion 注册时用 peekResultById 探测）
+    const pending = events.get(key);
+    if (pending && pending.length) {
+      for (const ev of [...pending]) {
+        try {
+          cb({ kind: 'event', event: ev });
+        } catch {
+          /* 单条失败不影响其余补交付 */
+        }
+      }
+    }
+    const signal = opts.signal || null;
+    const onAbort = () => unsubscribe();
+    if (signal) {
+      if (signal.aborted) {
+        // 已中止：注册即退订，但仍先完成存量补交付（上面已做），数据不丢
+        unsubscribe();
+        return () => {};
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+    function unsubscribe() {
+      const cur = observers.get(key);
+      if (cur) {
+        cur.delete(cb);
+        if (!cur.size) observers.delete(key);
+      }
+      if (signal) signal.removeEventListener('abort', onAbort);
+    }
+    return unsubscribe;
+  }
+
+  /** 只读探测 result（不消费）：拒绝回执无 event，订阅方据此免白等。 */
+  function peekResultById(id) {
+    return results.get(Number(id));
+  }
+
+  /** action-done 终态等待器：终态 resolve；拒绝/abort/deadline resolve null 落轮询降级。 */
+  function subscribeCompletionById(id, onEvent, opts = {}) {
+    const key = Number(id);
+    const signal = opts.signal || null;
+    const deadlineMs = Number.isFinite(opts.deadlineMs) ? opts.deadlineMs : 30000;
+    return new Promise((resolve) => {
+      let settled = false;
+      let unsub = () => {};
+      let timer = null;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        unsub();
+        if (signal) signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      };
+      const onAbort = () => finish(null);
+      const onNotify = (entry) => {
+        if (settled) return;
+        if (entry.kind === 'event') {
+          const e = entry.event;
+          if (!e || e.type !== 'action-done') return; // start 等其他事件类型不触发终态
+          try {
+            onEvent(e);
+          } catch {
+            /* 收集器异常不反噬订阅链路 */
+          }
+          if (e.phase === 'end' || e.phase === 'interrupted' || e.phase === 'failed') {
+            finish({ phase: e.phase, completionSource: e.completionSource, ownedParams: e.ownedParams });
+          }
+          return;
+        }
+        // result 落账：拒绝形态（无 event 会来）立即放行落轮询，executor 即时拿到拒绝
+        if (entry.kind === 'result' && entry.result && entry.result.ok === false) finish(null);
+      };
+      unsub = observeById(key, onNotify);
+      // 注册前已落账的拒绝 result：同样立即放行（事件不会来，等是白等）
+      const existing = peekResultById(key);
+      if (existing && existing.ok === false) {
+        finish(null);
+        return;
+      }
+      if (signal) {
+        if (signal.aborted) {
+          finish(null);
+          return;
+        }
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+      if (deadlineMs > 0) {
+        // 兜底定时器不 unref：unref 会让它在事件循环空闲时不触发，挂死防护失效；
+        // finish 三路径（终态/拒绝/abort）都 clearTimeout，遗留定时器仅在挂死场景存在。
+        timer = setTimeout(() => finish(null), deadlineMs);
+      }
+    });
+  }
+
   // flag 开→关→开：重新计时宽容期（flag 关期间 leaseEnabledAt 不动）
   function ensureArmed(now) {
     if (!leaseArmed) {
@@ -71,7 +204,10 @@ export function createAiInbox(options = {}) {
       expiresAt: now + leaseTtlMs,
     };
     for (const id of ownedCalls.keys()) {
-      if (!results.has(id)) results.set(id, { ok: false, reason: 'lease-taken-over' });
+      if (!results.has(id)) {
+        results.set(id, { ok: false, reason: 'lease-taken-over' });
+        notify(id, { kind: 'result', result: results.get(id) });
+      }
     }
     if (ownedCalls.size) trim(results);
     ownedCalls.clear();
@@ -84,7 +220,10 @@ export function createAiInbox(options = {}) {
   function issueCalls(now) {
     for (const [id, rec] of ownedCalls) {
       if (now - rec.polledAt > leaseTtlMs * 4) {
-        if (!results.has(id)) results.set(id, { ok: false, reason: 'lease-taken-over' });
+        if (!results.has(id)) {
+          results.set(id, { ok: false, reason: 'lease-taken-over' });
+          notify(id, { kind: 'result', result: results.get(id) });
+        }
         ownedCalls.delete(id);
       }
     }
@@ -105,10 +244,12 @@ export function createAiInbox(options = {}) {
       while (list.length > maxEventsPerId) list.shift();
       events.set(id, list);
       trim(events);
+      notify(id, { kind: 'event', event: body.event });
     }
     if (body.result !== undefined) {
       results.set(id, body.result ?? { ok: false, reason: 'empty' });
       trim(results);
+      notify(id, { kind: 'result', result: results.get(id) });
     }
   }
 
@@ -185,6 +326,7 @@ export function createAiInbox(options = {}) {
           while (list.length > maxEventsPerId) list.shift();
           events.set(id, list);
           trim(events);
+          notify(id, { kind: 'event', event: body.event });
         }
         // V3：一次执行一份 result，先到先得（含被 read 消费过的 id，防污染回执覆盖）
         if (hasResult) {
@@ -196,6 +338,7 @@ export function createAiInbox(options = {}) {
           // 仅 undefined/null 视为空结果；false/0 等合法 falsy 值原样保留。
           results.set(id, body.result ?? { ok: false, reason: 'empty' });
           trim(results);
+          notify(id, { kind: 'result', result: results.get(id) });
           // result 受理即销毁归属，但记录受理时 token：end/interrupted 合法晚于 result 到达，
           // 届时归属已删，凭 answeredTokens 校验放行 event（见下方晚到分支）。
           answeredTokens.set(id, owned.token);
@@ -213,6 +356,7 @@ export function createAiInbox(options = {}) {
         while (list.length > maxEventsPerId) list.shift();
         events.set(id, list);
         trim(events);
+        notify(id, { kind: 'event', event: body.event });
         return { ok: true };
       }
       // 无归属记录：带 token 的一律是陈旧消费者（token 已轮换/无主 id），拒绝
@@ -258,5 +402,29 @@ export function createAiInbox(options = {}) {
       if (drained.length) return { ready: false, events: drained };
       return { ready: false };
     },
+
+    /**
+     * observe(id, cb, { signal }) → unsubscribe（PR-D）。
+     * 旁路观察：cb 收到 {kind:'event',event} / {kind:'result',result}，不消费数据
+     * （events Map / results Map 原样保留，read 排空语义不变）。注册时把已落账、
+     * 未排空的存量 events 逐个补交付（订阅晚于回执到达的竞态窗口）。
+     * signal abort 时自动退订。回调异常已在 notify 内隔离。
+     */
+    observe: observeById,
+
+    /**
+     * peekResult(id) → result | undefined（PR-D）。
+     * 只读不消费：供订阅方注册时探测拒绝回执是否已落账（拒绝无 event，等是白等）。
+     */
+    peekResult: peekResultById,
+
+    /**
+     * subscribeCompletion(id, onEvent, { signal, deadlineMs }) → Promise<终态|null>（PR-D）。
+     * HttpActionExecutor.subscribeEvents 的宿主实现。resolve 值：
+     *   { phase:'end'|'interrupted'|'failed', completionSource?, ownedParams? } —— event 通道真实终态；
+     *   null —— 拒绝已落账/接管失败/abort/deadline 超时，executor 落轮询降级（fail-closed）。
+     * onEvent 对每个 action-done 事件透传（executor 统一收集器，progress 事件也能进 ctx）。
+     */
+    subscribeCompletion: subscribeCompletionById,
   };
 }

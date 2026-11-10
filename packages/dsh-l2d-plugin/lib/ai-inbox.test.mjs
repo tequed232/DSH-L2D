@@ -395,4 +395,116 @@ function makeLeaseInbox(t0, overrides = {}) {
 // CODE-REVIEW-1 #13 伴随收紧：既无 event 也无 result 的 post 拒绝（原为静默 ok:true）
 assert.equal(inbox.post({ id: 999 }).ok, false);
 
+// ---------------------------------------------------------------- 完成事件订阅（PR-D，issue #33）
+
+// SB1：observe 旁路通知——event/result 落账即推送，且不消费数据（read 语义不变）
+{
+  const box = createAiInbox();
+  const got = [];
+  const unsub = box.observe(7, (entry) => got.push(entry));
+  box.call('l2d_act', {});
+  box.post({ id: 7, event: { type: 'action-done', phase: 'start' } });
+  box.post({ id: 7, result: { ok: true, accepted: true } });
+  box.post({ id: 7, event: { type: 'action-done', phase: 'end', completionSource: 'runtime-event' } });
+  assert.equal(got.length, 3, '三次落账三次通知');
+  assert.equal(got[0].kind, 'event');
+  assert.equal(got[1].kind, 'result');
+  assert.equal(got[2].event.phase, 'end');
+  // 数据未被消费：read 仍拿到完整 result + events（旁路语义的关键）
+  const drained = box.read(7);
+  assert.equal(drained.ready, true);
+  assert.equal(drained.result.accepted, true);
+  assert.equal(drained.events.length, 2);
+  unsub();
+  box.post({ id: 7, event: { type: 'action-done', phase: 'interrupted' } });
+  assert.equal(got.length, 3, '退订后不再通知');
+  console.log('SB1 observe 旁路通知/不消费/退订 ok');
+}
+
+// SB2：subscribeCompletion 终态 resolve——end 携带 completionSource/ownedParams，onEvent 透传
+{
+  const box = createAiInbox();
+  const seen = [];
+  const p = box.subscribeCompletion(11, (e) => seen.push(e));
+  box.post({ id: 11, result: { ok: true, accepted: true } });
+  box.post({ id: 11, event: { type: 'action-done', phase: 'end', completionSource: 'runtime-event', ownedParams: [] } });
+  const r = await p;
+  assert.equal(r.phase, 'end');
+  assert.equal(r.completionSource, 'runtime-event');
+  assert.equal(seen.length, 1, 'start 缺席时 onEvent 只收终态一次');
+  console.log('SB2 终态 resolve + onEvent 透传 ok');
+}
+
+// SB3：interrupted / failed 三态都 resolve 终态（PR-A）
+{
+  const box = createAiInbox();
+  const pInt = box.subscribeCompletion(22, () => {});
+  box.post({ id: 22, event: { type: 'action-done', phase: 'interrupted', reason: 'stop-called' } });
+  assert.equal((await pInt).phase, 'interrupted');
+  const pFail = box.subscribeCompletion(23, () => {});
+  box.post({ id: 23, event: { type: 'action-done', phase: 'failed', reason: 'start-rejected' } });
+  assert.equal((await pFail).phase, 'failed');
+  console.log('SB3 interrupted/failed 三态 ok');
+}
+
+// SB4：拒绝 result 落账（订阅已注册）→ 立即 resolve null（拒绝无 event，免白等）
+{
+  const box = createAiInbox();
+  const t0 = Date.now();
+  const p = box.subscribeCompletion(31, () => {}, { deadlineMs: 5000 });
+  box.post({ id: 31, result: { ok: false, accepted: false, reason: 'priority-blocked' } });
+  const r = await p;
+  assert.equal(r, null, '拒绝 → null 落轮询降级');
+  assert.ok(Date.now() - t0 < 1000, '拒绝必须即时放行，不等 deadline');
+  console.log('SB4 拒绝即时放行 ok');
+}
+
+// SB5：拒绝 result 已落账（订阅晚到竞态）→ 注册时 peek 立即 resolve null
+{
+  const box = createAiInbox();
+  box.post({ id: 41, result: { ok: false, accepted: false, reason: 'empty-chain' } });
+  const p = box.subscribeCompletion(41, () => {}, { deadlineMs: 5000 });
+  assert.equal(await p, null, '注册时 peek 到拒绝立即放行');
+  console.log('SB5 存量拒绝 peek ok');
+}
+
+// SB6：存量 events 补交付——订阅晚于事件到达的竞态窗口
+{
+  const box = createAiInbox();
+  box.call('l2d_act', {});
+  box.post({ id: 51, event: { type: 'action-done', phase: 'end', completionSource: 'runtime-event', ownedParams: ['Param4'] } });
+  const seen = [];
+  const r = await box.subscribeCompletion(51, (e) => seen.push(e), { deadlineMs: 5000 });
+  assert.equal(r.phase, 'end');
+  assert.deepEqual(r.ownedParams, ['Param4']);
+  assert.equal(seen.length, 1, '存量事件补交付触发终态');
+  console.log('SB6 存量事件补交付 ok');
+}
+
+// SB7：signal abort → resolve null；deadline 超时 → resolve null（fail-closed 兜底）
+{
+  const box = createAiInbox();
+  const ac = new AbortController();
+  const p1 = box.subscribeCompletion(61, () => {}, { signal: ac.signal, deadlineMs: 30000 });
+  ac.abort();
+  assert.equal(await p1, null, 'abort → null');
+  const t0 = Date.now();
+  const p2 = box.subscribeCompletion(62, () => {}, { deadlineMs: 30 });
+  assert.equal(await p2, null, 'deadline → null');
+  assert.ok(Date.now() - t0 < 1000, 'deadline 生效，不挂死');
+  console.log('SB7 abort/deadline 兜底 ok');
+}
+
+// SB8：lease 接管写失败回执 → 订阅立即 resolve null（等待者不悬到 deadline）
+{
+  const t = makeLeaseInbox(1000);
+  t.box.call('l2d_act', {});
+  const pa = t.box.poll({ consumerId: 'pageA' });
+  const callId = pa.calls[0].id;
+  const p = t.box.subscribeCompletion(callId, () => {}, { deadlineMs: 5000 });
+  t.box.poll({ consumerId: 'pageB' }); // pageB 接管 → pageA 未回执 call 写 lease-taken-over
+  assert.equal(await p, null, '接管失败回执 → null 落轮询');
+  console.log('SB8 接管失败回执通知 ok');
+}
+
 console.log('ai-inbox ok');
