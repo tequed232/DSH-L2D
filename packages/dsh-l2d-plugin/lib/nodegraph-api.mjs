@@ -24,6 +24,7 @@ import { listNodegraphs, loadNodegraph, saveNodegraph } from './nodegraph.mjs';
 import { applyOps, docFromEditorGraph, editorGraphFromDoc, graphHash } from './nodegraph-ops.mjs';
 import { allowedFromLive2dIds, isSafeModelId, loadLive2dIds, loadLive2dIdsForModel } from './nodegraph-schema.mjs';
 import { aiEdit } from './nodegraph-ai.mjs';
+import { ACCESSORY_I18N, loadAccessoriesForModel } from './accessories-catalog.mjs';
 
 /** 请求体上限：120 节点设计层图 + 200 op 的宽松裕量（与 nodegraphs/import 同为 256KB）。 */
 export const NODEGRAPH_API_BODY_LIMIT = 256 * 1024;
@@ -239,6 +240,7 @@ export function handleCatalog(modelParam, deps = {}) {
     return { status: 404, payload: { ok: false, reason: 'no-model', message: '未指定 model 且无法确定当前模型（模型目录里没有 .model3.json）' } };
   }
   const loaded = loadLive2dIdsForModel(modelId, { modelsDir: d.modelsDir, globalFile: d.globalFile || d.live2dIdsFile });
+  const acc = loadAccessoriesForModel(modelId, { modelsDir: d.modelsDir });
   return {
     status: 200,
     payload: {
@@ -248,6 +250,13 @@ export function handleCatalog(modelParam, deps = {}) {
       catalog: loaded.ids
         ? { params: loaded.ids.params, motions: loaded.ids.motions, expressions: loaded.ids.expressions, forms: loaded.ids.forms }
         : null,
+      accessories: {
+        source: acc.source,
+        slots: acc.menuSlots,
+        i18n: ACCESSORY_I18N,
+        ...(acc.file ? { file: acc.file } : {}),
+        ...(acc.warning ? { warning: acc.warning } : {}),
+      },
       ...(loaded.file ? { file: loaded.file } : {}),
       ...(loaded.warning ? { warning: loaded.warning } : {}),
     },

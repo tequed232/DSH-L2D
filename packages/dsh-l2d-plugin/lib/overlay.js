@@ -1204,15 +1204,119 @@
   var menuView = 'root';
   var appearanceCurrent = null; // 当前外观表情名；null = 默认
   var FACE_OPTIONS = ['兔牙', '脸红', '爱心眼', '黑脸', '＞＜', '加载', '屑', '圈圈眼'];
-  var APPEARANCE_OPTIONS = [
-    { name: '胸口衣服', label: '胸口衣服' },
-    { name: '裙长切换', label: '裙摆样式' },
-    { name: '脱鞋', label: '脱鞋' },
-  ];
+  var APPEARANCE_OPTIONS = [];
+  // 衣着/饰品改走 accessories 表（物品 → 饰品），不再在外观菜单硬编码。
   var yandereOn = false;
   var yandereArmedAt = 0;
   var yandereFx = null;
   var yandereActRunId = 0;
+
+
+  // ---- 饰品：读 body-regions.json accessories（经 catalog），薄适配层 ----
+  // 替换点：若 window.DSH_L2D.applyAccessoryToggle 存在（bridge 饰品层），优先走它。
+  var accessoryTable = { slots: [], loaded: false, loading: false };
+
+  function accessoryItemParam(item) {
+    if (!item) return '';
+    if (item.writesParam) return String(item.writesParam);
+    if (item.kind === 'param' && item.ref) return String(item.ref);
+    return '';
+  }
+
+  function isAccessoryOn(value, item) {
+    if (!item) return false;
+    var current = Number(value);
+    var on = Number(item.on);
+    var off = Number(item.off);
+    if (!isFinite(current) || !isFinite(on) || !isFinite(off)) return false;
+    return Math.abs(current - on) < Math.abs(current - off);
+  }
+
+  function planAccessoryToggle(slot, item, wantOn) {
+    var values = {};
+    if (!item) return { values: values, on: !!wantOn };
+    var param = accessoryItemParam(item);
+    if (param) values[param] = wantOn ? item.on : item.off;
+    if (wantOn && slot && slot.exclusive === true && Array.isArray(slot.items)) {
+      slot.items.forEach(function (other) {
+        if (!other || other.id === item.id) return;
+        var otherParam = accessoryItemParam(other);
+        if (otherParam && values[otherParam] === undefined) values[otherParam] = other.off;
+      });
+    }
+    return { values: values, itemId: item.id, slotId: slot && slot.id, kind: item.kind, ref: item.ref, on: !!wantOn };
+  }
+
+  function applyAccessoryPlan(plan) {
+    var L = window.DSH_L2D;
+    if (L && typeof L.applyAccessoryToggle === 'function') return L.applyAccessoryToggle(plan);
+    if (!plan || !plan.values) return;
+    if (L && L.setParametersRuntime) L.setParametersRuntime(plan.values, 1);
+    else {
+      Object.keys(plan.values).forEach(function (id) { setSwitch(id, plan.values[id]); });
+      return;
+    }
+    if (L && L.markActive) L.markActive();
+  }
+
+  function loadAccessoryTable(then) {
+    if (accessoryTable.loading) return;
+    accessoryTable.loading = true;
+    fetch('/dsh-l2d/api/nodegraph/catalog', { cache: 'no-store' })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        var slots = data && data.accessories && Array.isArray(data.accessories.slots) ? data.accessories.slots : [];
+        accessoryTable.slots = slots.filter(function (slot) {
+          return slot && Array.isArray(slot.items) && slot.items.length > 0;
+        });
+        accessoryTable.loaded = true;
+        accessoryTable.loading = false;
+        if (typeof then === 'function') then();
+      })
+      .catch(function () {
+        accessoryTable.loaded = true;
+        accessoryTable.loading = false;
+        if (typeof then === 'function') then();
+      });
+  }
+
+  function buildAccessoryMenu() {
+    if (!accessoryTable.loaded) {
+      menuEl.appendChild(menuButton('加载饰品…', function () {}, true));
+      loadAccessoryTable(function () { setTimeout(buildMenu, 30); });
+      return;
+    }
+    if (!accessoryTable.slots.length) {
+      var empty = document.createElement('div');
+      empty.className = 'l2d-acc-empty';
+      empty.textContent = '还没有可切换的饰品分组';
+      menuEl.appendChild(empty);
+      return;
+    }
+    accessoryTable.slots.forEach(function (slot) {
+      var head = document.createElement('div');
+      head.className = 'l2d-acc-slot-label';
+      head.textContent = slot.label || slot.id;
+      menuEl.appendChild(head);
+      var row = document.createElement('div');
+      row.className = 'l2d-acc-row';
+      row.setAttribute('role', 'list');
+      (slot.items || []).forEach(function (item) {
+        var param = accessoryItemParam(item);
+        var current = param ? appearanceValues([param])[param] : undefined;
+        var on = isAccessoryOn(current, item);
+        var btn = menuButton(item.label || item.id, function () {
+          applyAccessoryPlan(planAccessoryToggle(slot, item, !on));
+          setTimeout(buildMenu, 30);
+        }, true);
+        btn.setAttribute('role', 'listitem');
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        if (on) btn.setAttribute('data-state', 'selected');
+        row.appendChild(btn);
+      });
+      menuEl.appendChild(row);
+    });
+  }
 
   function applyAppearance(name) {
     var L = window.DSH_L2D;
@@ -1327,7 +1431,7 @@
     menuEl.innerHTML = '';
     var title = document.createElement('div');
     title.className = 'l2d-menu-title';
-    title.textContent = menuView === 'root' ? 'DSH-L2D' : menuView === 'quickchat' ? '快捷对话' : menuView === 'appearance' ? '模型外观' : '面部';
+    title.textContent = menuView === 'root' ? 'DSH-L2D' : menuView === 'quickchat' ? '快捷对话' : menuView === 'appearance' ? '模型外观' : menuView === 'accessories' ? '饰品' : '面部';
     menuEl.appendChild(title);
 
     if (menuView === 'quickchat') {
@@ -1336,6 +1440,15 @@
         setTimeout(buildMenu, 30);
       }, true));
       buildQuickChat();
+      return;
+    }
+
+    if (menuView === 'accessories') {
+      menuEl.appendChild(menuButton('← 返回', function () {
+        menuView = 'root';
+        setTimeout(buildMenu, 30);
+      }, true));
+      buildAccessoryMenu();
       return;
     }
 
@@ -1394,6 +1507,10 @@
       if (window.DSH_L2D && window.DSH_L2D.setExpression) window.DSH_L2D.setExpression('兔牙');
     }));
     menuEl.appendChild(menuButton('随机动作', pokeRandom));
+    menuEl.appendChild(menuButton('物品', function () {
+      menuView = 'accessories';
+      setTimeout(buildMenu, 30);
+    }, true));
     menuEl.appendChild(menuButton('模型外观', function () {
       menuView = 'appearance';
       setTimeout(buildMenu, 30);

@@ -318,10 +318,133 @@
 /* ===== END STUDIO TOKENS v1 ===== */
 
       /* 锚点直达：抽屉/外链 #sec-xxx 定位（页面自身样式区，不入令牌块以免破坏四处一致） */
-      .card.studio-card { scroll-margin-top: var(--studio-toolbar-h, 48px); }
-      .studio-card.hash-flash {
+      .card.studio-card { scroll-margin-top: var(--studio-toolbar-h, 48px); transition: background 0.45s ease, border-color 0.45s ease; }
+      .studio-card.hash-flash,
+      .card.hash-flash {
         border-color: var(--studio-accent);
-        box-shadow: 0 0 0 2px var(--studio-accent-soft);
+        background: var(--studio-accent-soft);
+        box-shadow: none;
+      }
+      .settings-shell {
+        display: flex;
+        align-items: flex-start;
+        min-height: 100%;
+        background: var(--studio-bg, var(--dsh-bg));
+      }
+      .settings-rail {
+        position: sticky;
+        top: 0;
+        flex: none;
+        width: 108px;
+        height: 100vh;
+        overflow-y: auto;
+        padding: 12px 6px;
+        border-right: 0.5px solid var(--studio-line, var(--dsh-line));
+        background: var(--studio-surface, var(--dsh-surface));
+        box-sizing: border-box;
+        z-index: 4;
+      }
+      .settings-rail a {
+        display: block;
+        padding: 8px 8px;
+        margin: 0 0 2px;
+        border-left: 2px solid transparent;
+        border-radius: 0 6px 6px 0;
+        color: var(--studio-ink-2, var(--dsh-ink-muted));
+        font: 400 12px/1.35 var(--studio-font-ui, system-ui);
+        text-decoration: none;
+      }
+      .settings-rail a:hover {
+        background: var(--studio-hover, var(--dsh-hover));
+        color: var(--studio-ink, var(--dsh-ink));
+      }
+      .settings-rail a.is-active {
+        background: var(--studio-selected, var(--studio-accent-soft));
+        color: var(--studio-accent-soft-ink, var(--dsh-ink));
+        border-left-color: var(--studio-accent);
+        font-weight: 500;
+      }
+      .settings-rail a:focus-visible {
+        outline: none;
+        border-left-color: var(--studio-accent);
+        background: var(--studio-selected, var(--studio-accent-soft));
+      }
+      .settings-main { flex: 1; min-width: 0; }
+      .acc-slot { margin: 0 0 var(--dsh-space-3, 12px); }
+      .acc-slot-label {
+        margin: 0 0 4px;
+        font: 500 12px/1.35 var(--studio-font-ui, system-ui);
+        color: var(--studio-ink-2, var(--dsh-ink-muted));
+        letter-spacing: 0.04em;
+      }
+      .acc-row {
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        padding: 2px 0 8px;
+        border-bottom: 0.5px solid var(--studio-line, var(--dsh-line));
+        scrollbar-width: thin;
+      }
+      .acc-btn.chip.is-btn {
+        flex: none;
+        height: var(--studio-control-h-sm, 32px);
+        padding: 0 12px;
+        font: 400 12px/1.4 var(--studio-font-ui, system-ui);
+        border-width: 0.5px;
+        white-space: nowrap;
+        background: var(--studio-surface-2, var(--dsh-surface-raised));
+        color: var(--studio-ink, var(--dsh-ink));
+      }
+      .acc-btn.chip.is-btn[data-state='selected'],
+      .acc-btn.chip.is-btn.is-active {
+        background: var(--studio-selected, rgba(157,193,255,.16));
+        border-color: var(--studio-accent, var(--dsh-accent));
+        color: var(--studio-accent-soft-ink, var(--dsh-ink));
+        font-weight: 500;
+      }
+      .acc-btn.chip.is-btn[data-state='error'] {
+        border-color: var(--studio-danger, var(--dsh-danger));
+        color: var(--studio-danger, var(--dsh-danger));
+      }
+      .acc-btn.chip.is-btn:disabled {
+        opacity: var(--studio-state-disabled-opacity, var(--dsh-disabled-opacity, .42));
+        cursor: not-allowed;
+      }
+      .acc-status { margin: var(--dsh-space-2, 8px) 0 0; min-height: 1.4em; }
+      .acc-status[data-state='ok'] { color: var(--studio-ok, var(--dsh-ok)); }
+      .acc-status[data-state='error'] { color: var(--studio-danger, var(--dsh-danger)); }
+      .acc-status[data-state='busy'] { color: var(--studio-ink-2, var(--dsh-ink-muted)); }
+      @media (max-width: 720px) {
+        .settings-shell { flex-direction: column; }
+        .settings-rail {
+          position: sticky;
+          top: 0;
+          width: 100%;
+          height: auto;
+          display: flex;
+          gap: 4px;
+          overflow-x: auto;
+          overflow-y: hidden;
+          border-right: 0;
+          border-bottom: 0.5px solid var(--studio-line, var(--dsh-line));
+          padding: 8px;
+        }
+        .settings-rail a {
+          flex: none;
+          border-left: 0;
+          border-bottom: 2px solid transparent;
+          border-radius: 6px;
+          white-space: nowrap;
+        }
+        .settings-rail a.is-active {
+          border-left-color: transparent;
+          border-bottom-color: var(--studio-accent);
+        }
+        .card.studio-card { scroll-margin-top: calc(var(--studio-toolbar-h, 48px) + 48px); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .card.studio-card, .studio-card.hash-flash, .card.hash-flash { transition: none; }
+        .acc-btn, .settings-rail a { transition: none !important; }
       }
 
       :root {
@@ -1377,6 +1500,9 @@
     </style>
   </head>
   <body>
+    <div class="settings-shell">
+      <nav class="settings-rail" id="settingsRail" aria-label="设置分区"></nav>
+      <div class="settings-main">
     <main class="page">
       <header class="head studio-toolbar">
         <h1>设置</h1>
@@ -1434,20 +1560,33 @@
         <div class="chips" id="previewExpressions"></div>
       </section>
 
+      <section class="card studio-card" id="sec-accessories">
+        <div class="sec-head preview-head">
+          <div class="sec-title">
+            <span class="sec-no">04</span>
+            <h2 data-acc-i18n="sectionTitle">饰品</h2>
+          </div>
+        </div>
+        <p class="sec-desc" data-acc-i18n="sectionDesc">按部位分组。每件可独立开关，可同时穿戴；点按即可在角色上切换。</p>
+        <p class="hint" data-acc-i18n="sectionHint">高亮表示已戴。兽耳、翅膀暂无开关，不在此列出。</p>
+        <p class="acc-status hint" id="accStatus" role="status" aria-live="polite"></p>
+        <div id="accSlots"></div>
+      </section>
+
       <section class="card studio-card" id="sec-behavior">
-        <div class="sec-head"><span class="sec-no">04</span><h2>情绪与行为</h2></div>
+        <div class="sec-head"><span class="sec-no">05</span><h2>情绪与行为</h2></div>
         <p class="sec-desc">角色怎么被驱动，以及主动说话和玩梗的尺度。</p>
         <div class="rows" id="rows-behavior"></div>
       </section>
 
       <section class="card studio-card" id="sec-performance">
-        <div class="sec-head"><span class="sec-no">05</span><h2>动画与性能</h2></div>
+        <div class="sec-head"><span class="sec-no">06</span><h2>动画与性能</h2></div>
         <p class="sec-desc">刷新节奏、声音、传感器与桌宠形态。实时读数在「性能监控台」。</p>
         <div class="rows" id="rows-performance"></div>
       </section>
 
       <section class="card studio-card" id="sec-nodegraph">
-        <div class="sec-head"><span class="sec-no">06</span><h2>节点图动作编排</h2></div>
+        <div class="sec-head"><span class="sec-no">07</span><h2>节点图动作编排</h2></div>
         <p class="sec-desc">节点图与 LLM 通道互斥；分享 JSON 导入即用。</p>
         <div class="modes" id="ngModes" role="radiogroup" aria-label="执行通道模式">
           <label class="mode-opt"><input type="radio" name="motionMode" value="nodegraph" />节点图 + LLM 辅助</label>
@@ -1480,7 +1619,7 @@
       </section>
 
       <section class="card studio-card" id="sec-monitor">
-        <div class="sec-head"><span class="sec-no">07</span><h2>性能监控台</h2></div>
+        <div class="sec-head"><span class="sec-no">08</span><h2>性能监控台</h2></div>
         <p class="sec-desc">实时读数、诊断信息与不常用的重活。</p>
         <div class="readouts">
           <div class="ro">
@@ -1510,6 +1649,8 @@
         <p class="empty">这个页面需要 JavaScript 才能读写设置。</p>
       </noscript>
     </main>
+      </div>
+    </div>
 
     <script>
       (function () {
@@ -2543,6 +2684,7 @@
             }
           }
           renderPreviewButtons();
+          applyAccessoryLang();
           if (previewStatusKey) setPreviewStatus(previewStatusKey, previewStatusVars, previewStatusState);
           else setPreviewStatus('statusIdle', null, '');
         }
@@ -2707,6 +2849,7 @@
               var data = res.data || {};
               if (!res.ok || data.ok === false) {
                 previewItems = { motions: [], expressions: [], modelId: '', warning: '' };
+                applyAccessoryCatalog(null);
                 renderPreviewButtons();
                 var reason = data.reason || data.message || data.warning || ('HTTP ' + res.status);
                 if (data.reason === 'no-model' || reason === 'model-catalog-missing') {
@@ -2727,6 +2870,7 @@
                 modelId: data.modelId || '',
                 warning: data.warning || ''
               };
+              applyAccessoryCatalog(data.accessories);
               renderPreviewButtons();
               if (!motions.length && !expressions.length) {
                 setPreviewStatus(data.warning === 'model-catalog-missing' ? 'statusMissing' : 'statusEmpty', null, data.warning ? 'error' : '');
@@ -2742,6 +2886,7 @@
             })
             .catch(function (err) {
               previewItems = { motions: [], expressions: [], modelId: '', warning: '' };
+              applyAccessoryCatalog(null);
               renderPreviewButtons();
               setPreviewStatus('statusError', { error: err && err.message ? err.message : String(err) }, 'error');
             });
@@ -2759,6 +2904,268 @@
             });
           }
           applyPreviewLang();
+        }
+
+        // ------------------------------------------------------------ 饰品（与 accessories-catalog.mjs 同步）
+        // 替换点：planAccessoryToggle / 下方 toggleAccessory。后端补上 bridge 饰品层后，
+        // 改这里的写入路径即可；菜单与设置页共用 catalog.accessories.slots。
+        var ACCESSORY_I18N_FALLBACK = {
+          zh: { sectionTitle: '饰品', sectionDesc: '按部位分组。每件可独立开关，可同时穿戴；点按即可在角色上切换。', sectionHint: '高亮表示已戴。兽耳、翅膀暂无开关，不在此列出。', empty: '还没有可切换的饰品分组。', statusOn: '已戴：{name}', statusOff: '已卸下：{name}', statusFail: '饰品切换失败：{error}', statusIdle: '点按饰品即可开关。' },
+          en: { sectionTitle: 'Accessories', sectionDesc: 'Grouped by slot. Each item toggles on its own and can be worn together. Click to preview on the character.', sectionHint: 'A highlight means it is on. Empty slots such as ears and wings are hidden.', empty: 'No togglable accessories in the grouping table.', statusOn: 'On: {name}', statusOff: 'Off: {name}', statusFail: 'Accessory toggle failed: {error}', statusIdle: 'Click an accessory to toggle it.' },
+          ja: { sectionTitle: 'アクセサリー', sectionDesc: '部位ごとにグループ分け。各アイテムは独立したスイッチで、同時に着用できます。クリックするとキャラクターに反映されます。', sectionHint: 'ハイライトは装着中です。獣耳・翼などスイッチのない枠は表示しません。', empty: '切り替えられるアクセサリーがありません。', statusOn: '装着：{name}', statusOff: '外した：{name}', statusFail: '切り替えに失敗：{error}', statusIdle: 'アクセサリーをクリックして切り替えます。' }
+        };
+        var accessoryI18n = ACCESSORY_I18N_FALLBACK;
+        var accessorySlots = [];
+        var accessoryWorn = {};
+        var accessoryBusy = false;
+        var accessoryStatusKey = 'statusIdle';
+        var accessoryStatusVars = null;
+        var accessoryStatusState = '';
+
+        function accT(key, vars) {
+          var pack = (accessoryI18n && accessoryI18n[previewLang]) || ACCESSORY_I18N_FALLBACK[previewLang] || ACCESSORY_I18N_FALLBACK.zh;
+          var text = pack[key] || ACCESSORY_I18N_FALLBACK.zh[key] || key;
+          if (vars) Object.keys(vars).forEach(function (name) { text = text.split('{' + name + '}').join(String(vars[name])); });
+          return text;
+        }
+
+        function accLabel(entry) {
+          if (!entry) return '';
+          var labels = entry.labels || {};
+          return labels[previewLang] || labels.zh || entry.label || entry.id || '';
+        }
+
+        function accessoryItemParam(item) {
+          if (!item) return '';
+          if (item.writesParam) return String(item.writesParam);
+          if (item.kind === 'param' && item.ref) return String(item.ref);
+          return '';
+        }
+
+        function planAccessoryToggle(slot, item, wantOn) {
+          var values = {};
+          if (!item) return { values: values, on: !!wantOn };
+          var param = accessoryItemParam(item);
+          if (param) values[param] = wantOn ? item.on : item.off;
+          if (wantOn && slot && slot.exclusive === true && Array.isArray(slot.items)) {
+            slot.items.forEach(function (other) {
+              if (!other || other.id === item.id) return;
+              var otherParam = accessoryItemParam(other);
+              if (otherParam && values[otherParam] === undefined) values[otherParam] = other.off;
+            });
+          }
+          return { values: values, itemId: item.id, slotId: slot && slot.id, kind: item.kind, ref: item.ref, on: !!wantOn };
+        }
+
+        function setAccStatus(key, vars, stateName) {
+          var el = $('accStatus');
+          if (!el) return;
+          accessoryStatusKey = key;
+          accessoryStatusVars = vars || null;
+          accessoryStatusState = stateName || '';
+          el.textContent = accT(key, vars);
+          if (accessoryStatusState) el.setAttribute('data-state', accessoryStatusState);
+          else el.removeAttribute('data-state');
+        }
+
+        function applyAccessoryLang() {
+          document.querySelectorAll('[data-acc-i18n]').forEach(function (el) {
+            el.textContent = accT(el.getAttribute('data-acc-i18n'));
+          });
+          renderAccessories();
+          if (accessoryStatusKey) setAccStatus(accessoryStatusKey, accessoryStatusVars, accessoryStatusState);
+          renderSettingsRail();
+        }
+
+        function applyAccessoryCatalog(payload) {
+          accessorySlots = payload && Array.isArray(payload.slots) ? payload.slots : [];
+          accessoryI18n = payload && payload.i18n ? payload.i18n : ACCESSORY_I18N_FALLBACK;
+          accessoryWorn = {};
+          accessorySlots.forEach(function (slot) {
+            (slot.items || []).forEach(function (item) {
+              if (item && item.id) accessoryWorn[item.id] = !!item.restOn;
+            });
+          });
+          applyAccessoryLang();
+        }
+
+        function renderAccessories() {
+          var host = $('accSlots');
+          if (!host) return;
+          host.textContent = '';
+          if (!accessorySlots.length) {
+            var empty = document.createElement('p');
+            empty.className = 'empty';
+            empty.textContent = accT('empty');
+            host.appendChild(empty);
+            return;
+          }
+          accessorySlots.forEach(function (slot) {
+            var wrap = document.createElement('div');
+            wrap.className = 'acc-slot';
+            var label = document.createElement('h3');
+            label.className = 'acc-slot-label';
+            label.textContent = accLabel(slot);
+            wrap.appendChild(label);
+            var row = document.createElement('div');
+            row.className = 'acc-row';
+            row.setAttribute('role', 'list');
+            (slot.items || []).forEach(function (item) {
+              row.appendChild(makeAccessoryButton(slot, item));
+            });
+            wrap.appendChild(row);
+            host.appendChild(wrap);
+          });
+        }
+
+        function makeAccessoryButton(slot, item) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'chip is-btn acc-btn';
+          btn.textContent = accLabel(item);
+          btn.setAttribute('data-acc-id', item.id || '');
+          btn.setAttribute('role', 'listitem');
+          var on = !!accessoryWorn[item.id];
+          btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+          if (on) {
+            btn.setAttribute('data-state', 'selected');
+            btn.classList.add('is-active');
+          }
+          btn.disabled = accessoryBusy;
+          btn.addEventListener('click', function () {
+            toggleAccessory(slot, item, btn);
+          });
+          return btn;
+        }
+
+        function setAccessoryButtonsDisabled(disabled) {
+          var nodes = document.querySelectorAll('.acc-btn');
+          for (var i = 0; i < nodes.length; i += 1) nodes[i].disabled = disabled;
+        }
+
+        function applyWornFromPlan(slot, item, plan) {
+          accessoryWorn[item.id] = !!plan.on;
+          if (plan.on && slot && slot.exclusive === true) {
+            (slot.items || []).forEach(function (other) {
+              if (other && other.id !== item.id) accessoryWorn[other.id] = false;
+            });
+          }
+        }
+
+        function toggleAccessory(slot, item, btn) {
+          if (accessoryBusy) return;
+          var wantOn = !accessoryWorn[item.id];
+          var plan = planAccessoryToggle(slot, item, wantOn);
+          accessoryBusy = true;
+          setAccessoryButtonsDisabled(true);
+          setAccStatus(wantOn ? 'statusOn' : 'statusOff', { name: accLabel(item) }, 'busy');
+          previewPostCall('l2d_set_parameters', { values: plan.values })
+            .then(function (result) {
+              var err = resultError(result);
+              if (err) {
+                if (btn) btn.setAttribute('data-state', 'error');
+                setAccStatus('statusFail', { error: err }, 'error');
+                return;
+              }
+              applyWornFromPlan(slot, item, plan);
+              setAccStatus(wantOn ? 'statusOn' : 'statusOff', { name: accLabel(item) }, 'ok');
+              renderAccessories();
+            })
+            .catch(function (err) {
+              if (btn) btn.setAttribute('data-state', 'error');
+              setAccStatus('statusFail', { error: err && err.message ? err.message : String(err) }, 'error');
+            })
+            .then(function () {
+              accessoryBusy = false;
+              setAccessoryButtonsDisabled(false);
+            });
+        }
+
+        var SETTINGS_RAIL = [
+          { id: 'sec-display', zh: '显示与布局', en: 'Display', ja: '表示とレイアウト' },
+          { id: 'sec-model', zh: '角色与模型', en: 'Character', ja: 'キャラクター' },
+          { id: 'sec-preview', zh: '动作预览', en: 'Preview', ja: 'プレビュー' },
+          { id: 'sec-accessories', zh: '饰品', en: 'Accessories', ja: 'アクセサリー' },
+          { id: 'sec-behavior', zh: '情绪与行为', en: 'Behavior', ja: '感情と行動' },
+          { id: 'sec-performance', zh: '动画与性能', en: 'Performance', ja: 'アニメと性能' },
+          { id: 'sec-nodegraph', zh: '节点图', en: 'Node graph', ja: 'ノードグラフ' },
+          { id: 'sec-monitor', zh: '性能监控', en: 'Monitor', ja: 'モニター' }
+        ];
+        var railObserver = null;
+
+        function railLabel(item) {
+          return item[previewLang] || item.zh;
+        }
+
+        function setActiveRail(id) {
+          var rail = $('settingsRail');
+          if (!rail) return;
+          var links = rail.querySelectorAll('a[href^="#"]');
+          for (var i = 0; i < links.length; i += 1) {
+            var href = links[i].getAttribute('href') || '';
+            var on = href === '#' + id;
+            links[i].classList.toggle('is-active', on);
+            if (on) links[i].setAttribute('aria-current', 'true');
+            else links[i].removeAttribute('aria-current');
+          }
+        }
+
+        function renderSettingsRail() {
+          var rail = $('settingsRail');
+          if (!rail) return;
+          var current = '';
+          var active = rail.querySelector('a.is-active');
+          if (active) current = (active.getAttribute('href') || '').replace(/^#/, '');
+          rail.textContent = '';
+          rail.setAttribute('aria-label', previewLang === 'en' ? 'Settings sections' : previewLang === 'ja' ? '設定セクション' : '设置分区');
+          SETTINGS_RAIL.forEach(function (item) {
+            if (!document.getElementById(item.id)) return;
+            var a = document.createElement('a');
+            a.href = '#' + item.id;
+            a.textContent = railLabel(item);
+            if (current === item.id) {
+              a.classList.add('is-active');
+              a.setAttribute('aria-current', 'true');
+            }
+            rail.appendChild(a);
+          });
+        }
+
+        function bindSettingsRail() {
+          var rail = $('settingsRail');
+          if (!rail) return;
+          renderSettingsRail();
+          rail.addEventListener('click', function (event) {
+            var a = event.target && event.target.closest ? event.target.closest('a[href^="#"]') : null;
+            if (!a) return;
+            event.preventDefault();
+            var id = (a.getAttribute('href') || '').replace(/^#/, '');
+            if (!id) return;
+            if (history.replaceState) history.replaceState(null, '', '#' + id);
+            else location.hash = '#' + id;
+            applyHashTarget();
+          });
+          if (!('IntersectionObserver' in window)) return;
+          if (railObserver) railObserver.disconnect();
+          var visible = {};
+          railObserver = new IntersectionObserver(function (entries) {
+            entries.forEach(function (en) {
+              visible[en.target.id] = en.isIntersecting ? en.intersectionRatio : 0;
+            });
+            var best = '', bestR = 0;
+            Object.keys(visible).forEach(function (id) {
+              if (visible[id] > bestR) { bestR = visible[id]; best = id; }
+            });
+            if (best) setActiveRail(best);
+          }, { root: null, rootMargin: '-15% 0px -65% 0px', threshold: [0, 0.15, 0.3, 0.5, 1] });
+          SETTINGS_RAIL.forEach(function (item) {
+            var el = document.getElementById(item.id);
+            if (el) railObserver.observe(el);
+          });
+        }
+
+        function prefersReducedMotion() {
+          return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         }
 
         function bindDev() {
@@ -3430,6 +3837,7 @@
         bindFormChange();
         bindNodegraph();
         bindPreview();
+        bindSettingsRail();
         loadAll();
         refreshReadouts();
         window.setInterval(refreshReadouts, 6000);
@@ -3445,10 +3853,12 @@
           if (!id) return;
           var el = document.getElementById(id);
           if (!el) return;
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          var reduce = prefersReducedMotion();
+          el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
           el.classList.add('hash-flash');
+          setActiveRail(id);
           if (hashTimer) window.clearTimeout(hashTimer);
-          hashTimer = window.setTimeout(function () { el.classList.remove('hash-flash'); }, 1600);
+          hashTimer = window.setTimeout(function () { el.classList.remove('hash-flash'); }, reduce ? 800 : 1400);
         }
         window.addEventListener('hashchange', applyHashTarget);
         applyHashTarget();
