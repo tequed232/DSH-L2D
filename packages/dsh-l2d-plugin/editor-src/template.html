@@ -129,6 +129,18 @@ b, strong, h1, h2, h3, h4, th { font-weight:500; }
 }
 .lang-select:hover { border-color:color-mix(in srgb,var(--ink) 24%,var(--line)); }
 .lang-select:focus-visible { outline:2px solid var(--mg-focus-outer); outline-offset:1px; }
+/* 顶栏模型选择器：工作区当前模型；目录接口未就绪（mock 数据）时用虚线边框标注 */
+.model-select {
+  width:150px; background:var(--bg); border:0.5px solid var(--mg-border-strong); border-radius:var(--r-sm);
+  color:var(--ink); padding:5px 8px; font-size:11.5px; outline:none; cursor:pointer;
+}
+.model-select:hover { border-color:color-mix(in srgb,var(--ink) 24%,var(--line)); }
+.model-select:focus { border-color:var(--accent); }
+.model-select.is-mock { border-style:dashed; }
+.model-select option.is-out, .field select option.is-out { color:var(--danger); }
+.field .hint.is-out { color:var(--danger); }
+.ins-bind { padding:2px 0 0; }
+.ins-bind .hint { margin-top:6px; }
 /* 英/日文按钮文字较长：顶栏放不下时由 UI.fitTopbar 加 compact，退为图标按钮（与 ≤1100px 断点同效果） */
 #topbar.compact .top-actions .btn .lbl, #topbar.compact .ver-badge { display:none; }
 #topbar.compact .top-actions .btn { padding:6px 9px; }
@@ -641,6 +653,7 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
   .ver-badge { display:none; }
   .preset-add .pa-txt { display:none; }
   .doc-meta input { width:92px; }
+  .model-select { width:100px; }
   .top-actions .btn .lbl { display:none; }
   .top-actions .btn { padding:6px 9px; }
 }
@@ -683,7 +696,7 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
   </div>
   <div class="doc-meta">
     <label><span data-i18n="top.docName">名称</span> <input id="doc-name" type="text" value="挥手打招呼" spellcheck="false"></label>
-    <label><span data-i18n="top.docModel">模型</span> <input id="doc-model" type="text" value="大肥鱼" spellcheck="false"></label>
+    <label><span data-i18n="top.docModel">模型</span> <select id="model-select" class="model-select" data-i18n-title="model.title" data-i18n-aria="model.title" aria-label="工作区模型"></select></label>
   </div>
   <div class="top-actions">
     <button class="btn" id="btn-sim" title="模拟动作触发（纯本地预览）" data-i18n-title="top.sim.title"><span class="ico" aria-hidden="true">▶&#xFE0E;</span><span class="lbl" data-i18n="top.sim.lbl">模拟触发</span></button>
@@ -947,34 +960,40 @@ var NodeDef = {
       hint:tr('f.cooldown.hint') },
     { key:'execState',      label:tr('f.execState'),       kind:'select', options:Capability.execStates,
       hint:tr('f.execState.hint') },
-    { key:'modelWhitelist', label:tr('f.whitelist'),     kind:'text',
+    { key:'modelWhitelist', label:tr('f.whitelist'),     kind:'text', datalist:'catalog-params',
       hint:tr('f.whitelist.hint') },
     { key:'portType',       label:tr('f.portType'),       kind:'select', options:['flow','signal','data'],
       hint:tr('f.portType.hint') },
     { key:'disabled',       label:tr('f.disabled'), kind:'checkbox' }
   ]; },
-  /* 类型专属字段声明 —— Inspector 由此动态生成控件 */
-  fields: function (type) {
+  /* 类型专属字段声明 —— Inspector 由此动态生成控件。
+     表情 / 动作组 / 姿势选项来自当前模型的 ID 清单（ModelCatalog，catalog?model=X）：
+     有清单 → 下拉选择，清单里没有的现有值标红；没清单 → 退回手动输入 + 提示。
+     n 为可选的当前节点（用于判断现有值是否在清单外）。 */
+  fields: function (type, n) {
     switch (type) {
       case 'expression': return [
-        { key:'name', label:tr('f.expr.name'), kind:'select', options:Capability.expressions,
-          hint:tr('f.expr.name.hint') },
+        ModelCatalog.nameField('expressions', n ? n.props.name : '', { key:'name', label:tr('f.expr.name'), hint:tr('f.expr.name.hint') }),
         { key:'clear', label:tr('f.clear'), kind:'checkbox' },
         { key:'stepDelayMs', label:tr('f.stepDelay'), kind:'number', min:0, max:5000, step:10 }
       ];
       case 'motion': return [
-        { key:'name', label:tr('f.motion.name'), kind:'select', options:Capability.motionGroups,
-          hint:tr('f.motion.name.hint') },
+        ModelCatalog.nameField('motions', n ? n.props.name : '', { key:'name', label:tr('f.motion.name'), hint:tr('f.motion.name.hint') }),
         { key:'closeMotion', label:tr('f.closeMotion'), kind:'readonly',
           hint:tr('f.closeMotion.hint') },
         { key:'closeAfterMs', label:tr('f.closeAfter'), kind:'number', min:300, max:12000, step:100 },
         { key:'stepDelayMs', label:tr('f.stepDelay'), kind:'number', min:0, max:5000, step:10 }
       ];
-      case 'pose': return [
-        { key:'poseRight', label:tr('f.poseRight'), kind:'select', options:[''].concat(Capability.poseValues) },
-        { key:'poseLeft',  label:tr('f.poseLeft'),  kind:'select', options:[''].concat(Capability.poseValues) },
-        { key:'stepDelayMs', label:tr('f.stepDelay'), kind:'number', min:0, max:5000, step:10 }
-      ];
+      case 'pose': {
+        var pv = ModelCatalog.options('forms') || Capability.poseValues;
+        return [
+          { key:'poseRight', label:tr('f.poseRight'), kind:'select', options:[''].concat(pv),
+            outOfList:!!(n && n.props.poseRight) && pv.indexOf(String(n.props.poseRight)) < 0 },
+          { key:'poseLeft',  label:tr('f.poseLeft'),  kind:'select', options:[''].concat(pv),
+            outOfList:!!(n && n.props.poseLeft) && pv.indexOf(String(n.props.poseLeft)) < 0 },
+          { key:'stepDelayMs', label:tr('f.stepDelay'), kind:'number', min:0, max:5000, step:10 }
+        ];
+      }
       case 'look': return [
         { key:'x', label:tr('f.lookX'), kind:'number', min:-1, max:1, step:0.01 },
         { key:'y', label:tr('f.lookY'), kind:'number', min:-1, max:1, step:0.01 },
@@ -1013,7 +1032,8 @@ var NodeDef = {
    Binding：文档身份 + 模型绑定（§4 规则 8）
    ------------------------------------------------------------------------- */
 var Binding = {
-  name:'挥手打招呼', modelId:'大肥鱼', modelHash:'', bindingMode:'any', docPriority:'NORMAL',
+  /* modelId 默认空，由 ModelSel.init 用当前选中模型填充；新建动作链默认 strict（跟随选中模型） */
+  name:'挥手打招呼', modelId:'', modelHash:'', bindingMode:'strict', docPriority:'NORMAL',
   toJSON: function () { return { modelId:this.modelId, modelHash:this.modelHash, bindingMode:this.bindingMode }; },
   fromDoc: function (mb) {
     mb = mb || {};
@@ -1589,6 +1609,9 @@ var Validator = {
 
 <!-- BUILD:SPLIT rail-chips -->
 <!-- BUILD:END rail-chips -->
+
+<!-- BUILD:SPLIT model-catalog -->
+<!-- BUILD:END model-catalog -->
 
 /* =========================================================================
    JsonPreview：正常模式下的只读 JSON 预览浮窗（原 #mg-export 仅 selftest 可见）。
@@ -2202,8 +2225,11 @@ var UI = {
     var id = 'data-prop="'+esc(f.key)+'"';
     if (f.kind === 'select') {
       h += '<select '+id+'>';
-      (f.options||[]).forEach(function (o) {
-        h += '<option value="'+esc(o)+'"'+(String(val)===String(o)?' selected':'')+'>'+esc(o === '' ? tr('field.unset') : o)+'</option>';
+      var opts = (f.options||[]).slice();
+      if (f.outOfList && opts.indexOf(String(val)) < 0) opts.push(String(val));
+      opts.forEach(function (o) {
+        var out = f.outOfList && String(val) === String(o);
+        h += '<option value="'+esc(o)+'"'+(String(val)===String(o)?' selected':'')+(out?' class="is-out"':'')+'>'+esc(o === '' ? tr('field.unset') : o)+'</option>';
       });
       h += '</select>';
     } else if (f.kind === 'checkbox') {
@@ -2215,8 +2241,9 @@ var UI = {
         (f.min!==undefined?' min="'+f.min+'"':'')+(f.max!==undefined?' max="'+f.max+'"':'')+
         ' step="'+(f.step||1)+'">';
     } else {
-      h += '<input type="text" '+id+' value="'+esc(val)+'" spellcheck="false">';
+      h += '<input type="text" '+id+' value="'+esc(val)+'" spellcheck="false"'+(f.datalist?' list="'+esc(f.datalist)+'"':'')+'>';
     }
+    if (f.outOfList) h += '<div class="hint is-out">'+esc(tr('field.outOfList', { v:String(val) }))+'</div>';
     if (f.hint) h += '<div class="hint">'+esc(f.hint)+'</div>';
     return h + '</div>';
   },
@@ -2232,7 +2259,7 @@ var UI = {
       html += '<div class="ins-head"><div class="kicker">'+esc(tr('ins.kNode'))+'</div>'+
         '<h2>'+esc(n.label)+'</h2><p>'+esc(d.label+' · '+NodeDef.typeName(n.type))+' · '+esc(n.type)+'<br>'+
         esc(NodeDef.isCompilable(n.type) ? tr('ins.compiled', { t:NodeDef.gtype(n.type) }) : tr('ins.aux'))+'</p></div>';
-      var tf = NodeDef.fields(n.type), b1 = '';
+      var tf = NodeDef.fields(n.type, n), b1 = '';
       tf.forEach(function (f) { b1 += UI.fieldHTML(f, n.props[f.key]); });
       if (tf.length) html += UI.foldSection('ins.type', tr('ins.typeFields'), tf.length, b1);
       var common = NodeDef.commonFields(), b2 = '';
@@ -2255,11 +2282,15 @@ var UI = {
     } else {
       html += '<div class="ins-head"><div class="kicker">'+esc(tr('ins.kDoc'))+'</div><h2>'+esc(Binding.name)+'</h2>'+
         '<p>'+esc(tr('ins.docSub'))+'</p></div>';
+      var bindHtml = (Binding.bindingMode !== 'strict' || !Binding.modelId) ?
+        '<div class="ins-bind"><button class="btn" data-act="bind-current">'+esc(tr('act.bindCurrent'))+'</button>'+
+        '<div class="hint">'+esc(tr('act.bindCurrentHint'))+'</div></div>' : '';
       html += UI.foldSection('ins.doc', tr('ins.docBinding'), 4, UI.fieldHTML({key:'__name',label:tr('f.docName'),kind:'text'}, Binding.name)+
         UI.fieldHTML({key:'__model',label:tr('f.docModel'),kind:'text'}, Binding.modelId)+
         UI.fieldHTML({key:'__mode',label:tr('f.docMode'),kind:'select',options:['any','strict'],
           hint:tr('f.docMode.hint')}, Binding.bindingMode)+
-        UI.fieldHTML({key:'__prio',label:tr('f.docPrio'),kind:'select',options:Capability.priorities}, Binding.docPriority));
+        UI.fieldHTML({key:'__prio',label:tr('f.docPrio'),kind:'select',options:Capability.priorities}, Binding.docPriority)+
+        bindHtml);
       html += UI.foldSection('ins.stats', tr('ins.stats'), null, '<div class="stat-grid">'+
         '<div class="stat"><div class="v num">'+Graph.nodes.length+'</div><div class="k">'+esc(tr('stat.design'))+'</div></div>'+
         '<div class="stat"><div class="v num">'+Graph.edges.length+'</div><div class="k">'+esc(tr('stat.edges'))+'</div></div>'+
@@ -2302,7 +2333,7 @@ var UI = {
     this.renderNodes(); this.renderWires(); this.renderMinimap();
     this.renderInspector(); this.renderStatus();
     this.updateBadge(Validator.check(Serializer.build()));
-    $('#doc-name').value = Binding.name; $('#doc-model').value = Binding.modelId;
+    $('#doc-name').value = Binding.name; ModelSel.sync();
     JsonPreview.refresh();
   },
   status: function (text, pct) {
@@ -2330,7 +2361,7 @@ var UI = {
     $('#btn-menu').addEventListener('click', function (e) { e.stopPropagation(); UI.toggleMenu(); });
     $('#validate-badge').addEventListener('click', function () { UI.openValidation(); });
     $('#doc-name').addEventListener('input', function (e) { Binding.name = e.target.value || '未命名动作图'; Cache.invalidate(); UI.updateBadge(Validator.check(Serializer.build())); });
-    $('#doc-model').addEventListener('input', function (e) { Binding.modelId = e.target.value; Cache.invalidate(); UI.updateBadge(Validator.check(Serializer.build())); });
+    /* 模型选择器的事件在 ModelSel.init 里绑定（切换工作区模型，不改当前图绑定） */
     $('#zoom-in').addEventListener('click', function () { var r=UI.canvas.getBoundingClientRect(); UI.zoomAt(1.2, r.width/2, r.height/2); });
     $('#zoom-out').addEventListener('click', function () { var r=UI.canvas.getBoundingClientRect(); UI.zoomAt(1/1.2, r.width/2, r.height/2); });
     $('#zoom-fit').addEventListener('click', function () { UI.fitView(); });
@@ -2772,7 +2803,7 @@ var UI = {
         var sel = Array.from(Graph.selection).map(function (id) { return Graph.byId(id); }).filter(Boolean);
         if (k.indexOf('__') === 0) {
           if (k === '__name') { Binding.name = el.value || '未命名动作图'; $('#doc-name').value = Binding.name; }
-          else if (k === '__model') { Binding.modelId = el.value; $('#doc-model').value = Binding.modelId; }
+          else if (k === '__model') { Binding.modelId = el.value; }
           else if (k === '__mode') Binding.bindingMode = el.value;
           else if (k === '__prio') Binding.docPriority = el.value;
           Cache.invalidate(); UI.updateBadge(Validator.check(Serializer.build())); UI.renderStatus(); JsonPreview.refresh(); return;
@@ -2804,6 +2835,12 @@ var UI = {
       else if (act === 'layout') Layout.run();
       else if (act === 'fit') UI.fitView();
       else if (act === 'clear') { Graph.clear(); UI.refreshAll(); UI.status(tr('status.cleared')); }
+      else if (act === 'bind-current') {
+        /* 无绑定 / any 旧图：显式绑定到当前工作区模型（strict + modelId=当前模型），不静默改动 */
+        Binding.bindingMode = 'strict'; Binding.modelId = ModelSel.current;
+        UI.refreshAll();
+        UI.toast(tr('act.boundToast', { m:ModelSel.current }), 'ok');
+      }
     };
     root.addEventListener('input', handler);
     root.addEventListener('change', handler);
@@ -2879,8 +2916,12 @@ var UI = {
         return '<div class="slot-row"><span class="sn">'+esc(it.slot)+'</span><span class="sd">'+esc(when)+'</span>'+
           '<button class="btn" data-load="'+i+'">'+esc(tr('common.load'))+'</button><button class="btn danger" data-del="'+i+'">'+esc(tr('common.delete'))+'</button></div>';
       }).join('') : '<div class="sub" style="margin:0">'+esc(tr('slots.none'))+'</div>') + '</div></div>'+
+      /* 服务端动作链列表（按当前工作区模型过滤）：接口未就绪时显示 mock 示例并标注 */
+      '<div class="modal-section"><h3 style="font:600 10px var(--mono);color:var(--ink2);margin:0 0 10px">'+esc(tr('slots.remote'))+'</h3>'+
+      '<div id="remote-graph-list"></div></div>'+
       '<div class="modal-actions"><button class="btn" data-close>'+esc(tr('common.close'))+'</button></div>';
     this.openModal(html);
+    ModelCatalog.renderRemoteList(document.getElementById('remote-graph-list'));
     var list = items;
     $('#slot-save').addEventListener('click', function () {
       var s = $('#slot-name').value.trim() || Binding.name;
@@ -2906,6 +2947,17 @@ var UI = {
         var k = p[0].indexOf('sc.') === 0 ? tr(p[0]) : p[0];
         return '<div class="slot-row"><span class="sn">'+esc(k)+'</span><span class="sd">'+esc(tr(p[1]))+'</span></div>';
       }).join('')+'</div><div class="modal-actions"><button class="btn" data-close>'+esc(tr('common.close'))+'</button></div>');
+  },
+  /* 打开别的模型的图（strict + modelId ≠ 当前工作区模型）：提示归属 + 一键切换，不改绑定 */
+  openModelMismatch: function (docModelId) {
+    var self = this;
+    this.openModal('<h2>'+esc(tr('mm.title'))+'</h2><p class="sub">'+esc(tr('mm.body', { doc:docModelId, cur:ModelSel.current }))+'</p>'+
+      '<div class="modal-actions"><button class="btn primary" id="mm-switch">'+esc(tr('mm.switch'))+'</button>'+
+      '<button class="btn" data-close>'+esc(tr('mm.keep'))+'</button></div>');
+    $('#mm-switch').addEventListener('click', function () {
+      self.closeModal();
+      ModelSel.switchTo(docModelId);
+    });
   },
   bindModal: function () {
     $('#modal-layer').addEventListener('click', function (e) { if (e.target.id === 'modal-layer') UI.closeModal(); });
@@ -2961,6 +3013,14 @@ var IO = {
     UI.refreshAll();
     UI.status(tr('status.imported', { n:Graph.nodes.length, e:Graph.edges.length }));
     UI.toast(tr('toast.imported'), 'ok');
+    /* 打开别的模型的图：strict 绑定且 modelId ≠ 当前工作区模型 → 明确提示 + 「切换到该模型」；
+       只提示，不偷偷改绑定（切换仅更新工作区模型选择器） */
+    var doc = null; try { doc = JSON.parse(text); } catch (err) {}
+    var mb = doc && typeof doc === 'object' && doc.modelBinding;
+    if (mb && mb.bindingMode === 'strict' && typeof mb.modelId === 'string' && mb.modelId &&
+        mb.modelId !== ModelSel.current) {
+      UI.openModelMismatch(mb.modelId);
+    }
   }
 };
 
@@ -3092,7 +3152,9 @@ var Demo = {
     ];
     Graph.viewport = { x:30, y:40, k:0.85 };
     Graph.selection.clear(); Graph.selectedEdge = null;
-    Binding.name = '挥手打招呼'; Binding.modelId = '大肥鱼'; Binding.bindingMode = 'any'; Binding.docPriority = 'NORMAL';
+    /* 新建动作链：bindingMode 默认 strict，modelId 跟随当前选中的工作区模型 */
+    Binding.name = '挥手打招呼'; Binding.modelId = ModelSel.current; Binding.modelHash = '';
+    Binding.bindingMode = 'strict'; Binding.docPriority = 'NORMAL';
     Cache.invalidate();
     UI.applyViewport(); UI.refreshAll();
     UI.status(tr('status.demo'));
@@ -3529,7 +3591,113 @@ function runSelfTest() {
       return done(r);
     }).catch(function (e) { return done({ ok:false, error:String(e) }); });
   };
+  /* 第十五组：按单个模型编辑动作链（ModelCatalog/ModelSel，mock fetch 不发真实请求）——
+     ①选择器从模型清单渲染且默认当前模型；②新建动作链 strict + modelId=当前模型；
+     ③切换模型=切换工作区（选择器/动作链列表跟随，且不偷偷改当前图绑定）；
+     ④清单外值标红并说明；⑤AI 编辑 409 model-mismatch 显示期望/实际模型并可切换；
+     ⑥无绑定旧图「绑定到当前模型」按钮；⑦catalog 失败 → 手动输入回退 + 提示 */
+  var modelTest = function () {
+    var realFetch = ModelCatalog.fetch, realAiFetch = AiEditAdapter.fetch;
+    var saved = { name:Binding.name, modelId:Binding.modelId, modelHash:Binding.modelHash, mode:Binding.bindingMode, cur:ModelSel.current };
+    var r = {};
+    var FIXTURE = {
+      models: ['demo-model', 'demo-model-b'],
+      catalogs: {
+        'demo-model':   { expressions:['兔牙','脸红','爱心眼'], motions:['竖手指打开','竖手指关闭'], params:['ParamMouthOpenY'], forms:['rest','finger'] },
+        'demo-model-b': { expressions:['加载','圈圈眼'], motions:['狗尾巴草打开'], params:['ParamEyeLOpen'], forms:['rest'] }
+      },
+      graphs: {
+        'demo-model':   [{ name:'挥手打招呼', modelId:'demo-model' }],
+        'demo-model-b': [{ name:'加载演出', modelId:'demo-model-b' }]
+      }
+    };
+    var reply = function (status, data) { return Promise.resolve({ ok:status < 400, status:status, json:function () { return Promise.resolve(data); } }); };
+    var modelOf = function (url) { try { return new URLSearchParams(url.split('?')[1] || '').get('model'); } catch (e) { return null; } };
+    ModelCatalog.fetch = function (url) {
+      if (url.indexOf(ModelCatalog.CATALOG_URL) === 0) {
+        var m = modelOf(url), c = m ? FIXTURE.catalogs[m] : null;
+        if (!m) return reply(200, { ok:true, models:FIXTURE.models });
+        return c ? reply(200, { ok:true, expressions:c.expressions, motions:c.motions, params:c.params, forms:c.forms })
+                 : reply(404, {});
+      }
+      if (url.indexOf(ModelCatalog.LIST_URL) === 0) {
+        var g = FIXTURE.graphs[modelOf(url)];
+        return (g && g.length) ? reply(200, { ok:true, graphs:g }) : reply(404, {});
+      }
+      return reply(404, {});
+    };
+    var done = function (x) {
+      ModelCatalog.fetch = realFetch; AiEditAdapter.fetch = realAiFetch;
+      ModelCatalog.MOCK_CATALOGS = true;
+      ModelSel.current = saved.cur;
+      Binding.name = saved.name; Binding.modelId = saved.modelId; Binding.modelHash = saved.modelHash; Binding.bindingMode = saved.mode;
+      ModelSel.reload().then(function () { Demo.load(); });
+      return x;
+    };
+    return ModelSel.reload().then(function () {
+      var sel = document.getElementById('model-select');
+      r.selector = !!sel && sel.options.length === 2 && sel.value === 'demo-model' &&
+        ModelCatalog.models.indexOf('demo-model') >= 0 && ModelCatalog.options('expressions') != null;
+      Demo.load();
+      r.strictDefault = Binding.bindingMode === 'strict' && Binding.modelId === 'demo-model';
+      return ModelSel.switchTo('demo-model-b');
+    }).then(function () {
+      var g = ModelCatalog.graphsCache['demo-model-b'];
+      r.switchWs = ModelSel.current === 'demo-model-b' &&
+        document.getElementById('model-select').value === 'demo-model-b' &&
+        Binding.modelId === 'demo-model' &&  /* 切换工作区不改当前图绑定 */
+        !!g && g.graphs.length === 1 && g.graphs[0].name === '加载演出';
+      /* 清单外标红：demo-model-b 清单里没有「兔牙」 */
+      var n = Graph.addNode('expression', { x:40, y:40 });
+      n.props.name = '兔牙';
+      Graph.selection = new Set([n.id]); UI.renderInspector();
+      var redOpt = document.querySelector('#ins-root select[data-prop="name"] option.is-out');
+      var redHint = document.querySelector('#ins-root .hint.is-out');
+      r.outOfList = !!redOpt && redOpt.textContent === '兔牙' && !!redHint &&
+        redHint.textContent.indexOf('兔牙') >= 0;
+      Graph.removeNodes([n.id]); Graph.selection.clear(); UI.refreshAll();
+      /* AI 编辑 409 model-mismatch：显示期望/实际模型，切换按钮更新工作区模型 */
+      AiEditAdapter.fetch = function (url, opts) {
+        return reply(409, { ok:false, reason:'model-mismatch', expected:'demo-model', actual:'demo-model-b' });
+      };
+      var input = document.getElementById('ai-input'), prevIn = input.value;
+      input.value = 'x';
+      return AiEdit.generate().then(function () {
+        var st = document.getElementById('ai-status').textContent;
+        r.aiMismatch = AiEdit.state === 'mismatch' && st.indexOf('demo-model') >= 0 && st.indexOf('demo-model-b') >= 0;
+        var sw = document.querySelector('#ai-result [data-ai="switch-model"]');
+        if (sw) sw.click();
+        r.aiSwitch = ModelSel.current === 'demo-model';
+        AiEdit.proposal = null; AiEdit.mismatch = null; AiEdit.highlight(null); AiEdit.set('idle');
+        input.value = prevIn;
+        /* 无绑定旧图 → 「绑定到当前模型」按钮 */
+        Binding.bindingMode = 'any'; Binding.modelId = '';
+        UI.renderInspector();
+        var bb = document.querySelector('#ins-root [data-act="bind-current"]');
+        r.bindBtn = !!bb;
+        if (bb) bb.click();
+        r.bindApplied = Binding.bindingMode === 'strict' && Binding.modelId === ModelSel.current;
+        /* catalog 失败（关闭 mock 目录开关）→ 手动输入回退 + 提示 */
+        ModelCatalog.fetch = function () { return Promise.reject(new Error('offline')); };
+        ModelCatalog.MOCK_CATALOGS = false;
+        ModelCatalog.cache = {}; ModelCatalog.models = []; ModelCatalog.useMock = false;
+        return ModelSel.reload();
+      }).then(function () {
+        var n2 = Graph.addNode('expression', { x:40, y:40 });
+        Graph.selection = new Set([n2.id]); UI.renderInspector();
+        var txt = document.querySelector('#ins-root input[data-prop="name"]');
+        var noCat = false;
+        $$('#ins-root .hint').forEach(function (h) { if (h.textContent === tr('field.noCatalog')) noCat = true; });
+        r.fallbackText = !!txt && noCat;
+        Graph.removeNodes([n2.id]); Graph.selection.clear();
+        var ok = true; Object.keys(r).forEach(function (k) { ok = ok && r[k] === true; });
+        r.ok = ok;
+        return done(r);
+      });
+    }).catch(function (e) { return done({ ok:false, error:String(e) }); });
+  };
   aiTest().then(function (aiT) {
+    return modelTest().then(function (mT) {
   var doc = Serializer.build();
   var result = {
     validate: v,
@@ -3550,7 +3718,8 @@ function runSelfTest() {
     i18n: i18nT,
     folds: foldT,
     nodeUi: nodeUiT,
-    aiEdit: aiT
+    aiEdit: aiT,
+    model: mT
   };
   $('#mg-selftest').textContent = JSON.stringify(result, null, 2);
   $('#mg-export').textContent = Serializer.exportText();
@@ -3575,7 +3744,9 @@ function runSelfTest() {
     + ' fold-' + (foldT.ok ? 'ok' : 'FAIL(' + (foldT.error ? 'err=' + foldT.error : 'lib=' + foldT.lib + '/ins=' + foldT.ins + '/bars=' + foldT.bars + '/bg=' + foldT.bgImages) + ')')
     + ' nodeui-' + (nodeUiT.ok ? 'ok' : 'FAIL(' + (nodeUiT.error ? 'err=' + nodeUiT.error : JSON.stringify(nodeUiT)) + ')')
     + ' aiedit-' + (aiT.ok ? 'ok' : 'FAIL(' + (aiT.error ? 'err=' + aiT.error : JSON.stringify(aiT)) + ')')
+    + ' model-' + (mT.ok ? 'ok' : 'FAIL(' + (mT.error ? 'err=' + mT.error : JSON.stringify(mT)) + ')')
     + (rt.diff.length ? ' diff=' + rt.diff.join('|') : '');
+  });
   });
 }
 
@@ -3589,9 +3760,11 @@ window.addEventListener('error', function (ev) {
 function boot() {
   document.documentElement.setAttribute('data-theme', Preferences.theme);
   I18n.init();      // 先定界面语言（静态 DOM 取词），UI.init 渲染动态文字时直接用当前语言
+  ModelSel.init();  // 工作区模型：URL ?model= > 默认 demo-model；空 modelId 由当前模型填充
   UI.init();        // 先建立 DOM 引用与事件绑定，再装配数据
-  Demo.load();      // 默认示例图（UI 引用已就绪）
+  Demo.load();      // 默认示例图（UI 引用已就绪；strict 绑定到当前选中模型）
   window.__MG_READY__ = true;
+  ModelSel.loadCatalogs();  // 异步：模型清单 + 当前模型 ID 清单（接口未就绪 → mock 并标注）
   if (new URLSearchParams(window.location.search).has('selftest')) {
     setTimeout(runSelfTest, 60);
   }

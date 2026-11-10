@@ -30,7 +30,10 @@ var AiEditAdapter = {
         function () { return { ready:true, status:res.status, data:{} }; });
     }, function () { return { ready:false, status:0, data:{} }; });
   },
-  edit: function (graph, instruction, lang) { return this.post(this.EDIT_URL, { graph:graph, instruction:instruction, lang:lang }); },
+  edit: function (graph, instruction, lang, modelId) {
+    var body = { graph:graph, instruction:instruction, lang:lang, modelId:modelId || '' };
+    return this.post(this.EDIT_URL, body);
+  },
   applyOps: function (graph, ops, baseHash) {
     var body = { graph:graph, ops:ops };
     if (baseHash != null) body.baseHash = baseHash;
@@ -40,9 +43,10 @@ var AiEditAdapter = {
 AiEditAdapter._nativeFetch = AiEditAdapter.fetch;
 
 var AiEdit = {
-  state: 'idle',        /* idle | loading | proposal | applying | applied | notready | unavailable | failed | error */
+  state: 'idle',        /* idle | loading | proposal | applying | applied | notready | unavailable | failed | error | mismatch */
   proposal: null,       /* { ops, explanation, warnings, baseHash, valid, snapshot, errors:{opIndex:[...]} } */
   undoSnapshot: null,
+  mismatch: null,       /* 409 model-mismatch → { expected, actual } */
   message: '', code: '', lastWarnings: [],
   touched: null,
   LANGS: { 'zh-CN':'zh-CN', en:'en', ja:'ja' },
@@ -59,6 +63,20 @@ var AiEdit = {
       else if (act === 'discard') { self.proposal = null; self.highlight(null); self.set('idle'); }
       else if (act === 'undo') self.undo();
       else if (act === 'retry') self.generate();
+      else if (act === 'switch-model') {
+        /* 409 model-mismatch：切换工作区模型到后端期望的模型（不改当前图绑定） */
+        var m = self.mismatch && self.mismatch.expected;
+        self.mismatch = null; self.set('idle');
+        if (m && typeof ModelSel !== 'undefined') ModelSel.switchTo(m);
+      }
+      else if (act === 'rebind') {
+        /* 409 model-mismatch：把当前图显式重新绑定到当前加载的模型 */
+        self.mismatch = null;
+        Binding.bindingMode = 'strict'; Binding.modelId = ModelSel.current;
+        Cache.invalidate(); UI.refreshAll();
+        UI.toast(tr('act.boundToast', { m:ModelSel.current }), 'ok');
+        self.set('idle');
+      }
     });
     var input = document.getElementById('ai-input');
     if (input) input.addEventListener('keydown', function (e) {
@@ -87,10 +105,17 @@ var AiEdit = {
     var snapshot = Serializer.exportText();
     this.proposal = null; this.highlight(null);
     this.set('loading', tr('ai.loading'));
-    return AiEditAdapter.edit(this.designGraph(snapshot), text, this.LANGS[I18n.lang] || 'zh-CN').then(function (r) {
+    return AiEditAdapter.edit(this.designGraph(snapshot), text, this.LANGS[I18n.lang] || 'zh-CN',
+      (typeof Binding !== 'undefined' && Binding.modelId) || (typeof ModelSel !== 'undefined' ? ModelSel.current : '')).then(function (r) {
       var d = r.data || {};
       if (!r.ready) { self.set('notready', tr('ai.notReady')); return; }
       if (r.status === 503) { self.set('unavailable', tr('ai.unavailable'), d.reason || 'ai-unavailable'); return; }
+      if (r.status === 409 && d.reason === 'model-mismatch') {
+        /* 后端 strict 校验：期望模型 ≠ 当前加载模型 → 显示两者并提示切换或重新绑定 */
+        self.mismatch = { expected:String(d.expected || ''), actual:String(d.actual || (typeof ModelSel !== 'undefined' ? ModelSel.current : '')) };
+        self.set('mismatch', tr('ai.mismatch', self.mismatch), 'model-mismatch');
+        return;
+      }
       if (r.status >= 500 || r.status >= 400 && r.status !== 409) { self.set('failed', tr('ai.failed'), d.reason || ('http-' + r.status)); return; }
       if (!Array.isArray(d.ops)) { self.set('failed', tr('ai.failed'), d.reason || 'ai-bad-response'); return; }
       self.proposal = { ops:d.ops, explanation:String(d.explanation || ''), warnings:Array.isArray(d.warnings) ? d.warnings : [],
@@ -171,7 +196,7 @@ var AiEdit = {
     var st = document.getElementById('ai-status'), box = document.getElementById('ai-result');
     var send = document.getElementById('ai-send');
     if (send) send.disabled = this.state === 'loading' || this.state === 'applying';
-    var warn = /^(notready|unavailable|failed|error)$/.test(this.state) || (this.state === 'proposal' && this.message);
+    var warn = /^(notready|unavailable|failed|error|mismatch)$/.test(this.state) || (this.state === 'proposal' && this.message);
     if (st) {
       st.innerHTML = esc(this.message || tr('ai.idle')) + (this.code ? ' <code class="ai-code">' + esc(this.code) + '</code>' : '');
       st.className = 'ai-status' + (warn ? ' is-warn' : '') + (this.state === 'applied' ? ' is-ok' : '');
@@ -197,6 +222,11 @@ var AiEdit = {
       if (this.undoSnapshot) h += '<div class="ai-actions"><button class="btn" type="button" data-ai="undo">' + esc(tr('ai.undo')) + '</button></div>';
     } else if (this.state === 'failed') {
       h += '<div class="ai-actions"><button class="btn" type="button" data-ai="retry">' + esc(tr('ai.retry')) + '</button></div>';
+    } else if (this.state === 'mismatch') {
+      var mm = this.mismatch || { expected:'', actual:'' };
+      h += '<p class="ai-empty">' + esc(tr('ai.mismatchHelp', mm)) + '</p>' +
+        '<div class="ai-actions"><button class="btn primary" type="button" data-ai="switch-model">' + esc(tr('ai.mismatchSwitch')) + '</button>' +
+        '<button class="btn" type="button" data-ai="rebind">' + esc(tr('ai.mismatchRebind')) + '</button></div>';
     } else if (this.state === 'unavailable') {
       h += '<p class="ai-empty">' + esc(tr('ai.unavailableHelp')) + '</p>';
     }
