@@ -44,6 +44,10 @@ export function createAiInbox(options = {}) {
   const observers = new Map();
 
   // 租约状态（flag 关时不读写，保证逐路径等价基线）
+  // 前台 overlay 最近一次可见 poll：后台页不得把队列抢走（多标签/被冻结的旧页）。
+  const visibleGraceMs = options.visibleGraceMs != null ? options.visibleGraceMs : 2000;
+  let lastVisiblePollAt = 0;
+
   let leaseSeq = 0;        // epoch 计数器，单调整数从 1 起
   let lease = null;        // null = 从未有租约
   const ownedCalls = new Map(); // callId -> { token, epoch, polledAt }；poll 出队登记，回执/清理删除
@@ -274,6 +278,13 @@ export function createAiInbox(options = {}) {
      */
     poll(query) {
       const consumerId = (query && query.consumerId) || '';
+      const hidden = !!(query && (query.hidden === true || query.hidden === '1' || query.visible === false || query.visible === '0'));
+      const nowVis = nowFn();
+      if (!hidden) lastVisiblePollAt = nowVis;
+      // 有前台 overlay 正在轮询时，后台页不得 splice 队列，否则设置页预览会超时且角色不变化。
+      if (hidden && lastVisiblePollAt > 0 && (nowVis - lastVisiblePollAt) < visibleGraceMs) {
+        return { calls: [] };
+      }
       if (!leaseEnabled()) {
         leaseArmed = false; // 重开 flag 时 grace 从头计时
         return { calls: queue.splice(0, queue.length) };

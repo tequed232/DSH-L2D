@@ -328,7 +328,7 @@
     '/* Editor-style overlay: align injected floats with studio tokens. */',
     '#dsh-l2d-root,.l2d-menu,.l2d-panel,.l2d-logpanel,#dsh-l2d-error-dialog{font-family:var(--studio-font-ui,system-ui);color:var(--studio-ink,#e9ecf3);}',
     '.l2d-menu,.l2d-panel,.l2d-logpanel{background:var(--studio-surface,#141821);border:1px solid var(--studio-line-strong,rgba(232,236,245,.22));border-radius:var(--studio-radius-md,10px);box-shadow:var(--studio-shadow-2,0 8px 24px rgba(0,0,0,.45));}',
-    '.l2d-menu{padding:6px;min-width:200px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;}',
+    '.l2d-menu{padding:6px;min-width:200px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;min-height:0;scrollbar-width:thin;scrollbar-color:var(--studio-line-strong,rgba(232,236,245,.22)) transparent;}',
     '.l2d-menu button{min-height:var(--studio-row-h,36px);padding:0 10px;border:1px solid transparent;border-radius:var(--studio-radius-sm,6px);font:var(--studio-text-sm,400 13px/1.5 system-ui);color:var(--studio-ink-2,#aeb7c7);background:transparent;transition:background var(--studio-transition-fast,100ms),color var(--studio-transition-fast,100ms),border-color var(--studio-transition-fast,100ms),box-shadow var(--studio-transition-fast,100ms),transform var(--studio-transition-fast,100ms);}',
     '.l2d-menu button:hover{background:var(--studio-hover,rgba(232,236,245,.06));color:var(--studio-ink,#e9ecf3);}',
     '.l2d-menu button:active{background:var(--studio-active,rgba(232,236,245,.11));transform:translateY(1px);}',
@@ -528,6 +528,14 @@
     document.body.appendChild(root);
     document.body.appendChild(menuEl);
     document.body.appendChild(panelEl);
+    menuEl.addEventListener('wheel', function (e) {
+      e.stopPropagation();
+    }, { passive: true });
+    window.addEventListener('wheel', function (e) {
+      if (menuEl && menuEl.classList.contains('open') && menuEl.contains(e.target)) {
+        e.stopPropagation();
+      }
+    }, { capture: true, passive: true });
 
     loadSettings();
     initRenderer();
@@ -1283,7 +1291,7 @@
   function buildAccessoryMenu() {
     if (!accessoryTable.loaded) {
       menuEl.appendChild(menuButton('加载饰品…', function () {}, true));
-      loadAccessoryTable(function () { setTimeout(buildMenu, 30); });
+      loadAccessoryTable(function () { setTimeout(function () { buildMenu(); if (menuEl && menuEl.classList.contains('open')) placeMenu(); }, 30); });
       return;
     }
     if (!accessoryTable.slots.length) {
@@ -1440,6 +1448,7 @@
         setTimeout(buildMenu, 30);
       }, true));
       buildQuickChat();
+      if (menuEl.classList.contains('open')) placeMenu();
       return;
     }
 
@@ -1449,6 +1458,7 @@
         setTimeout(buildMenu, 30);
       }, true));
       buildAccessoryMenu();
+      if (menuEl.classList.contains('open')) placeMenu();
       return;
     }
 
@@ -1475,6 +1485,7 @@
         applyAppearance(null);
         setTimeout(buildMenu, 30);
       }, true));
+      if (menuEl.classList.contains('open')) placeMenu();
       return;
     }
 
@@ -1496,6 +1507,7 @@
         applyAppearance(null);
         setTimeout(buildMenu, 30);
       }, true));
+      if (menuEl.classList.contains('open')) placeMenu();
       return;
     }
 
@@ -1548,6 +1560,7 @@
       setTimeout(buildMenu, 30);
     }, true));
     menuEl.appendChild(menuButton('调试日志', toggleLogPanel, true));
+    if (menuEl.classList.contains('open')) placeMenu();
   }
 
   // ---- 快捷对话：Enter 发送 / Shift+Enter 换行；发送成功本地经字幕准入回显并关菜单 ----
@@ -1674,17 +1687,39 @@
     if (show) renderLogPanel();
   }
 
+  var lastMenuX = 8;
+  var lastMenuY = 8;
+
+  function placeMenu(x, y) {
+    if (!menuEl) return;
+    var pad = 8;
+    if (typeof x === 'number') lastMenuX = x;
+    if (typeof y === 'number') lastMenuY = y;
+    var maxH = Math.max(160, window.innerHeight - pad * 2);
+    menuEl.style.maxHeight = maxH + 'px';
+    var w = menuEl.offsetWidth || 160;
+    var h = menuEl.offsetHeight || 180;
+    var left = Math.min(window.innerWidth - w - pad, Math.max(pad, lastMenuX));
+    var top = Math.min(window.innerHeight - h - pad, Math.max(pad, lastMenuY));
+    var avail = window.innerHeight - pad - top;
+    if (h > avail) {
+      menuEl.style.maxHeight = Math.max(160, avail) + 'px';
+      h = menuEl.offsetHeight || avail;
+      if (h > avail) {
+        top = Math.max(pad, window.innerHeight - h - pad);
+        menuEl.style.maxHeight = Math.max(160, window.innerHeight - pad - top) + 'px';
+      }
+    }
+    menuEl.style.left = left + 'px';
+    menuEl.style.top = top + 'px';
+  }
+
   function openMenuAt(e) {
     buildMenu();
     if (!menuEl) return;
     menuEl.classList.add('open');
     menuEl.setAttribute('aria-hidden', 'false');
-    var w = menuEl.offsetWidth || 160;
-    var h = menuEl.offsetHeight || 180;
-    var x = Math.min(window.innerWidth - w - 8, Math.max(8, e.clientX));
-    var y = Math.min(window.innerHeight - h - 8, Math.max(8, e.clientY));
-    menuEl.style.left = x + 'px';
-    menuEl.style.top = y + 'px';
+    placeMenu(e.clientX, e.clientY);
   }
 
   function moodFromText(text) {
@@ -5543,7 +5578,9 @@
     aiPollTimer = setInterval(function () {
       if (aiPollHoldTicks > 0) { aiPollHoldTicks--; return; } // 租约被他人持有：降频轮询
       if (!window.DSH_L2D_AI) return;
-      fetch('/dsh-l2d/ai/poll?consumer=' + encodeURIComponent(__aiConsumerId) + '&version=' + encodeURIComponent(__bootTag || ''), { cache: 'no-store' })
+      // 后台标签页被浏览器节流/冻结时若仍来 splice 队列，设置页预览会等到超时，前台角色也不变。
+      var hidden = typeof document !== 'undefined' && document.hidden;
+      fetch('/dsh-l2d/ai/poll?consumer=' + encodeURIComponent(__aiConsumerId) + '&version=' + encodeURIComponent(__bootTag || '') + '&hidden=' + (hidden ? '1' : '0'), { cache: 'no-store' })
         .then(function (r) {
           return r.ok ? r.json() : null;
         })

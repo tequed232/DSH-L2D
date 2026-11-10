@@ -507,4 +507,34 @@ assert.equal(inbox.post({ id: 999 }).ok, false);
   console.log('SB8 接管失败回执通知 ok');
 }
 
+// ---------------------------------------------------------------- 后台 poll 不得抢走前台队列（设置页预览超时的根因）
+{
+  let now = 1000;
+  const box = createAiInbox({ now: () => now, visibleGraceMs: 2000 });
+  box.call('l2d_set_expression', { name: '脸红' });
+  const front = box.poll({ hidden: false });
+  assert.equal(front.calls.length, 1, '前台 poll 取走调用');
+  assert.equal(front.calls[0].args.name, '脸红');
+
+  box.call('l2d_set_expression', { name: '爱心眼' });
+  now += 200;
+  const back = box.poll({ hidden: true });
+  assert.equal(back.calls.length, 0, '2s 宽限内后台不得 splice');
+  now += 200;
+  const front2 = box.poll({ hidden: false });
+  assert.equal(front2.calls.length, 1, '前台仍能取到被保护的调用');
+  assert.equal(front2.calls[0].args.name, '爱心眼');
+  console.log('后台 poll 不抢前台队列 ok');
+}
+
+{
+  let now = 1000;
+  const box = createAiInbox({ now: () => now, visibleGraceMs: 2000 });
+  box.call('l2d_set_expression', { name: '屑' });
+  // 从未有前台 poll：仅后台标签（例如设置开在新窗口、角色页在后台）仍应取到调用
+  const onlyHidden = box.poll({ hidden: true });
+  assert.equal(onlyHidden.calls.length, 1, '无前台时后台仍可执行');
+  console.log('仅后台页仍可取调用 ok');
+}
+
 console.log('ai-inbox ok');

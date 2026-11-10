@@ -1119,13 +1119,16 @@ export function apply(root, config = {}) {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       // 消费者身份：新 overlay 带 ?consumer=<页面自生成 id>（version 仅诊断）；旧 overlay 无参数 → 空队列降级
       let consumerId = '';
+      let hidden = false;
       try {
-        consumerId = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('consumer') || '');
+        const q = new URL(req.url, 'http://127.0.0.1').searchParams;
+        consumerId = String(q.get('consumer') || '');
+        hidden = q.get('hidden') === '1' || q.get('visible') === '0';
       } catch {
         consumerId = '';
       }
       // 搭车：把反向桥事件摘要一并带给页面，overlay 可并入 l2d_get_state
-      const polled = aiInbox.poll({ consumerId });
+      const polled = aiInbox.poll({ consumerId, hidden });
       polled.reverse = reverseLog.snapshot();
       sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(polled), 'utf8'));
     });

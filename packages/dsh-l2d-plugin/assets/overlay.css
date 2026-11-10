@@ -463,6 +463,22 @@
 #dsh-l2d-root .l2d-gear:hover{background:var(--studio-hover,rgba(232,236,245,.06));}
 .l2d-snap-ghost{background:var(--studio-accent-soft,#24334a);border:1px solid var(--studio-accent,#9dc1ff);border-radius:var(--studio-radius-md,10px);}
 
+
+.l2d-menu {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--studio-line-strong, rgba(232,236,245,.22)) transparent;
+}
+.l2d-menu::-webkit-scrollbar { width: 6px; height: 6px; }
+.l2d-menu::-webkit-scrollbar-thumb {
+  background: var(--studio-line-strong, rgba(232,236,245,.22));
+  border-radius: 6px;
+}
+.l2d-menu::-webkit-scrollbar-track { background: transparent; }
+.l2d-menu::-webkit-scrollbar-corner { background: transparent; }
 .l2d-menu:has(.l2d-acc-row) { width: min(320px, calc(100vw - 16px)); }
 .l2d-acc-slot-label {
   padding: 6px 10px 2px;
