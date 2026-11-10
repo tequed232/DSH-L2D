@@ -51,18 +51,19 @@ node tools/motion-graph-build.mjs verify
    import/export 的歧义文件按 ESM 解析，而 ESM 禁止 HTML 注释；浏览器 `<script>`
    走的是 Script 目标，以 `.cjs` 检查与之一致）。
 4. **回归**：`node tools/dev-server/index.mjs --port 5332` 后访问
-   `/dsh-l2d/motion-graph.html?selftest=1`，tab_title 应为八项全绿
-   （validate-ok roundtrip-ok sim resizers-ok ctx-ok combo-ok panels-ok console-ok）。
+   `/dsh-l2d/motion-graph.html?selftest=1`，tab_title 应为十组全绿
+   （validate-ok roundtrip-ok sim resizers-ok ctx-ok combo-ok panels-ok console-ok chips-ok jsonpv-ok）。
 
 ## 如何抽取下一个模块（规程）
 
 1. 在 `assets/motion-graph.html` 中目标区块（含其头注释）前后各加一行
    `<!-- BUILD:SPLIT <name> -->` / `<!-- BUILD:END <name> -->`（name 用小写连字符）。
-2. `node tools/motion-graph-build.mjs verify` —— 此刻无模块文件，应输出 IDENTICAL。
+2. `cp assets/motion-graph.html /tmp/mg-before.html` 留快照（已有 template.html 时 `verify` 以旧模板构建，
+   新标记尚未入模板，此步 verify 会报 DIFF，属预期，不要据此回退）。
 3. `node tools/motion-graph-build.mjs extract` —— 模块落盘、模板区段清空。
-4. `node tools/motion-graph-build.mjs build && ... verify` —— 必须回到 IDENTICAL
-   （与 extract 前的文件逐字节一致，纯搬移零语义变化）。
-5. `node --check modules/<name>.js` + dev-server selftest 八项全绿。
+4. `node tools/motion-graph-build.mjs build && ... verify` —— 必须回到 IDENTICAL，
+   且 `cmp /tmp/mg-before.html assets/motion-graph.html` 无输出（纯搬移零语义变化）。
+5. `node --check modules/<name>.js` + dev-server selftest 全绿。
 6. 之后修改该模块请编辑 `editor-src/modules/<name>.js`，改完 `build` 回写；
    **不要直接改产物中被标记包裹的区段**（会被下次 build 覆盖）。
 
@@ -72,6 +73,8 @@ node tools/motion-graph-build.mjs verify
 | --- | --- | --- |
 | `combos.js` | `var Combos = {...}`（含头注释） | 自定义组合事件，localStorage `dsh-mg-combos.v1` |
 | `panel-layers.js` | `var PanelLayers = {...}`（含头注释） | 监看浮窗图层管理，localStorage `dsh-mg-panels.v1` |
+| `hint-bar.js` | `var HintBar = {...}`（含头注释） | 画布操作指南条收起/展开，localStorage 持久化 |
+| `rail-chips.js` | `var RailChips = {...}`（含头注释） | 左右栏收起为悬浮 chip，localStorage `dsh-mg-rail-chips.v1` |
 
 两个模块都依赖同 `<script>` 作用域内的前置声明（`esc`、`$$`、`localStorage` 等）
 与后置引用（`UI`、`Demo` 等），运行期才解析，因此按模板中的原声明顺序内联即可，

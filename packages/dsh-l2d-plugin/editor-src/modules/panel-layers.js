@@ -13,9 +13,10 @@ var PanelLayers = {
     { id: 'sim-panel', name: '模拟监视 LOCAL SIM' },
     { id: 'minimap-wrap', name: '小地图 MINIMAP' },
     { id: 'monitor-win', name: 'Live2D 监看 MONITOR' },
-    { id: 'exec-console', name: '执行监视 CONSOLE' }
+    { id: 'exec-console', name: '执行监视 CONSOLE' },
+    { id: 'json-preview', name: 'JSON 预览 PREVIEW' }
   ],
-  state: { order: ['sim-panel', 'minimap-wrap', 'monitor-win', 'exec-console'], collapsed: {}, hidden: {}, pos: {} },
+  state: { order: ['sim-panel', 'minimap-wrap', 'monitor-win', 'exec-console', 'json-preview'], collapsed: {}, hidden: {}, pos: {} },
   load: function () {
     try {
       var raw = localStorage.getItem(this.KEY);

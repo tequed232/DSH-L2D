@@ -376,6 +376,29 @@ body[data-selftest-ui="1"] .dock-resizer { display:block; }
 #exec-console .ec-badge.ec-stopped { color:var(--warn); border-color:color-mix(in srgb,var(--warn) 45%,var(--line)); }
 #exec-console.fp-collapsed .ec-body { display:none; }
 #exec-console.fp-collapsed .ec-head { border-bottom:0; }
+/* ---- JSON 预览浮窗：正常模式可用（与 exec-console 同款图层式浮窗），只读、随画布刷新 ---- */
+#json-preview {
+  position:absolute; right:14px; top:14px; z-index:6; width:360px; max-height:min(420px,70%);
+  display:none; flex-direction:column;
+  background:var(--panel); border:1px solid var(--mg-border-strong); border-radius:var(--r-md);
+  box-shadow:0 16px 40px rgba(0,0,0,.45); overflow:hidden;
+}
+#json-preview.show { display:flex; }
+#json-preview .jp-head {
+  display:flex; align-items:center; gap:8px; flex:none; padding:7px 10px;
+  border-bottom:1px solid var(--mg-border-strong); cursor:move;
+}
+#json-preview .jp-head b { flex:1; min-width:0; font:600 10px var(--mono); letter-spacing:.1em; color:var(--ink2); }
+#json-preview .jp-meta { font:11px var(--mono); color:var(--ink3); white-space:nowrap; }
+#json-preview .jp-body {
+  flex:1; min-height:0; overflow:auto; margin:0; padding:8px 10px;
+  font:11px/1.55 var(--mono); color:var(--ink); white-space:pre; tab-size:2;
+}
+#json-preview.fp-collapsed .jp-body { display:none; }
+#json-preview.fp-collapsed .jp-head { border-bottom:0; }
+.preset-confirm-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; }
+.preset-confirm-stats div { border:1px solid var(--line); border-radius:var(--r-sm); padding:8px 10px; font-size:12px; color:var(--ink2); }
+.preset-confirm-stats b { display:block; font-weight:600; color:var(--ink); font-size:13px; margin-top:2px; }
 .user-hidden { display:none !important; }
 #layers-pop {
   position:absolute; right:14px; bottom:56px; z-index:47; width:264px;
@@ -557,6 +580,7 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
     <button class="btn" id="btn-monitor" title="Live2D 监看：宿主在线时显示真实模型执行画面"><span class="ico">◉</span><span class="lbl">监看</span></button>
     <button class="btn" id="btn-exec" title="执行监视控制台：设置页运行节点图后自动推送执行回执时间线"><span class="ico">▤</span><span class="lbl">执行</span></button>
     <button class="btn" id="btn-validate" title="结构校验"><span class="ico">✓</span><span class="lbl">结构校验</span></button>
+    <button class="btn" id="btn-json" title="JSON 预览：只读，随画布实时刷新" aria-pressed="false"><span class="ico">{}</span><span class="lbl">JSON</span></button>
     <button class="btn" id="btn-export" title="导出 JSON"><span class="ico">⇩</span><span class="lbl">导出</span></button>
     <button class="btn" id="btn-import" title="导入 JSON"><span class="ico">⇧</span><span class="lbl">导入</span></button>
     <button class="btn icon-only" id="btn-menu" title="更多"><span class="ico">⋯</span></button>
@@ -619,6 +643,13 @@ body[data-selftest-ui="1"] #mg-selftest, body[data-selftest-ui="1"] #mg-export {
       <div class="ec-body" id="exec-console-body">
         <div class="ec-empty">等待执行数据：从设置页运行节点图后自动刷新</div>
       </div>
+    </div>
+    <div id="json-preview" role="region" aria-label="JSON 预览">
+      <div class="jp-head"><b>JSON PREVIEW</b><span class="jp-meta" id="json-preview-meta"></span>
+        <button class="fp-btn" id="json-preview-copy" title="复制 JSON" aria-label="复制 JSON">⧉</button>
+        <button class="fp-btn" data-fp-collapse="json-preview" title="收起/展开">—</button>
+        <button class="fp-btn" id="json-preview-close" title="关闭" aria-label="关闭 JSON 预览">×</button></div>
+      <pre class="jp-body" id="json-preview-body"></pre>
     </div>
     <div id="zoombar">
       <button id="zoom-out" title="缩小">−</button>
@@ -1410,145 +1441,55 @@ var Validator = {
 <!-- BUILD:SPLIT panel-layers -->
 <!-- BUILD:END panel-layers -->
 
-/* =========================================================================
-   HintBar：画布顶部操作指南条的收起/展开（本轮交互改造 ①）。
-   - 收起：条体隐藏，仅剩「操作指南 ?」小 chip（position:absolute left:14 top:12）
-   - 状态持久化 localStorage 'dsh-mg-hint-collapsed.v1'（file:// 受限时静默降级）
-   ========================================================================= */
-var HintBar = {
-  KEY: 'dsh-mg-hint-collapsed.v1',
-  collapsed: false,
-  init: function () {
-    try { this.collapsed = localStorage.getItem(this.KEY) === '1'; } catch (err) { /* file:// 降级 */ }
-    this.apply();
-    var self = this;
-    var t = document.getElementById('hint-toggle');
-    if (t) t.addEventListener('click', function () { self.collapsed = true; self.persist(); self.apply(); });
-    var chip = document.getElementById('hint-chip');
-    if (chip) chip.addEventListener('click', function () { self.collapsed = false; self.persist(); self.apply(); });
-  },
-  persist: function () { try { localStorage.setItem(this.KEY, this.collapsed ? '1' : '0'); } catch (err) { /* ignore */ } },
-  apply: function () {
-    var bar = document.getElementById('canvas-hint'), chip = document.getElementById('hint-chip');
-    if (!bar || !chip) return;
-    bar.classList.toggle('hidden', this.collapsed);
-    /* chip 基础样式 display:none，用 inline display 显式揭示（.hidden 只用于条体） */
-    chip.style.display = this.collapsed ? 'block' : 'none';
-  }
-};
+<!-- BUILD:SPLIT hint-bar -->
+<!-- BUILD:END hint-bar -->
+
+<!-- BUILD:SPLIT rail-chips -->
+<!-- BUILD:END rail-chips -->
 
 /* =========================================================================
-   RailChips：三栏可收起（本轮交互改造 ②）。
-   - #library / #inspector 收起 → display:none（flex 兄弟，#canvas-wrap 自动扩宽）
-   - 对应 col-resizer 同步隐藏；生成一个小悬浮 chip（固定定位、可拖动、位置持久化）
-   - chip 单击 → 恢复该栏（拖拽结束的 click 被抑制，不误触发）
-   - 位置持久化 localStorage 'dsh-mg-rail-chips.v1'；chip 尺寸 ≤80×28px，初始贴原栏边缘
-   - JSON 预览（#mg-export）仅 selftest 模式存在（display:none → body[data-selftest-ui] 揭示），
-     正常模式无此窗口，故无需收起能力（调查结论见 selftest 报告）。
+   JsonPreview：正常模式下的只读 JSON 预览浮窗（原 #mg-export 仅 selftest 可见）。
+   - 内容 = Serializer.exportText()，与「导出」完全同源；显示时随 UI.refreshAll 刷新
+   - 顶栏「JSON」按钮 / 菜单「JSON 预览」开关；PanelLayers 管理拖动、收起、图层
    ========================================================================= */
-var RailChips = {
-  KEY: 'dsh-mg-rail-chips.v1',
-  defs: {
-    lib:  { panel:'library',   resizer:'rz-lib',  label:'库',   side:'left',  name:'节点库' },
-    insp: { panel:'inspector', resizer:'rz-insp', label:'属性', side:'right', name:'属性栏' }
-  },
-  pos: {},
-  load: function () {
-    try {
-      var raw = localStorage.getItem(this.KEY);
-      if (raw) { var s = JSON.parse(raw); if (s && typeof s === 'object') this.pos = s; }
-    } catch (err) { /* file:// 降级 */ }
-  },
-  save: function () {
-    try { localStorage.setItem(this.KEY, JSON.stringify(this.pos)); } catch (err) { /* ignore */ }
-  },
-  toggle: function (kind, force) {
-    var d = this.defs[kind]; if (!d) return;
-    var panel = document.getElementById(d.panel);
-    var collapse = force === undefined ? panel.style.display !== 'none' : !!force;
-    var btn = document.getElementById(kind === 'lib' ? 'lib-collapse' : 'insp-collapse');
-    var chip = document.getElementById('rail-chip-' + kind);
-    if (collapse) {
-      panel.style.display = 'none';
-      var rz = document.getElementById(d.resizer); if (rz) rz.style.display = 'none';
-      if (btn) btn.style.display = 'none';
-      if (!chip) {
-        chip = document.createElement('button');
-        chip.id = 'rail-chip-' + kind;
-        chip.type = 'button';
-        chip.className = 'rail-chip';
-        chip.textContent = d.label;
-        chip.title = '展开' + d.name;
-        document.body.appendChild(chip);
-        this.bindChip(chip, kind);
-      }
-      this.placeChip(chip, kind);
-      chip.style.display = 'inline-flex';
-      UI.status(d.name + '已收起：悬浮「' + d.label + '」chip 可拖动 / 单击恢复');
-    } else {
-      panel.style.display = '';
-      var rz2 = document.getElementById(d.resizer); if (rz2) rz2.style.display = '';
-      if (btn) btn.style.display = '';
-      if (chip && chip.parentNode) chip.parentNode.removeChild(chip);
-      UI.status(d.name + '已展开');
-    }
-  },
-  placeChip: function (chip, kind) {
-    var w = chip.offsetWidth || 56, h = chip.offsetHeight || 26;
-    var saved = this.pos[kind], x, y;
-    if (saved && typeof saved.x === 'number' && typeof saved.y === 'number') {
-      x = saved.x; y = saved.y;
-    } else if (this.defs[kind].side === 'left') {
-      x = 8; y = 64;
-    } else {
-      x = Math.max(8, window.innerWidth - w - 8); y = 64;
-    }
-    x = clamp(x, 0, Math.max(0, window.innerWidth - w));
-    y = clamp(y, 0, Math.max(0, window.innerHeight - h));
-    chip.style.left = x + 'px'; chip.style.top = y + 'px';
-  },
-  bindChip: function (chip, kind) {
-    var self = this;
-    var drag = null;   /* { ox, oy, moved } */
-    chip.addEventListener('pointerdown', function (e) {
-      if (e.button !== 0) return;
-      var r = chip.getBoundingClientRect();
-      drag = { sx: e.clientX, sy: e.clientY, ox: e.clientX - r.left, oy: e.clientY - r.top, moved: false };
-      var move = function (ev) {
-        if (!drag) return;
-        if (Math.abs(ev.clientX - drag.sx) + Math.abs(ev.clientY - drag.sy) > 4) drag.moved = true;
-        if (!drag.moved) return;
-        chip.style.left = clamp(ev.clientX - drag.ox, 0, Math.max(0, window.innerWidth - chip.offsetWidth)) + 'px';
-        chip.style.top = clamp(ev.clientY - drag.oy, 0, Math.max(0, window.innerHeight - chip.offsetHeight)) + 'px';
-      };
-      var up = function () {
-        window.removeEventListener('pointermove', move);
-        window.removeEventListener('pointerup', up);
-        window.removeEventListener('pointercancel', up);
-        if (drag && drag.moved) {
-          self.pos[kind] = { x: Math.round(parseFloat(chip.style.left) || 0), y: Math.round(parseFloat(chip.style.top) || 0) };
-          self.save();
-          self._suppressClick = true;   /* 拖拽结束的 click 不触发展开 */
-        }
-        drag = null;
-      };
-      window.addEventListener('pointermove', move);
-      window.addEventListener('pointerup', up);
-      window.addEventListener('pointercancel', up);
-      e.preventDefault();
-    });
-    chip.addEventListener('click', function () {
-      if (self._suppressClick) { self._suppressClick = false; return; }
-      self.toggle(kind, false);
-    });
-  },
+var JsonPreview = {
   init: function () {
-    this.load();
-    var self = this;
-    var lc = document.getElementById('lib-collapse');
-    if (lc) lc.addEventListener('click', function () { self.toggle('lib', true); });
-    var ic = document.getElementById('insp-collapse');
-    if (ic) ic.addEventListener('click', function () { self.toggle('insp', true); });
+    PanelLayers.makeDraggable('json-preview', '.jp-head');
+    var close = document.getElementById('json-preview-close');
+    if (close) close.addEventListener('click', function () { JsonPreview.toggle(false); });
+    var copy = document.getElementById('json-preview-copy');
+    if (copy) copy.addEventListener('click', function () { JsonPreview.copy(); });
+  },
+  isShown: function () {
+    var el = document.getElementById('json-preview');
+    return !!el && el.classList.contains('show');
+  },
+  toggle: function (force) {
+    var el = document.getElementById('json-preview');
+    if (!el) return false;
+    var show = force === undefined ? !el.classList.contains('show') : !!force;
+    el.classList.toggle('show', show);
+    var btn = document.getElementById('btn-json');
+    if (btn) btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+    if (show) { this.refresh(); PanelLayers.raise('json-preview'); }
+    return show;
+  },
+  refresh: function () {
+    if (!this.isShown()) return;
+    var body = document.getElementById('json-preview-body');
+    var meta = document.getElementById('json-preview-meta');
+    var text = Serializer.exportText();
+    if (body && body.textContent !== text) body.textContent = text;
+    if (meta) meta.textContent = Graph.nodes.length + 'N · ' + Graph.edges.length + 'E · ' + text.length + 'B';
+  },
+  copy: function () {
+    var text = Serializer.exportText();
+    var done = function () { UI.toast('JSON 已复制到剪贴板', 'ok'); };
+    var fail = function () { UI.toast('复制失败：浏览器不允许访问剪贴板，可用「导出」手动复制', 'err'); };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fail);
+      else fail();
+    } catch (err) { fail(); }
   }
 };
 
@@ -1652,6 +1593,7 @@ var UI = {
     this.renderLibrary(); this.bindTopbar(); this.bindCanvas(); this.bindInspector(); this.bindModal(); this.bindResizers(); this.bindContextMenus();
     PanelLayers.init();
     ExecConsole.init();
+    JsonPreview.init();
     HintBar.init();
     RailChips.init();
     this.applyViewport(); this.refreshAll();
@@ -1801,7 +1743,7 @@ var UI = {
     inp.focus();
   },
   /* ---- 预设库 / PRESETS：Slots（按 modelId 分槽）作为内置节点预设选择库 ----
-     数据源 = Slots.list()；每项单击 = 载入整图（直接载入 + toast 说明，无模态）；
+     数据源 = Slots.list()；每项单击 = 弹确认模态（显示当前/预设规模，可先备份再载入），确认后才替换画布；
      「+ 存当前」复用现有保存槽位流程（openSlots 的 name 输入模态）；删除与 combo-del 同款交互 */
   renderPresets: function () {
     var box = $('#lib-presets');
@@ -1852,11 +1794,41 @@ var UI = {
     var add = $('#preset-add');
     if (add) add.addEventListener('click', function () { UI.openSlots(true); });
   },
+  PRESET_BACKUP_SLOT: '载入前自动备份',
   loadPreset: function (slot) {
+    var raw = Slots.load(slot);
+    if (!raw) { this.toast('预设不存在或已被删除', 'err'); return false; }
+    if (!Graph.nodes.length) { this.applyPreset(slot); return true; }
+    var pn = '?', pname = '';
+    try {
+      var doc = JSON.parse(raw);
+      var ed = doc.meta && doc.meta.editor;
+      pn = ed && Array.isArray(ed.nodes) ? ed.nodes.length
+        : (doc.graph && Array.isArray(doc.graph.nodes) ? doc.graph.nodes.length : 0);
+      pname = String(doc.name || '');
+    } catch (err) { /* 保留 '?' */ }
+    this.openModal('<h2>载入预设「' + esc(slot) + '」？</h2>' +
+      '<p class="sub">载入会替换整张画布。编辑器没有撤销，如需保留当前内容，请先备份。</p>' +
+      '<div class="preset-confirm-stats">' +
+      '<div>当前画布<b class="num">' + Graph.nodes.length + ' 节点 · ' + Graph.edges.length + ' 连线</b></div>' +
+      '<div>预设内容<b class="num">' + esc(String(pn)) + ' 节点' + (pname ? ' · ' + esc(pname) : '') + '</b></div></div>' +
+      '<div class="modal-actions"><button class="btn" data-close>取消</button>' +
+      '<button class="btn" id="preset-backup-load">备份当前后载入</button>' +
+      '<button class="btn primary" id="preset-confirm">替换并载入</button></div>');
+    $('#preset-confirm').addEventListener('click', function () { UI.closeModal(); UI.applyPreset(slot); });
+    $('#preset-backup-load').addEventListener('click', function () {
+      Slots.save(UI.PRESET_BACKUP_SLOT, Serializer.exportText());
+      UI.closeModal(); UI.applyPreset(slot, true);
+    });
+    setTimeout(function () { var b = $('#preset-confirm'); if (b) b.focus(); }, 0);
+    return true;
+  },
+  applyPreset: function (slot, backedUp) {
     var raw = Slots.load(slot);
     if (!raw) { this.toast('预设不存在或已被删除', 'err'); return; }
     IO.applyText(raw, true);
-    this.toast('已载入预设「' + slot + '」· 当前画布已替换（编辑器无撤销 undo，建议先存槽备份）', 'ok');
+    this.renderPresets();
+    this.toast('已载入预设「' + slot + '」' + (backedUp ? ' · 原画布已备份到「' + this.PRESET_BACKUP_SLOT + '」' : ''), 'ok');
     this.status('已载入预设「' + slot + '」');
   },
   appendNode: function (type) {
@@ -2084,6 +2056,7 @@ var UI = {
     this.renderInspector(); this.renderStatus();
     this.updateBadge(Validator.check(Serializer.build()));
     $('#doc-name').value = Binding.name; $('#doc-model').value = Binding.modelId;
+    JsonPreview.refresh();
   },
   status: function (text, pct) {
     $('#status-text').textContent = text;
@@ -2102,6 +2075,7 @@ var UI = {
     $('#btn-sim').addEventListener('click', function () { RuntimeCtl.toggle(); });
     $('#btn-monitor').addEventListener('click', function () { UI.toggleMonitor(); });
     $('#btn-exec').addEventListener('click', function () { UI.toggleExecConsole(); });
+    $('#btn-json').addEventListener('click', function () { JsonPreview.toggle(); });
     $('#monitor-close').addEventListener('click', function () { UI.toggleMonitor(false); });
     $('#btn-validate').addEventListener('click', function () { UI.openValidation(); });
     $('#btn-export').addEventListener('click', function () { UI.openExport(); });
@@ -2282,6 +2256,7 @@ var UI = {
     { label:'自动布局', act:'layout' }, { label:'适配视图 (Ctrl+0)', act:'fit' },
     { label:'恢复默认示例图', act:'demo' }, { sep:true },
     { label:'保存槽位（按 modelId）', act:'slots' },
+    { label:'JSON 预览', act:'jsonpv' },
     { label:'导出 JSON', act:'export' }, { label:'导入 JSON', act:'import' },
     { sep:true },
     { label:'切换浅/深色主题', act:'theme' }, { label:'切换点阵网格', act:'grid' },
@@ -2308,6 +2283,7 @@ var UI = {
       case 'demo': Demo.load(); break;
       case 'slots': UI.openSlots(); break;
       case 'export': UI.openExport(); break;
+      case 'jsonpv': JsonPreview.toggle(); break;
       case 'import': UI.openImport(); break;
       case 'validate': UI.openValidation(); break;
       case 'theme':
@@ -3071,9 +3047,17 @@ function runSelfTest() {
       Slots.save('__selftest_preset__', Serializer.exportText());
       UI.renderPresets();
       var presetOk = !!document.querySelector('#lib-presets .preset-item[data-preset="__selftest_preset__"]');
-      Graph.clear(); UI.refreshAll();
+      /* 非空画布载入须先弹确认模态：取消不改画布，确认才替换 */
+      var nBefore = Graph.nodes.length;
       UI.loadPreset('__selftest_preset__');
-      var presetLoad = Graph.nodes.length === nSaved && (!firstId || !!Graph.byId(firstId));
+      var confirmShown = $('#modal-layer').classList.contains('show') && !!$('#preset-confirm') && !!$('#preset-backup-load');
+      var cancelBtn = $('#modal-box [data-close]'); if (cancelBtn) cancelBtn.click();
+      var cancelKeeps = !$('#modal-layer').classList.contains('show') && Graph.nodes.length === nBefore;
+      Graph.clear(); Graph.addNode(Object.keys(NodeDef.defs)[0], { x:40, y:40 }); UI.refreshAll();
+      UI.loadPreset('__selftest_preset__');
+      var cbtn = $('#preset-confirm'); if (cbtn) cbtn.click();
+      var presetLoad = confirmShown && cancelKeeps && !$('#modal-layer').classList.contains('show') &&
+        Graph.nodes.length === nSaved && (!firstId || !!Graph.byId(firstId));
       Slots.del('__selftest_preset__');
       UI.renderPresets();
       var presetClean = !document.querySelector('#lib-presets .preset-item[data-preset="__selftest_preset__"]');
@@ -3102,6 +3086,24 @@ function runSelfTest() {
         marquee:marqueeShown && marqueeDone, panMid:panMid && panEnd };
     } catch (e) { return { ok:false, error:String(e) }; }
   })();
+  /* 第十组：JSON 预览（正常模式可用的只读浮窗）——开/刷新同源/收起/关闭 */
+  var jsonT = (function () {
+    try {
+      var shown = JsonPreview.toggle(true);
+      var el = document.getElementById('json-preview');
+      var body = document.getElementById('json-preview-body');
+      var visible = shown && getComputedStyle(el).display !== 'none' && el.offsetWidth > 0;
+      var same = body.textContent === Serializer.exportText();
+      var n0 = Graph.nodes.length;
+      var added = Graph.addNode(Object.keys(NodeDef.defs)[0], { x:60, y:60 }); UI.refreshAll();
+      var live = body.textContent === Serializer.exportText() && Graph.nodes.length === n0 + 1;
+      Graph.removeNodes([added.id]); UI.refreshAll();
+      var inLayers = PanelLayers.state.order.indexOf('json-preview') >= 0;
+      var off = JsonPreview.toggle(false) === false && getComputedStyle(el).display === 'none';
+      var ok = visible && same && live && inLayers && off;
+      return { ok:ok, visible:visible, same:same, live:live, inLayers:inLayers, off:off };
+    } catch (e) { return { ok:false, error:String(e) }; }
+  })();
   var doc = Serializer.build();
   var result = {
     validate: v,
@@ -3117,7 +3119,8 @@ function runSelfTest() {
     combo: comboT,
     panels: panelsT,
     console: consoleT,
-    chips: chipsT
+    chips: chipsT,
+    jsonPreview: jsonT
   };
   $('#mg-selftest').textContent = JSON.stringify(result, null, 2);
   $('#mg-export').textContent = Serializer.exportText();
@@ -3134,6 +3137,8 @@ function runSelfTest() {
     + ' console-' + (consoleT.ok ? 'ok' : 'FAIL(' + (consoleT.error ? 'err=' + consoleT.error : 'z=' + consoleT.z + '/row=' + consoleT.row + '/col=' + consoleT.col + '/uncol=' + consoleT.uncol) + ')')
     + ' chips-' + (chipsT.ok ? 'ok' : 'FAIL(' + (chipsT.error ? 'err=' + chipsT.error :
       'hint=' + chipsT.hint + '/libChip=' + chipsT.libChip + '/inspChip=' + chipsT.inspChip + '/presets=' + chipsT.presets + '/marquee=' + chipsT.marquee + '/panMid=' + chipsT.panMid) + ')')
+    + ' jsonpv-' + (jsonT.ok ? 'ok' : 'FAIL(' + (jsonT.error ? 'err=' + jsonT.error :
+      'vis=' + jsonT.visible + '/same=' + jsonT.same + '/live=' + jsonT.live + '/layers=' + jsonT.inLayers + '/off=' + jsonT.off) + ')')
     + (rt.diff.length ? ' diff=' + rt.diff.join('|') : '');
 }
 
