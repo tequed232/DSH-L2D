@@ -1,4 +1,4 @@
-# Live2D 目录 · 大肥鱼（给 AI / 校验用）
+# Live2D 目录 · 大肥鱼.dsl2d.2048（给 AI / 校验用）
 
 ## 用途与纪律
 
@@ -12,6 +12,7 @@
 
 | 项 | 值 |
 |---|---|
+| modelId | `大肥鱼.dsl2d.2048` |
 | model3 | `大肥鱼.dsl2d.2048.model3.json` |
 | moc3 | `大肥鱼.moc3` |
 | cdi3 | `大肥鱼.cdi3.json` |
@@ -722,10 +723,11 @@
 - 参数量程全部来自 Cubism Core 读取 `大肥鱼.moc3`，不是命名推断。
 - cdi3 只有 Id/GroupId/Name，**不含** min/max/default。
 - pose3：未在模型目录中找到。
-- HitAreas：model3 声明为空数组。
+- HitAreas：model3 声明为 []。
 - moc3 与 cdi3 参数 Id 集合一致（0 差异）。
-- `ParamMouthOpen` 在 LIPSYNC_PARAMS 中，但 **未出现在本模型 moc3/cdi3**。
-- exp3 `裙子切换` 写 Clothes1=-1、`尾巴开关` 写 Clothes5=-1，超出 moc3 的 0..1；目录仍以 moc3 为准。
-- 成对动作槽 poseParams 来自 motion-director.ts，不是 moc3 字段。
-- HOST_ALLOWED_TOOLS 与 overlay case 列表可能不完全重合（如 l2d_cue 系列仅 overlay）。
+- exp3 `裙长切换` 写 Clothes1=-1（moc3 量程 0..1）；exp3 `尾巴开关` 写 Clothes5=-1（moc3 量程 0..1）；超出 moc3 量程，目录仍以 moc3 为准（播放由运行时钳制）。
+- `ParamMouthOpen` 在 LIPSYNC_PARAMS 中但未出现在本模型 moc3/cdi3（保留名拦截）。
+- 成对动作槽 poseParams 来自 motion-director.ts，不是 moc3 字段（仅当动作组存在时列出）。
+- forms 来自宿主 overlay 的 BODY_TYPES（大肥鱼专用）；本模型没有该表时 forms 为空。
+- HOST_ALLOWED_TOOLS 与 overlay case 列表是宿主代码事实，与模型无关。
 

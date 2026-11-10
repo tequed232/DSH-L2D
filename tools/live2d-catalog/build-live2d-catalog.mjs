@@ -490,6 +490,15 @@ async function main() {
     note: g.Name === 'LipSync' ? '口型红线，行为/节点不得写' : g.Name === 'EyeBlink' ? '眨眼组，引擎可接管' : '',
   }));
 
+  // 表情文件把参数写出 moc3 量程是模型既有行为（如大肥鱼 裙子切换 Clothes1=-1）：目录仍以 moc3 为准。
+  const outOfRange = [];
+  for (const e of expressions) {
+    for (const p of e.parameters || []) {
+      const r = rangeById.get(p.Id);
+      if (r && (Number(p.Value) < r.min || Number(p.Value) > r.max)) outOfRange.push(`exp3 \`${e.name}\` 写 ${p.Id}=${p.Value}（moc3 量程 ${r.min}..${r.max}）`);
+    }
+  }
+
   const notes = [
     `参数量程全部来自 Cubism Core 读取 \`${path.basename(moc3Path)}\`，不是命名推断。`,
     cdi3Path ? 'cdi3 只有 Id/GroupId/Name，**不含** min/max/default。' : 'cdi3 未找到：显示名/分组为空，量程仍以 moc3 为准。',
@@ -497,6 +506,7 @@ async function main() {
     `HitAreas：model3 声明为 ${JSON.stringify(model3.HitAreas || [])}。`,
     onlyMoc.length ? `仅在 moc3、不在 cdi3：${onlyMoc.join(', ')}` : 'moc3 与 cdi3 参数 Id 集合一致（0 差异）。',
     onlyCdi.length ? `仅在 cdi3、不在 moc3：${onlyCdi.join(', ')}` : null,
+    outOfRange.length ? `${outOfRange.join('；')}；超出 moc3 量程，目录仍以 moc3 为准（播放由运行时钳制）。` : null,
     '`ParamMouthOpen` 在 LIPSYNC_PARAMS 中但未出现在本模型 moc3/cdi3（保留名拦截）。',
     '成对动作槽 poseParams 来自 motion-director.ts，不是 moc3 字段（仅当动作组存在时列出）。',
     'forms 来自宿主 overlay 的 BODY_TYPES（大肥鱼专用）；本模型没有该表时 forms 为空。',
