@@ -33,11 +33,12 @@ import {
   saveNodegraph,
   loadNodegraph,
   runNodegraph,
+  checkRunModelBinding,
   createInboxActExecutor,
 } from './nodegraph.mjs';
 import { createRunRegistry } from './nodegraph-runs.mjs';
 import { deepseekChatJson, resolveDeepSeekKey } from './llm-channel.mjs';
-import { handleApplyOps, handleAiEdit, handleGraphGet, NODEGRAPH_API_BODY_LIMIT } from './nodegraph-api.mjs';
+import { handleApplyOps, handleAiEdit, handleCatalog, handleGraphGet, NODEGRAPH_API_BODY_LIMIT } from './nodegraph-api.mjs';
 import { isReservedParam } from './param-guards.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
 import { ageSummaryState, isActionTool, legacyAgentState, summarizeSession } from './session-events.mjs';
@@ -135,6 +136,20 @@ function overlayInjectRow() {
     placement: 'body',
     src: '/dsh-l2d/overlay.js?v=' + overlayBuildTag(),
   };
+}
+
+/**
+ * 当前模型 ID（统一裁决 2026-11-10）：模型文件名去 .model3.json（如 大肥鱼.dsl2d.2048）。
+ * 取目录里发现的第一个 .model3.json（discoverModelFiles 排序后取 [0]）；目录读不到 → ''。
+ * 能力画像路由与节点图模型绑定校验共用这一处取法，不再各写一份。
+ */
+function getCurrentModelId() {
+  try {
+    const modelFile = discoverModelFiles(MODEL_DIR)[0];
+    return modelFile ? modelFile.replace(/\.model3\.json$/, '') : '';
+  } catch {
+    return '';
+  }
 }
 
 export const name = 'dsh-l2d';
@@ -1167,6 +1182,14 @@ export function apply(root, config = {}) {
           return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['body 不是合法 JSON'] }), 'utf8'));
         }
         try {
+          // 新图默认 strict 绑定当前模型（2026-11-10 统一约定）：doc 完全没有 modelBinding
+          // 字段时注入；旧图显式带 bindingMode:'any' → 原样保存，不自动迁移。
+          if (doc && typeof doc === 'object' && !Array.isArray(doc) && doc.modelBinding === undefined) {
+            const modelId = getCurrentModelId();
+            doc.modelBinding = modelId
+              ? { modelId, modelHash: '', bindingMode: 'strict' }
+              : { bindingMode: 'any' };
+          }
           // saveNodegraph 内部先整体校验后原子写：重名覆盖前校验，失败原文件不动（SPEC §4）。
           const saved = saveNodegraph(doc);
           if (!saved.ok) {
@@ -1261,6 +1284,18 @@ export function apply(root, config = {}) {
       if (!name) {
         return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['name required'] }), 'utf8'));
       }
+      // 模型绑定闸门：strict 绑定模型 ≠ 当前模型 → 409 model-mismatch，一个动作都不发。
+      // 检查必须在 nodegraphRunRegistry.begin 之前——失败时不建 running 档，注册表零污染。
+      const gate = checkRunModelBinding(name, { currentModelId: getCurrentModelId() });
+      if (!gate.ok) {
+        return sendBuffer(res, gate.status || 409, MIME['.json'], Buffer.from(JSON.stringify({
+          ok: false,
+          reason: gate.reason || 'model-mismatch',
+          expected: gate.expected,
+          actual: gate.actual,
+          message: `节点图 strict 绑定模型 ${gate.expected}，当前模型 ${gate.actual}，未执行任何动作`,
+        }), 'utf8'));
+      }
       const executionId = randomUUID();
       const begun = nodegraphRunRegistry.begin(executionId, name);
       if (!begun.ok) {
@@ -1283,7 +1318,8 @@ export function apply(root, config = {}) {
       };
       (async () => {
         try {
-          const result = await runNodegraph(name, cancellableExecutor);
+          // currentModelId 传入执行层：any 模式绑定模型与当前模型不一致时结果附 warning。
+          const result = await runNodegraph(name, cancellableExecutor, { currentModelId: getCurrentModelId() });
           nodegraphRunRegistry.finish(executionId, result);
           // runNodegraph 约定：ok:false 且 status 为数字 → 该数字即 HTTP 状态码；
           // 正常执行回 executeActionSequence 原样（含 receipts/completedSegments/remainingSegments），200。
@@ -1373,24 +1409,42 @@ export function apply(root, config = {}) {
         nodegraphApiSend(res, { status: 500, payload: { ok: false, reason: 'internal-error' } });
       }
     };
-    route('/dsh-l2d/api/nodegraph/apply-ops', nodegraphApiPost((body) => handleApplyOps(body)));
+    route('/dsh-l2d/api/nodegraph/apply-ops', nodegraphApiPost((body) => handleApplyOps(body, { getCurrentModelId })));
     route('/dsh-l2d/api/nodegraph/ai-edit', nodegraphApiPost((body) => {
       const key = resolveDeepSeekKey(readSettings());
       const llm = key
         ? (prompt) => deepseekChatJson({ key, ...prompt, temperature: 0.2, maxTokens: 2000, timeoutMs: 30000 })
         : null;
-      return handleAiEdit(body, { llm });
+      return handleAiEdit(body, { llm, getCurrentModelId });
     }));
     route('/dsh-l2d/api/nodegraph/graph', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
       let name = '';
+      let model = '';
       try {
-        name = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('name') || '');
+        const params = new URL(req.url, 'http://127.0.0.1').searchParams;
+        name = String(params.get('name') || '');
+        model = String(params.get('model') || '');
       } catch {
         name = '';
+        model = '';
       }
-      nodegraphApiSend(res, handleGraphGet(name));
+      // 不带 name + ?model=X → 按模型过滤的图列表（strict 绑定该模型的图 + any 图标记）。
+      nodegraphApiSend(res, handleGraphGet(name, { getCurrentModelId, ...(model ? { listModel: model } : {}) }));
+    });
+    // 模型目录接口（唯一入口，不另开 /models）：GET catalog?model=X → 该模型动作组/表情/参数/forms。
+    // model 缺省用当前模型；模型缺清单回退全局并带 warning model-catalog-missing。
+    route('/dsh-l2d/api/nodegraph/catalog', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      let model = '';
+      try {
+        model = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('model') || '');
+      } catch {
+        model = '';
+      }
+      nodegraphApiSend(res, handleCatalog(model, { getCurrentModelId }));
     });
 
     // ------------------------------------------------------ 桌宠独立窗页面
@@ -1603,9 +1657,9 @@ export function apply(root, config = {}) {
         // 回退字母序第一份会把别的模型的画像当现状返回（错误画像驱动错误演出）。
         // 当前模型没有画像 → 404 no-profile，提示 rescan；仅当目录里发现不了
         // model3.json（目录不可读/为空）时才回退第一份，保持旧目录名下的旧行为。
-        const modelFile = discoverModelFiles(MODEL_DIR)[0];
-        if (modelFile) {
-          const expected = 'profile.' + modelFile.replace(/\.model3\.json$/, '') + '.json';
+        const currentId = getCurrentModelId();
+        if (currentId) {
+          const expected = 'profile.' + currentId + '.json';
           file = profiles.find((n) => n === expected) || null;
         } else {
           file = profiles[0] || null;
