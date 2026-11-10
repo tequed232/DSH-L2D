@@ -43,3 +43,9 @@ data/
 # 例外：stage-web 内自包含的注册表副本（Plugin Center 构建期导入）
 !apps/stage-web/src/data/
 !apps/stage-web/src/data/**
+
+# 文档中每模型分区/目录 JSON 可入库（不是授权模型资源；modelId 以 .2048 结尾，会撞到上面的 **/*.2048/）
+# 只放行 docs/nodegraph/models/**/*.json，其它模型资源仍忽略。
+!docs/nodegraph/models/
+!docs/nodegraph/models/**/
+!docs/nodegraph/models/**/*.json
