@@ -152,6 +152,7 @@ export const REASON_CODES = Object.freeze([
   'input-occupied', 'cycle', 'edge-not-found', 'invalid-position', 'graph-invalid',
   // 告警（不阻断）
   'live2d-id-not-in-model',
+  'model-catalog-missing',
 ]);
 
 /**
@@ -192,9 +193,10 @@ export function buildNodeSchema() {
     ops: Object.fromEntries(Object.entries(OP_DEFS).map(([k, v]) => [k, { ...v }])),
     reasonCodes: [...REASON_CODES],
     live2dIds: {
-      file: 'docs/nodegraph/live2d-ids.json',
+      file: 'docs/nodegraph/live2d-ids.json（全局回退）',
+      perModelFile: 'docs/nodegraph/models/<modelId>/live2d-ids.json（按模型；modelId = 模型文件名去 .model3.json，如 大肥鱼.dsl2d.2048）',
       format: '{params:{<id>:{min,max}}, motions:[<group>], expressions:[<name>], forms:[<index|name>]}',
-      note: '可选。存在时 live2d 引用参数按它校验（unknown-live2d-id / param-out-of-range），不存在时只做通用类型校验；只校验节点 op 写入的值，不校验模型自带表情文件内部的参数值',
+      note: '可选。编辑/校验按图绑定模型选清单：图绑定 modelId → 该模型清单 → 缺失回退全局（warning model-catalog-missing）→ 全局也没有则只做通用类型校验；live2d 引用参数按命中清单校验（unknown-live2d-id / param-out-of-range），只校验节点 op 写入的值，不校验模型自带表情文件内部的参数值。运行时 strict 绑定模型与当前模型不一致 → 409 model-mismatch',
       codeOnlyParamIds: [...CODE_ONLY_PARAM_IDS],
       modelFacts: '大肥鱼模型没有 HitAreas，也没有 pose3',
     },
@@ -207,6 +209,78 @@ export function buildNodeSchema() {
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const DEFAULT_LIVE2D_IDS_FILE = path.join(REPO_ROOT, 'docs', 'nodegraph', 'live2d-ids.json');
+/** 按模型清单根目录：docs/nodegraph/models/<modelId>/live2d-ids.json。 */
+export const DEFAULT_MODEL_IDS_DIR = path.join(REPO_ROOT, 'docs', 'nodegraph', 'models');
+
+/**
+ * modelId 路径安全（统一裁决 2026-11-10）：
+ *   - modelId = 模型文件名去 .model3.json（如 大肥鱼.dsl2d.2048，**单个点必须放行**）；
+ *   - 只拦 `..` 与路径分隔符（/ 或 \），防止 catalog 路径目录穿越。
+ * @returns {boolean} true = 可安全拼进 docs/nodegraph/models/<modelId>/live2d-ids.json
+ */
+export function isSafeModelId(modelId) {
+  if (typeof modelId !== 'string' || !modelId) return false;
+  if (modelId.length > 128) return false;
+  if (modelId.includes('..')) return false;
+  if (modelId.includes('/') || modelId.includes('\\')) return false;
+  return true;
+}
+
+/** 解析某模型的清单文件路径。modelId 不安全时抛错（调用方先过 isSafeModelId）。 */
+export function resolveModelIdsFile(modelId, modelsDir) {
+  if (!isSafeModelId(modelId)) throw new Error('modelId 非法（拦 .. 与路径分隔符）：' + String(modelId).slice(0, 40));
+  return path.join(modelsDir || DEFAULT_MODEL_IDS_DIR, modelId, 'live2d-ids.json');
+}
+
+/**
+ * 读取某模型自己的 live2d-ids.json（docs/nodegraph/models/<modelId>/live2d-ids.json）。
+ * 文件不存在 → 回退全局 docs/nodegraph/live2d-ids.json 并带 warning 'model-catalog-missing'；
+ * 全局也没有 → ids 为 null，走通用校验不报错（与旧行为一致）。
+ * 按 modelId 缓存（mtime 变化时自动失效，重新生成目录后无需重启）。
+ *
+ * @param {string} modelId
+ * @param {{modelsDir?: string, globalFile?: string, cache?: Map<string, object>}} [options]
+ * @returns {{ids: ReturnType<typeof normalizeLive2dIds>, file: string|null, modelId: string,
+ *            source: 'model'|'global'|'none', warning?: 'model-catalog-missing'}}
+ */
+export function loadLive2dIdsForModel(modelId, options = {}) {
+  const modelsDir = options.modelsDir || DEFAULT_MODEL_IDS_DIR;
+  const cache = options.cache instanceof Map ? options.cache : MODEL_IDS_CACHE;
+  const key = modelsDir + '::' + String(modelId);
+  let file = null;
+  try {
+    file = resolveModelIdsFile(modelId, modelsDir);
+  } catch {
+    return { ids: null, file: null, modelId: String(modelId), source: 'none' };
+  }
+  if (cache.has(key)) {
+    const hit = cache.get(key);
+    try {
+      if (fs.statSync(file).mtimeMs === hit.mtimeMs) return { ...hit.result, file };
+    } catch {
+      cache.delete(key); // 文件被删：走回退
+    }
+  }
+  let loaded = loadLive2dIds(file);
+  if (loaded.ids) {
+    const result = { ids: loaded.ids, file, modelId, source: 'model' };
+    try {
+      cache.set(key, { mtimeMs: fs.statSync(file).mtimeMs, result });
+    } catch {
+      /* stat 失败就不缓存 */
+    }
+    return result;
+  }
+  // 模型目录缺清单 → 回退全局清单 + 告警
+  const globalLoaded = loadLive2dIds(options.globalFile || DEFAULT_LIVE2D_IDS_FILE);
+  const result = globalLoaded.ids
+    ? { ids: globalLoaded.ids, file: globalLoaded.file, modelId, source: 'global', warning: 'model-catalog-missing' }
+    : { ids: null, file: null, modelId, source: 'none', warning: 'model-catalog-missing' };
+  return result;
+}
+
+/** loadLive2dIdsForModel 的进程级缓存（key = modelsDir::modelId，value = {mtimeMs, result}）。 */
+const MODEL_IDS_CACHE = new Map();
 
 /** 解析路径：显式参数 > 环境变量 DSH_L2D_IDS_FILE > 仓库 docs/nodegraph/live2d-ids.json。 */
 export function resolveLive2dIdsFile(file) {

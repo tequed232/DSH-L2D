@@ -535,8 +535,12 @@ export function editorGraphFromDoc(doc) {
 /**
  * 设计层图 + 原分享 JSON → 新分享 JSON（不含 segments，由 validateNodegraph 编译生成）。
  * meta.editor 写入完整设计层（与编辑器 Serializer.build 同形），其余 meta 字段保留。
+ *
+ * 新图默认绑定：baseDoc 没有 modelBinding（全新图）且 options.defaultBinding 提供
+ * {modelId, bindingMode:'strict'} 时用它（宿主传当前模型，实现「新建图默认 strict 绑定当前模型」）；
+ * 未提供 defaultBinding 或旧图已有绑定 → 照旧 'any'（旧图不自动迁移）。
  */
-export function docFromEditorGraph(graph, baseDoc) {
+export function docFromEditorGraph(graph, baseDoc, options = {}) {
   const base = isPlain(baseDoc) ? baseDoc : {};
   const meta = isPlain(base.meta) ? deep(base.meta) : {};
   const prevEditor = isPlain(meta.editor) ? meta.editor : {};
@@ -548,11 +552,17 @@ export function docFromEditorGraph(graph, baseDoc) {
     edges: deep(graph.edges),
     viewport: isPlain(graph.viewport) ? deep(graph.viewport) : prevEditor.viewport || { x: 30, y: 80, k: 0.85 },
   };
+  const db = isPlain(options.defaultBinding) ? options.defaultBinding : null;
+  const binding = isPlain(base.modelBinding)
+    ? deep(base.modelBinding)
+    : db && typeof db.modelId === 'string' && db.modelId
+      ? { modelId: db.modelId, modelHash: '', bindingMode: 'strict' }
+      : { bindingMode: 'any' };
   return {
     schemaVersion: NODEGRAPH_SCHEMA_VERSION,
     kind: NODEGRAPH_KIND,
     name: base.name,
-    modelBinding: isPlain(base.modelBinding) ? deep(base.modelBinding) : { bindingMode: 'any' },
+    modelBinding: binding,
     graph: compileEditorGraph(graph),
     meta,
   };

@@ -606,6 +606,63 @@ export function loadNodegraph(name, options = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// 模型绑定裁决（按单个模型编辑动作链，2026-11-10 统一约定）
+// ---------------------------------------------------------------------------
+
+/**
+ * 裁决一份 modelBinding 与当前模型是否匹配（纯函数，不发动作、不碰注册表）。
+ *
+ * 规则：
+ *   - bindingMode 缺省 'any'（旧图现状兼容）；
+ *   - strict 且绑定 modelId 与当前模型不同 → {ok:false, reason:'model-mismatch', expected, actual}；
+ *   - strict 只填 modelHash（无 modelId）→ 无法比对，放行（与导入校验「二选一」一致）；
+ *   - any 且填了 modelId 且与当前不同 → 放行但带 warning（结果回传给调用方）；
+ *   - 当前模型未知（currentModelId 为空）→ 不比对，放行（与 strict 导入校验同风格）。
+ *
+ * @param {object|null} binding doc.modelBinding
+ * @param {string} currentModelId 当前模型（模型文件名去 .model3.json）
+ * @returns {{ok:true, bindingMode:'strict'|'any', modelId:string, warning?:'model-mismatch', expected?:string, actual?:string}
+ *           |{ok:false, status:409, reason:'model-mismatch', bindingMode:'strict', modelId:string, expected:string, actual:string}}
+ */
+export function evaluateModelBinding(binding, currentModelId) {
+  const b = isPlain(binding) ? binding : {};
+  const bindingMode = b.bindingMode === 'strict' ? 'strict' : 'any';
+  const modelId = typeof b.modelId === 'string' ? b.modelId : '';
+  const current = typeof currentModelId === 'string' ? currentModelId : '';
+  if (bindingMode === 'strict' && modelId && current && modelId !== current) {
+    return { ok: false, status: 409, reason: 'model-mismatch', bindingMode, modelId, expected: modelId, actual: current };
+  }
+  if (bindingMode === 'any' && modelId && current && modelId !== current) {
+    return { ok: true, bindingMode, modelId, warning: 'model-mismatch', expected: modelId, actual: current };
+  }
+  return { ok: true, bindingMode, modelId };
+}
+
+/**
+ * run 通道的绑定闸门（路由层在 nodegraphRunRegistry.begin **之前**调用）：
+ * 读已导入图的 modelBinding 并裁决。strict 不匹配 → 409 model-mismatch，一个动作都不发、
+ * 不进注册表；图缺失/损坏 → 放行（后续 runNodegraph 按既有语义报 404/500，这里不抢职责）。
+ *
+ * @param {string} name 节点图名
+ * @param {{homeDir?: string, currentModelId?: string}} [options]
+ * @returns {{ok:true, bindingMode:string, modelId:string, warning?:string, expected?:string, actual?:string}
+ *           |{ok:false, status:number, reason:string, expected:string, actual:string}}
+ */
+export function checkRunModelBinding(name, options = {}) {
+  const currentModelId = typeof options.currentModelId === 'string' ? options.currentModelId : '';
+  const raw = loadNodegraph(name, { homeDir: options.homeDir });
+  if (raw === null) return { ok: true, bindingMode: 'any', modelId: '' };
+  let doc = null;
+  try {
+    doc = JSON.parse(raw);
+  } catch {
+    return { ok: true, bindingMode: 'any', modelId: '' };
+  }
+  const verdict = evaluateModelBinding(doc && doc.modelBinding, currentModelId);
+  return verdict;
+}
+
+// ---------------------------------------------------------------------------
 // 执行入口（SPEC §4 第 4 行，NG-RUN，2026-11-08 14:50 定案）
 // ---------------------------------------------------------------------------
 
@@ -697,6 +754,9 @@ export function createInboxActExecutor(transport, options = {}) {
  * @param {string} name 节点图名（导入时的原始 name，内部做文件名安全化）
  * @param {(input: {chain: object[], priority: string, bubble?: string}) => Promise<object>} execute
  *   单批动作下发回调；宿主传 createInboxActExecutor 产物，单测注入假回调。
+ * @param {{homeDir?: string, currentModelId?: string, sequence?: object}} [options]
+ *   currentModelId：当前模型 ID（模型文件名去 .model3.json）；strict 绑定不一致 → 409 model-mismatch，
+ *   any 绑定不一致 → 结果附 warning。缺省不比对（现状兼容）。
  */
 export async function runNodegraph(name, execute, options = {}) {
   if (typeof execute !== 'function') {
@@ -725,10 +785,28 @@ export async function runNodegraph(name, execute, options = {}) {
   if (!doc || !Array.isArray(doc.segments) || doc.segments.length === 0) {
     return { ok: false, status: 422, reason: 'no-segments', errors: ['nodegraph 无可执行 segments：' + name] };
   }
+  // 绑定裁决（纵深防御第二道闸；路由层已在 registry.begin 前拦过一次）：
+  // strict 不匹配 → 409 model-mismatch，execute 一次都不调（一个动作都不发）；
+  // any 模式照旧执行，绑定模型与当前模型不一致时结果附 warning 字段。
+  const currentModelId = typeof options.currentModelId === 'string' ? options.currentModelId : '';
+  const verdict = evaluateModelBinding(doc.modelBinding, currentModelId);
+  if (!verdict.ok) {
+    return {
+      ok: false,
+      status: 409,
+      reason: 'model-mismatch',
+      expected: verdict.expected,
+      actual: verdict.actual,
+      message: `节点图 strict 绑定模型 ${verdict.expected}，当前模型 ${verdict.actual}，未执行任何动作`,
+    };
+  }
   const result = await executeActionSequence(
     { segments: doc.segments },
     execute,
     options.sequence || {},
   );
+  if (verdict.warning) {
+    result.warning = { reason: 'model-mismatch', expected: verdict.expected, actual: verdict.actual };
+  }
   return { ...result, name };
 }
