@@ -1,0 +1,683 @@
+{
+  "schemaVersion": 1,
+  "modelId": "大肥鱼.dsl2d.2048",
+  "purpose": "神态部件表（给大模型读）：参数含义 → 部件（actionUnits）→ 情绪维度换算 → 组合算法 → 组合示例。body-regions.json 只管模块归属，语义只放这里。",
+  "sources": [
+    "body-regions.json（可写性）",
+    "大肥鱼.vtube.json（输出范围）"
+  ],
+  "valuesAreDraft": true,
+  "params": {
+    "ParamEyeLOpen": {
+      "meaning": "左眼睁开程度",
+      "range": [
+        0,
+        1.5
+      ],
+      "neutral": 1,
+      "plus": "睁大",
+      "minus": "闭合"
+    },
+    "ParamEyeROpen": {
+      "meaning": "右眼睁开程度",
+      "range": [
+        0,
+        1.5
+      ],
+      "neutral": 1,
+      "plus": "睁大",
+      "minus": "闭合"
+    },
+    "EyeSmile": {
+      "meaning": "眼睛弯成笑眼",
+      "range": [
+        0,
+        1
+      ],
+      "neutral": 0,
+      "plus": "更弯"
+    },
+    "LEyeSquint": {
+      "meaning": "左下眼睑收紧（眯、审视、坏笑）",
+      "range": [
+        0,
+        1
+      ],
+      "neutral": 0
+    },
+    "REyeSquint": {
+      "meaning": "右下眼睑收紧",
+      "range": [
+        0,
+        1
+      ],
+      "neutral": 0
+    },
+    "ParamEyeBallX": {
+      "meaning": "视线左右",
+      "range": [
+        -1,
+        1
+      ],
+      "neutral": 0,
+      "verifySign": true
+    },
+    "ParamEyeBallY": {
+      "meaning": "视线上下",
+      "range": [
+        -1,
+        1
+      ],
+      "neutral": 0,
+      "plus": "向上",
+      "verifySign": true
+    },
+    "ParamBrowLY": {
+      "meaning": "左眉高度",
+      "range": [
+        -1,
+        1
+      ],
+      "neutral": 0,
+      "plus": "上扬",
+      "minus": "下压",
+      "verifySign": true
+    },
+    "ParamBrowRY": {
+      "meaning": "右眉高度",
+      "range": [
+        -1,
+        1
+      ],
+      "neutral": 0,
+      "plus": "上扬",
+      "minus": "下压",
+      "verifySign": true
+    },
+    "BrowInnerUp": {
+      "meaning": "眉心上提（委屈、担忧、楚楚可怜）",
+      "range": [
+        0,
+        1
+      ],
+      "neutral": 0
+    },
+    "ParamMouthForm": {
+      "meaning": "嘴形整体",
+      "range": [
+        -1,
+        1
+      ],
+      "neutral": 0,
+      "plus": "上扬（笑）",
+      "minus": "下撇（不满）"
+    },
+    "MouthSmile_L": {
+      "meaning": "左嘴角上扬",
+      "range": [
+        0,
+        1
+      ],
+      "neutral": 0
+    },
+    "MouthSmile_R": {
+      "meaning": "右嘴角上扬",
+      "range": [
+        0,
+        1
+      ],
+      "neutral": 0
+    },
+    "MouthX": {
+      "meaning": "嘴整体左右偏移",
+      "range": [
+        -1,
+        1
+      ],
+      "neutral": 0,
+      "verifySign": true
+    },
+    "Mouthpucker": {
+      "meaning": "嘟嘴",
+      "range": [
+        0,
+        1
+      ],
+      "neutral": 0,
+      "rangeFromModel": false
+    },
+    "CheeckPuff": {
+      "meaning": "鼓腮",
+      "range": [
+        0,
+        1
+      ],
+      "neutral": 0,
+      "rangeFromModel": false
+    },
+    "AngleX": {
+      "meaning": "头左右转",
+      "range": [
+        -30,
+        30
+      ],
+      "neutral": 0,
+      "verifySign": true
+    },
+    "AngleY": {
+      "meaning": "头上下（抬头/低头）",
+      "range": [
+        -30,
+        30
+      ],
+      "neutral": 0,
+      "plus": "抬头"
+    },
+    "AngleZ": {
+      "meaning": "头左右歪",
+      "range": [
+        -30,
+        30
+      ],
+      "neutral": 0,
+      "verifySign": true
+    },
+    "LeanInput": {
+      "meaning": "身体前倾（属于躯干模块）",
+      "range": [
+        -30,
+        0
+      ],
+      "neutral": 0,
+      "minus": "前倾",
+      "rangeFromModel": false
+    }
+  },
+  "neverWrite": {
+    "ParamMouthOpenY": "口型同步专用",
+    "ParamAngleX/Y/Z": "物理输出，写了会被覆盖；头部角度写 AngleX/Y/Z"
+  },
+  "actionUnits": {
+    "eye_narrow": {
+      "名": "眯眼/半睁",
+      "传达": "慵懒、放松、诱惑、困",
+      "writes": {
+        "ParamEyeLOpen": 0.5,
+        "ParamEyeROpen": 0.5
+      },
+      "opposes": "eye_wide"
+    },
+    "eye_wide": {
+      "名": "睁大眼",
+      "传达": "惊讶、兴奋、害怕",
+      "writes": {
+        "ParamEyeLOpen": 1.4,
+        "ParamEyeROpen": 1.4
+      },
+      "opposes": "eye_narrow"
+    },
+    "eye_smile": {
+      "名": "笑眼",
+      "传达": "开心、温柔、亲昵",
+      "writes": {
+        "EyeSmile": 1,
+        "ParamEyeLOpen": 0.7,
+        "ParamEyeROpen": 0.7
+      }
+    },
+    "squint": {
+      "名": "下眼睑收紧",
+      "传达": "坏笑、审视、生气、狡黠",
+      "writes": {
+        "LEyeSquint": 1,
+        "REyeSquint": 1
+      }
+    },
+    "gaze_side": {
+      "名": "斜睨",
+      "传达": "调情、不屑、心虚",
+      "lateral": true,
+      "writes": {
+        "ParamEyeBallX": 0.7
+      }
+    },
+    "gaze_down": {
+      "名": "垂眸",
+      "传达": "害羞、柔弱、思考、诱惑",
+      "writes": {
+        "ParamEyeBallY": -0.6
+      },
+      "opposes": "gaze_up"
+    },
+    "gaze_up": {
+      "名": "上瞟",
+      "传达": "回想、无辜、撒娇",
+      "writes": {
+        "ParamEyeBallY": 0.6
+      },
+      "opposes": "gaze_down"
+    },
+    "brow_down": {
+      "名": "压眉",
+      "传达": "生气、专注、魅惑（轻）",
+      "writes": {
+        "ParamBrowLY": -0.8,
+        "ParamBrowRY": -0.8
+      },
+      "opposes": "brow_up"
+    },
+    "brow_up": {
+      "名": "扬眉",
+      "传达": "惊讶、得意、挑衅",
+      "writes": {
+        "ParamBrowLY": 0.8,
+        "ParamBrowRY": 0.8
+      },
+      "opposes": "brow_down"
+    },
+    "brow_inner_up": {
+      "名": "眉心上提",
+      "传达": "委屈、担忧、楚楚可怜",
+      "writes": {
+        "BrowInnerUp": 1
+      }
+    },
+    "smile": {
+      "名": "微笑",
+      "传达": "友好、开心",
+      "writes": {
+        "ParamMouthForm": 0.8,
+        "MouthSmile_L": 0.6,
+        "MouthSmile_R": 0.6
+      },
+      "opposes": "frown"
+    },
+    "smirk": {
+      "名": "单侧挑嘴角",
+      "传达": "坏笑、得意、调情、不屑",
+      "lateral": true,
+      "writes": {
+        "MouthSmile_L": 0.7,
+        "MouthSmile_R": 0.1,
+        "MouthX": 0.3
+      },
+      "mirror": {
+        "MouthSmile_L": "MouthSmile_R"
+      }
+    },
+    "frown": {
+      "名": "嘴角下撇",
+      "传达": "不满、难过、生气",
+      "writes": {
+        "ParamMouthForm": -0.8
+      },
+      "opposes": "smile"
+    },
+    "pout": {
+      "名": "嘟嘴",
+      "传达": "撒娇、赌气",
+      "writes": {
+        "Mouthpucker": 1
+      }
+    },
+    "cheek_puff": {
+      "名": "鼓腮",
+      "传达": "生闷气、可爱",
+      "writes": {
+        "CheeckPuff": 1
+      }
+    },
+    "head_tilt": {
+      "名": "歪头",
+      "传达": "好奇、可爱、调情",
+      "lateral": true,
+      "writes": {
+        "AngleZ": 15
+      }
+    },
+    "head_turn": {
+      "名": "转头",
+      "传达": "回避（负权重=转向对方）",
+      "lateral": true,
+      "writes": {
+        "AngleX": 15
+      }
+    },
+    "chin_down": {
+      "名": "低头/收下巴",
+      "传达": "害羞、顺从、自下而上看人的魅惑",
+      "writes": {
+        "AngleY": -12
+      },
+      "opposes": "chin_up"
+    },
+    "chin_up": {
+      "名": "抬下巴",
+      "传达": "骄傲、挑衅、得意",
+      "writes": {
+        "AngleY": 12
+      },
+      "opposes": "chin_down"
+    },
+    "lean_in": {
+      "名": "前倾",
+      "传达": "亲近、感兴趣、压迫感",
+      "region": "torso",
+      "writes": {
+        "LeanInput": -30
+      }
+    }
+  },
+  "expressionsAsAU": {
+    "blush": {
+      "名": "脸红",
+      "传达": "害羞、心动、醉",
+      "expression": "脸红"
+    },
+    "tears": {
+      "名": "流泪",
+      "传达": "难过、感动",
+      "expression": "流泪"
+    },
+    "heart_eyes": {
+      "名": "爱心眼",
+      "传达": "着迷",
+      "expression": "爱心眼"
+    }
+  },
+  "algorithm": {
+    "input": "两种任选：{units:{<部件>:权重}} 或 {dimensions:{<维度>:强度0..1}}；可同时给，部件权重相加。另可选 side:L|R、energy、expressions、enterMs、holdMs",
+    "steps": [
+      "1. 侧向：lateral 的 AU 写入值乘 s（side=L 为 +1，R 为 -1）；有 mirror 的在 side=R 时交换左右参数。同一指令内所有 lateral AU 用同一个 side，眼神、嘴角、歪头自然朝同一侧。",
+      "2. 叠加：对每个参数 value = neutral + Σ 权重 × (AU写入值 − neutral)，最后夹到 range。相反的 AU（opposes）同时给出会互相抵消，这是预期行为。",
+      "3. 动态：每个参数绕 value 做正弦摆动，幅度 = 该参数量程 × 0.03 × (0.5 + energy)，周期从 [4100,5300,5900,6300,6700,7300,7900,8900] 按参数顺序取，互不成整数比；energy 越高摆得越大越快（周期 × (1.3 − 0.6·energy)）。",
+      "4. 过渡：enterMs 默认 1000 渐入，退出 600 渐回 neutral。",
+      "5. 眨眼：占用眼睛开合时，自动眨眼乘在 value 上（0..value），不覆盖。",
+      "6. 不写 neverWrite；expressions 走表情层开关。"
+    ],
+    "reverse": "l2d_face_describe：读当前参数，按 AU 写入方向做非负最小二乘，返回『眯眼0.7、斜睨0.6…』，让大模型知道自己现在是什么表情。",
+    "output": "writes:[{param, value, meaning（取自 params）, fromUnits:[{unit, weight, contribution}]}]，外加 units 最终权重和 energy，节点编辑器和大模型都看这份"
+  },
+  "recipes": {
+    "妩媚": {
+      "aus": {
+        "eye_narrow": 0.7,
+        "eye_smile": 0.45,
+        "squint": 0.3,
+        "gaze_side": 0.6,
+        "gaze_down": 0.4,
+        "brow_down": 0.35,
+        "brow_inner_up": 0.15,
+        "smirk": 0.7,
+        "smile": 0.3,
+        "head_tilt": 0.7,
+        "head_turn": 0.4,
+        "chin_down": 0.25
+      },
+      "expressions": [
+        "脸红"
+      ],
+      "energy": 0.3,
+      "why": "半眯+斜睨下瞟=勾人的眼神；单侧嘴角=暧昧；歪头低头=自下而上看人；慢摆动=慵懒",
+      "asDimensions": {
+        "慵懒": 0.6,
+        "挑逗": 0.7,
+        "害羞": 0.2
+      }
+    },
+    "害羞": {
+      "aus": {
+        "gaze_down": 0.8,
+        "gaze_side": 0.4,
+        "eye_narrow": 0.3,
+        "brow_inner_up": 0.5,
+        "smile": 0.4,
+        "head_tilt": 0.4,
+        "chin_down": 0.5
+      },
+      "expressions": [
+        "脸红"
+      ],
+      "energy": 0.5,
+      "why": "躲开视线+低头+眉心上提",
+      "asDimensions": {
+        "害羞": 1
+      }
+    },
+    "得意": {
+      "aus": {
+        "chin_up": 0.6,
+        "eye_narrow": 0.4,
+        "smirk": 0.8,
+        "brow_up": 0.3
+      },
+      "energy": 0.4,
+      "why": "抬下巴+单侧笑",
+      "asDimensions": {
+        "得意": 1
+      }
+    },
+    "不屑": {
+      "aus": {
+        "gaze_side": 0.8,
+        "eye_narrow": 0.6,
+        "smirk": 0.5,
+        "brow_down": 0.3,
+        "chin_up": 0.4,
+        "head_turn": 0.5
+      },
+      "energy": 0.2,
+      "why": "斜眼+转头避开+抬下巴"
+    },
+    "惊讶": {
+      "aus": {
+        "eye_wide": 1,
+        "brow_up": 1,
+        "chin_up": 0.2
+      },
+      "energy": 0.8,
+      "why": "睁眼扬眉"
+    },
+    "生气": {
+      "aus": {
+        "brow_down": 1,
+        "squint": 0.6,
+        "frown": 0.7,
+        "chin_down": 0.3
+      },
+      "energy": 0.7,
+      "why": "压眉+眼睑收紧+嘴角下撇，低头瞪人"
+    },
+    "困倦": {
+      "aus": {
+        "eye_narrow": 1,
+        "gaze_down": 0.3,
+        "brow_inner_up": 0.2,
+        "head_tilt": 0.5,
+        "chin_down": 0.4
+      },
+      "energy": 0.1,
+      "why": "眼皮沉+头歪，几乎不动"
+    },
+    "温柔": {
+      "aus": {
+        "eye_smile": 0.7,
+        "smile": 0.6,
+        "head_tilt": 0.3,
+        "brow_inner_up": 0.2
+      },
+      "energy": 0.3,
+      "why": "笑眼+微笑+轻歪头"
+    },
+    "撒娇": {
+      "aus": {
+        "pout": 0.8,
+        "gaze_up": 0.5,
+        "brow_inner_up": 0.6,
+        "head_tilt": 0.6,
+        "chin_down": 0.3
+      },
+      "expressions": [
+        "脸红"
+      ],
+      "energy": 0.6,
+      "why": "嘟嘴+上瞟+眉心上提",
+      "asDimensions": {
+        "撒娇": 1
+      }
+    }
+  },
+  "llmGuide": "想表达一种没在 recipes 里的神态时：先拆成『眼睛在干什么、视线看哪、眉毛、嘴角、头的姿态、要不要脸红』，每项挑一个 AU，用权重表示强弱（0.3 轻微、0.6 明显、0.9 强烈），energy 表示情绪激动程度。recipes 只是示例，可以混合，比如『害羞里带一点得意』= 两个配方按 0.7/0.3 加权。",
+  "dimensions": {
+    "note": "情绪维度 → 部件权重。每个维度给出强度为 1 时各部件的权重，以及 energy（激动程度）和是否开表情。",
+    "combine": [
+      "部件权重 = Σ 维度强度 × 该维度里的部件权重；结果夹到 0..1（head_turn 夹到 -1..1）",
+      "energy = Σ(维度强度 × 维度 energy) / Σ 维度强度；调用方显式给 energy 时以调用方为准",
+      "表情：某维度强度 ≥ 该维度 expressionAt 时打开它的 expressions",
+      "得到部件权重后，按 algorithm 统一叠加、限幅、加摆动"
+    ],
+    "table": {
+      "慵懒": {
+        "units": {
+          "eye_narrow": 0.6,
+          "gaze_down": 0.2,
+          "head_tilt": 0.4,
+          "chin_down": 0.15
+        },
+        "energy": 0.15
+      },
+      "挑逗": {
+        "units": {
+          "gaze_side": 0.7,
+          "smirk": 0.8,
+          "squint": 0.35,
+          "eye_smile": 0.3,
+          "brow_down": 0.3,
+          "head_tilt": 0.4,
+          "head_turn": 0.3,
+          "chin_down": 0.2
+        },
+        "energy": 0.4
+      },
+      "害羞": {
+        "units": {
+          "gaze_down": 0.8,
+          "gaze_side": 0.3,
+          "brow_inner_up": 0.5,
+          "smile": 0.3,
+          "chin_down": 0.5,
+          "head_tilt": 0.3
+        },
+        "energy": 0.5,
+        "expressions": [
+          "脸红"
+        ],
+        "expressionAt": 0.2
+      },
+      "开心": {
+        "units": {
+          "eye_smile": 0.8,
+          "smile": 0.9,
+          "brow_up": 0.2,
+          "head_tilt": 0.2
+        },
+        "energy": 0.6
+      },
+      "温柔": {
+        "units": {
+          "eye_smile": 0.6,
+          "smile": 0.5,
+          "brow_inner_up": 0.2,
+          "head_tilt": 0.3
+        },
+        "energy": 0.25
+      },
+      "得意": {
+        "units": {
+          "chin_up": 0.6,
+          "smirk": 0.8,
+          "eye_narrow": 0.3,
+          "brow_up": 0.3
+        },
+        "energy": 0.4
+      },
+      "不屑": {
+        "units": {
+          "gaze_side": 0.8,
+          "eye_narrow": 0.5,
+          "smirk": 0.4,
+          "chin_up": 0.4,
+          "head_turn": 0.5,
+          "brow_down": 0.2
+        },
+        "energy": 0.2
+      },
+      "惊讶": {
+        "units": {
+          "eye_wide": 1,
+          "brow_up": 1,
+          "chin_up": 0.2
+        },
+        "energy": 0.8
+      },
+      "生气": {
+        "units": {
+          "brow_down": 1,
+          "squint": 0.6,
+          "frown": 0.7,
+          "chin_down": 0.3
+        },
+        "energy": 0.7
+      },
+      "委屈": {
+        "units": {
+          "brow_inner_up": 0.9,
+          "frown": 0.4,
+          "gaze_down": 0.5,
+          "pout": 0.3
+        },
+        "energy": 0.35,
+        "expressions": [
+          "流泪"
+        ],
+        "expressionAt": 0.8
+      },
+      "撒娇": {
+        "units": {
+          "pout": 0.8,
+          "gaze_up": 0.5,
+          "brow_inner_up": 0.5,
+          "head_tilt": 0.6
+        },
+        "energy": 0.6,
+        "expressions": [
+          "脸红"
+        ],
+        "expressionAt": 0.4
+      },
+      "困倦": {
+        "units": {
+          "eye_narrow": 1,
+          "gaze_down": 0.3,
+          "head_tilt": 0.5,
+          "chin_down": 0.4
+        },
+        "energy": 0.05
+      },
+      "着迷": {
+        "units": {
+          "eye_wide": 0.3,
+          "smile": 0.6,
+          "lean_in": 0.4,
+          "head_tilt": 0.3
+        },
+        "energy": 0.5,
+        "expressions": [
+          "爱心眼"
+        ],
+        "expressionAt": 0.7
+      }
+    }
+  },
+  "recipesNote": "recipes 只是组合示例，不是固定动作；asDimensions 给出用情绪维度写同一效果的写法"
+}
