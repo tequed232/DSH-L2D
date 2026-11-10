@@ -6711,7 +6711,7 @@
       {
         "id": "glasses",
         "label": "眼镜",
-        "exclusive": true,
+        "exclusive": false,
         "canCombineWithOtherSlots": true,
         "params": [],
         "note": "单片眼镜写 key12，黑框眼镜写 key11，参数不同但都戴在眼上，视觉占同一位置，同槽互斥。开关键仍归表情层；切换走表情层，由 accessories 槽位判冲突。",
@@ -6743,7 +6743,7 @@
       {
         "id": "headwear",
         "label": "头饰",
-        "exclusive": true,
+        "exclusive": false,
         "canCombineWithOtherSlots": true,
         "params": [],
         "note": "入库可切换项只有「钢盆」（写 key10，参数留在表情层）。帽/发饰/耳环/头缎带等只有物理输出、没有开关，不能确认为钢盆的一部分，见 uncertain.head-accessories-physics。",
@@ -6764,7 +6764,7 @@
       {
         "id": "ears",
         "label": "兽耳",
-        "exclusive": true,
+        "exclusive": false,
         "canCombineWithOtherSlots": true,
         "params": [
           "LControl",
@@ -6786,7 +6786,7 @@
       {
         "id": "tail",
         "label": "尾巴",
-        "exclusive": true,
+        "exclusive": false,
         "canCombineWithOtherSlots": true,
         "params": [
           "Clothes5",
@@ -6817,7 +6817,7 @@
       {
         "id": "shoes",
         "label": "鞋",
-        "exclusive": true,
+        "exclusive": false,
         "canCombineWithOtherSlots": true,
         "params": [],
         "regionHint": "legs",
@@ -6840,7 +6840,7 @@
       {
         "id": "skirt",
         "label": "裙长",
-        "exclusive": true,
+        "exclusive": false,
         "canCombineWithOtherSlots": true,
         "params": [],
         "regionHint": "torso",
@@ -6863,7 +6863,7 @@
       {
         "id": "chest-clothes",
         "label": "胸口衣服",
-        "exclusive": true,
+        "exclusive": false,
         "canCombineWithOtherSlots": true,
         "params": [],
         "regionHint": "torso",
@@ -7009,7 +7009,7 @@
       {
         "id": "mic-glow",
         "label": "话筒光",
-        "exclusive": true,
+        "exclusive": false,
         "canCombineWithOtherSlots": true,
         "params": [
           "MicroGlows"
@@ -7030,7 +7030,7 @@
       {
         "id": "money",
         "label": "钱币特效",
-        "exclusive": true,
+        "exclusive": false,
         "canCombineWithOtherSlots": true,
         "params": [
           "Param136"
@@ -7327,6 +7327,10 @@
       "KiraB",
       "KiraC",
       "KiraD"
-    ]
+    ],
+    "policy": {
+      "compatibility": "all-compatible",
+      "note": "用户确认：所有饰品都可以同时穿戴。slot 只用于菜单和设置页的分类显示，不做互斥；每件饰品独立开关。"
+    }
   }
 }
