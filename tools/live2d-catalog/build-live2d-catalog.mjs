@@ -415,11 +415,21 @@ async function main() {
     count: parameters.filter((p) => p.groupId === g.Id).length,
   }));
 
-  // 动作组：FileReferences.Motions 为空时回退扫描同目录 *.motion3.json（组名去序号后缀）。
+  // 动作组：FileReferences.Motions 为空（或只有无效空组名）时回退扫描同目录 *.motion3.json
+  //（组名去序号后缀）。空字符串组名是损坏的 model3（VTS 导出缺陷），按组名不可播放处理，
+  // 只记录异常 note，不进清单。
   let motionSource = 'model3';
   let motionGroups;
-  if (fr.Motions && typeof fr.Motions === 'object' && Object.keys(fr.Motions).length) {
-    motionGroups = Object.keys(fr.Motions);
+  let emptyMotionGroupFiles = 0;
+  if (fr.Motions && typeof fr.Motions === 'object') {
+    motionGroups = Object.keys(fr.Motions).filter((g) => typeof g === 'string' && g.trim());
+    for (const g of Object.keys(fr.Motions)) {
+      if (!g || !g.trim()) emptyMotionGroupFiles += (fr.Motions[g] || []).length;
+    }
+    if (!motionGroups.length) {
+      motionSource = 'scan';
+      motionGroups = scanMotionGroups(modelDir, fs);
+    }
   } else {
     motionSource = 'scan';
     motionGroups = scanMotionGroups(modelDir, fs);
@@ -446,11 +456,14 @@ async function main() {
   }
   for (const m of motions) m.pairSlot = pairByGroup.get(m.group) || null;
 
-  // 表情：FileReferences.Expressions 为空时回退扫描同目录 *.exp3.json（表情名 = 文件名去扩展名）。
+  // 表情：FileReferences.Expressions 为空（或 Name 全无效）时回退扫描同目录 *.exp3.json
+  //（表情名 = 文件名去扩展名）。
   let expressionSource = 'model3';
   let expressionEntries;
-  if (Array.isArray(fr.Expressions) && fr.Expressions.length) {
-    expressionEntries = fr.Expressions.map((e) => ({ Name: e.Name, File: e.File || '' }));
+  if (Array.isArray(fr.Expressions) && fr.Expressions.some((e) => e && typeof e.Name === 'string' && e.Name.trim())) {
+    expressionEntries = fr.Expressions
+      .filter((e) => e && typeof e.Name === 'string' && e.Name.trim())
+      .map((e) => ({ Name: e.Name, File: e.File || '' }));
   } else {
     expressionSource = 'scan';
     expressionEntries = scanExpressionFiles(modelDir, fs).map((name) => ({ Name: name, File: name + '.exp3.json' }));
@@ -507,6 +520,8 @@ async function main() {
     onlyMoc.length ? `仅在 moc3、不在 cdi3：${onlyMoc.join(', ')}` : 'moc3 与 cdi3 参数 Id 集合一致（0 差异）。',
     onlyCdi.length ? `仅在 cdi3、不在 moc3：${onlyCdi.join(', ')}` : null,
     outOfRange.length ? `${outOfRange.join('；')}；超出 moc3 量程，目录仍以 moc3 为准（播放由运行时钳制）。` : null,
+    emptyMotionGroupFiles ? `FileReferences.Motions 含**空字符串组名**（${emptyMotionGroupFiles} 个 motion 文件）：空组名不可播放，未计入清单；${motionSource === 'scan' ? '已回退目录扫描' : '有效组名仍按 FileReferences 为准'}。` : null,
+    '目录扫描（exp3/motion3）只覆盖模型目录**顶层**（与运行时 loadModelIndex 同规则）；子目录里的资源不索引。',
     '`ParamMouthOpen` 在 LIPSYNC_PARAMS 中但未出现在本模型 moc3/cdi3（保留名拦截）。',
     '成对动作槽 poseParams 来自 motion-director.ts，不是 moc3 字段（仅当动作组存在时列出）。',
     'forms 来自宿主 overlay 的 BODY_TYPES（大肥鱼专用）；本模型没有该表时 forms 为空。',

@@ -726,6 +726,7 @@
 - HitAreas：model3 声明为 []。
 - moc3 与 cdi3 参数 Id 集合一致（0 差异）。
 - exp3 `裙长切换` 写 Clothes1=-1（moc3 量程 0..1）；exp3 `尾巴开关` 写 Clothes5=-1（moc3 量程 0..1）；超出 moc3 量程，目录仍以 moc3 为准（播放由运行时钳制）。
+- 目录扫描（exp3/motion3）只覆盖模型目录**顶层**（与运行时 loadModelIndex 同规则）；子目录里的资源不索引。
 - `ParamMouthOpen` 在 LIPSYNC_PARAMS 中但未出现在本模型 moc3/cdi3（保留名拦截）。
 - 成对动作槽 poseParams 来自 motion-director.ts，不是 moc3 字段（仅当动作组存在时列出）。
 - forms 来自宿主 overlay 的 BODY_TYPES（大肥鱼专用）；本模型没有该表时 forms 为空。
