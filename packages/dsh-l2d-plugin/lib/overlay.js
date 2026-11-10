@@ -2931,8 +2931,43 @@
   }
 
   function pokeAction() {
+    if (settings.clickMode === 'nodegraph') return pokeByNodegraph();
     if (settings.clickMode === 'api') return pokeByApi();
     return pokeRandom();
+  }
+
+  // ---------------------------------------------------------------- 节点图编排戳一戳
+  // 固定命名节点图 poke-response（模型导入时由语义模板自动生成，strict 绑定当前模型）。
+  // 服务端 run 通道经 aiInbox l2d_act 下发（与 /ai/call 同一执行链路），回执 receipts
+  // 在 /dsh-l2d/nodegraphs/executions?id=X 可回查。失败 fail-open 降级随机动作：
+  // 节点图只是编排偏好，绝不能让戳一戳哑掉（mode-blocked / model-mismatch / busy /
+  // 图不存在 / 网络异常一律降级）。
+  var POKE_NODEGRAPH_NAME = 'poke-response';
+
+  function pokeByNodegraph() {
+    var L = window.DSH_L2D;
+    if (!L || !L.isReady || !L.isReady()) {
+      say('模型还没准备好', 1800);
+      return;
+    }
+    fetch('/dsh-l2d/nodegraphs/run?name=' + encodeURIComponent(POKE_NODEGRAPH_NAME), {
+      method: 'POST',
+      cache: 'no-store',
+    })
+      .then(function (r) { return r.json().catch(function () { return null; }); })
+      .then(function (data) {
+        if (data && data.ok === true && data.status === 'completed') {
+          say('戳戳~', 2200);
+          return;
+        }
+        console.warn('[dsh-l2d] nodegraph poke fallback', data && (data.reason || data.errors || data.status));
+        say('节点图不配合，先随机一个', 2200);
+        pokeRandom();
+      })
+      .catch(function (err) {
+        console.warn('[dsh-l2d] nodegraph poke failed', err);
+        pokeRandom();
+      });
   }
 
   // ---------------------------------------------------------------- 交互
@@ -3533,7 +3568,7 @@
   // ---------------------------------------------------------------- 设置面板
   // 用户自填 API Key / 音效 / 缩放 / 刷新间隔；宿主侧落盘（$DSH_HOME/l2d-settings.json）。
   var panelEl = null;
-  var settings = { scale: 1, soundEnabled: true, soundVolume: 0.7, refreshSeconds: 60, hasApiKey: false, eyeFollow: true, agentLink: true, clickMode: 'random', spontaneousChat: true, memeStyle: true, memeLevel: 50, autoAct: true, systemSensor: false, mediaSensor: false, petMode: true };
+  var settings = { scale: 1, soundEnabled: true, soundVolume: 0.7, refreshSeconds: 60, hasApiKey: false, eyeFollow: true, agentLink: true, clickMode: 'nodegraph', spontaneousChat: true, memeStyle: true, memeLevel: 50, autoAct: true, systemSensor: false, mediaSensor: false, petMode: true };
   var panelOpen = false;
 
   // 体型系数：三个体型的可见轮廓不同，用一个统一系数把视觉高度拉回一致。
@@ -4098,15 +4133,19 @@
     body.appendChild(row('眼神跟随（鼠标驱动视线/头/身体）', eyeFollowToggle, 'appearance'));
 
     var clickMode = document.createElement('select');
+    var modeNodegraph = document.createElement('option');
+    modeNodegraph.value = 'nodegraph';
+    modeNodegraph.textContent = '节点图编排（推荐）';
     var modeRandom = document.createElement('option');
     modeRandom.value = 'random';
     modeRandom.textContent = '随机动作';
     var modeApi = document.createElement('option');
     modeApi.value = 'api';
     modeApi.textContent = 'DeepSeek 决定';
+    clickMode.appendChild(modeNodegraph);
     clickMode.appendChild(modeRandom);
     clickMode.appendChild(modeApi);
-    clickMode.value = settings.clickMode === 'api' ? 'api' : 'random';
+    clickMode.value = settings.clickMode === 'api' ? 'api' : settings.clickMode === 'nodegraph' ? 'nodegraph' : 'random';
     body.appendChild(row('戳一戳动作', clickMode, 'behavior'));
 
     var spontaneousChat = document.createElement('input');

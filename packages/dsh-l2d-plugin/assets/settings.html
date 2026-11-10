@@ -2203,8 +2203,9 @@
             behavior,
             'clickMode',
             '戳一戳动作',
-            '单击角色时播什么',
+            '单击角色时播什么；节点图编排按模型语义模板自动生成，失败自动降级随机动作',
             [
+              { value: 'nodegraph', label: '节点图编排（推荐）' },
               { value: 'random', label: '随机动作' },
               { value: 'api', label: 'DeepSeek 决定' }
             ]

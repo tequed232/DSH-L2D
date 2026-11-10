@@ -41,6 +41,7 @@ import { deepseekChatJson, resolveDeepSeekKey } from './llm-channel.mjs';
 import { handleApplyOps, handleAiEdit, handleCatalog, handleGraphGet, NODEGRAPH_API_BODY_LIMIT } from './nodegraph-api.mjs';
 import { isReservedParam } from './param-guards.mjs';
 import { allowedFromLive2dIds, isSafeModelId, loadLive2dIdsForModel } from './nodegraph-schema.mjs';
+import { ensureModelNodegraphs } from './nodegraph-templates.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
 import { ageSummaryState, isActionTool, legacyAgentState, summarizeSession } from './session-events.mjs';
 import { listSessionFiles, readSessionEvents } from './session-log.mjs';
@@ -169,7 +170,7 @@ const SETTINGS_SHAPE = {
   scale: { type: 'number', default: 1, description: '角色显示缩放 0.6~1.6' },
   eyeFollow: { type: 'boolean', default: true, description: '眼睛跟随鼠标（默认开；关掉则视线回到待机）' },
   agentLink: { type: 'boolean', default: true, description: '读取 DSH 工作区会话状态，驱动角色表情/动作链' },
-  clickMode: { type: 'string', default: 'random', description: '单击角色动作：random 随机动作 / api DeepSeek 决定' },
+  clickMode: { type: 'string', default: 'nodegraph', description: '单击角色动作：nodegraph 节点图编排 / random 随机动作 / api DeepSeek 决定' },
   spontaneousChat: { type: 'boolean', default: true, description: '空闲/完成时让角色主动冒泡' },
   memeStyle: { type: 'boolean', default: true, description: '让动作/气泡带梗味人设' },
   memeLevel: { type: 'number', default: 50, description: '玩梗程度 0~100' },
@@ -198,7 +199,7 @@ export const Config = z
       scale: z.number().default(1).description('角色显示缩放 0.6~1.6').extra('volatile', true),
       eyeFollow: z.boolean().default(true).description('眼睛跟随鼠标（默认开；关掉则视线回到待机）').extra('volatile', true),
       agentLink: z.boolean().default(true).description('读取 DSH 工作区会话状态，驱动角色表情/动作链').extra('volatile', true),
-      clickMode: z.string().default('random').description('单击角色动作：random 随机动作 / api DeepSeek 决定').extra('volatile', true),
+      clickMode: z.string().default('nodegraph').description('单击角色动作：nodegraph 节点图编排 / random 随机动作 / api DeepSeek 决定').extra('volatile', true),
       spontaneousChat: z.boolean().default(true).description('空闲/完成时让角色主动冒泡').extra('volatile', true),
       memeStyle: z.boolean().default(true).description('让动作/气泡带梗味人设').extra('volatile', true),
       memeLevel: z.number().default(50).description('玩梗程度 0~100').extra('volatile', true),
@@ -923,6 +924,29 @@ export function apply(root, config = {}) {
       }
     } catch (err) {
       diag('service file 写入失败: ' + String(err && err.message ? err.message : err));
+    }
+
+    // 模型导入自动初始化联动节点（语义模板 × live2d-ids.json 清单实例化）：
+    // 插件 apply + 模型发现成功（getCurrentModelId 非空）时 ensure 一次语义节点图
+    // （poke-response 等，strict 绑定当前模型，落 $DSH_HOME/l2d-nodegraphs/）。
+    // 幂等：meta.templateVersion 相同跳过（保留手改）、更旧重生成（升级策略）、更新不降级。
+    // fail-open：清单缺失全跳过、任何异常不影响宿主启动。
+    try {
+      const ensured = ensureModelNodegraphs(getCurrentModelId());
+      if (ensured && ensured.ok) {
+        const touched = [
+          ...ensured.generated.map((n) => 'generated:' + n),
+          ...ensured.regenerated.map((n) => 'regenerated:' + n),
+          ...ensured.failed.map((f) => 'failed:' + f.name),
+        ];
+        diag('nodegraph-templates ensure: source=' + ensured.catalogSource +
+          (touched.length ? ' ' + touched.join(' ') : ' all-unchanged') +
+          (ensured.skipped.length ? ' skipped=' + ensured.skipped.map((s) => s.id).join(',') : ''));
+      } else {
+        diag('nodegraph-templates ensure skipped: ' + (ensured && ensured.reason));
+      }
+    } catch (err) {
+      diag('nodegraph-templates ensure error: ' + String(err && err.message ? err.message : err));
     }
 
     const disposers = [];
