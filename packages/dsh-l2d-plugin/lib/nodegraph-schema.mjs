@@ -344,6 +344,19 @@ export function loadLive2dIds(file) {
 export const CODE_ONLY_PARAM_IDS = Object.freeze(['ParamMouthOpen']);
 
 /**
+ * 从 live2d-ids 清单构造 validateActionSequence 的 allowed 注入（静态名单 ∪ 该模型清单）。
+ * ids 为 null（无清单）→ 返回 null，调用方按缺省静态名单走（旧行为）。
+ * @param {ReturnType<typeof normalizeLive2dIds>} ids
+ */
+export function allowedFromLive2dIds(ids) {
+  if (!ids) return null;
+  return {
+    expressions: new Set([...MODEL_EXPRESSIONS, ...(Array.isArray(ids.expressions) ? ids.expressions : [])]),
+    motionGroups: new Set([...MODEL_MOTION_GROUPS, ...(Array.isArray(ids.motions) ? ids.motions : [])]),
+  };
+}
+
+/**
  * Live2D 引用校验（ids 为 null 时恒通过）。
  * 只校验节点 op 里写的值；模型自带 exp3 表情文件内部写了什么参数值（如「裙长切换」「尾巴开关」
  * 把 Clothes 参数设为 -1）属于模型既有行为，不在这里校验。

@@ -58,8 +58,9 @@ export function buildAiEditPrompt({ graph, instruction, lang, live2dIds }) {
 }
 
 /**
- * @param {{graph: object, instruction: string, lang?: string}} body
- * @param {{llm?: Function|null, live2dIds?: object|null}} deps
+ * @param {{graph: object, instruction: string, lang?: string, modelId?: string}} body
+ * @param {{llm?: Function|null, live2dIds?: object|null, allowed?: {expressions?: Set<string>, motionGroups?: Set<string>}|null}} deps
+ *   allowed：按模型注入的动态白名单（静态 ∪ 该模型 live2d-ids.json），预演与复核共用。
  * @returns {Promise<{status: number, payload: object}>}
  */
 export async function aiEdit(body, deps = {}) {
@@ -68,7 +69,7 @@ export async function aiEdit(body, deps = {}) {
   if (!instruction) return bad(400, 'invalid-request', 'instruction 必须是非空字符串');
   if (instruction.length > MAX_INSTRUCTION_LENGTH) return bad(400, 'invalid-request', `instruction 最长 ${MAX_INSTRUCTION_LENGTH} 字`);
   const lang = normalizeLang(b.lang);
-  const probe = applyOps(b.graph, []);
+  const probe = applyOps(b.graph, [], { allowed: deps.allowed || null });
   if (probe.errors.some((e) => e.reason === 'invalid-graph')) {
     return { status: 400, payload: { ok: false, reason: 'invalid-graph', errors: probe.errors } };
   }
@@ -97,7 +98,7 @@ export async function aiEdit(body, deps = {}) {
     aiOps = aiOps.slice(0, MAX_OPS_PER_CALL);
   }
   // 预演：逐 op 应用，失败的跳过并记入 warnings（opIndex 指模型原始 ops 下标）
-  const preview = applyOps(b.graph, aiOps, { mode: 'skip', live2dIds });
+  const preview = applyOps(b.graph, aiOps, { mode: 'skip', live2dIds, allowed: deps.allowed || null });
   for (const e of preview.errors) {
     const w = { opIndex: e.opIndex, reason: e.reason, message: e.message };
     if (e.opIndex !== null) w.op = aiOps[e.opIndex];
@@ -107,7 +108,7 @@ export async function aiEdit(body, deps = {}) {
   for (const w of preview.warnings) warnings.push({ ...w, op: aiOps[w.opIndex] });
   const ops = preview.appliedOps.map((i) => aiOps[i]);
   // 复核：只含合法 op 的整批 atomic 应用必须成功（确定性保证，防预演与确认结果不一致）
-  const verify = applyOps(b.graph, ops, { live2dIds });
+  const verify = applyOps(b.graph, ops, { live2dIds, allowed: deps.allowed || null });
   if (!verify.applied) {
     return { status: 502, payload: { ok: false, reason: 'ai-preview-mismatch', message: '合法 op 复核应用失败', errors: verify.errors, baseHash } };
   }

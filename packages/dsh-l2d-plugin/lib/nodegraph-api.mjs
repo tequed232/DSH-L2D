@@ -22,7 +22,7 @@
 import { guardGraphCall } from './host-guard.mjs';
 import { listNodegraphs, loadNodegraph, saveNodegraph } from './nodegraph.mjs';
 import { applyOps, docFromEditorGraph, editorGraphFromDoc, graphHash } from './nodegraph-ops.mjs';
-import { isSafeModelId, loadLive2dIds, loadLive2dIdsForModel } from './nodegraph-schema.mjs';
+import { allowedFromLive2dIds, isSafeModelId, loadLive2dIds, loadLive2dIdsForModel } from './nodegraph-schema.mjs';
 import { aiEdit } from './nodegraph-ai.mjs';
 
 /** 请求体上限：120 节点设计层图 + 200 op 的宽松裕量（与 nodegraphs/import 同为 256KB）。 */
@@ -50,24 +50,25 @@ function resolveIdsForModel(bindingModelId, deps) {
   const d = deps || {};
   // 旧注入（单测/宿主显式覆盖）不变语义
   if (Object.prototype.hasOwnProperty.call(d, 'live2dIds')) {
-    return { ids: d.live2dIds || null, status: d.live2dIds ? 'loaded' : 'missing', modelId: bindingModelId || '' };
+    return { ids: d.live2dIds || null, status: d.live2dIds ? 'loaded' : 'missing', modelId: bindingModelId || '', allowed: allowedFromLive2dIds(d.live2dIds || null) };
   }
   const explicit = typeof bindingModelId === 'string' && bindingModelId && isSafeModelId(bindingModelId)
     ? bindingModelId
     : currentModelId(d);
   if (explicit) {
-    const loaded = loadLive2dIdsForModel(explicit, { modelsDir: d.modelsDir, globalFile: d.live2dIdsFile });
+    const loaded = loadLive2dIdsForModel(explicit, { modelsDir: d.modelsDir, globalFile: d.globalFile || d.live2dIdsFile });
     return {
       ids: loaded.ids,
       status: loaded.ids ? 'loaded' : 'missing',
       modelId: explicit,
       source: loaded.source,
+      allowed: allowedFromLive2dIds(loaded.ids),
       ...(loaded.warning ? { warning: loaded.warning } : {}),
     };
   }
   // 无模型上下文：全局清单（旧行为）
   const loaded = loadLive2dIds(d.live2dIdsFile);
-  return { ids: loaded.ids, status: loaded.ids ? 'loaded' : loaded.reason, modelId: '' };
+  return { ids: loaded.ids, status: loaded.ids ? 'loaded' : loaded.reason, modelId: '', allowed: allowedFromLive2dIds(loaded.ids) };
 }
 
 function loadStored(name, homeDir) {
@@ -126,7 +127,7 @@ export function handleGraphGet(name, deps = {}) {
     ? stored.doc.modelBinding.modelId
     : '';
   const ids = resolveIdsForModel(boundModelId, deps);
-  const checked = applyOps(stored.graph, [], { live2dIds: ids.ids });
+  const checked = applyOps(stored.graph, [], { live2dIds: ids.ids, allowed: ids.allowed });
   return {
     status: 200,
     payload: {
@@ -170,7 +171,7 @@ export function handleApplyOps(body, deps = {}) {
   }
   // modelId 优先级：显式传 > 图绑定模型 > 当前模型（图没绑用当前模型）
   const ids = resolveIdsForModel(typeof b.modelId === 'string' && b.modelId ? b.modelId : boundModelId, deps);
-  const result = applyOps(graph, b.ops, { live2dIds: ids.ids });
+  const result = applyOps(graph, b.ops, { live2dIds: ids.ids, allowed: ids.allowed });
   const payload = {
     ok: result.errors.length === 0,
     graph: result.graph,
@@ -190,7 +191,7 @@ export function handleApplyOps(body, deps = {}) {
     // 只有整批应用成功且整体合法才写回；saveNodegraph 内部先校验后原子写，失败原文件不动。
     if (result.applied && result.valid && b.ops.length > 0) {
       try {
-        const saved = saveNodegraph(docFromEditorGraph(result.graph, stored.doc), { homeDir: deps.homeDir });
+        const saved = saveNodegraph(docFromEditorGraph(result.graph, stored.doc), { homeDir: deps.homeDir, allowed: ids.allowed });
         payload.saved = saved.ok === true;
         if (!saved.ok) payload.saveErrors = saved.errors;
       } catch (err) {
@@ -208,7 +209,7 @@ export async function handleAiEdit(body, deps = {}) {
   const b = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
   // ai-edit 的 graph 是设计层图（不带绑定）：modelId = 显式传 > 当前模型（图没绑用当前模型）
   const ids = resolveIdsForModel(typeof b.modelId === 'string' && b.modelId ? b.modelId : '', deps);
-  const out = await aiEdit(body, { llm: deps.llm || null, live2dIds: ids.ids });
+  const out = await aiEdit(body, { llm: deps.llm || null, live2dIds: ids.ids, allowed: ids.allowed });
   if (out.status === 200 && out.payload && typeof out.payload === 'object') {
     out.payload.modelId = ids.modelId;
     if (ids.warning) out.payload.catalogWarning = ids.warning;
@@ -237,7 +238,7 @@ export function handleCatalog(modelParam, deps = {}) {
   if (!modelId) {
     return { status: 404, payload: { ok: false, reason: 'no-model', message: '未指定 model 且无法确定当前模型（模型目录里没有 .model3.json）' } };
   }
-  const loaded = loadLive2dIdsForModel(modelId, { modelsDir: d.modelsDir, globalFile: d.live2dIdsFile });
+  const loaded = loadLive2dIdsForModel(modelId, { modelsDir: d.modelsDir, globalFile: d.globalFile || d.live2dIdsFile });
   return {
     status: 200,
     payload: {

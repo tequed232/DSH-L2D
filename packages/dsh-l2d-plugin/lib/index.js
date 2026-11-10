@@ -40,6 +40,7 @@ import { createRunRegistry } from './nodegraph-runs.mjs';
 import { deepseekChatJson, resolveDeepSeekKey } from './llm-channel.mjs';
 import { handleApplyOps, handleAiEdit, handleCatalog, handleGraphGet, NODEGRAPH_API_BODY_LIMIT } from './nodegraph-api.mjs';
 import { isReservedParam } from './param-guards.mjs';
+import { allowedFromLive2dIds, isSafeModelId, loadLive2dIdsForModel } from './nodegraph-schema.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
 import { ageSummaryState, isActionTool, legacyAgentState, summarizeSession } from './session-events.mjs';
 import { listSessionFiles, readSessionEvents } from './session-log.mjs';
@@ -1190,8 +1191,19 @@ export function apply(root, config = {}) {
               ? { modelId, modelHash: '', bindingMode: 'strict' }
               : { bindingMode: 'any' };
           }
+          // 按图绑定模型选清单：把「静态 ∪ 该模型 live2d-ids.json」注入整图校验，
+          // 清单里有而静态名单没有的表情/动作组也能导入。
+          let importAllowed = null;
+          try {
+            const bindingId = doc && doc.modelBinding && typeof doc.modelBinding.modelId === 'string' && isSafeModelId(doc.modelBinding.modelId)
+              ? doc.modelBinding.modelId
+              : getCurrentModelId();
+            if (bindingId) importAllowed = allowedFromLive2dIds(loadLive2dIdsForModel(bindingId).ids);
+          } catch {
+            importAllowed = null; // 清单读取异常按无注入走（静态名单兜底）
+          }
           // saveNodegraph 内部先整体校验后原子写：重名覆盖前校验，失败原文件不动（SPEC §4）。
-          const saved = saveNodegraph(doc);
+          const saved = saveNodegraph(doc, { allowed: importAllowed });
           if (!saved.ok) {
             return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: saved.errors }), 'utf8'));
           }

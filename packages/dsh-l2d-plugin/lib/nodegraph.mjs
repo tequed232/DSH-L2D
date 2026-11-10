@@ -445,9 +445,13 @@ export function segmentsToGraph(segments) {
 
 /**
  * @param {object} doc 分享 JSON 解析结果
+ * @param {{allowed?: {expressions?: Set<string>, motionGroups?: Set<string>}|null}} [options]
+ *   allowed：按图绑定模型注入的动态白名单（静态 ∪ 该模型 live2d-ids.json）；缺省 null 用纯静态名单
+ *   （旧行为，旧图不受影响）。
  * @returns {{ok: boolean, errors: string[], normalized: object|null}}
  */
-export function validateNodegraph(doc) {
+export function validateNodegraph(doc, options = {}) {
+  const allowed = options.allowed || null;
   if (!isPlain(doc)) return { ok: false, errors: ['分享 JSON 必须是对象'], normalized: null };
   const errors = [];
   // §2 唯一格式：顶层只接受这七个字段（与 validateActionSequence 的严格风格一致），
@@ -491,7 +495,7 @@ export function validateNodegraph(doc) {
     else graph = doc.graph;
   }
   if (hasSegments) {
-    const checked = validateActionSequence({ segments: doc.segments });
+    const checked = validateActionSequence({ segments: doc.segments }, allowed);
     if (!checked.ok) errors.push(...checked.errors);
     else segments = doc.segments;
   }
@@ -507,7 +511,7 @@ export function validateNodegraph(doc) {
     // 只有 graph：编译出 segments，并复用 F2 校验器把关（表情/动作组白名单、时长上限）。
     const compiled = compileGraphToSegments(graph);
     if (!compiled.ok) return { ok: false, errors: compiled.errors, normalized: null };
-    const checked = validateActionSequence({ segments: compiled.segments });
+    const checked = validateActionSequence({ segments: compiled.segments }, allowed);
     if (!checked.ok) return { ok: false, errors: checked.errors, normalized: null };
     normalizedSegments = compiled.segments;
     normalizedGraph = graph;
@@ -534,7 +538,7 @@ export function validateNodegraph(doc) {
  * @returns {{ok: true, name: string, file: string} | {ok: false, errors: string[]}}
  */
 export function saveNodegraph(doc, options = {}) {
-  const checked = validateNodegraph(doc);
+  const checked = validateNodegraph(doc, { allowed: options.allowed || null });
   if (!checked.ok) return { ok: false, errors: checked.errors };
   let fileName;
   try {

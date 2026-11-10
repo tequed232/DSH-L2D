@@ -424,12 +424,14 @@
     "edge-not-found",
     "invalid-position",
     "graph-invalid",
-    "live2d-id-not-in-model"
+    "live2d-id-not-in-model",
+    "model-catalog-missing"
   ],
   "live2dIds": {
-    "file": "docs/nodegraph/live2d-ids.json",
+    "file": "docs/nodegraph/live2d-ids.json（全局回退）",
+    "perModelFile": "docs/nodegraph/models/<modelId>/live2d-ids.json（按模型；modelId = 模型文件名去 .model3.json，如 大肥鱼.dsl2d.2048）",
     "format": "{params:{<id>:{min,max}}, motions:[<group>], expressions:[<name>], forms:[<index|name>]}",
-    "note": "可选。存在时 live2d 引用参数按它校验（unknown-live2d-id / param-out-of-range），不存在时只做通用类型校验；只校验节点 op 写入的值，不校验模型自带表情文件内部的参数值",
+    "note": "可选。编辑/校验按图绑定模型选清单：图绑定 modelId → 该模型清单 → 缺失回退全局（warning model-catalog-missing）→ 全局也没有则只做通用类型校验；live2d 引用参数按命中清单校验（unknown-live2d-id / param-out-of-range），只校验节点 op 写入的值，不校验模型自带表情文件内部的参数值。运行时 strict 绑定模型与当前模型不一致 → 409 model-mismatch",
     "codeOnlyParamIds": [
       "ParamMouthOpen"
     ],

@@ -406,14 +406,14 @@ export function compileEditorGraph(graph) {
 }
 
 /** 整体校验：编译后交给 nodegraph.mjs validateNodegraph（§2 全规则 + F2 编译校验）。 */
-function validateWhole(graph) {
+function validateWhole(graph, allowed) {
   const execGraph = compileEditorGraph(graph);
   const checked = validateNodegraph({
     schemaVersion: NODEGRAPH_SCHEMA_VERSION,
     kind: NODEGRAPH_KIND,
     name: 'ai-edit-preview',
     graph: execGraph,
-  });
+  }, { allowed: allowed || null });
   return checked.ok ? [] : checked.errors;
 }
 
@@ -424,7 +424,8 @@ function validateWhole(graph) {
 /**
  * @param {object} graph 设计层节点图
  * @param {object[]} ops 编辑操作
- * @param {{mode?: 'atomic'|'skip', live2dIds?: object|null}} [options]
+ * @param {{mode?: 'atomic'|'skip', live2dIds?: object|null, allowed?: {expressions?: Set<string>, motionGroups?: Set<string>}|null}} [options]
+ *   allowed：按图绑定模型注入的动态白名单（静态 ∪ 该模型 live2d-ids.json），缺省纯静态（旧行为）。
  * @returns {{graph: object, valid: boolean, applied: boolean, errors: Array<{opIndex: number|null, op?: string, reason: string, message: string}>,
  *           warnings: Array<{opIndex: number, op?: string, reason: string, message: string}>, appliedOps: number[]}}
  *   warnings 不阻断（如 live2d-id-not-in-model）。
@@ -432,6 +433,7 @@ function validateWhole(graph) {
 export function applyOps(graph, ops, options = {}) {
   const mode = options.mode === 'skip' ? 'skip' : 'atomic';
   const live2dIds = options.live2dIds || null;
+  const allowed = options.allowed || null;
   const inputErrors = checkInputGraph(graph);
   if (inputErrors.length) {
     return {
@@ -473,7 +475,7 @@ export function applyOps(graph, ops, options = {}) {
   if (errors.length && mode === 'atomic') {
     return { graph: original, valid: false, applied: false, errors, warnings: [], appliedOps: [] };
   }
-  const wholeErrors = validateWhole(work);
+  const wholeErrors = validateWhole(work, allowed);
   for (const message of wholeErrors) errors.push({ opIndex: null, reason: 'graph-invalid', message });
   return { graph: work, valid: errors.length === 0, applied: true, errors, warnings, appliedOps };
 }

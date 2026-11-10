@@ -1,0 +1,6 @@
+{
+  "params": { "ParamGlobal": { "min": 0, "max": 5 } },
+  "motions": ["GlobalMove", "竖手指打开"],
+  "expressions": ["GlobalExp", "微笑"],
+  "forms": []
+}
