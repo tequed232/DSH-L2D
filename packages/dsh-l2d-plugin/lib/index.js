@@ -40,6 +40,7 @@ import { createRunRegistry } from './nodegraph-runs.mjs';
 import { deepseekChatJson, resolveDeepSeekKey } from './llm-channel.mjs';
 import { handleApplyOps, handleAiEdit, handleCatalog, handleGraphGet, NODEGRAPH_API_BODY_LIMIT } from './nodegraph-api.mjs';
 import { isReservedParam } from './param-guards.mjs';
+import { createBridgeApi, BRIDGE_API_BODY_LIMIT } from './body-bridge-api.mjs';
 import { allowedFromLive2dIds, isSafeModelId, loadLive2dIdsForModel } from './nodegraph-schema.mjs';
 import { ensureModelNodegraphs } from './nodegraph-templates.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
@@ -76,6 +77,8 @@ import { createGallerySource } from '../../mcp-bridge/gallery-source.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OVERLAY_FILE = path.join(PKG_ROOT, 'lib', 'overlay.js');
+/** 部位联动 bridge 规则核心：overlay 以 ES 模块动态 import 同一份文件（无 import，可直接发给浏览器）。 */
+const BODY_BRIDGE_FILE = path.join(PKG_ROOT, 'lib', 'body-bridge.mjs');
 
 const L2D_ROOT = process.env.DSH_L2D_ROOT || 'D:/Desktop/DSH-L2D';
 const MODEL_DIR =
@@ -1482,6 +1485,61 @@ export function apply(root, config = {}) {
       }
       nodegraphApiSend(res, handleCatalog(model, { getCurrentModelId }));
     });
+
+    // ---------------------- 部位联动 bridge（docs/nodegraph/BODY-BRIDGE.md） ----------------------
+    // 占用状态权威只在 overlay（浏览器）里那一个 createBridge 实例；宿主只做静态校验（同一份
+    // body-bridge.mjs + 同一张 body-regions.json）并经 aiInbox 转发，与 l2d_act / 节点图 run 通道同一条。
+    const bridgeApi = createBridgeApi({
+      getCurrentModelId,
+      call: (name, args) => aiInbox.call(name, args),
+      read: (id) => aiInbox.read(id),
+    });
+    route('/dsh-l2d/body-bridge.mjs', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      const buf = readIfExists(BODY_BRIDGE_FILE);
+      if (!buf) return sendBuffer(res, 404, 'text/plain; charset=utf-8', Buffer.from('body-bridge.mjs missing'));
+      sendBuffer(res, 200, MIME['.js'], buf);
+    });
+    route('/dsh-l2d/api/bridge/table', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      let model = '';
+      try {
+        model = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('model') || '');
+      } catch {
+        model = '';
+      }
+      nodegraphApiSend(res, bridgeApi.handleTable(model));
+    });
+    route('/dsh-l2d/api/bridge/state', async (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      try {
+        nodegraphApiSend(res, await bridgeApi.handleState());
+      } catch (err) {
+        diag('bridge state 异常: ' + String((err && err.message) || err));
+        nodegraphApiSend(res, { status: 500, payload: { ok: false, reason: 'internal-error' } });
+      }
+    });
+    const bridgeApiPost = (handler) => async (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'POST') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      let body;
+      try {
+        body = await readJsonBody(req, BRIDGE_API_BODY_LIMIT);
+      } catch {
+        return nodegraphApiSend(res, { status: 400, payload: { ok: false, reason: 'invalid-command', message: 'body 不是合法 JSON 或超过 32KB' } });
+      }
+      try {
+        nodegraphApiSend(res, await handler(body));
+      } catch (err) {
+        diag('bridge api 异常: ' + String((err && err.message) || err));
+        nodegraphApiSend(res, { status: 500, payload: { ok: false, reason: 'internal-error' } });
+      }
+    };
+    route('/dsh-l2d/api/bridge/act', bridgeApiPost((body) => bridgeApi.handleAct(body)));
+    route('/dsh-l2d/api/bridge/release', bridgeApiPost((body) => bridgeApi.handleRelease(body)));
 
     // ------------------------------------------------------ 桌宠独立窗页面
     // 只从本机 webServer 同源加载（模型/渲染资源零拷贝）；preload 走文件路径不走路由
