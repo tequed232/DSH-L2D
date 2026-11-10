@@ -1667,6 +1667,9 @@
           test: '/dsh-l2d/test.html'
         };
 
+        // 预览与读数共用回执预算：共用手臂先关再开约 1.25s+，旧的 8×200ms=1.8s 会误报超时。
+        var RECEIPT_WAIT_MS = 8000;
+
         var LS_KEY = 'dsh-l2d.settings-ui.v1';
 
         var state = { settings: null, status: null, capability: null };
@@ -2332,28 +2335,7 @@
             })
             .then(function (queued) {
               if (!queued || !queued.id) throw new Error('未入队');
-              return new Promise(function (resolve, reject) {
-                var tries = 0;
-                function step() {
-                  if (tries >= 8) {
-                    reject(new Error('超时'));
-                    return;
-                  }
-                  tries += 1;
-                  fetch(API.result + '?id=' + encodeURIComponent(queued.id), { cache: 'no-store' })
-                    .then(function (res) {
-                      return res.json();
-                    })
-                    .then(function (data) {
-                      if (data && data.ready) resolve(data.result);
-                      else window.setTimeout(step, 200);
-                    })
-                    .catch(function () {
-                      window.setTimeout(step, 200);
-                    });
-                }
-                window.setTimeout(step, 200);
-              });
+              return waitAiReceipt(queued.id);
             });
         }
 
@@ -2704,27 +2686,30 @@
             return res.json();
           }).then(function (queued) {
             if (!queued || !queued.id) throw new Error('未入队');
-            return new Promise(function (resolve, reject) {
-              // 共用手臂时要先收尾再播，关闭动作约 1.25s，8×200ms 会误报超时。
-              var deadline = Date.now() + 8000;
-              function step() {
-                if (Date.now() >= deadline) {
-                  reject(new Error('超时'));
-                  return;
-                }
-                fetch(API.result + '?id=' + encodeURIComponent(queued.id), { cache: 'no-store' })
-                  .then(function (res) { return res.json(); })
-                  .then(function (data) {
-                    if (data && data.ready) resolve(data.result);
-                    else window.setTimeout(step, 200);
-                  })
-                  .catch(function () {
-                    if (Date.now() >= deadline) reject(new Error('超时'));
-                    else window.setTimeout(step, 200);
-                  });
+            return waitAiReceipt(queued.id);
+          });
+        }
+
+        function waitAiReceipt(id) {
+          return new Promise(function (resolve, reject) {
+            var deadline = Date.now() + RECEIPT_WAIT_MS;
+            function step() {
+              if (Date.now() >= deadline) {
+                reject(new Error('超时'));
+                return;
               }
-              window.setTimeout(step, 200);
-            });
+              fetch(API.result + '?id=' + encodeURIComponent(id), { cache: 'no-store' })
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                  if (data && data.ready) resolve(data.result);
+                  else window.setTimeout(step, 200);
+                })
+                .catch(function () {
+                  if (Date.now() >= deadline) reject(new Error('超时'));
+                  else window.setTimeout(step, 200);
+                });
+            }
+            window.setTimeout(step, 50);
           });
         }
 

@@ -5487,16 +5487,54 @@
 
   // result 提交统一走这里：附带 poll 时下发的租约凭证（flag 关时服务端忽略）。
   // 409 fenced 不重试——重试必然再被 fence，仅告警留痕。
-  function postAiResult(payload) {
+  var AI_EXEC_DEADLINE_MS = 8000;
+
+  function postAiResult(payload, attempt) {
     payload.token = __aiLeaseToken;
     payload.epoch = __aiLeaseEpoch;
+    attempt = attempt || 0;
     return fetch('/dsh-l2d/ai/result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).then(function (r) {
-      if (!r.ok) console.warn('[dsh-l2d] AI 回执被拒 id=' + payload.id + ' status=' + r.status);
+      if (!r.ok) {
+        console.warn('[dsh-l2d] AI 回执被拒 id=' + payload.id + ' status=' + r.status);
+        // 409 fenced 不重试——重试必然再被 fence。其它失败（网络闪断）再试两次。
+        if (r.status !== 409 && attempt < 2) {
+          return new Promise(function (resolve) { setTimeout(resolve, 150 * (attempt + 1)); })
+            .then(function () { return postAiResult(payload, attempt + 1); });
+        }
+      }
       return r;
+    }).catch(function (err) {
+      if (attempt < 2) {
+        return new Promise(function (resolve) { setTimeout(resolve, 150 * (attempt + 1)); })
+          .then(function () { return postAiResult(payload, attempt + 1); });
+      }
+      throw err;
+    });
+  }
+
+  function execWithDeadline(name, args, callId) {
+    var settled = false;
+    return new Promise(function (resolve) {
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        resolve({ ok: false, reason: 'timeout', tool: name, message: '执行超过 ' + AI_EXEC_DEADLINE_MS + 'ms 仍未返回' });
+      }, AI_EXEC_DEADLINE_MS);
+      Promise.resolve(window.DSH_L2D_AI.exec(name, args, callId)).then(function (res) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(res);
+      }, function (err) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({ ok: false, reason: String(err && err.message ? err.message : err) });
+      });
     });
   }
 
@@ -5522,7 +5560,7 @@
           }
           if (!d || !d.calls || !d.calls.length) return;
           d.calls.forEach(function (c) {
-            Promise.resolve(window.DSH_L2D_AI.exec(c.name, c.args, c.id))
+            execWithDeadline(c.name, c.args, c.id)
               .then(function (res) {
                 if (!res || res.ok === false) {
                   // skipped / conflict 是状态机的正常结果，不当成异常刷屏
@@ -5530,13 +5568,12 @@
                     console.warn('[dsh-l2d] AI 指令执行失败', c.name, res);
                   }
                 }
-                postAiResult({ id: c.id, result: res || { ok: false, reason: 'empty' } })
-                  .catch(function () { /* 结果回写失败，MCP 会超时 */ });
+                return postAiResult({ id: c.id, result: res || { ok: false, reason: 'empty' } });
               })
               .catch(function (err) {
-                postAiResult({ id: c.id, result: { ok: false, reason: String(err && err.message ? err.message : err) } })
-                  .catch(function () { /* ignore */ });
-              });
+                return postAiResult({ id: c.id, result: { ok: false, reason: String(err && err.message ? err.message : err) } });
+              })
+              .catch(function () { /* 结果回写失败，MCP 会超时 */ });
           });
         })
         .catch(function () {
