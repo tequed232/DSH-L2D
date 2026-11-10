@@ -281,7 +281,7 @@
     "到达 chainFromSec 后：立即交叉淡入下一个动作，不等动作播完",
     "anytime 的循环动作（Idle）：任何时刻都可切，淡出 0.5s",
     "神态、表情、饰品是持续写值，不存在排队，新指令直接按 enterMs 渐变到新目标",
-    "调用方可选 when: now | next-cut（默认）| after-finish，由模型侧按上面规则落到具体时间点"
+    "调用方可选 cut: now | next（默认）| after，由模型侧按上面规则落到具体时间点"
   ],
   "note": "时间点由 tools/live2d-catalog/motion-cutpoints.mjs 从本地模型算出，均为秒；需在真模型上目测复核"
 }
