@@ -22,6 +22,7 @@
   <a href="#-系统架构">架构</a> ·
   <a href="#-快速开始">快速开始</a> ·
   <a href="#-开发与验证">开发验证</a> ·
+  <a href="docs/nodegraph/TUTORIAL.md">节点设计</a> ·
   <a href="#-文档索引">文档</a>
 </p>
 
@@ -369,6 +370,7 @@ DSH-L2D/
 | [参数所有权不变量](docs/Ownership-Invariants.md) | 参数冲突、所有权和写入约束 |
 | [参数读写对照](docs/参数读写对照.md) | Cubism 参数读写边界 |
 | [动作链编排](docs/动作链编排-v1.md) | 动作链阶段与编排规则 |
+| [节点设计教程](docs/nodegraph/TUTORIAL.md) | Motion Graph 节点编辑器图文教程：每种节点的用途、端口、参数与操作演示 |
 | [MCP 包说明](packages/dsh-l2d-mcp/README.md) | MCP 安装、工具和回执语义 |
 | [Workspace Agent 指南](docs/agent/README.md) | 上下文边界、动作组合与结果验证 |
 | [MCP Bridge 设计](docs/mcp-bridge/BRIDGE-DESIGN.md) | Workspace、状态和动作桥接设计 |
