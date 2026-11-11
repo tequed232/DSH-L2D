@@ -519,6 +519,38 @@ server.registerTool(
     ),
 );
 
+// ---------------- AI 动作链规划（Phase 2 / LLM Action Planner）----------------
+// 自然语言意图 → 从空图创建完整动作链并落盘（strict 绑定模型）。
+// 与 l2d_graph_apply_ops 同风格经 graphApi 走 /dsh-l2d/api/nodegraph/ai-plan；
+// 校验/保存全在宿主（applyOps 预演 + saveNodegraph），MCP 侧只转发。
+server.registerTool(
+  'l2d_graph_ai_plan',
+  {
+    description:
+      '自然语言创建全新动作链。给出 name（新图名，不可与已有图重名）和 instruction（行为意图，如「看到主人回来先惊讶再挥手最后害羞」），宿主 LLM 从空图生成 ops、逐 op 校验（动作/表情 ID 按模型 live2d-ids 清单），整图必须构成完整可执行链才保存（strict 绑定模型；modelId 可显式指定，缺省用宿主当前模型）。返回保存后的 name/modelId/nodeCount/explanation/warnings。注意：先 l2d_graph_get 看是否已有语义相近的图可复用或编辑，不要盲目新建；创建成功后用 l2d_nodegraph_run 执行。宿主无 LLM Key 时返回 503 ai-unavailable。',
+    inputSchema: {
+      name: z.string().min(1).max(64).describe('新动作链名称（不可与已导入图重名，否则 409 name-exists）'),
+      instruction: z.string().min(1).max(2000).describe('行为意图的自然语言描述'),
+      lang: z.enum(['zh-CN', 'en', 'ja']).optional().describe('explanation 语言，缺省 zh-CN'),
+      modelId: z
+        .string()
+        .max(128)
+        .optional()
+        .describe('可选。显式指定校验用模型清单（模型文件名去 .model3.json）；缺省用宿主当前模型'),
+    },
+  },
+  async ({ name, instruction, lang, modelId }) => {
+    const payload = { name, instruction };
+    if (lang) payload.lang = lang;
+    if (modelId) payload.modelId = modelId;
+    return toolResult(await graphApi('/dsh-l2d/api/nodegraph/ai-plan', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    }));
+  },
+);
+
 // ---------------- AI 节点图执行侧（import / run / status / cancel）----------------
 // 与 graphApi 同风格直连宿主 /dsh-l2d/nodegraphs/* 路由（不经 /ai/call 队列）；
 // 宿主路由入口统一过 host-guard 的 guardGraphCall（HOST_GRAPH_TOOLS 白名单），

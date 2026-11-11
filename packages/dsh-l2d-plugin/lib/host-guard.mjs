@@ -89,6 +89,7 @@ export const HOST_GRAPH_TOOLS = Object.freeze([
   'l2d_graph_get',
   'l2d_graph_apply_ops',
   'l2d_graph_ai_edit',
+  'l2d_graph_ai_plan',
   'l2d_nodegraph_import',
   'l2d_nodegraph_run',
   'l2d_nodegraph_status',
@@ -122,6 +123,14 @@ export function guardGraphCall(request = {}) {
     if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) return deny('name-required', '');
   }
   if (name === 'l2d_graph_ai_edit') {
+    if (typeof args.instruction !== 'string' || !args.instruction.trim()) {
+      return deny('invalid-request', '', 'invalid-request: instruction 必须是非空字符串');
+    }
+  }
+  if (name === 'l2d_graph_ai_plan') {
+    if (typeof args.name !== 'string' || !args.name.trim()) {
+      return deny('name-required', '', 'name-required: 需要新动作链的 name');
+    }
     if (typeof args.instruction !== 'string' || !args.instruction.trim()) {
       return deny('invalid-request', '', 'invalid-request: instruction 必须是非空字符串');
     }

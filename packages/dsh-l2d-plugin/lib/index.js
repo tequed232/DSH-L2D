@@ -39,6 +39,7 @@ import {
 import { createRunRegistry } from './nodegraph-runs.mjs';
 import { deepseekChatJson, resolveDeepSeekKey } from './llm-channel.mjs';
 import { handleApplyOps, handleAiEdit, handleCatalog, handleGraphGet, NODEGRAPH_API_BODY_LIMIT } from './nodegraph-api.mjs';
+import { handleAiPlan } from './nodegraph-planner.mjs';
 import { isReservedParam } from './param-guards.mjs';
 import { createModelImporter, readBodyBuffer } from './model-import.mjs';
 import { allowedFromLive2dIds, isSafeModelId, loadLive2dIdsForModel } from './nodegraph-schema.mjs';
@@ -1573,6 +1574,15 @@ export function apply(root, config = {}) {
         ? (prompt) => deepseekChatJson({ key, ...prompt, temperature: 0.2, maxTokens: 2000, timeoutMs: 30000 })
         : null;
       return handleAiEdit(body, { llm, getCurrentModelId });
+    }));
+    // AI 动作链规划（Phase 2）：自然语言意图 → 从空图创建完整动作链并落盘（strict 绑定当前模型）。
+    // LLM Key 来源与 ai-edit 同一通道；无 Key 由 handleAiPlan 返回 503 ai-unavailable。
+    route('/dsh-l2d/api/nodegraph/ai-plan', nodegraphApiPost((body) => {
+      const key = resolveDeepSeekKey(readSettings());
+      const llm = key
+        ? (prompt) => deepseekChatJson({ key, ...prompt, temperature: 0.2, maxTokens: 2000, timeoutMs: 30000 })
+        : null;
+      return handleAiPlan(body, { llm, getCurrentModelId });
     }));
     route('/dsh-l2d/api/nodegraph/graph', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));

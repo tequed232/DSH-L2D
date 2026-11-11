@@ -38,6 +38,7 @@ import {
   handleCatalog,
   NODEGRAPH_API_BODY_LIMIT,
 } from '../../packages/dsh-l2d-plugin/lib/nodegraph-api.mjs';
+import { handleAiPlan } from '../../packages/dsh-l2d-plugin/lib/nodegraph-planner.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
@@ -559,7 +560,7 @@ const server = http.createServer(async (req, res) => {
     const out = handleCatalog(modelParam, { modelId: currentModelId });
     return send(res, out.status, MIME['.json'], Buffer.from(JSON.stringify(out.payload), 'utf8'));
   }
-  if (urlPath === '/api/nodegraph/apply-ops' || urlPath === '/api/nodegraph/ai-edit') {
+  if (urlPath === '/api/nodegraph/apply-ops' || urlPath === '/api/nodegraph/ai-edit' || urlPath === '/api/nodegraph/ai-plan') {
     if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'), false);
     if (!writeGuard(req, res)) return;
     const chunks = [];
@@ -586,6 +587,18 @@ const server = http.createServer(async (req, res) => {
         const llm = key
           ? (prompt) => deepseekChatJson({ key, ...prompt, temperature: 0.2, maxTokens: 2000, timeoutMs: 30000 })
           : null;
+        if (urlPath === '/api/nodegraph/ai-plan') {
+          // 与 catalog 分支同源的当前模型推导（模型根顶层第一个 model3.json）
+          const currentModelId = (() => {
+            try {
+              const f = fs.readdirSync(MODEL_DIR).find((n) => n.endsWith('.model3.json'));
+              return f ? f.slice(0, -'.model3.json'.length) : '';
+            } catch {
+              return '';
+            }
+          })();
+          return reply(await handleAiPlan(body, { llm, getCurrentModelId: () => currentModelId }));
+        }
         return reply(await handleAiEdit(body, { llm }));
       } catch {
         return reply({ status: 500, payload: { ok: false, reason: 'internal-error' } });

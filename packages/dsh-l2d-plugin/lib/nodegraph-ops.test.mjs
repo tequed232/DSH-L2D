@@ -360,6 +360,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ng-ops-'));
       'l2d_graph_get',
       'l2d_graph_apply_ops',
       'l2d_graph_ai_edit',
+      'l2d_graph_ai_plan',
       'l2d_nodegraph_import',
       'l2d_nodegraph_run',
       'l2d_nodegraph_status',
