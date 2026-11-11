@@ -29,6 +29,7 @@ import {
 } from '../../packages/dsh-l2d-plugin/lib/nodegraph.mjs';
 import { createRunRegistry } from '../../packages/dsh-l2d-plugin/lib/nodegraph-runs.mjs';
 import { guardGraphCall } from '../../packages/dsh-l2d-plugin/lib/host-guard.mjs';
+import { createModelImporter, readBodyBuffer } from '../../packages/dsh-l2d-plugin/lib/model-import.mjs';
 import { deepseekChatJson, resolveDeepSeekKey } from '../../packages/dsh-l2d-plugin/lib/llm-channel.mjs';
 import {
   handleApplyOps,
@@ -52,6 +53,14 @@ const CORE_FILE =
   path.join(ROOT, 'vendor', 'cubism', 'CubismSdkForWeb-5-r.5', 'Core', 'live2dcubismcore.min.js');
 const RENDERER_FILE = path.join(ROOT, 'packages', 'dsh-l2d-plugin', 'assets', 'renderer.js');
 const PUBLIC_DIR = path.join(HERE, 'public');
+
+// 模型 zip 导入管线：与真机宿主 lib/index.js 同规格（同一份 lib/model-import.mjs）。
+// 测试/本地可用 DSH_L2D_IMPORT_SCAN_OUT 把能力画像产物引到临时目录，避免污染仓库。
+const modelImporter = createModelImporter({
+  modelDir: MODEL_DIR,
+  repoRoot: ROOT,
+  ...(process.env.DSH_L2D_IMPORT_SCAN_OUT ? { scanOutDir: process.env.DSH_L2D_IMPORT_SCAN_OUT } : {}),
+});
 
 // MG-LAB Control Studio 静态页：严格显式白名单，只有这两条 URL 可达。
 // 刻意不开 assets/*.html 通用映射——URL 一旦参与文件名拼接就有目录穿越风险；
@@ -765,6 +774,90 @@ const server = http.createServer(async (req, res) => {
     }
     nodegraphRuns.requestCancel(id);
     return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, cancelled: true, executionId: id }), 'utf8'));
+  }
+
+  // ---------------------- 模型 zip 导入（与真机宿主同规格） ----------------------
+  // POST /models/import：zip 原始字节（X-Filename URL 编码），同步校验后 202 {jobId}；
+  // GET ?jobId=X：任务状态回查；POST /models/import/cancel：步骤边界取消。
+  if (urlPath === '/models/import') {
+    if (req.method === 'GET') {
+      let jobId = '';
+      try {
+        jobId = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('jobId') || '');
+      } catch {
+        jobId = '';
+      }
+      if (!jobId) {
+        return send(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: 'job-id-required', message: '缺少 jobId' }), 'utf8'));
+      }
+      const record = modelImporter.get(jobId);
+      if (!record) {
+        return send(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: 'not-found', message: '导入任务不存在：' + jobId }), 'utf8'));
+      }
+      return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify(record), 'utf8'));
+    }
+    if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST or GET'), false);
+    if (!writeGuard(req, res)) return;
+    try {
+      const data = await readBodyBuffer(req, modelImporter.maxZipBytes);
+      let filename = '';
+      try {
+        filename = decodeURIComponent(String(req.headers['x-filename'] || ''));
+      } catch {
+        filename = String(req.headers['x-filename'] || '');
+      }
+      const out = modelImporter.beginImport({ filename, data });
+      if (out.ok) {
+        return send(res, 202, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, jobId: out.jobId }), 'utf8'));
+      }
+      return send(res, out.status, MIME['.json'], Buffer.from(JSON.stringify({
+        ok: false,
+        error: out.reason,
+        jobId: out.existingJobId,
+        message: out.message,
+      }), 'utf8'));
+    } catch (err) {
+      const status = err && err.status ? err.status : 500;
+      const code = err && err.code ? err.code : 'import-failed';
+      const message = err && err.message ? err.message : '导入受理失败';
+      return send(res, status, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: code, message }), 'utf8'));
+    }
+  }
+
+  if (urlPath === '/models/import/cancel') {
+    if (req.method !== 'POST') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'), false);
+    if (!writeGuard(req, res)) return;
+    const chunks = [];
+    let total = 0;
+    req.on('data', (c) => {
+      total += c.length;
+      if (total > 4 * 1024) {
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      let body = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
+      } catch {
+        body = {};
+      }
+      const jobId = typeof body.jobId === 'string' ? body.jobId : '';
+      if (!jobId) {
+        return send(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: 'job-id-required', message: '缺少 jobId' }), 'utf8'));
+      }
+      const out = modelImporter.cancel(jobId);
+      if (out.ok) {
+        return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, cancelled: true, jobId }), 'utf8'));
+      }
+      if (out.error === 'not-found') {
+        return send(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: 'not-found', message: '导入任务不存在：' + jobId }), 'utf8'));
+      }
+      return send(res, 409, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: 'not-cancellable', state: out.state, message: '任务已结束（' + out.state + '），无需取消' }), 'utf8'));
+    });
+    return;
   }
 
   if (urlPath === '/motion-mode') {

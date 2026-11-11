@@ -40,6 +40,7 @@ import { createRunRegistry } from './nodegraph-runs.mjs';
 import { deepseekChatJson, resolveDeepSeekKey } from './llm-channel.mjs';
 import { handleApplyOps, handleAiEdit, handleCatalog, handleGraphGet, NODEGRAPH_API_BODY_LIMIT } from './nodegraph-api.mjs';
 import { isReservedParam } from './param-guards.mjs';
+import { createModelImporter, readBodyBuffer } from './model-import.mjs';
 import { allowedFromLive2dIds, isSafeModelId, loadLive2dIdsForModel } from './nodegraph-schema.mjs';
 import { ensureModelNodegraphs } from './nodegraph-templates.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
@@ -153,6 +154,15 @@ function getCurrentModelId() {
     return '';
   }
 }
+
+// 模型 zip 导入管线（设置页「模型导入」）：注册表与步骤逻辑在 lib/model-import.mjs，
+// 这里只做路由（回环 + 跨站防护 + 原始字节读取），与 dev-server 同规格。
+// DSH_L2D_IMPORT_SCAN_OUT 可把能力画像产物引到自定义目录（测试/诊断用）。
+const modelImporter = createModelImporter({
+  modelDir: MODEL_DIR,
+  repoRoot: L2D_ROOT,
+  ...(process.env.DSH_L2D_IMPORT_SCAN_OUT ? { scanOutDir: process.env.DSH_L2D_IMPORT_SCAN_OUT } : {}),
+});
 
 export const name = 'dsh-l2d';
 
@@ -1302,6 +1312,94 @@ export function apply(root, config = {}) {
         } catch (err) {
           sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: [String((err && err.message) || err)] }), 'utf8'));
         }
+      });
+    });
+
+    // ---------------------- 模型 zip 导入（设置页「模型导入」） ----------------------
+    // 三端点与 dev-server 同规格；管线/注册表在 lib/model-import.mjs。
+    // POST 收 zip 原始字节（X-Filename 带 URL 编码文件名），同步校验后 202 {jobId}；
+    // GET ?jobId=X 回查执行状态（state/step/progress/result/error）。
+    route('/dsh-l2d/models/import', (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method === 'GET') {
+        let jobId = '';
+        try {
+          jobId = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('jobId') || '');
+        } catch {
+          jobId = '';
+        }
+        if (!jobId) {
+          return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: 'job-id-required', message: '缺少 jobId' }), 'utf8'));
+        }
+        const record = modelImporter.get(jobId);
+        if (!record) {
+          return sendBuffer(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: 'not-found', message: '导入任务不存在：' + jobId }), 'utf8'));
+        }
+        return sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify(record), 'utf8'));
+      }
+      if (req.method !== 'POST') {
+        return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST or GET'));
+      }
+      readBodyBuffer(req, modelImporter.maxZipBytes)
+        .then((data) => {
+          let filename = '';
+          try {
+            filename = decodeURIComponent(String(req.headers['x-filename'] || ''));
+          } catch {
+            filename = String(req.headers['x-filename'] || '');
+          }
+          const out = modelImporter.beginImport({ filename, data });
+          if (out.ok) {
+            return sendBuffer(res, 202, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, jobId: out.jobId }), 'utf8'));
+          }
+          // busy：同时只允许一个导入任务，回执带既有 jobId 供前端转轮询。
+          sendBuffer(res, out.status, MIME['.json'], Buffer.from(JSON.stringify({
+            ok: false,
+            error: out.reason,
+            jobId: out.existingJobId,
+            message: out.message,
+          }), 'utf8'));
+        })
+        .catch((err) => {
+          const status = err && err.status ? err.status : 500;
+          const code = err && err.code ? err.code : 'import-failed';
+          const message = err && err.message ? err.message : '导入受理失败';
+          sendBuffer(res, status, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: code, message }), 'utf8'));
+        });
+    });
+
+    route('/dsh-l2d/models/import/cancel', (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'POST') {
+        return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
+      }
+      const chunks = [];
+      req.on('data', (c) => {
+        chunks.push(c);
+        if (chunks.reduce((n, b) => n + b.length, 0) > 4 * 1024) req.destroy();
+      });
+      req.on('end', () => {
+        let body = {};
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString('utf8')) || {};
+        } catch {
+          body = {};
+        }
+        const jobId = typeof body.jobId === 'string' ? body.jobId : '';
+        if (!jobId) {
+          return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: 'job-id-required', message: '缺少 jobId' }), 'utf8'));
+        }
+        const out = modelImporter.cancel(jobId);
+        if (out.ok) {
+          return sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, cancelled: true, jobId }), 'utf8'));
+        }
+        if (out.error === 'not-found') {
+          return sendBuffer(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: 'not-found', message: '导入任务不存在：' + jobId }), 'utf8'));
+        }
+        // 终态/已完成任务不可取消：409 + 当前 state，前端据此停止取消态 UI。
+        sendBuffer(res, 409, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: 'not-cancellable', state: out.state, message: '任务已结束（' + out.state + '），无需取消' }), 'utf8'));
       });
     });
 
