@@ -963,8 +963,9 @@
         padding-left: var(--studio-rail-w);
         padding-bottom: var(--studio-statusbar-h);
       }
-      body::before {
-        content: '01 / 02 / 03 / 04 / 05';
+      /* NAV RAIL v1：真实导航导轨（替代原 body::before 装饰编号）。
+         几何与原导轨一致；默认态低调，hover 提亮，当前项左侧指示条 + 选中底色。 */
+      .nav-rail {
         position: fixed;
         left: 0;
         top: var(--studio-toolbar-h);
@@ -974,13 +975,47 @@
         padding: var(--studio-gutter) 0;
         border-right: 1px solid var(--studio-line);
         background: var(--studio-surface);
-        color: var(--studio-ink-3);
-        font: var(--studio-text-micro);
-        text-align: center;
-        letter-spacing: 2px;
-        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 2px;
         z-index: 2;
       }
+      .nav-rail-item {
+        appearance: none;
+        box-sizing: border-box;
+        border: 0;
+        border-left: 2px solid transparent;
+        border-radius: 0;
+        background: transparent;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 34px;
+        margin: 0 var(--studio-gutter-sm);
+        padding: 0 10px;
+        font: var(--studio-text-sm);
+        color: var(--studio-ink-3);
+        text-align: left;
+        cursor: pointer;
+        transition: background var(--studio-transition-fast), color var(--studio-transition-fast),
+                    border-color var(--studio-transition-fast);
+      }
+      .nav-rail-no {
+        font: var(--studio-text-micro);
+        letter-spacing: 1px;
+        color: var(--studio-ink-3);
+        flex: none;
+      }
+      .nav-rail-item:hover { background: var(--studio-hover); color: var(--studio-ink); }
+      .nav-rail-item:active { background: var(--studio-active); }
+      .nav-rail-item:focus-visible { outline: none; box-shadow: var(--studio-focus-ring); }
+      .nav-rail-item.is-active {
+        background: var(--studio-selected);
+        border-left-color: var(--studio-accent);
+        color: var(--studio-accent-soft-ink);
+      }
+      .nav-rail-item.is-active .nav-rail-no { color: var(--studio-accent); }
 
       /* Toolbar (48px), statusbar (34px), content grid, card head/body split */
       .page {
@@ -1162,14 +1197,16 @@
       }
       @media (max-width: 1023px) {
         body { padding-left: var(--studio-rail-compact-w); }
-        body::before { width: var(--studio-rail-compact-w); font-size: 0; }
+        .nav-rail { width: var(--studio-rail-compact-w); padding: var(--studio-gutter-sm) 0; }
+        .nav-rail-item { justify-content: center; padding: 0; margin: 0 6px; }
+        .nav-rail-item .nav-rail-title { display: none; }
         .page { grid-template-columns: minmax(0, 1fr); }
         .bar { left: var(--studio-rail-compact-w); }
         .head { min-height: 44px; }
       }
       @media (max-width: 719px) {
         body { padding-left: 0; }
-        body::before { display: none; }
+        .nav-rail { display: none; }
         .head { min-height: var(--studio-toolbar-h); padding: 6px var(--studio-gutter-sm); }
         .page { padding: var(--studio-gutter-sm); gap: var(--studio-gutter-sm); }
         .card > * { margin-left: var(--studio-gutter-sm); margin-right: var(--studio-gutter-sm); }
@@ -1295,6 +1332,15 @@
     </style>
   </head>
   <body>
+    <!-- NAV RAIL v1：左侧分区导航（编号与 .sec-no 一致，含 06；点击滚动到对应卡片） -->
+    <nav class="nav-rail" aria-label="设置分区导航">
+      <button class="nav-rail-item" type="button" data-target="sec-display"><span class="nav-rail-no">01</span><span class="nav-rail-title">显示与布局</span></button>
+      <button class="nav-rail-item" type="button" data-target="sec-model"><span class="nav-rail-no">02</span><span class="nav-rail-title">角色与模型</span></button>
+      <button class="nav-rail-item" type="button" data-target="sec-behavior"><span class="nav-rail-no">03</span><span class="nav-rail-title">情绪与行为</span></button>
+      <button class="nav-rail-item" type="button" data-target="sec-performance"><span class="nav-rail-no">04</span><span class="nav-rail-title">动画与性能</span></button>
+      <button class="nav-rail-item" type="button" data-target="sec-nodegraph"><span class="nav-rail-no">05</span><span class="nav-rail-title">节点图动作编排</span></button>
+      <button class="nav-rail-item" type="button" data-target="sec-monitor"><span class="nav-rail-no">06</span><span class="nav-rail-title">性能监控台</span></button>
+    </nav>
     <main class="page">
       <header class="head studio-toolbar">
         <h1>设置</h1>
@@ -2988,6 +3034,80 @@
         }
         window.addEventListener('hashchange', applyHashTarget);
         applyHashTarget();
+
+        /* ===== NAV RAIL v1 =====
+           左侧编号导轨导航化：点击平滑滚动到分区（偏移由既有 .card.studio-card
+           的 scroll-margin-top: var(--studio-toolbar-h) 承担，不写死像素）；
+           scroll-spy 用 scroll+rAF 节流跟随可视分区；点击期间加锁防中间态闪烁。
+           纯交互增强，不触碰任何业务 JS / 表单逻辑。 */
+        var navRail = document.querySelector('.nav-rail');
+        if (navRail) {
+          var navItems = Array.prototype.slice.call(navRail.querySelectorAll('.nav-rail-item[data-target]'));
+          var navSections = navItems
+            .map(function (item) { return document.getElementById(item.getAttribute('data-target')); })
+            .filter(Boolean);
+          var navLockUntil = 0; // 点击平滑滚动期间暂停 spy，避免 active 抖动
+          var navRafPending = false;
+
+          function navSetActive(id) {
+            navItems.forEach(function (item) {
+              var on = item.getAttribute('data-target') === id;
+              item.classList.toggle('is-active', on);
+              if (on) item.setAttribute('aria-current', 'true');
+              else item.removeAttribute('aria-current');
+            });
+          }
+
+          function navSpy() {
+            if (!navSections.length || Date.now() < navLockUntil) return;
+            // spy 阈值沿用卡片的 scroll-margin-top 计算值，与落点偏移保持一致
+            var margin = parseFloat(window.getComputedStyle(navSections[0]).scrollMarginTop) || 0;
+            var current = navSections[0];
+            for (var i = 0; i < navSections.length; i++) {
+              if (navSections[i].getBoundingClientRect().top <= margin + 1) current = navSections[i];
+              else break;
+            }
+            // 页面已滚到底时强制点亮最后一项（末屏内容不足一屏时到不了 top<=margin）
+            if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
+              current = navSections[navSections.length - 1];
+            }
+            navSetActive(current.id);
+          }
+
+          function navOnScroll() {
+            if (navRafPending) return;
+            navRafPending = true;
+            window.requestAnimationFrame(function () {
+              navRafPending = false;
+              navSpy();
+            });
+          }
+
+          navItems.forEach(function (item) {
+            item.addEventListener('click', function () {
+              var target = document.getElementById(item.getAttribute('data-target'));
+              if (!target) return;
+              navSetActive(target.id); // 点击即反馈，不等滚动结束
+              navLockUntil = Date.now() + 900; // 覆盖平滑滚动时长，期间 spy 不抢状态
+              var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+              target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+            });
+          });
+
+          window.addEventListener('scroll', navOnScroll, { passive: true });
+          window.addEventListener('resize', navOnScroll, { passive: true });
+
+          // 初始定位：URL 带 #sec-xxx 时随其落点，否则按当前滚动位置
+          var navHashId = (window.location.hash || '').replace(/^#/, '');
+          var navHashHit = navSections.filter(function (s) { return s.id === navHashId; });
+          if (navHashHit.length) {
+            navSetActive(navHashId);
+            navLockUntil = Date.now() + 900; // applyHashTarget 平滑滚动期间不抢状态
+          } else {
+            navSpy();
+          }
+        }
+        /* ===== END NAV RAIL v1 ===== */
       })();
     </script>
   </body>
