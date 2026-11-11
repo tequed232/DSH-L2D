@@ -1329,6 +1329,159 @@
       .ng-tri-state .ng-tri-item[data-state='ok'] { color: var(--studio-ok); }
       .ng-tri-state .ng-tri-item[data-state='bad'] { color: var(--studio-danger); }
       /* ===== END NODEGRAPH UI v1 ===== */
+
+      /* ===== MODEL IMPORT v1 =====
+         模型 zip 导入区（#sec-model 内、能力画像上方）：
+         拖拽/点击选择态 → XHR 上传（upload.onprogress）→ 轮询处理步骤 → done/error 展示。
+         只追加新前缀 .mi-* 选择器，不修改任何既有选择器；颜色/圆角/字体全部走 studio tokens。 */
+      .mi-root { margin-top: var(--dsh-space-3); }
+      .mi-head {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: var(--dsh-space-2);
+      }
+      .mi-head .sub-head { margin: 0; }
+      .mi-msg.is-error { color: var(--studio-danger); }
+
+      /* idle 选择态：虚线拖拽卡。hover 提示可放、focus-visible 用既有焦点环语言 */
+      .mi-drop {
+        box-sizing: border-box;
+        margin-top: var(--dsh-space-2);
+        padding: var(--dsh-space-4) var(--dsh-space-3);
+        border: 1px dashed var(--studio-line-strong);
+        border-radius: var(--studio-radius-md);
+        background: var(--studio-surface-2);
+        text-align: center;
+        cursor: pointer;
+        outline: none;
+        transition: border-color var(--studio-transition-fast), background var(--studio-transition-fast);
+      }
+      .mi-drop:hover { border-color: var(--studio-ink-3); }
+      .mi-drop:focus-visible {
+        border-color: var(--studio-accent);
+        box-shadow: var(--studio-focus-ring);
+      }
+      .mi-drop.is-over {
+        border-color: var(--studio-accent);
+        border-style: solid;
+        background: var(--studio-hover);
+      }
+      .mi-drop-title {
+        margin: 0;
+        font: var(--studio-text-sm);
+        color: var(--studio-ink);
+      }
+      .mi-drop-sub {
+        margin: var(--dsh-space-1) 0 0;
+        font: var(--studio-text-micro);
+        color: var(--studio-ink-3);
+      }
+      /* 隐藏的原生 file input：仍保留在 DOM 中由拖拽卡/键盘触发 click */
+      .mi-file {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+      }
+
+      /* uploading / processing：步骤行 + 细进度条，复用 .btn/.studio-btn 取消 */
+      .mi-progress {
+        box-sizing: border-box;
+        margin-top: var(--dsh-space-2);
+        padding: var(--dsh-space-3);
+        border: 1px solid var(--studio-line);
+        border-radius: var(--studio-radius-md);
+        background: var(--studio-surface-2);
+      }
+      .mi-step-row {
+        display: flex;
+        align-items: center;
+        gap: var(--dsh-space-2);
+      }
+      .mi-step-dot {
+        flex: none;
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--studio-accent);
+      }
+      .mi-step-text {
+        flex: 1 1 auto;
+        min-width: 0;
+        font: var(--studio-text-sm);
+        color: var(--studio-ink);
+      }
+      .mi-progress .btn { flex: none; }
+      .mi-bar {
+        margin-top: var(--dsh-space-2);
+        height: 6px;
+        border: 1px solid var(--studio-line);
+        border-radius: 999px;
+        background: var(--studio-surface-sunken);
+        overflow: hidden;
+      }
+      .mi-bar-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--studio-accent);
+        transition: width var(--studio-transition-fast);
+      }
+
+      /* done：结果展示。左边框 2px 状态色即页面既有「状态点语言」的框线化表达 */
+      .mi-done {
+        box-sizing: border-box;
+        margin-top: var(--dsh-space-2);
+        padding: var(--dsh-space-3);
+        border: 1px solid var(--studio-line);
+        border-left: 2px solid var(--studio-ok);
+        border-radius: var(--studio-radius-md);
+        background: var(--studio-surface-2);
+      }
+      .mi-done-head {
+        display: flex;
+        align-items: center;
+        gap: var(--dsh-space-2);
+        min-width: 0;
+      }
+      .mi-done-name {
+        font: var(--studio-text-sm);
+        color: var(--studio-ink);
+        word-break: break-all;
+      }
+      .mi-done .dev-actions { margin-top: var(--dsh-space-3); }
+      .mi-warnings {
+        margin: var(--dsh-space-2) 0 0;
+        font: var(--studio-text-xs);
+        color: var(--studio-warn);
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+
+      /* error：错误提示 + 重新选择文件 */
+      .mi-error {
+        box-sizing: border-box;
+        margin-top: var(--dsh-space-2);
+        padding: var(--dsh-space-3);
+        border: 1px solid var(--studio-line);
+        border-left: 2px solid var(--studio-danger);
+        border-radius: var(--studio-radius-md);
+        background: var(--studio-surface-2);
+      }
+      .mi-error-head {
+        display: flex;
+        align-items: center;
+        gap: var(--dsh-space-2);
+      }
+      .mi-error-text {
+        font: var(--studio-text-sm);
+        color: var(--studio-ink);
+        word-break: break-all;
+      }
+      .mi-error .dev-actions { margin-top: var(--dsh-space-3); }
+      /* ===== END MODEL IMPORT v1 ===== */
     </style>
   </head>
   <body>
@@ -1372,6 +1525,54 @@
             <div class="model-name" id="modelName">—</div>
           </div>
           <div class="chips" id="assetChips"></div>
+        </div>
+        <!-- MODEL IMPORT v1：模型 zip 导入区（拖拽/点击选择 → 上传 → 处理 → 结果），能力画像上方 -->
+        <div class="mi-root" id="miRoot">
+          <div class="mi-head">
+            <h3 class="sub-head">导入模型 zip</h3>
+            <span class="hint mi-msg" id="miMsg" role="status" aria-live="polite"></span>
+          </div>
+          <!-- idle 选择态：点击或键盘 Enter/Space 触发隐藏 file input（accept=.zip） -->
+          <div class="mi-drop" id="miDrop" role="button" tabindex="0" aria-label="拖入或点击选择模型 zip 压缩包，上限 200MB">
+            <input type="file" id="miFile" accept=".zip" class="mi-file" tabindex="-1" aria-hidden="true" />
+            <p class="mi-drop-title">把模型 zip 拖到这里，或点击选择文件</p>
+            <p class="mi-drop-sub">.zip 压缩包 · 上限 200MB</p>
+          </div>
+          <!-- uploading / processing：步骤文案 + 进度条 + 取消（取消上传 / 中断导入由 JS 切文案） -->
+          <div class="mi-progress" id="miProgress" hidden>
+            <div class="mi-step-row">
+              <span class="mi-step-dot"></span>
+              <span class="mi-step-text" id="miStepText">上传中 0%</span>
+              <button class="btn studio-btn" type="button" id="miCancelBtn" data-state="error">取消上传</button>
+            </div>
+            <div class="mi-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="miBar">
+              <div class="mi-bar-fill" id="miBarFill"></div>
+            </div>
+          </div>
+          <!-- done：模型名 + 能力三分类 chips + 切换/继续导入 -->
+          <div class="mi-done" id="miDone" hidden>
+            <div class="mi-done-head">
+              <span class="dot ok"></span>
+              <span class="mi-done-name" id="miDoneName"></span>
+            </div>
+            <div id="miCapGroups"></div>
+            <p class="mi-warnings" id="miWarnings" hidden></p>
+            <div class="dev-actions">
+              <button class="btn studio-btn is-primary" type="button" id="miSwitchBtn">切换到此模型</button>
+              <button class="btn studio-btn" type="button" id="miNextBtn">导入下一个</button>
+              <span class="hint" id="miSwitchMsg"></span>
+            </div>
+          </div>
+          <!-- error：错误码映射文案 + 重新选择文件 -->
+          <div class="mi-error" id="miError" hidden>
+            <div class="mi-error-head">
+              <span class="dot err"></span>
+              <span class="mi-error-text" id="miErrorText"></span>
+            </div>
+            <div class="dev-actions">
+              <button class="btn studio-btn" type="button" id="miRetryBtn">重新选择文件</button>
+            </div>
+          </div>
         </div>
         <h3 class="sub-head">能力画像 <span class="hint" id="capSummary"></span></h3>
         <div id="capGroups"></div>
@@ -3108,6 +3309,386 @@
           }
         }
         /* ===== END NAV RAIL v1 ===== */
+
+        /* ===== MODEL IMPORT v1 =====
+           模型 zip 导入状态机：idle → uploading（XHR upload.onprogress，必须 XHR 才有
+           上传进度与 abort）→ processing（每 500ms 轮询，步骤完成自动进下一步）→ done/error。
+           取消：uploading 阶段 abort XHR 回 idle；processing 阶段 POST import/cancel。
+           清理：done/error/重复选文件/页面离开时清掉轮询 interval 与进行中 XHR。
+           纯追加小节，不触碰既有业务 JS / 表单 / NAV RAIL 逻辑。 */
+        var MI_API = {
+          upload: '/dsh-l2d/models/import',
+          poll: '/dsh-l2d/models/import?jobId=',
+          cancel: '/dsh-l2d/models/import/cancel'
+        };
+
+        // 错误码 → 中文文案（契约冻结的五个码；message 非空时优先后端原文）
+        var MI_ERROR_TEXT = {
+          'not-zip': '不是有效的 zip 压缩包',
+          'too-large': '文件过大（上限 200MB）',
+          'invalid-model': '压缩包内未找到有效的 Live2D 模型（缺 model3.json 或存在多个模型）',
+          'busy': '已有导入任务进行中',
+          'import-failed': '导入失败，请重试'
+        };
+        var MI_STATUS_FALLBACK = { 400: 'not-zip', 413: 'too-large', 422: 'invalid-model', 409: 'busy', 500: 'import-failed' };
+        var MI_STEP_TEXT = {
+          queued: '排队中…',
+          extracting: '解压中…',
+          registering: '注册模型…',
+          scanning: '扫描能力中…'
+        };
+
+        var MI_RESULT_GROUPS = [
+          { key: 'supports', title: '支持', dot: 'ok' },
+          { key: 'approximate', title: '近似', dot: 'warn' },
+          { key: 'unsupported', title: '不支持', dot: 'err' }
+        ];
+
+        var miState = 'idle'; // idle | uploading | processing | done | error（每个状态都有出口，见 miSetState/绑定）
+        var miJobId = null;
+        var miXhr = null; // 身份令牌：onload/onabort 校验 miXhr === xhr，防过期回调改状态
+        var miPollTimer = 0;
+        var miPollMiss = 0; // 轮询连续失败计数（网络抖动容忍，5s 判死）
+
+        function miSay(text, isError) {
+          var el = $('miMsg');
+          el.textContent = text || '';
+          el.className = 'hint mi-msg' + (isError ? ' is-error' : '');
+        }
+
+        function miPaintProgress(pct, text) {
+          var v = Math.max(0, Math.min(100, Math.round(pct)));
+          $('miStepText').textContent = text;
+          $('miBarFill').style.width = v + '%';
+          $('miBar').setAttribute('aria-valuenow', String(v));
+        }
+
+        // 停轮询、静默丢弃进行中的 XHR（置空 miXhr 让其回调身份校验失败，不产生状态跳变）
+        function miCleanup() {
+          if (miPollTimer) {
+            window.clearInterval(miPollTimer);
+            miPollTimer = 0;
+          }
+          if (miXhr) {
+            var xhr = miXhr;
+            miXhr = null;
+            try { xhr.abort(); } catch (err) { /* 忽略 */ }
+          }
+          miPollMiss = 0;
+          miJobId = null;
+        }
+
+        // 状态机出口：
+        // idle      → uploading（选/拖文件）
+        // uploading → processing（202+jobId）/ error（HTTP、网络）/ idle（取消上传 abort）
+        // processing→ done（轮询终态）/ error（轮询 error）/ idle（中断导入、服务端 cancelled）
+        // done      → idle（导入下一个；切换按钮只刷新展示，不跳状态）
+        // error     → idle（重新选择文件）
+        function miSetState(next) {
+          miState = next;
+          var isRun = next === 'uploading' || next === 'processing';
+          $('miDrop').hidden = isRun || next === 'done' || next === 'error';
+          $('miProgress').hidden = !isRun;
+          $('miDone').hidden = next !== 'done';
+          $('miError').hidden = next !== 'error';
+          var cancelBtn = $('miCancelBtn');
+          cancelBtn.textContent = next === 'uploading' ? '取消上传' : '中断导入';
+          cancelBtn.disabled = false;
+          if (next === 'idle') {
+            $('miFile').value = '';
+          } else if (next === 'uploading') {
+            miPaintProgress(0, '上传中 0%');
+          }
+        }
+
+        function miResolveErrorText(err, httpStatus) {
+          if (err && err.message) return String(err.message); // 后端 message 非空优先
+          var code = err && err.code ? String(err.code) : '';
+          if (MI_ERROR_TEXT[code]) return MI_ERROR_TEXT[code];
+          var fallback = MI_STATUS_FALLBACK[httpStatus];
+          if (fallback && MI_ERROR_TEXT[fallback]) return MI_ERROR_TEXT[fallback];
+          return MI_ERROR_TEXT['import-failed'];
+        }
+
+        function miParseJson(text) {
+          try { return JSON.parse(text); } catch (err) { return null; }
+        }
+
+        function miFail(err, httpStatus) {
+          miCleanup();
+          miSetState('error');
+          $('miErrorText').textContent = miResolveErrorText(err, httpStatus);
+          miSay('');
+        }
+
+        function miStartUpload(file) {
+          // 重复选择/拖入文件前先清理进行中的轮询与 XHR
+          miCleanup();
+          miSay('');
+          miSetState('uploading');
+          var xhr = new XMLHttpRequest();
+          miXhr = xhr;
+          xhr.open('POST', MI_API.upload, true);
+          // 契约：zip 原始字节 body + X-Filename（encodeURIComponent）
+          xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+          xhr.setRequestHeader('Content-Type', 'application/zip');
+          xhr.upload.onprogress = function (ev) {
+            if (miXhr !== xhr || miState !== 'uploading') return;
+            if (ev.lengthComputable) {
+              var pct = Math.round((ev.loaded / ev.total) * 100);
+              miPaintProgress(pct, pct >= 100 ? '已发送，等待响应…' : '上传中 ' + pct + '%');
+            }
+          };
+          xhr.onload = function () {
+            if (miXhr !== xhr || miState !== 'uploading') return;
+            miXhr = null;
+            var data = miParseJson(xhr.responseText);
+            if ((xhr.status === 202 || xhr.status === 200) && data && data.jobId) {
+              // 上传完成 → 自动进入处理中，立即拉一次再进入 500ms 轮询
+              miJobId = String(data.jobId);
+              miSetState('processing');
+              miPaintProgress(0, MI_STEP_TEXT.queued);
+              miPoll();
+              if (miState === 'processing') miPollTimer = window.setInterval(miPoll, 500);
+            } else {
+              miFail(data ? (data.error || data) : null, xhr.status);
+            }
+          };
+          xhr.onerror = function () {
+            if (miXhr !== xhr || miState !== 'uploading') return;
+            miXhr = null;
+            miFail(null, 0);
+          };
+          xhr.send(file);
+        }
+
+        function miPoll() {
+          if (miState !== 'processing' || !miJobId) return;
+          fetchJson(MI_API.poll + encodeURIComponent(miJobId)).then(function (res) {
+            if (miState !== 'processing') return; // 期间被取消/清理
+            if (!res.ok) {
+              miPollMiss += 1;
+              if (miPollMiss >= 10) miFail(null, 0); // 连续 5 秒拉不到状态才判失败
+              return;
+            }
+            miPollMiss = 0;
+            var data = res.data || {};
+            var st = data.state;
+            if (st === 'done') {
+              miCleanup();
+              miSetState('done');
+              miRenderDone(data.result);
+            } else if (st === 'error') {
+              miFail(data.error || null, 0);
+            } else if (st === 'cancelled') {
+              // 服务端判 cancelled（如另一通道取消）→ 回 idle + 行内提示
+              miCleanup();
+              miSetState('idle');
+              miSay('导入已取消', false);
+            } else if (MI_STEP_TEXT[st]) {
+              var pct = typeof data.progress === 'number' && isFinite(data.progress) ? data.progress : 0;
+              miPaintProgress(pct, MI_STEP_TEXT[st]);
+            }
+          });
+        }
+
+        function miCancel() {
+          if (miState === 'uploading' && miXhr) {
+            // 取消上传 = abort XHR；同步回 idle + 行内提示（miXhr 已置空，onload/onabort 不会抢状态）
+            var xhr = miXhr;
+            miXhr = null;
+            try { xhr.abort(); } catch (err) { /* 忽略 */ }
+            miSetState('idle');
+            miSay('已取消上传', false);
+          } else if (miState === 'processing' && miJobId) {
+            // 中断导入 = POST /dsh-l2d/models/import/cancel {jobId}
+            var jobId = miJobId;
+            var btn = $('miCancelBtn');
+            btn.disabled = true;
+            fetch(MI_API.cancel, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jobId: jobId })
+            })
+              .then(function (res) { return res.json().catch(function () { return {}; }); })
+              .then(function (data) {
+                btn.disabled = false;
+                if (data && data.cancelled) {
+                  miCleanup();
+                  miSetState('idle');
+                  miSay('已中断导入', false);
+                } else {
+                  // {error:'not-cancellable', state}：任务已进入不可中断阶段，继续轮询等终态
+                  miSay('当前步骤不可中断，请等待完成', true);
+                }
+              })
+              .catch(function () {
+                btn.disabled = false;
+                miSay('中断请求失败，请重试', true);
+              });
+          }
+        }
+
+        function miRenderDone(result) {
+          miSay('');
+          var res = result || {};
+          $('miDoneName').textContent = res.name ? String(res.name) : '（未命名模型）';
+          var host = $('miCapGroups');
+          var warnings = $('miWarnings');
+          host.textContent = '';
+          warnings.hidden = true;
+          warnings.textContent = '';
+          $('miSwitchMsg').textContent = '';
+
+          var caps = res.capabilities;
+          var rendered = 0;
+          if (caps && typeof caps === 'object') {
+            // 复用既有 chip 语言：cap-title（dot ok/warn/err + 分组标题）+ .chips/.chip
+            MI_RESULT_GROUPS.forEach(function (group) {
+              var items = Array.isArray(caps[group.key]) ? caps[group.key] : [];
+              if (!items.length) return;
+              rendered += 1;
+              var box = document.createElement('div');
+              box.className = 'cap-group';
+              var title = document.createElement('div');
+              title.className = 'cap-title';
+              var dot = document.createElement('span');
+              dot.className = 'dot ' + group.dot;
+              var label = document.createElement('span');
+              label.textContent = group.title + ' ' + items.length;
+              title.appendChild(dot);
+              title.appendChild(label);
+              box.appendChild(title);
+              var chips = document.createElement('div');
+              chips.className = 'chips';
+              chips.style.marginTop = '8px';
+              items.forEach(function (item) {
+                var chip = document.createElement('span');
+                chip.className = 'chip';
+                chip.textContent = item && item.name ? String(item.name) : '未命名';
+                chips.appendChild(chip);
+              });
+              box.appendChild(chips);
+              host.appendChild(box);
+            });
+          }
+          // capabilities 为 null（或没有任何分组可渲染）时降级展示 warnings 文本
+          if (!rendered) {
+            var list = Array.isArray(res.warnings) ? res.warnings : [];
+            warnings.hidden = false;
+            warnings.textContent = list.length ? list.join('\n') : '导入完成，但没有返回能力画像。';
+          }
+        }
+
+        function miPickFile() {
+          if (miState !== 'idle') return;
+          miCleanup(); // 防御式：重复选文件前清掉进行中的轮询与 XHR
+          var input = $('miFile');
+          input.value = '';
+          input.click();
+        }
+
+        function miAcceptZip(file) {
+          if (!file) return false;
+          if (/\.zip$/i.test(file.name)) return true;
+          var type = (file.type || '').toLowerCase();
+          return type === 'application/zip' || type === 'application/x-zip-compressed' || type === 'application/octet-stream';
+        }
+
+        function miBind() {
+          var drop = $('miDrop');
+          var input = $('miFile');
+
+          drop.addEventListener('click', miPickFile);
+          drop.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') {
+              ev.preventDefault();
+              miPickFile();
+            }
+          });
+
+          input.addEventListener('change', function () {
+            var file = input.files && input.files[0];
+            if (file) miStartUpload(file);
+          });
+
+          ['dragenter', 'dragover'].forEach(function (type) {
+            drop.addEventListener(type, function (ev) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              drop.classList.add('is-over');
+            });
+          });
+          ['dragleave', 'drop'].forEach(function (type) {
+            drop.addEventListener(type, function (ev) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              drop.classList.remove('is-over');
+            });
+          });
+          drop.addEventListener('drop', function (ev) {
+            if (miState !== 'idle') return;
+            var files = ev.dataTransfer && ev.dataTransfer.files;
+            var file = files && files[0];
+            if (!file) {
+              miSay('未识别到拖入的文件', true);
+              return;
+            }
+            if (!miAcceptZip(file)) {
+              miSay('请拖入 .zip 压缩包', true);
+              return;
+            }
+            miStartUpload(file);
+          });
+
+          // 拖拽落点在区域外时浏览器会整页打开文件：吞掉页面级 stray drop
+          ['dragover', 'drop'].forEach(function (type) {
+            window.addEventListener(type, function (ev) { ev.preventDefault(); });
+          });
+
+          $('miCancelBtn').addEventListener('click', miCancel);
+
+          $('miNextBtn').addEventListener('click', function () {
+            miCleanup();
+            miSetState('idle');
+            miSay('');
+          });
+          $('miRetryBtn').addEventListener('click', function () {
+            miCleanup();
+            miSetState('idle');
+            miSay('');
+          });
+
+          // 「切换到此模型」：本页没有现成的模型切换前端调用（模型由宿主/overlay 加载，
+          // settings 页只读 status.json 展示），退化为刷新当前模型状态；
+          // TODO(模型切换)：待宿主提供切换指令（如 l2d_load_model）后改为直接调用。
+          $('miSwitchBtn').addEventListener('click', function () {
+            var btn = $('miSwitchBtn');
+            var msg = $('miSwitchMsg');
+            btn.disabled = true;
+            msg.textContent = '正在刷新模型状态…';
+            msg.className = 'hint';
+            fetchJson(API.status).then(function (res) {
+              btn.disabled = false;
+              if (res.ok) {
+                state.status = res.data;
+                renderStatus(state.status);
+                renderDevInfo(state.status);
+                msg.textContent = '已刷新模型状态';
+              } else {
+                msg.textContent = '刷新失败：' + (res.error || '未知错误');
+                msg.className = 'hint is-error';
+              }
+            });
+          });
+
+          // 页面离开时清理进行中的轮询与 XHR
+          window.addEventListener('pagehide', miCleanup);
+          window.addEventListener('beforeunload', miCleanup);
+        }
+
+        miBind();
+        /* ===== END MODEL IMPORT v1 ===== */
       })();
     </script>
   </body>
