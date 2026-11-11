@@ -75,20 +75,34 @@ export const HOST_ALLOWED_TOOLS = Object.freeze([
 const ALLOWED_SET = new Set(HOST_ALLOWED_TOOLS);
 
 /**
- * AI 节点编辑工具白名单（与 /ai/call 的 HOST_ALLOWED_TOOLS 分开）：
- * 这三项在宿主进程内同步执行（lib/nodegraph-api.mjs），不进浏览器 aiInbox 队列，
- * 所以不能混进 HOST_ALLOWED_TOOLS——否则 /ai/call 会把它们入队给 overlay，而 overlay 没有执行器。
- * MCP 的 l2d_graph_get / l2d_graph_apply_ops 经宿主路由进入，路由入口统一过 guardGraphCall。
+ * AI 节点编辑 / 执行侧工具白名单（与 /ai/call 的 HOST_ALLOWED_TOOLS 分开）：
+ *   - l2d_graph_get / l2d_graph_apply_ops / l2d_graph_ai_edit：设计层编辑，
+ *     在宿主进程内同步执行（lib/nodegraph-api.mjs）；
+ *   - l2d_nodegraph_import / run / status / cancel：执行侧（Phase 1 补齐），
+ *     转发 /dsh-l2d/nodegraphs/{import,run,executions,cancel} 路由，
+ *     生命周期在 nodegraph-runs.mjs、模式互斥在 runNodegraph。
+ * 这些工具都不进浏览器 aiInbox 队列，所以不能混进 HOST_ALLOWED_TOOLS——
+ * 否则 /ai/call 会把它们入队给 overlay，而 overlay 没有执行器。
+ * MCP 的节点图类工具经宿主路由进入，路由入口统一过 guardGraphCall。
  */
-export const HOST_GRAPH_TOOLS = Object.freeze(['l2d_graph_get', 'l2d_graph_apply_ops', 'l2d_graph_ai_edit']);
+export const HOST_GRAPH_TOOLS = Object.freeze([
+  'l2d_graph_get',
+  'l2d_graph_apply_ops',
+  'l2d_graph_ai_edit',
+  'l2d_nodegraph_import',
+  'l2d_nodegraph_run',
+  'l2d_nodegraph_status',
+  'l2d_nodegraph_cancel',
+]);
 const GRAPH_TOOL_SET = new Set(HOST_GRAPH_TOOLS);
 const GRAPH_HASH_RE = /^[0-9a-f]{16}$/;
 /** 与 nodegraph-schema.MAX_OPS_PER_CALL 一致（这里不 import，避免守卫依赖节点定义模块）。 */
 const GRAPH_MAX_OPS = 200;
 
 /**
- * AI 节点编辑入口的静态守卫：未知工具名、ops 形状/数量、baseHash 格式、name 必填。
- * 逐 op 的语义校验在 applyOps 里做，这里只拦明显畸形的请求。
+ * AI 节点编辑 / 执行侧入口的静态守卫：未知工具名、ops 形状/数量、baseHash 格式、name 必填、
+ * 执行侧 doc / executionId 形状。逐 op 的语义校验在 applyOps 里做，导入全量校验在
+ * saveNodegraph，这里只拦明显畸形的请求。
  * @returns {{ok:true} | {ok:false, status:400, reason:string, detail:string, message:string}}
  */
 export function guardGraphCall(request = {}) {
@@ -110,6 +124,22 @@ export function guardGraphCall(request = {}) {
   if (name === 'l2d_graph_ai_edit') {
     if (typeof args.instruction !== 'string' || !args.instruction.trim()) {
       return deny('invalid-request', '', 'invalid-request: instruction 必须是非空字符串');
+    }
+  }
+  // 执行侧工具（l2d_nodegraph_*）：同样只拦明显畸形的请求。
+  // Schema v1 全量校验在导入路由 saveNodegraph，执行生命周期在 nodegraph-runs，这里不重复。
+  if (name === 'l2d_nodegraph_import') {
+    const doc = args.doc;
+    if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+      return deny('invalid-doc', '', 'invalid-doc: doc 必须是完整 Schema v1 分享 JSON 对象');
+    }
+  }
+  if (name === 'l2d_nodegraph_run') {
+    if (typeof args.name !== 'string' || !args.name.trim()) return deny('name-required', '', 'name-required: 需要已导入节点图的 name');
+  }
+  if (name === 'l2d_nodegraph_status' || name === 'l2d_nodegraph_cancel') {
+    if (typeof args.executionId !== 'string' || !args.executionId.trim()) {
+      return deny('execution-id-required', '', 'execution-id-required: 需要 l2d_nodegraph_run 返回的 executionId');
     }
   }
   return { ok: true };

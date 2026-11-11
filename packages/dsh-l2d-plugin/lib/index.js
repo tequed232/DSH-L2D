@@ -25,7 +25,7 @@ import { createAiInbox } from './ai-inbox.mjs';
 import { createWorkspaceAgentBridge } from './workspace-agent.mjs';
 import { createReverseLog } from './reverse-log.mjs';
 import { normalizePresencePayload, readEnvState, writeEnvState } from './env-state.mjs';
-import { createModelIndexCache, guardAiCall, discoverModelFiles } from './host-guard.mjs';
+import { createModelIndexCache, guardAiCall, guardGraphCall, discoverModelFiles } from './host-guard.mjs';
 import {
   readMotionMode,
   writeMotionMode,
@@ -1206,6 +1206,12 @@ export function apply(root, config = {}) {
         } catch {
           return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['body 不是合法 JSON'] }), 'utf8'));
         }
+        // 图工具静态守卫（HOST_GRAPH_TOOLS：l2d_nodegraph_import）：doc 形状不合法先拦，
+        // 全量 Schema v1 校验仍由 saveNodegraph 兜（这里只拦明显畸形）。
+        const importGuard = guardGraphCall({ name: 'l2d_nodegraph_import', args: { doc } });
+        if (!importGuard.ok) {
+          return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: importGuard.reason, errors: [importGuard.message] }), 'utf8'));
+        }
         try {
           // 新图默认 strict 绑定当前模型（2026-11-10 统一约定）：doc 完全没有 modelBinding
           // 字段时注入；旧图显式带 bindingMode:'any' → 原样保存，不自动迁移。
@@ -1320,6 +1326,12 @@ export function apply(root, config = {}) {
       if (!name) {
         return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['name required'] }), 'utf8'));
       }
+      // 图工具静态守卫（HOST_GRAPH_TOOLS：l2d_nodegraph_run）；模式互斥与绑定闸门在
+      // checkRunModelBinding / runNodegraph 兜（这里只拦明显畸形）。
+      const runGuard = guardGraphCall({ name: 'l2d_nodegraph_run', args: { name } });
+      if (!runGuard.ok) {
+        return sendBuffer(res, runGuard.status || 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: runGuard.reason, errors: [runGuard.message] }), 'utf8'));
+      }
       // 模型绑定闸门：strict 绑定模型 ≠ 当前模型 → 409 model-mismatch，一个动作都不发。
       // 检查必须在 nodegraphRunRegistry.begin 之前——失败时不建 running 档，注册表零污染。
       const gate = checkRunModelBinding(name, { currentModelId: getCurrentModelId() });
@@ -1388,6 +1400,11 @@ export function apply(root, config = {}) {
         limit = '';
       }
       if (id) {
+        // 图工具静态守卫（HOST_GRAPH_TOOLS：l2d_nodegraph_status）；?limit 列表用法不走该工具名。
+        const statusGuard = guardGraphCall({ name: 'l2d_nodegraph_status', args: { executionId: id } });
+        if (!statusGuard.ok) {
+          return sendBuffer(res, statusGuard.status || 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: statusGuard.reason, errors: [statusGuard.message] }), 'utf8'));
+        }
         const record = nodegraphRunRegistry.get(id);
         if (!record) {
           return sendBuffer(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['execution not found: ' + id] }), 'utf8'));
@@ -1415,6 +1432,12 @@ export function apply(root, config = {}) {
       }
       if (!id) {
         return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['id required'] }), 'utf8'));
+      }
+      // 图工具静态守卫（HOST_GRAPH_TOOLS：l2d_nodegraph_cancel）；批间取消语义在
+      // registry.requestCancel + 宿主 executor 包装里实现，这里只拦明显畸形。
+      const cancelGuard = guardGraphCall({ name: 'l2d_nodegraph_cancel', args: { executionId: id } });
+      if (!cancelGuard.ok) {
+        return sendBuffer(res, cancelGuard.status || 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: cancelGuard.reason, errors: [cancelGuard.message] }), 'utf8'));
       }
       if (!nodegraphRunRegistry.requestCancel(id)) {
         return sendBuffer(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['running execution not found: ' + id] }), 'utf8'));

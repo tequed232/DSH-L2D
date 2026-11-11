@@ -15,7 +15,7 @@ import {
 } from './nodegraph-schema.mjs';
 import { handleApplyOps, handleAiEdit, handleGraphGet } from './nodegraph-api.mjs';
 import { buildAiEditPrompt } from './nodegraph-ai.mjs';
-import { HOST_GRAPH_TOOLS, HOST_ALLOWED_TOOLS, guardGraphCall } from './host-guard.mjs';
+import { HOST_GRAPH_TOOLS, HOST_ALLOWED_TOOLS, guardAiCall, guardGraphCall } from './host-guard.mjs';
 import { saveNodegraph, loadNodegraph } from './nodegraph.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -354,12 +354,40 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ng-ops-'));
 // 11) host-guard：图工具白名单与 /ai/call 白名单分开
 // ---------------------------------------------------------------------------
 {
-  assert.deepEqual([...HOST_GRAPH_TOOLS], ['l2d_graph_get', 'l2d_graph_apply_ops', 'l2d_graph_ai_edit']);
+  assert.deepEqual(
+    [...HOST_GRAPH_TOOLS],
+    [
+      'l2d_graph_get',
+      'l2d_graph_apply_ops',
+      'l2d_graph_ai_edit',
+      'l2d_nodegraph_import',
+      'l2d_nodegraph_run',
+      'l2d_nodegraph_status',
+      'l2d_nodegraph_cancel',
+    ],
+  );
   for (const t of HOST_GRAPH_TOOLS) assert.equal(HOST_ALLOWED_TOOLS.includes(t), false, t + ' 不进 /ai/call 队列白名单');
   assert.equal(guardGraphCall({ name: 'l2d_set_form' }).reason, 'unknown-tool');
   assert.equal(guardGraphCall({ name: 'l2d_graph_get', args: { name: 'a' } }).ok, true);
   assert.equal(guardGraphCall({ name: 'l2d_graph_apply_ops', args: { ops: [] } }).ok, true);
   assert.equal(guardGraphCall({ name: 'l2d_graph_apply_ops', args: { ops: new Array(201).fill({}) } }).reason, 'too-many-ops');
+  // 执行侧工具（Phase 1）：静态形状守卫
+  assert.equal(guardGraphCall({ name: 'l2d_nodegraph_import', args: { doc: { kind: 'dsh-l2d-nodegraph' } } }).ok, true);
+  assert.equal(guardGraphCall({ name: 'l2d_nodegraph_import', args: {} }).reason, 'invalid-doc');
+  assert.equal(guardGraphCall({ name: 'l2d_nodegraph_import', args: { doc: '{"kind":"x"}' } }).reason, 'invalid-doc', 'doc 必须是对象不是字符串');
+  assert.equal(guardGraphCall({ name: 'l2d_nodegraph_import', args: { doc: [1] } }).reason, 'invalid-doc');
+  assert.equal(guardGraphCall({ name: 'l2d_nodegraph_run', args: { name: 'greet' } }).ok, true);
+  assert.equal(guardGraphCall({ name: 'l2d_nodegraph_run', args: { name: '  ' } }).reason, 'name-required');
+  assert.equal(guardGraphCall({ name: 'l2d_nodegraph_status', args: { executionId: 'e-1' } }).ok, true);
+  assert.equal(guardGraphCall({ name: 'l2d_nodegraph_status', args: {} }).reason, 'execution-id-required');
+  assert.equal(guardGraphCall({ name: 'l2d_nodegraph_cancel', args: { executionId: '' } }).reason, 'execution-id-required');
+  // 白名单外工具仍被拒（执行侧新增不改 unknown-tool 语义）
+  assert.equal(guardGraphCall({ name: 'l2d_nodegraph_execute' }).reason, 'unknown-tool');
+  // 模式互斥语义保持不变：nodegraph 模式拦 LLM 整链编排（l2d_act），执行侧图工具
+  // 不在 /ai/call 白名单（不进 aiInbox），guardGraphCall 侧不做模式判定。
+  assert.equal(guardAiCall({ name: 'l2d_act', args: { chain: [] } }, { mode: 'nodegraph' }).reason, 'mode-blocked');
+  assert.equal(guardAiCall({ name: 'l2d_emote', args: { mood: '开心' } }, { mode: 'nodegraph' }).reason, 'mode-blocked');
+  assert.equal(guardGraphCall({ name: 'l2d_nodegraph_run', args: { name: 'greet' } }).ok, true);
 }
 
 // ---------------------------------------------------------------------------

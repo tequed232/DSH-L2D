@@ -28,6 +28,7 @@ import {
   createInboxActExecutor,
 } from '../../packages/dsh-l2d-plugin/lib/nodegraph.mjs';
 import { createRunRegistry } from '../../packages/dsh-l2d-plugin/lib/nodegraph-runs.mjs';
+import { guardGraphCall } from '../../packages/dsh-l2d-plugin/lib/host-guard.mjs';
 import { deepseekChatJson, resolveDeepSeekKey } from '../../packages/dsh-l2d-plugin/lib/llm-channel.mjs';
 import {
   handleApplyOps,
@@ -635,6 +636,11 @@ const server = http.createServer(async (req, res) => {
       } catch {
         return send(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['body 不是合法 JSON'] }), 'utf8'));
       }
+      // 与真机宿主同级：路由入口过 guardGraphCall（HOST_GRAPH_TOOLS：l2d_nodegraph_import）
+      const importGuard = guardGraphCall({ name: 'l2d_nodegraph_import', args: { doc } });
+      if (!importGuard.ok) {
+        return send(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: importGuard.reason, errors: [importGuard.message] }), 'utf8'));
+      }
       try {
         const saved = saveNodegraph(doc);
         if (!saved.ok) {
@@ -681,6 +687,11 @@ const server = http.createServer(async (req, res) => {
     if (!name) {
       return send(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['name required'] }), 'utf8'));
     }
+    // 与真机宿主同级：路由入口过 guardGraphCall（HOST_GRAPH_TOOLS：l2d_nodegraph_run）
+    const runGuard = guardGraphCall({ name: 'l2d_nodegraph_run', args: { name } });
+    if (!runGuard.ok) {
+      return send(res, runGuard.status || 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: runGuard.reason, errors: [runGuard.message] }), 'utf8'));
+    }
     // NE-02：同图重入防护（与真机宿主同语义）
     const executionId = randomUUID();
     const begun = nodegraphRuns.begin(executionId, name);
@@ -718,6 +729,11 @@ const server = http.createServer(async (req, res) => {
       id = u.searchParams.get('id') || '';
       const limit = Number(u.searchParams.get('limit')) || 20;
       if (id) {
+        // 与真机宿主同级：?id 回查过 guardGraphCall（HOST_GRAPH_TOOLS：l2d_nodegraph_status）
+        const statusGuard = guardGraphCall({ name: 'l2d_nodegraph_status', args: { executionId: id } });
+        if (!statusGuard.ok) {
+          return send(res, statusGuard.status || 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: statusGuard.reason, errors: [statusGuard.message] }), 'utf8'));
+        }
         const rec = nodegraphRuns.get(id);
         if (!rec) return send(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'not-found' }), 'utf8'));
         return send(res, 200, MIME['.json'], Buffer.from(JSON.stringify({ ok: true, record: rec }), 'utf8'));
@@ -738,6 +754,11 @@ const server = http.createServer(async (req, res) => {
       id = '';
     }
     if (!id) return send(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, errors: ['id required'] }), 'utf8'));
+    // 与真机宿主同级：路由入口过 guardGraphCall（HOST_GRAPH_TOOLS：l2d_nodegraph_cancel）
+    const cancelGuard = guardGraphCall({ name: 'l2d_nodegraph_cancel', args: { executionId: id } });
+    if (!cancelGuard.ok) {
+      return send(res, cancelGuard.status || 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: cancelGuard.reason, errors: [cancelGuard.message] }), 'utf8'));
+    }
     const rec = nodegraphRuns.get(id);
     if (!rec || rec.status !== 'running') {
       return send(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'not-found-or-terminal' }), 'utf8'));

@@ -23,6 +23,13 @@ import {
   validateMotionGroup,
 } from './validate.mjs';
 import { readToolchainStatus } from './toolchain-status.mjs';
+import {
+  NODEGRAPH_EXEC_TOOL_DESCRIPTIONS,
+  nodegraphCancel,
+  nodegraphImport,
+  nodegraphRun,
+  nodegraphStatus,
+} from './nodegraph-exec.mjs';
 
 let cachedBase = '';
 
@@ -510,6 +517,66 @@ server.registerTool(
         body: JSON.stringify(modelId ? { name, ops, baseHash, modelId } : { name, ops, baseHash }),
       }),
     ),
+);
+
+// ---------------- AI 节点图执行侧（import / run / status / cancel）----------------
+// 与 graphApi 同风格直连宿主 /dsh-l2d/nodegraphs/* 路由（不经 /ai/call 队列）；
+// 宿主路由入口统一过 host-guard 的 guardGraphCall（HOST_GRAPH_TOOLS 白名单），
+// 导入全量校验在 saveNodegraph、执行生命周期在 nodegraph-runs、模式互斥在 runNodegraph。
+// 转发与错误归一在 nodegraph-exec.mjs（可单测），这里只做注册。
+
+/** 与 graphApi 一致的 unreachable 清缓存（下次调用重新发现端口）。 */
+function execResult(result) {
+  if (result && result.reason === 'unreachable') cachedBase = '';
+  return toolResult(result);
+}
+
+server.registerTool(
+  'l2d_nodegraph_import',
+  {
+    description: NODEGRAPH_EXEC_TOOL_DESCRIPTIONS.import,
+    inputSchema: {
+      doc: z
+        .object({})
+        .passthrough()
+        .describe('完整分享 JSON 对象（对象本身，不是字符串），格式见 docs/nodegraph/NODE-SCHEMA.json'),
+    },
+  },
+  async ({ doc }) => execResult(await nodegraphImport(doc, { base: await baseUrl() })),
+);
+
+server.registerTool(
+  'l2d_nodegraph_run',
+  {
+    description: NODEGRAPH_EXEC_TOOL_DESCRIPTIONS.run,
+    inputSchema: {
+      name: z.string().min(1).max(64).describe('已导入节点图的名称'),
+      modelId: z.string().max(128).optional().describe('可选，仅透传备用：宿主按图的绑定模型校验，此参数不改变校验目标'),
+    },
+  },
+  async ({ name, modelId }) => execResult(await nodegraphRun(name, { base: await baseUrl(), modelId })),
+);
+
+server.registerTool(
+  'l2d_nodegraph_status',
+  {
+    description: NODEGRAPH_EXEC_TOOL_DESCRIPTIONS.status,
+    inputSchema: {
+      executionId: z.string().min(1).max(64).describe('l2d_nodegraph_run 返回的 executionId'),
+    },
+  },
+  async ({ executionId }) => execResult(await nodegraphStatus(executionId, { base: await baseUrl() })),
+);
+
+server.registerTool(
+  'l2d_nodegraph_cancel',
+  {
+    description: NODEGRAPH_EXEC_TOOL_DESCRIPTIONS.cancel,
+    inputSchema: {
+      executionId: z.string().min(1).max(64).describe('l2d_nodegraph_run 返回的 executionId'),
+    },
+  },
+  async ({ executionId }) => execResult(await nodegraphCancel(executionId, { base: await baseUrl() })),
 );
 
 const transport = new StdioServerTransport();
