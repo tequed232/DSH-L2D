@@ -40,6 +40,7 @@ import { createRunRegistry } from './nodegraph-runs.mjs';
 import { deepseekChatJson, resolveDeepSeekKey } from './llm-channel.mjs';
 import { handleApplyOps, handleAiEdit, handleCatalog, handleGraphGet, NODEGRAPH_API_BODY_LIMIT } from './nodegraph-api.mjs';
 import { handleAiPlan } from './nodegraph-planner.mjs';
+import { handleMemorySearch } from './nodegraph-memory.mjs';
 import { isReservedParam } from './param-guards.mjs';
 import { createModelImporter, readBodyBuffer } from './model-import.mjs';
 import { allowedFromLive2dIds, isSafeModelId, loadLive2dIdsForModel } from './nodegraph-schema.mjs';
@@ -1584,6 +1585,28 @@ export function apply(root, config = {}) {
         : null;
       return handleAiPlan(body, { llm, getCurrentModelId });
     }));
+    // 行为记忆检索（Phase 3+4）：语义关键词查既有动作链 + 最近一次真实执行摘要。
+    // 只读；执行史来自本进程的 nodegraphRunRegistry（重启即清空，与执行中状态生命周期一致）。
+    route('/dsh-l2d/api/nodegraph/memory', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      let q = '';
+      let model = '';
+      let limit = '';
+      try {
+        const params = new URL(req.url, 'http://127.0.0.1').searchParams;
+        q = String(params.get('q') || '');
+        model = String(params.get('model') || '');
+        limit = String(params.get('limit') || '');
+      } catch {
+        q = '';
+      }
+      const out = handleMemorySearch(
+        { q, modelId: model || undefined, limit: limit || undefined },
+        { homeDir: process.env.DSH_HOME || path.join(os.homedir(), '.dsh'), registry: nodegraphRunRegistry, getCurrentModelId },
+      );
+      return sendBuffer(res, out.status, MIME['.json'], Buffer.from(JSON.stringify(out.payload), 'utf8'));
+    });
     route('/dsh-l2d/api/nodegraph/graph', (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));

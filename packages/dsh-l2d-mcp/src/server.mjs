@@ -551,6 +551,30 @@ server.registerTool(
   },
 );
 
+// ---------------- 行为记忆检索（Phase 3 Action Memory + Phase 4 Runtime Feedback）----------------
+// 语义关键词查既有动作链（命中即复用/修补，未命中才新建）；每条链附最近一次真实执行摘要
+// （完成/剩余段数、首个失败回执），供 LLM 依据真实 receipts 决定 ai_edit 修补或重规划。
+server.registerTool(
+  'l2d_graph_search',
+  {
+    description:
+      '按语义关键词检索已导入的动作链记忆（行为意图复用入口）。返回每条链的 name/modelId/semantic/链步骤摘要/最近一次真实执行结果 lastRun（status、completedSegments、remainingSegments、failure 首个失败回执）。工作流：创建或执行前先调本工具——①命中语义相近的图：lastRun 为 completed 直接 l2d_nodegraph_run 复用；lastRun 非 completed（interrupted/timeout/failed）先读 failure 定位失败点，用 l2d_graph_ai_edit 修补后重跑；②未命中：l2d_graph_ai_plan 新建。q 为空返回全部链清单。检索为本地关键词评分（name>semantic>链节点名，同模型加权），不做语义向量。',
+    inputSchema: {
+      q: z.string().max(200).optional().describe('语义关键词（如「害羞」「挥手」「欢迎回来」），空格分词任一命中即算；缺省返回全部'),
+      modelId: z.string().max(128).optional().describe('可选。指定模型加权（同模型/any 绑定的链排前）；缺省用宿主当前模型'),
+      limit: z.number().int().min(1).max(50).optional().describe('返回条数上限，缺省 8'),
+    },
+  },
+  async ({ q, modelId, limit }) => {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (modelId) params.set('model', modelId);
+    if (limit) params.set('limit', String(limit));
+    const qs = params.toString();
+    return toolResult(await graphApi('/dsh-l2d/api/nodegraph/memory' + (qs ? '?' + qs : ''), { cache: 'no-store' }));
+  },
+);
+
 // ---------------- AI 节点图执行侧（import / run / status / cancel）----------------
 // 与 graphApi 同风格直连宿主 /dsh-l2d/nodegraphs/* 路由（不经 /ai/call 队列）；
 // 宿主路由入口统一过 host-guard 的 guardGraphCall（HOST_GRAPH_TOOLS 白名单），

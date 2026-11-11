@@ -39,6 +39,7 @@ import {
   NODEGRAPH_API_BODY_LIMIT,
 } from '../../packages/dsh-l2d-plugin/lib/nodegraph-api.mjs';
 import { handleAiPlan } from '../../packages/dsh-l2d-plugin/lib/nodegraph-planner.mjs';
+import { handleMemorySearch } from '../../packages/dsh-l2d-plugin/lib/nodegraph-memory.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
@@ -619,6 +620,35 @@ const server = http.createServer(async (req, res) => {
       name = '';
     }
     const out = handleGraphGet(name, { listModel: listModel || undefined });
+    return send(res, out.status, MIME['.json'], Buffer.from(JSON.stringify(out.payload), 'utf8'));
+  }
+
+  // 行为记忆检索（Phase 3+4）：只读；执行史用 dev-server 自己的 nodegraphRuns 注册表。
+  if (urlPath === '/api/nodegraph/memory') {
+    if (req.method !== 'GET') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'), false);
+    let q = '';
+    let model = '';
+    let limit = '';
+    try {
+      const u = new URL(req.url, 'http://127.0.0.1');
+      q = String(u.searchParams.get('q') || '');
+      model = String(u.searchParams.get('model') || '');
+      limit = String(u.searchParams.get('limit') || '');
+    } catch {
+      q = '';
+    }
+    const currentModelId = (() => {
+      try {
+        const f = fs.readdirSync(MODEL_DIR).find((n) => n.endsWith('.model3.json'));
+        return f ? f.slice(0, -'.model3.json'.length) : '';
+      } catch {
+        return '';
+      }
+    })();
+    const out = handleMemorySearch(
+      { q, modelId: model || undefined, limit: limit || undefined },
+      { registry: nodegraphRuns, getCurrentModelId: () => currentModelId },
+    );
     return send(res, out.status, MIME['.json'], Buffer.from(JSON.stringify(out.payload), 'utf8'));
   }
 
