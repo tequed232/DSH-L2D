@@ -135,7 +135,12 @@ const zhModelFiles = {
   '大肥鱼测试/大肥鱼测试.model3.json': JSON.stringify({ FileReferences: {} }),
   '大肥鱼测试/大肥鱼测试.moc3': 'ZH-MOC3',
 };
-for (const [rel, content] of Object.entries({ ...dirModelFiles, ...flatModelFiles, ...zhModelFiles })) {
+// 中间带空格的模型名（前端 #modelName 只 trim 首尾、保留中间空格）→ 必须能导出
+const spaceModelFiles = {
+  'space model/space model.model3.json': JSON.stringify({ FileReferences: {} }),
+  'space model/space model.moc3': 'SPACE-MOC3',
+};
+for (const [rel, content] of Object.entries({ ...dirModelFiles, ...flatModelFiles, ...zhModelFiles, ...spaceModelFiles })) {
   const full = path.join(modelDirA, rel);
   fs.mkdirSync(path.dirname(full), { recursive: true });
   fs.writeFileSync(full, content);
@@ -218,6 +223,24 @@ try {
     dirEntries.map((e) => e.name).sort(),
     '后缀容错导出内容与不带后缀时一致',
   );
+
+  // 3c) 中间带空格的模型名（前端 #modelName 只 trim 首尾）：isSafeModelId 放行中间空格，
+  //     导出与 filename* 编码都正常
+  const spaceId = 'space model';
+  const spaceExport = await requestRaw(portA, 'GET', '/dsh-l2d/models/export?modelId=' + encodeURIComponent(spaceId));
+  assert.equal(spaceExport.status, 200, '中间空格模型名可导出');
+  assert.equal(
+    spaceExport.headers['content-disposition'],
+    'attachment; filename="model.zip"; filename*=UTF-8\'\'' + encodeURIComponent(spaceId) + '.zip',
+  );
+  assert.deepEqual(
+    readZipEntries(spaceExport.buffer).map((e) => e.name).sort(),
+    ['space model.moc3', 'space model.model3.json'],
+  );
+  // 纯空白 modelId → trim 后为空 → 400（不猜）
+  const blankId = await requestRaw(portA, 'GET', '/dsh-l2d/models/export?modelId=' + encodeURIComponent('   '));
+  assert.equal(blankId.status, 400);
+  assert.equal(jsonOf(blankId).code, 'invalid-model-id');
 
   // 4) 越界/不存在：400 / 404（错误体同时给 error 字符串码与顶层 code，前端两种形状都兼容）
   const badId = await requestRaw(portA, 'GET', '/dsh-l2d/models/export?modelId=' + encodeURIComponent('../etc/passwd'));
