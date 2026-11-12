@@ -67,17 +67,21 @@ function fakeExecTool(calls) {
 }
 
 function makeImporter(opts = {}) {
-  const modelDir = opts.modelDir || tmp();
-  const scanOutDir = opts.scanOutDir || path.join(modelDir, '..', 'scan-out-' + path.basename(modelDir));
+  // 沙盒根：模型目录必须嵌在根下（staging 在 dirname(modelDir)，清理只删这个根，
+  // 绝不 rm 系统临时目录本身）。
+  const root = tmp();
+  const modelDir = path.join(root, 'model');
+  fs.mkdirSync(modelDir, { recursive: true });
+  const scanOutDir = opts.scanOutDir || path.join(root, 'scan-out');
   const calls = [];
   const importer = createModelImporter({
     modelDir,
-    repoRoot: opts.repoRoot || tmp(),
+    repoRoot: opts.repoRoot || path.join(root, 'repo'),
     scanOutDir,
     execTool: opts.execTool || fakeExecTool(calls),
     ...(opts.maxZipBytes ? { maxZipBytes: opts.maxZipBytes } : {}),
   });
-  return { importer, modelDir, scanOutDir, calls };
+  return { importer, modelDir, scanOutDir, calls, root };
 }
 
 const terminals = new Set(['done', 'error', 'cancelled']);
@@ -86,7 +90,7 @@ const terminals = new Set(['done', 'error', 'cancelled']);
 // 1) 正常导入：嵌套 zip 抬升 + 安装到顶层 + capabilities 同源映射 + staging 清理
 // ---------------------------------------------------------------------------
 {
-  const { importer, modelDir, scanOutDir } = makeImporter();
+  const { importer, modelDir, scanOutDir, calls, root } = makeImporter();
   try {
     const out = importer.beginImport({ filename: 'demo-model.zip', data: modelZip('demo-model') });
     assert.equal(out.ok, true);
@@ -104,6 +108,8 @@ const terminals = new Set(['done', 'error', 'cancelled']);
       'capabilities 三分类与能力画像产物同源',
     );
     assert.equal(rec.result.switched, true, '模型根目录从空到有 → 当前模型切换');
+    // 工具调用顺序：register → catalog → scan → cognition（C-2 认知入库在安装后）
+    assert.deepEqual(calls, ['register', 'catalog', 'scan', 'cognition'], '工具步骤顺序固定');
     // 安装位置：既有加载链只发现模型根顶层
     assert.ok(fs.existsSync(path.join(modelDir, 'demo-model.model3.json')), 'model3.json 必须落在模型根顶层');
     assert.ok(fs.existsSync(path.join(modelDir, 'demo-model.moc3')));
@@ -113,7 +119,7 @@ const terminals = new Set(['done', 'error', 'cancelled']);
     assert.equal(fs.existsSync(stagingRoot) && fs.readdirSync(stagingRoot).length > 0, false, 'staging 已清理');
     assert.ok(fs.existsSync(path.join(scanOutDir, 'profile.demo-model.json')));
   } finally {
-    clean(path.dirname(modelDir));
+    clean(root);
   }
 }
 
@@ -124,7 +130,7 @@ for (const [label, entries, reason] of [
   ['no-model3', [{ name: 'readme.txt', data: 'no model here' }], 'no-model3'],
   ['multi-model3', [{ name: 'a.model3.json', data: '{}' }, { name: 'sub/b.model3.json', data: '{}' }], 'multi-model3'],
 ]) {
-  const { importer, modelDir } = makeImporter();
+  const { importer, modelDir, root } = makeImporter();
   try {
     const out = importer.beginImport({ filename: 'x.zip', data: makeZip(entries) });
     const rec = await waitTerminal(importer, out.jobId);
@@ -133,11 +139,11 @@ for (const [label, entries, reason] of [
     assert.equal(rec.error.code, 422);
     assert.ok(rec.error.message.length > 0, '中文 message 非空');
   } finally {
-    clean(path.dirname(modelDir));
+    clean(root);
   }
 }
 {
-  const { importer, modelDir } = makeImporter();
+  const { importer, modelDir, root } = makeImporter();
   try {
     const out = importer.beginImport({ filename: 'x.zip', data: makeZip([{ name: 'bad.model3.json', data: '{oops' }]) });
     const rec = await waitTerminal(importer, out.jobId);
@@ -145,7 +151,7 @@ for (const [label, entries, reason] of [
     assert.equal(rec.error.reason, 'bad-json');
     assert.equal(rec.error.code, 422);
   } finally {
-    clean(path.dirname(modelDir));
+    clean(root);
   }
 }
 
@@ -153,7 +159,7 @@ for (const [label, entries, reason] of [
 // 3) zip-slip 条目在管线内被拦（zip-reader 抛，管线落 error 态）
 // ---------------------------------------------------------------------------
 {
-  const { importer, modelDir } = makeImporter();
+  const { importer, modelDir, root } = makeImporter();
   try {
     const zip = makeZip([
       { rawName: '../escaped.txt', data: 'evil' },
@@ -166,7 +172,7 @@ for (const [label, entries, reason] of [
     assert.equal(fs.existsSync(path.join(path.dirname(modelDir), 'escaped.txt')), false, '穿越文件不得落盘');
     assert.equal(fs.existsSync(path.join(modelDir, 'escaped.txt')), false);
   } finally {
-    clean(path.dirname(modelDir));
+    clean(root);
   }
 }
 
@@ -179,7 +185,7 @@ for (const [label, entries, reason] of [
     release = r;
   });
   const calls = [];
-  const { importer, modelDir } = makeImporter({
+  const { importer, modelDir, root } = makeImporter({
     execTool: async (job) => {
       calls.push(job.tool);
       if (job.tool === 'scan') await gate; // 卡在 scanning 步，制造活跃窗口
@@ -200,7 +206,7 @@ for (const [label, entries, reason] of [
     assert.equal(rec.state, 'done');
   } finally {
     release();
-    clean(path.dirname(modelDir));
+    clean(root);
   }
 }
 
@@ -212,7 +218,7 @@ for (const [label, entries, reason] of [
   const gate = new Promise((r) => {
     release = r;
   });
-  const { importer, modelDir } = makeImporter({
+  const { importer, modelDir, root } = makeImporter({
     execTool: async (job) => {
       if (job.tool === 'register') await gate; // 卡在 registering
       return { code: 0, stdout: '', stderr: '' };
@@ -241,7 +247,7 @@ for (const [label, entries, reason] of [
     assert.equal(again.state, 'cancelled');
   } finally {
     release();
-    clean(path.dirname(modelDir));
+    clean(root);
   }
 }
 
@@ -249,7 +255,7 @@ for (const [label, entries, reason] of [
 // 6) 重导入同名模型允许覆盖；异模型文件名冲突拒绝
 // ---------------------------------------------------------------------------
 {
-  const { importer, modelDir } = makeImporter();
+  const { importer, modelDir, root } = makeImporter();
   try {
     const first = importer.beginImport({ filename: 'a.zip', data: modelZip('demo-model') });
     await waitTerminal(importer, first.jobId);
@@ -259,11 +265,11 @@ for (const [label, entries, reason] of [
     assert.equal(rec.state, 'done', '同模型重导入成功');
     assert.deepEqual(fs.readFileSync(path.join(modelDir, 'texture00.png')), before);
   } finally {
-    clean(path.dirname(modelDir));
+    clean(root);
   }
 }
 {
-  const { importer, modelDir } = makeImporter();
+  const { importer, modelDir, root } = makeImporter();
   try {
     // 预置另一个模型的同名贴图（内容不同），导入不同 model3 的模型 → 冲突拒绝
     fs.writeFileSync(path.join(modelDir, 'texture00.png'), Buffer.from('existing-other-model'));
@@ -279,7 +285,7 @@ for (const [label, entries, reason] of [
     assert.equal(rec.error.reason, 'name-conflict');
     assert.deepEqual(fs.readFileSync(path.join(modelDir, 'texture00.png')), Buffer.from('existing-other-model'), '既有文件未被覆盖');
   } finally {
-    clean(path.dirname(modelDir));
+    clean(root);
   }
 }
 
@@ -287,7 +293,7 @@ for (const [label, entries, reason] of [
 // 7) 同步校验：非 zip / 扩展名 / 大小上限（不建任务、不抛注册表副作用）
 // ---------------------------------------------------------------------------
 {
-  const { importer, modelDir } = makeImporter();
+  const { importer, modelDir, root } = makeImporter();
   try {
     assert.throws(() => importer.beginImport({ filename: 'a.zip', data: Buffer.from('garbage not zip') }), (err) => err instanceof ImportError && err.code === 'not-zip');
     assert.throws(
@@ -300,7 +306,7 @@ for (const [label, entries, reason] of [
     assert.equal(importer.get('nonexistent'), null);
     assert.equal(importer.cancel('nonexistent').error, 'not-found');
   } finally {
-    clean(path.dirname(modelDir));
+    clean(root);
   }
 }
 
@@ -308,15 +314,83 @@ for (const [label, entries, reason] of [
 // 8) 工具失败降级：register/catalog/scan 全失败 → 导入仍 done，capabilities:null + warnings
 // ---------------------------------------------------------------------------
 {
-  const { importer, modelDir } = makeImporter({ execTool: async () => ({ code: 1, stdout: '', stderr: 'boom' }) });
+  const { importer, modelDir, root } = makeImporter({ execTool: async () => ({ code: 1, stdout: '', stderr: 'boom' }) });
   try {
     const out = importer.beginImport({ filename: 'a.zip', data: modelZip('demo-model') });
     const rec = await waitTerminal(importer, out.jobId);
     assert.equal(rec.state, 'done', '工具失败不阻塞导入');
     assert.equal(rec.result.capabilities, null, '扫描失败 → capabilities:null');
     assert.ok(rec.result.warnings.some((w) => w.startsWith('scan-')), 'warnings 说明降级原因');
+    assert.ok(rec.result.warnings.some((w) => w.startsWith('cognition-')), 'C-2：认知入库失败同样降级 warnings');
   } finally {
-    clean(path.dirname(modelDir));
+    clean(root);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 9) C-2 认知入库：cognition 步在 done 前执行；DB 不可用/超时 → 降级不阻塞
+// ---------------------------------------------------------------------------
+{
+  const calls = [];
+  const { importer, modelDir, root } = makeImporter({
+    execTool: async (job) => {
+      calls.push({ tool: job.tool, args: job.args, env: job.env });
+      if (job.tool === 'scan') {
+        // 其他工具按成功返回；cognition 模拟 node:sqlite 不可用（非零退出）
+      }
+      if (job.tool === 'cognition') return { code: 1, stdout: '', stderr: 'node:sqlite 不可用：请使用 Node >= 22.5' };
+      return { code: 0, stdout: '', stderr: '' };
+    },
+  });
+  try {
+    const out = importer.beginImport({ filename: 'a.zip', data: modelZip('demo-model') });
+    const rec = await waitTerminal(importer, out.jobId);
+    assert.equal(rec.state, 'done', '认知入库失败不阻塞 done');
+    const cognitionCall = calls.find((c) => c.tool === 'cognition');
+    assert.ok(cognitionCall, 'cognition 步必须执行');
+    // 参数契约：--model-dir <安装目录> --model-id <modelId> [--db]
+    const dirArg = cognitionCall.args[cognitionCall.args.indexOf('--model-dir') + 1];
+    const idArg = cognitionCall.args[cognitionCall.args.indexOf('--model-id') + 1];
+    assert.equal(dirArg, modelDir, 'cognition 跑在安装后的模型目录');
+    assert.equal(idArg, 'demo-model');
+    assert.ok(!cognitionCall.args.includes('--db'), '未配置 DB 路径时不传 --db（CLI 用仓库默认库）');
+    assert.ok(
+      rec.result.warnings.some((w) => w.includes('cognition-failed') && w.includes('node:sqlite')),
+      'warnings 携带认知入库失败原因：' + JSON.stringify(rec.result.warnings),
+    );
+  } finally {
+    clean(root);
+  }
+}
+{
+  // dbPath 显式配置 → 透传 --db；host 取消在 cognition 前仍生效（步骤边界）
+  const calls = [];
+  const root = tmp();
+  const modelDir = path.join(root, 'model');
+  fs.mkdirSync(modelDir, { recursive: true });
+  const scanOutDir = path.join(root, 'scan-out');
+  const importer = createModelImporter({
+    modelDir,
+    repoRoot: path.join(root, 'repo'),
+    scanOutDir,
+    dbPath: path.join(root, 'cognition-test.sqlite'),
+    execTool: async (job) => {
+      calls.push(job);
+      return { code: 0, stdout: '', stderr: '' };
+    },
+  });
+  try {
+    const out = importer.beginImport({ filename: 'a.zip', data: modelZip('demo-model') });
+    const rec = await waitTerminal(importer, out.jobId);
+    assert.equal(rec.state, 'done');
+    const cognitionCall = calls.find((c) => c.tool === 'cognition');
+    assert.deepEqual(
+      cognitionCall.args.slice(cognitionCall.args.indexOf('--db'), cognitionCall.args.indexOf('--db') + 2),
+      ['--db', path.join(root, 'cognition-test.sqlite')],
+      'dbPath 透传为 --db 参数',
+    );
+  } finally {
+    clean(root);
   }
 }
 

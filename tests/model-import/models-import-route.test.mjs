@@ -79,8 +79,12 @@ async function waitState(port, jobId, states, timeoutMs = 30000) {
   throw new Error('任务未在时限内到 ' + states.join('|') + '：' + JSON.stringify(last));
 }
 
-const modelDir = tmp();
-const scanOut = tmp();
+// 沙盒根：modelDir/scanOut/db 都嵌在同一个根下（清理只删这个根，绝不 rm 系统临时目录）。
+const root = tmp();
+const modelDir = path.join(root, 'model');
+const scanOut = path.join(root, 'scan-out');
+const dbPath = path.join(root, 'cognition.sqlite');
+fs.mkdirSync(modelDir, { recursive: true });
 const port = await freePort();
 const child = spawn(process.execPath, [path.join(ROOT, 'tools', 'dev-server', 'index.mjs'), '--port', String(port)], {
   cwd: ROOT,
@@ -88,6 +92,8 @@ const child = spawn(process.execPath, [path.join(ROOT, 'tools', 'dev-server', 'i
     ...process.env,
     DSH_L2D_MODEL_DIR: modelDir,
     DSH_L2D_IMPORT_SCAN_OUT: scanOut,
+    // C-2 认知入库：DB 指向沙盒，绝不写仓库默认库 data/bootstrap-state.sqlite
+    DSH_L2D_DB_PATH: dbPath,
   },
   stdio: ['ignore', 'pipe', 'pipe'],
   windowsHide: true,
@@ -160,6 +166,8 @@ try {
     assert.equal(record.result.modelId, fixtureId);
     assert.equal(record.result.switched, true, '空模型目录 → 导入即当前模型');
     assert.ok(fs.existsSync(path.join(modelDir, fixtureId + '.model3.json')), 'model3.json 落在模型根顶层（既有加载链可发现）');
+    // C-2：认知入库（cognition 步）真实执行 —— 沙盒库文件被创建且含本模型行
+    assert.ok(fs.existsSync(dbPath), '认知档案库应被创建（cognition 步真实执行）');
     // 最小 fixture：scan 真实执行成功（controls 全 unsupported/unknown），capabilities 与产物同源
     assert.ok(record.result.capabilities, '最小模型 scan 应成功产出 capabilities');
     assert.ok(fs.existsSync(path.join(scanOut, 'profile.' + fixtureId + '.json')));
@@ -205,7 +213,7 @@ try {
   console.log('models-import route tests passed');
 } finally {
   child.kill();
-  clean(path.dirname(modelDir)); // 连同 scan-out 一起（在其兄弟位置）
+  clean(root); // 模型目录 / 扫描产物 / 认知库都在同一个沙盒根下
   for (const f of repoSideEffects) {
     try {
       fs.rmSync(f, { force: true });

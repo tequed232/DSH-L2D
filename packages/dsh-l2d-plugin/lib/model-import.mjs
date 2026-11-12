@@ -4,7 +4,7 @@
  *
  * 职责（docs 与契约：POST /dsh-l2d/models/import 三端点）：
  *   - 任务注册表：同时只允许一个导入任务（409 busy 返回既有 jobId，前端可据此轮询）；
- *   - 步骤串行、步间检查取消：extracting → registering → scanning → 安装 → done；
+ *   - 步骤串行、步间检查取消：extracting → registering → scanning → 安装 → cognition → done；
  *   - 安装目标：宿主模型根目录 MODEL_DIR 顶层——既有加载链（getCurrentModelId =
  *     discoverModelFiles(MODEL_DIR)[0]，overlay 经 /dsh-l2d/status.json 解析当前模型）
  *     只发现顶层 .model3.json，导入的模型必须落进这个位置才能被现有链选中；
@@ -12,7 +12,10 @@
  *     spawn tools/capability-scan/scan.mjs，读 profile.<modelId>.json 的 controls 映射；
  *   - exp3/motion3 引用写回（#28 方案 A）与 live2d-ids 清单：spawn 既有 CLI
  *     （tools/model-resources/register.mjs / tools/live2d-catalog/build-live2d-catalog.mjs），
- *     不复制粘贴逻辑；工具失败不阻塞导入（降级 warnings）。
+ *     不复制粘贴逻辑；工具失败不阻塞导入（降级 warnings）；
+ *   - 认知入库（C-2）：安装完成后 spawn tools/model-registry/ingest.mjs 写 @dsh/db
+ *     Model IR（插件包不依赖 db，DB 路径经 env DSH_L2D_DB_PATH / --db 传）；失败降级
+ *     warnings，绝不阻塞 done。
  *
  * 复用方式说明：register / catalog / scan 三个工具是 CLI 形态（顶层直接执行，
  * 不可安全 import），统一走子进程 spawn——与既有 /dsh-l2d/capability/rescan 路由
@@ -32,12 +35,12 @@ import { discoverModelFiles } from './host-guard.mjs';
 import { readZipEntries, ZIP_ENTRY_DEFAULT_LIMITS } from './zip-reader.mjs';
 
 /** 活跃状态：占用「同时只能一个导入任务」名额。 */
-const ACTIVE_STATES = new Set(['queued', 'extracting', 'registering', 'scanning']);
+const ACTIVE_STATES = new Set(['queued', 'extracting', 'registering', 'scanning', 'cognition']);
 
 export const MODEL_IMPORT_DEFAULTS = Object.freeze({
   maxZipBytes: 200 * 1024 * 1024,
   ...ZIP_ENTRY_DEFAULT_LIMITS,
-  toolTimeouts: { register: 60_000, catalog: 180_000, scan: 300_000 },
+  toolTimeouts: { register: 60_000, catalog: 180_000, scan: 300_000, cognition: 120_000 },
 });
 
 /** 管线同步校验/步骤错误：路由与注册表统一消费 code/status/message。 */
@@ -130,7 +133,8 @@ function moveContentsMerge(src, dst, fsImpl) {
  *   maxTotalUncompressedBytes?: number,
  *   toolTimeouts?: {register?: number, catalog?: number, scan?: number},
  *   scanOutDir?: string,
- *   execTool?: (job: {tool: 'register'|'catalog'|'scan', script: string, args: string[],
+ *   dbPath?: string,
+ *   execTool?: (job: {tool: 'register'|'catalog'|'scan'|'cognition', script: string, args: string[],
  *                      env: object, cwd: string, timeoutMs: number}) =>
  *                      Promise<{code: number, stdout: string, stderr: string, timedOut?: boolean}>,
  * }} options
@@ -150,6 +154,10 @@ export function createModelImporter(options = {}) {
   };
   const timeouts = { ...MODEL_IMPORT_DEFAULTS.toolTimeouts, ...(options.toolTimeouts || {}) };
   const scanOutDir = options.scanOutDir || path.join(repoRoot, 'tools', 'capability-scan');
+  // 认知档案库路径（@dsh/db）：显式 options.dbPath > env DSH_L2D_DB_PATH > 不传（CLI 用仓库默认库）。
+  const dbPath = typeof options.dbPath === 'string' && options.dbPath
+    ? options.dbPath
+    : process.env.DSH_L2D_DB_PATH || '';
 
   /** jobId → record（纯内存，进程重启清空）。 */
   const records = new Map();
@@ -423,6 +431,20 @@ export function createModelImporter(options = {}) {
       moveContentsMerge(payloadDir, modelDir, fsImpl);
       const postModelId = currentModelIdOf(modelDir, fsImpl);
       const switched = Boolean(postModelId) && postModelId !== preModelId;
+
+      // ---- cognition：模型认知入库（@dsh/db Model IR，spawn 既有 CLI） ----
+      // 安装完成后跑（源文件清单要锚定最终安装位置的真实文件）。失败/超时/node:sqlite
+      // 不可用一律降级 warnings，绝不阻塞导入 done——认知档案是增强，不是前置条件。
+      checkCancel(rec);
+      setStep(rec, 'cognition', 'cognition', 92, '正在建立模型认知档案…');
+      await runCliTool(rec, {
+        tool: 'cognition',
+        script: path.join(repoRoot, 'tools', 'model-registry', 'ingest.mjs'),
+        args: ['--model-dir', modelDir, '--model-id', modelId, ...(dbPath ? ['--db', dbPath] : [])],
+        env: { ...process.env },
+        cwd: repoRoot,
+        timeoutMs: timeouts.cognition,
+      });
 
       const result = {
         modelId,
