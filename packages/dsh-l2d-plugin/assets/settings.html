@@ -1482,6 +1482,66 @@
       }
       .mi-error .dev-actions { margin-top: var(--dsh-space-3); }
       /* ===== END MODEL IMPORT v1 ===== */
+
+      /* ===== QUICK IO v1 =====
+         左侧导轨底部快捷导入/导出入口。几何与 .nav-rail-item 完全对齐（同 margin/内边距/
+         min-height 34px），视觉沿用 studio tokens；≤1023px 紧排断点下只留图标，
+         与 .nav-rail-item .nav-rail-title 的收窄处理保持一致。 */
+      .nav-rail-foot {
+        margin-top: auto; /* 导轨是 flex column：底部吸附 */
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding-top: var(--studio-gutter-sm);
+        border-top: 1px solid var(--studio-line);
+      }
+      .nav-rail-io {
+        appearance: none;
+        box-sizing: border-box;
+        border: 0;
+        border-left: 2px solid transparent;
+        border-radius: 0;
+        background: transparent;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 34px;
+        margin: 0 var(--studio-gutter-sm);
+        padding: 0 10px;
+        font: var(--studio-text-sm);
+        color: var(--studio-ink-3);
+        text-align: left;
+        cursor: pointer;
+        transition: background var(--studio-transition-fast), color var(--studio-transition-fast),
+                    border-color var(--studio-transition-fast);
+      }
+      .nav-rail-io:hover:not(:disabled) { background: var(--studio-hover); color: var(--studio-ink); }
+      .nav-rail-io:active:not(:disabled) { background: var(--studio-active); }
+      .nav-rail-io:focus-visible { outline: none; box-shadow: var(--studio-focus-ring); }
+      .nav-rail-io:disabled {
+        opacity: var(--studio-state-disabled-opacity);
+        cursor: not-allowed;
+      }
+      .nav-rail-io-glyph {
+        flex: none;
+        width: 14px;
+        text-align: center;
+        font: var(--studio-text-micro);
+        color: var(--studio-ink-3);
+      }
+      .nav-rail-io:hover:not(:disabled) .nav-rail-io-glyph { color: var(--studio-ink-2); }
+      .nav-rail-io-label {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      @media (max-width: 1023px) {
+        .nav-rail-io { justify-content: center; padding: 0; margin: 0 6px; }
+        .nav-rail-io-label { display: none; }
+      }
+      /* ===== END QUICK IO v1 ===== */
     </style>
   </head>
   <body>
@@ -1493,6 +1553,15 @@
       <button class="nav-rail-item" type="button" data-target="sec-performance"><span class="nav-rail-no">04</span><span class="nav-rail-title">动画与性能</span></button>
       <button class="nav-rail-item" type="button" data-target="sec-nodegraph"><span class="nav-rail-no">05</span><span class="nav-rail-title">节点图动作编排</span></button>
       <button class="nav-rail-item" type="button" data-target="sec-monitor"><span class="nav-rail-no">06</span><span class="nav-rail-title">性能监控台</span></button>
+      <!-- QUICK IO v1：导轨底部快捷入口。导入只做入口（触发既有 #miFile 全链），导出走 GET /dsh-l2d/models/export -->
+      <div class="nav-rail-foot">
+        <button class="nav-rail-io" type="button" id="qioImportBtn" aria-label="快捷导入模型 zip">
+          <span class="nav-rail-io-glyph" aria-hidden="true">⤓</span><span class="nav-rail-io-label">导入</span>
+        </button>
+        <button class="nav-rail-io" type="button" id="qioExportBtn" aria-label="快捷导出当前模型 zip">
+          <span class="nav-rail-io-glyph" aria-hidden="true">⤒</span><span class="nav-rail-io-label">导出</span>
+        </button>
+      </div>
     </nav>
     <main class="page">
       <header class="head studio-toolbar">
@@ -3689,6 +3758,167 @@
 
         miBind();
         /* ===== END MODEL IMPORT v1 ===== */
+
+        /* ===== QUICK IO v1 =====
+           左侧导轨底部快捷导入/导出。
+           导入：只做入口——滚动到 #sec-model 并触发既有 #miFile 的 click()，文件选中后的
+                 上传 / 进度 / 取消 / 结果全权交给 MODEL IMPORT v1 既有状态机，本节不新写上传逻辑。
+           导出：GET /dsh-l2d/models/export?modelId=<当前模型名> 取 zip blob；
+                 优先 showSaveFilePicker 选目标位置写盘，旧内核回退 <a download> 到默认下载目录。
+           贯穿约定：请求期间按钮 disabled +「导出中…」，结束（含异常）必恢复。 */
+        var QIO_EXPORT_URL = '/dsh-l2d/models/export?modelId=';
+        // 错误码 → 中文（契约码）与 HTTP 状态码双路映射，后端 message 非空时优先原文
+        var QIO_CODE_TEXT = {
+          'invalid-model-id': '模型标识非法',
+          'model-not-found': '模型不存在',
+          'export-too-large': '模型过大，无法导出',
+          'export-failed': '导出失败，请重试'
+        };
+        var QIO_STATUS_TEXT = {
+          400: '模型标识非法',
+          404: '模型不存在',
+          413: '模型过大，无法导出',
+          500: '导出失败，请重试'
+        };
+
+        function qioModelId() {
+          var el = $('modelName');
+          var text = el ? String(el.textContent || '').trim() : '';
+          if (!text || text === '—' || text === '-' || text === '未找到模型文件') return '';
+          // status.json 的 model 是 model3.json 文件名（discoverModelFiles 结果），
+          // 而导入管线里 modelId = 去掉 .model3.json 后缀的模型名（model-import.mjs:363）；
+          // 导出接口按同源 modelId 收参数，这里归一化掉后缀，两种形态都能对上。
+          return text.replace(/\.model3\.json$/i, '');
+        }
+
+        function qioErrorMessage(status, payload) {
+          if (payload && typeof payload.message === 'string' && payload.message) return payload.message;
+          var err = payload && payload.error;
+          if (err && typeof err === 'object' && typeof err.message === 'string' && err.message) return err.message;
+          var code = '';
+          if (typeof err === 'string') code = err;
+          else if (err && typeof err.code === 'string') code = err.code;
+          else if (payload && typeof payload.code === 'string') code = payload.code;
+          if (QIO_CODE_TEXT[code]) return QIO_CODE_TEXT[code];
+          if (QIO_STATUS_TEXT[status]) return QIO_STATUS_TEXT[status];
+          return QIO_CODE_TEXT['export-failed'];
+        }
+
+        // 落盘：返回 'picked'（写入所选位置）/ 'fallback'（下载到默认目录）/ 'aborted'（用户取消）
+        function qioSaveBlob(blob, modelId) {
+          var fileName = modelId + '.zip';
+          if (typeof window.showSaveFilePicker === 'function') {
+            return window.showSaveFilePicker({
+              suggestedName: fileName,
+              types: [{ description: 'ZIP 压缩包', accept: { 'application/zip': ['.zip'] } }]
+            }).then(function (handle) {
+              return handle
+                .createWritable()
+                .then(function (writable) {
+                  return writable.write(blob).then(function () { return writable.close(); });
+                })
+                .then(function () { return 'picked'; });
+            }).catch(function (err) {
+              var name = err && err.name;
+              if (name === 'AbortError') return 'aborted'; // 用户在选择框点了取消：静默
+              if (name === 'SecurityError' || name === 'NotAllowedError') {
+                // 无用户手势（fetch 耗时超出激活窗口）或环境不允许：降级为默认目录下载
+                return qioAnchorDownload(blob, fileName).then(function () { return 'fallback'; });
+              }
+              throw err; // 写盘失败等交给上层统一友好提示
+            });
+          }
+          // 旧内核回退：objectURL + <a download>
+          return qioAnchorDownload(blob, fileName).then(function () { return 'fallback'; });
+        }
+
+        function qioAnchorDownload(blob, fileName) {
+          return new Promise(function (resolve) {
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.rel = 'noopener';
+            document.body.appendChild(a);
+            a.click();
+            if (a.parentNode) a.parentNode.removeChild(a);
+            window.setTimeout(function () {
+              try { URL.revokeObjectURL(url); } catch (err) { /* 忽略 */ }
+            }, 10000);
+            resolve();
+          });
+        }
+
+        function qioImport() {
+          var target = $('sec-model');
+          if (target) {
+            var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+          }
+          var input = $('miFile');
+          if (!input) {
+            showAlert('导入区不可用：页面上找不到模型导入控件。');
+            return;
+          }
+          showAlert('');
+          input.value = '';
+          input.click(); // 选中文件后由 MODEL IMPORT v1 的 change 监听接管整条链
+        }
+
+        function qioExport() {
+          var btn = $('qioExportBtn');
+          var label = btn ? btn.querySelector('.nav-rail-io-label') : null;
+          var prevLabel = label ? label.textContent : '导出';
+          function restore() {
+            if (btn) btn.disabled = false;
+            if (label) label.textContent = prevLabel || '导出';
+          }
+
+          var modelId = qioModelId();
+          if (!modelId) {
+            showAlert('当前无模型可导出：先导入或在「角色与模型」里确认模型已就绪。');
+            return;
+          }
+
+          try {
+            if (btn) btn.disabled = true;
+            if (label) label.textContent = '导出中…';
+            showAlert('');
+            fetch(QIO_EXPORT_URL + encodeURIComponent(modelId), { cache: 'no-store' })
+              .then(function (res) {
+                if (res.ok) return res.blob();
+                return res.json().catch(function () { return null; }).then(function (payload) {
+                  showAlert('导出失败：' + qioErrorMessage(res.status, payload));
+                  return null;
+                });
+              })
+              .then(function (blob) {
+                if (!blob) return null; // 错误提示已给出，走 restore
+                return qioSaveBlob(blob, modelId).then(function (result) {
+                  if (result === 'picked') showAlert('已导出到所选位置：' + modelId + '.zip');
+                  else if (result === 'fallback') showAlert('当前环境不支持选择目录，已下载到默认下载目录：' + modelId + '.zip');
+                  // 'aborted'：用户取消，静默
+                });
+              })
+              .catch(function (err) {
+                showAlert('导出失败：' + (err && err.message ? String(err.message) : '未知错误'));
+              })
+              .then(restore, restore); // 成功/失败/取消均恢复按钮两态
+          } catch (err) {
+            restore();
+            showAlert('导出失败：' + (err && err.message ? String(err.message) : '未知错误'));
+          }
+        }
+
+        function qioBind() {
+          var importBtn = $('qioImportBtn');
+          var exportBtn = $('qioExportBtn');
+          if (importBtn) importBtn.addEventListener('click', qioImport);
+          if (exportBtn) exportBtn.addEventListener('click', qioExport);
+        }
+
+        qioBind();
+        /* ===== END QUICK IO v1 ===== */
       })();
     </script>
   </body>
