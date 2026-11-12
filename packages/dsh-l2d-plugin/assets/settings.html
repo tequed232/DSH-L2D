@@ -3767,16 +3767,19 @@
                  优先 showSaveFilePicker 选目标位置写盘，旧内核回退 <a download> 到默认下载目录。
            贯穿约定：请求期间按钮 disabled +「导出中…」，结束（含异常）必恢复。 */
         var QIO_EXPORT_URL = '/dsh-l2d/models/export?modelId=';
-        // 错误码 → 中文（契约码）与 HTTP 状态码双路映射，后端 message 非空时优先原文
+        // 错误码 → 中文（契约码 + 后端兜底码 ambiguous-model/409）与 HTTP 状态码双路映射；
+        // 后端 message 非空时优先原文，本表只作 message 缺失时的兜底。
         var QIO_CODE_TEXT = {
           'invalid-model-id': '模型标识非法',
           'model-not-found': '模型不存在',
           'export-too-large': '模型过大，无法导出',
+          'ambiguous-model': '存在多个同名模型，无法确定导出哪一个',
           'export-failed': '导出失败，请重试'
         };
         var QIO_STATUS_TEXT = {
           400: '模型标识非法',
           404: '模型不存在',
+          409: '存在多个同名模型，无法确定导出哪一个',
           413: '模型过大，无法导出',
           500: '导出失败，请重试'
         };
