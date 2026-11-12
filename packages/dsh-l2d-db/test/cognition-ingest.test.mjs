@@ -334,12 +334,22 @@ const parseMoc3 = () => MOC3_FACTS;
 }
 
 // ---------------------------------------------------------------------------
-// 8) CLI 薄壳：单模型 / --all-models / --verify（真实子进程，不碰仓库默认库）
+// 8) CLI 薄壳：单模型 / --all-models（含嵌套目录递归）/ --verify（真实子进程，不碰仓库默认库）
 // ---------------------------------------------------------------------------
 {
   const modelDir = makeModelDir();
-  // 第二个模型（无引用资源 → 全降级）
-  fs.writeFileSync(path.join(modelDir, 'fy.model3.json'), JSON.stringify({ FileReferences: {} }));
+  // 第二个模型（无引用资源 → 全降级；Name 字段保证 model3 内容不同——同内容会撞
+  // models.package_hash 唯一索引，见报告"已知风险①"）
+  fs.writeFileSync(path.join(modelDir, 'fy.model3.json'), JSON.stringify({ Name: 'fy', FileReferences: {} }));
+  // 嵌套布局（workshop 形态：a/b/c/m.model3.json 必须被递归扫到）
+  const nested = path.join(modelDir, 'a', 'b', 'c');
+  fs.mkdirSync(nested, { recursive: true });
+  fs.writeFileSync(path.join(nested, 'm.model3.json'), JSON.stringify({ Name: 'nested-m', FileReferences: {} }));
+  // 干扰项：隐藏目录 / node_modules 下的 model3 不得被扫到
+  fs.mkdirSync(path.join(modelDir, '.hidden'), { recursive: true });
+  fs.writeFileSync(path.join(modelDir, '.hidden', 'ghost.model3.json'), JSON.stringify({ FileReferences: {} }));
+  fs.mkdirSync(path.join(modelDir, 'node_modules', 'pkg'), { recursive: true });
+  fs.writeFileSync(path.join(modelDir, 'node_modules', 'pkg', 'ghost2.model3.json'), JSON.stringify({ FileReferences: {} }));
   const dbDir = tmp();
   const dbPath = path.join(dbDir, 'cli.sqlite');
   const script = path.join(ROOT, 'tools', 'model-registry', 'ingest.mjs');
@@ -351,11 +361,19 @@ const parseMoc3 = () => MOC3_FACTS;
     assert.equal(report.ok, true, single);
     assert.ok(report.steps.some((s) => s.step === 'registered'));
 
+    // --all-models：顶层 2 + 嵌套 1 = 3（隐藏目录/node_modules 不计）
     const all = execFileSync(process.execPath, [script, '--all-models', '--model-dir', modelDir, '--db', dbPath], { encoding: 'utf8' });
     const allReport = JSON.parse(all);
     assert.equal(allReport.ok, true, all);
-    assert.equal(allReport.total, 2);
-    assert.deepEqual(allReport.reports.map((r) => r.modelId).sort(), ['fx', 'fy']);
+    assert.equal(allReport.total, 3, '递归扫描总数（顶层 2 + a/b/c 嵌套 1）');
+    assert.deepEqual(allReport.reports.map((r) => r.modelId).sort(), ['fx', 'fy', 'm']);
+    const nestedReport = allReport.reports.find((r) => r.modelId === 'm');
+    assert.equal(nestedReport.ok, true, '嵌套模型入库成功');
+    assert.equal(nestedReport.modelDir, 'a/b/c', '回执带相对模型根的定位（同目录多变体可区分）');
+    assert.equal(allReport.reports.find((r) => r.modelId === 'fx').modelDir, '.', '顶层模型 modelDir 记为 .');
+    // 二次执行幂等：总数与 modelId 集合不变
+    const rerun = JSON.parse(execFileSync(process.execPath, [script, '--all-models', '--model-dir', modelDir, '--db', dbPath], { encoding: 'utf8' }));
+    assert.deepEqual(rerun.reports.map((r) => r.modelId).sort(), ['fx', 'fy', 'm']);
 
     const verified = execFileSync(process.execPath, [script, '--verify', '--model-id', 'fy', '--db', dbPath], { encoding: 'utf8' });
     const v = JSON.parse(verified);

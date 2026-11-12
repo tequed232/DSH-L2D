@@ -8,7 +8,8 @@
  *   node tools/model-registry/ingest.mjs --model-dir <path> --model-id <id> [--db <path>]
  *       # 单模型入库（模型导入管线的 cognition 步走这条）
  *   node tools/model-registry/ingest.mjs --all-models [--model-dir <path>] [--db <path>]
- *       # 扫描模型根下全部 *.model3.json 逐个入库（幂等）
+ *       # 递归扫描模型根下全部 *.model3.json 逐个入库（深度上限 6，跳过 node_modules/.git/
+ *       # 隐藏目录；workshop 这类嵌套布局靠这条批量回填；同目录多变体各自一档，幂等）
  *   node tools/model-registry/ingest.mjs --verify [--model-id <id>] [--db <path>]
  *       # 只读验收：打印该 modelId 在库里的行数（models/source_files/nodes/parameters/
  *       # capability_profiles/validation_findings），不写入
@@ -94,21 +95,61 @@ function resolveProfileArtifact(modelId) {
   return fs.existsSync(file) ? file : null;
 }
 
-/** --all-models：扫模型根下全部 *.model3.json，逐个入库（单模型失败不影响其余）。 */
+/** --all-models 的扫描上限：目录深度 / 命中数量护栏（workshop 嵌套树实测 3 层足够）。 */
+const ALL_MODELS_MAX_DEPTH = 6;
+const ALL_MODELS_MAX_HITS = 500;
+const SKIP_DIRS = new Set(['node_modules', '.git', '__pycache__']);
+
+/** 递归找出 root 下全部 *.model3.json（跳过隐藏目录与依赖/版本库目录）。 */
+function discoverModel3Files(root) {
+  const hits = [];
+  const walk = (dir, depth) => {
+    if (depth > ALL_MODELS_MAX_DEPTH || hits.length >= ALL_MODELS_MAX_HITS) return;
+    let items;
+    try {
+      items = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return; // 不可读目录跳过，不阻塞其余模型
+    }
+    for (const item of items) {
+      const full = path.join(dir, item.name);
+      if (item.isDirectory()) {
+        if (item.name.startsWith('.') || SKIP_DIRS.has(item.name)) continue;
+        walk(full, depth + 1);
+      } else if (item.isFile() && item.name.toLowerCase().endsWith('.model3.json')) {
+        hits.push(full);
+      }
+    }
+  };
+  walk(root, 0);
+  return hits.sort();
+}
+
+/** --all-models：递归扫模型根下全部 *.model3.json，逐个入库（单模型失败不影响其余）。
+ *  每个命中的 modelId = 文件名去 .model3.json，modelDir = 该文件所在目录（cognition-ingest
+ *  在这个目录里找 model3/cdi3/moc3——workshop 嵌套布局天然支持）。同目录多变体各自一档。 */
 function allModels(db) {
-  let files = [];
-  try {
-    files = fs.readdirSync(MODEL_DIR).filter((n) => n.toLowerCase().endsWith('.model3.json')).sort();
-  } catch (err) {
-    return { ok: false, error: '模型目录不可读：' + MODEL_DIR + '（' + String((err && err.message) || err) + '）' };
+  if (!fs.existsSync(MODEL_DIR)) {
+    return { ok: false, error: '模型目录不存在：' + MODEL_DIR, modelDir: MODEL_DIR, total: 0, reports: [] };
   }
+  const files = discoverModel3Files(MODEL_DIR);
   const reports = [];
   for (const file of files) {
-    const modelId = file.replace(/\.model3\.json$/, '');
+    const modelId = path.basename(file).replace(/\.model3\.json$/i, '');
+    const modelDir = path.dirname(file);
     try {
-      reports.push(ingestOne(db, modelId, MODEL_DIR));
+      const report = ingestOne(db, modelId, modelDir);
+      // 相对模型根的定位信息：同目录多变体时靠它区分是哪一个档
+      reports.push({ ...report, modelDir: path.relative(MODEL_DIR, modelDir).replace(/\\/g, '/') || '.' });
     } catch (err) {
-      reports.push({ modelId, ok: false, counts: null, warnings: [], error: String((err && err.message) || err) });
+      reports.push({
+        modelId,
+        modelDir: path.relative(MODEL_DIR, modelDir).replace(/\\/g, '/') || '.',
+        ok: false,
+        counts: null,
+        warnings: [],
+        error: String((err && err.message) || err),
+      });
     }
   }
   return { ok: reports.every((r) => r.ok), modelDir: MODEL_DIR, total: reports.length, reports };
