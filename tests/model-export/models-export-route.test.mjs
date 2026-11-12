@@ -204,13 +204,31 @@ try {
     '中文条目名往返正常',
   );
 
-  // 4) 越界/不存在：400 / 404
+  // 3b) modelId 后缀容错：前端若直接传 status.json 的带后缀文件名，也能导出
+  //     （filename* 用归一化后的名字，不带 .model3.json）
+  const suffixed = await requestRaw(portA, 'GET', '/dsh-l2d/models/export?modelId=' + encodeURIComponent('demo-model.model3.json'));
+  assert.equal(suffixed.status, 200, '带 .model3.json 后缀的 modelId 容错导出');
+  assert.equal(
+    suffixed.headers['content-disposition'],
+    'attachment; filename="model.zip"; filename*=UTF-8\'\'demo-model.zip',
+    '下载文件名使用归一化后的模型名（不带 .model3.json）',
+  );
+  assert.deepEqual(
+    readZipEntries(suffixed.buffer).map((e) => e.name).sort(),
+    dirEntries.map((e) => e.name).sort(),
+    '后缀容错导出内容与不带后缀时一致',
+  );
+
+  // 4) 越界/不存在：400 / 404（错误体同时给 error 字符串码与顶层 code，前端两种形状都兼容）
   const badId = await requestRaw(portA, 'GET', '/dsh-l2d/models/export?modelId=' + encodeURIComponent('../etc/passwd'));
   assert.equal(badId.status, 400);
   assert.equal(jsonOf(badId).error, 'invalid-model-id');
+  assert.equal(jsonOf(badId).code, 'invalid-model-id');
   const missing = await requestRaw(portA, 'GET', '/dsh-l2d/models/export?modelId=nope');
   assert.equal(missing.status, 404);
   assert.equal(jsonOf(missing).error, 'model-not-found');
+  assert.equal(jsonOf(missing).code, 'model-not-found');
+  assert.ok(jsonOf(missing).message && /[\u4e00-\u9fa5]/.test(jsonOf(missing).message), 'message 中文可读');
   const noId = await requestRaw(portA, 'GET', '/dsh-l2d/models/export');
   assert.equal(noId.status, 400, '缺 modelId → 400');
 

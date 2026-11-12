@@ -242,7 +242,11 @@ function collectFlatModelFiles(modelDir, modelId, limits) {
  */
 export function buildModelExportZip(options = {}) {
   const modelDir = options.modelDir;
-  const modelId = typeof options.modelId === 'string' ? options.modelId.trim() : '';
+  const rawModelId = typeof options.modelId === 'string' ? options.modelId.trim() : '';
+  // modelId 语义与导入管线同源：不带 .model3.json 后缀的模型名（lib/model-import.mjs
+  // 的 modelId = 文件名去后缀）。这里额外容错：前端若把 status.json 的原始文件名
+  // （带 .model3.json）直接传进来，剥掉后缀再解析，两种形态都能导出。
+  const modelId = rawModelId.replace(/\.model3\.json$/i, '');
   const limits = {
     maxEntries: options.limits?.maxEntries || MODEL_EXPORT_LIMITS.maxEntries,
     maxTotalBytes: options.limits?.maxTotalBytes || MODEL_EXPORT_LIMITS.maxTotalBytes,
@@ -254,7 +258,7 @@ export function buildModelExportZip(options = {}) {
   if (!modelId || !isSafeModelId(modelId)) {
     return {
       ok: false,
-      error: { status: 400, code: 'invalid-model-id', message: 'modelId 非法（拦 .. 与路径分隔符）：' + modelId.slice(0, 40) },
+      error: { status: 400, code: 'invalid-model-id', message: 'modelId 非法（拦 .. 与路径分隔符）：' + rawModelId.slice(0, 40) },
     };
   }
   const resolved = resolveModelSource(modelDir, modelId);
@@ -292,5 +296,7 @@ export function buildModelExportZip(options = {}) {
     bytes,
     mode: resolved.mode,
     sourceDir: path.relative(modelDir, resolved.dir).replace(/\\/g, '/') || '.',
+    // 归一化后的模型名（去 .model3.json 后缀）：路由用它生成下载文件名。
+    modelId,
   };
 }

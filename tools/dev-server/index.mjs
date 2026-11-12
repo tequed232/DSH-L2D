@@ -915,12 +915,12 @@ const server = http.createServer(async (req, res) => {
     }
     const out = buildModelExportZip({ modelDir: MODEL_DIR, modelId });
     if (!out.ok) {
-      return send(res, out.error.status, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: out.error.code, message: out.error.message }), 'utf8'));
+      return send(res, out.error.status, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: out.error.code, code: out.error.code, message: out.error.message }), 'utf8'));
     }
     res.writeHead(200, {
       'Content-Type': 'application/zip',
       'Content-Length': String(out.buffer.length),
-      'Content-Disposition': 'attachment; filename="model.zip"; filename*=UTF-8\'\'' + encodeURIComponent(modelId) + '.zip',
+      'Content-Disposition': 'attachment; filename="model.zip"; filename*=UTF-8\'\'' + encodeURIComponent(out.modelId) + '.zip',
       'Cache-Control': 'no-store',
     });
     return res.end(out.buffer);

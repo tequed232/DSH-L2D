@@ -1423,12 +1423,13 @@ export function apply(root, config = {}) {
       }
       const out = buildModelExportZip({ modelDir: MODEL_DIR, modelId });
       if (!out.ok) {
-        return sendBuffer(res, out.error.status, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: out.error.code, message: out.error.message }), 'utf8'));
+        // 兼容前端两种错误形状：error 为字符串码 + 顶层 message，同时给顶层 code。
+        return sendBuffer(res, out.error.status, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: out.error.code, code: out.error.code, message: out.error.message }), 'utf8'));
       }
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Length', String(out.buffer.length));
-      res.setHeader('Content-Disposition', 'attachment; filename="model.zip"; filename*=UTF-8\'\'' + encodeURIComponent(modelId) + '.zip');
+      res.setHeader('Content-Disposition', 'attachment; filename="model.zip"; filename*=UTF-8\'\'' + encodeURIComponent(out.modelId) + '.zip');
       res.setHeader('Cache-Control', 'no-store');
       res.end(out.buffer);
     });
