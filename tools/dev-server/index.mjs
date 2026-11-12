@@ -30,6 +30,7 @@ import {
 import { createRunRegistry } from '../../packages/dsh-l2d-plugin/lib/nodegraph-runs.mjs';
 import { guardGraphCall } from '../../packages/dsh-l2d-plugin/lib/host-guard.mjs';
 import { createModelImporter, readBodyBuffer } from '../../packages/dsh-l2d-plugin/lib/model-import.mjs';
+import { buildModelExportZip } from '../../packages/dsh-l2d-plugin/lib/model-export.mjs';
 import { deepseekChatJson, resolveDeepSeekKey } from '../../packages/dsh-l2d-plugin/lib/llm-channel.mjs';
 import {
   handleApplyOps,
@@ -901,6 +902,28 @@ const server = http.createServer(async (req, res) => {
       return send(res, 409, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: 'not-cancellable', state: out.state, message: '任务已结束（' + out.state + '），无需取消' }), 'utf8'));
     });
     return;
+  }
+
+  // 模型 zip 导出（与真机宿主 lib/index.js 同规格；逻辑在 lib/model-export.mjs）。
+  if (urlPath === '/models/export') {
+    if (req.method !== 'GET') return send(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'), false);
+    let modelId = '';
+    try {
+      modelId = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('modelId') || '');
+    } catch {
+      modelId = '';
+    }
+    const out = buildModelExportZip({ modelDir: MODEL_DIR, modelId });
+    if (!out.ok) {
+      return send(res, out.error.status, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: out.error.code, message: out.error.message }), 'utf8'));
+    }
+    res.writeHead(200, {
+      'Content-Type': 'application/zip',
+      'Content-Length': String(out.buffer.length),
+      'Content-Disposition': 'attachment; filename="model.zip"; filename*=UTF-8\'\'' + encodeURIComponent(modelId) + '.zip',
+      'Cache-Control': 'no-store',
+    });
+    return res.end(out.buffer);
   }
 
   if (urlPath === '/motion-mode') {

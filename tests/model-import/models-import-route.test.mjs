@@ -15,7 +15,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { makeZip, modelZip } from './zip-writer.mjs';
+import { makeZip } from '../../packages/dsh-l2d-plugin/lib/zip-writer.mjs';
+import { modelZip } from './fixtures.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');

@@ -43,6 +43,7 @@ import { handleAiPlan } from './nodegraph-planner.mjs';
 import { handleMemorySearch } from './nodegraph-memory.mjs';
 import { isReservedParam } from './param-guards.mjs';
 import { createModelImporter, readBodyBuffer } from './model-import.mjs';
+import { buildModelExportZip } from './model-export.mjs';
 import { allowedFromLive2dIds, isSafeModelId, loadLive2dIdsForModel } from './nodegraph-schema.mjs';
 import { ensureModelNodegraphs } from './nodegraph-templates.mjs';
 import { readPersona, resetPersona, writePersona } from './persona.mjs';
@@ -1403,6 +1404,33 @@ export function apply(root, config = {}) {
         // 终态/已完成任务不可取消：409 + 当前 state，前端据此停止取消态 UI。
         sendBuffer(res, 409, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: 'not-cancellable', state: out.state, message: '任务已结束（' + out.state + '），无需取消' }), 'utf8'));
       });
+    });
+
+    // 模型 zip 导出（设置页「快捷导出」）：modelId → 可回导的 zip。
+    // 定位/收集/上限全部在 lib/model-export.mjs（与 dev-server 同规格、可单测）。
+    // 响应头 filename* 按 RFC 5987/6266 做 UTF-8 编码（中文模型名如 大肥鱼.dsl2d.2048）。
+    route('/dsh-l2d/models/export', (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') {
+        return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      }
+      let modelId = '';
+      try {
+        modelId = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('modelId') || '');
+      } catch {
+        modelId = '';
+      }
+      const out = buildModelExportZip({ modelDir: MODEL_DIR, modelId });
+      if (!out.ok) {
+        return sendBuffer(res, out.error.status, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, error: out.error.code, message: out.error.message }), 'utf8'));
+      }
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Length', String(out.buffer.length));
+      res.setHeader('Content-Disposition', 'attachment; filename="model.zip"; filename*=UTF-8\'\'' + encodeURIComponent(modelId) + '.zip');
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(out.buffer);
     });
 
     // 节点图执行入口（SPEC §4 第 4 行，14:50 定案）：导入的图回传动作给模型。

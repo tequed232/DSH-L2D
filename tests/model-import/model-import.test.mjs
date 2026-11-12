@@ -14,7 +14,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createModelImporter, ImportError } from '../../packages/dsh-l2d-plugin/lib/model-import.mjs';
-import { makeZip, modelZip } from './zip-writer.mjs';
+import { makeZip } from '../../packages/dsh-l2d-plugin/lib/zip-writer.mjs';
+import { modelZip } from './fixtures.mjs';
 
 function tmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-l2d-model-import-'));

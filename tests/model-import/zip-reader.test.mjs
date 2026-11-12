@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { readZipEntries, ZipError } from '../../packages/dsh-l2d-plugin/lib/zip-reader.mjs';
-import { makeZip } from './zip-writer.mjs';
+import { makeZip } from '../../packages/dsh-l2d-plugin/lib/zip-writer.mjs';
 
 function expectZipError(fn, code) {
   try {
