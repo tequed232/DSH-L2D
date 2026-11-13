@@ -42,7 +42,9 @@ const db = openDb({ path: path.join(tmp, 'obs.sqlite') });
 console.log('P1 Workspace Observer（obs.*）');
 
 ok('迁移 v10：gallery_scores 已建；v9 observer_dispatch_log 仍在；SCHEMA_VERSION 推进到 10', () => {
-  assert.equal(SCHEMA_VERSION, 10);
+  // OACA-2 把 SCHEMA_VERSION 推进到 12（v12 action_manifests/compiled_actions）。
+  // 「v10 已应用」是本用例的下限保证：===10 改为 >=10，列集合断言保持严格。
+  assert.ok(SCHEMA_VERSION >= 10, `SCHEMA_VERSION 应 ≥10（v10 gallery_scores 已应用），实际 ${SCHEMA_VERSION}`);
   const cols = db.prepare("SELECT name FROM pragma_table_info('observer_dispatch_log')").all().map((c) => c.name);
   assert.deepEqual(cols.sort(), ['attempts', 'created_at', 'dispatched_at', 'event_id', 'last_error', 'status', 'workspace_id']);
   const g = db.prepare("SELECT name FROM pragma_table_info('gallery_scores')").all().map((c) => c.name);

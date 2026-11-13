@@ -40,7 +40,9 @@ import { createRunRegistry } from './nodegraph-runs.mjs';
 import { deepseekChatJson, resolveDeepSeekKey } from './llm-channel.mjs';
 import { handleApplyOps, handleAiEdit, handleCatalog, handleGraphGet, NODEGRAPH_API_BODY_LIMIT } from './nodegraph-api.mjs';
 import { handleAiPlan } from './nodegraph-planner.mjs';
-import { compileModelActions, readCurrentBundle } from './action-compiler.mjs';
+import { compileModelActions, readCurrentBundle, loadCapabilityProfile, capabilityRevisionOf } from './action-compiler.mjs';
+// OACA-2：编译产物 → 动作注册表同步桥（在编译器之外，编译器本体零改动）。
+import { syncCompiledBundle } from './action-registry-sync.mjs';
 import { handleMemorySearch } from './nodegraph-memory.mjs';
 import { isReservedParam } from './param-guards.mjs';
 import { createModelImporter, readBodyBuffer } from './model-import.mjs';
@@ -78,6 +80,17 @@ import { HttpActionExecutor } from '../../mcp-bridge/action-executor.mjs';
 import { ModelActionQueue } from '../../mcp-bridge/action-queue.mjs';
 import { registerLive2DTools } from '../../mcp-bridge/mcp-tools.mjs';
 import { createGallerySource } from '../../mcp-bridge/gallery-source.mjs';
+// OACA-3/4：确定性路由（0 LLM）、触发器路由、指标收集器。
+import { ActionRouter, ActionRouterError } from '../../mcp-bridge/action-router.mjs';
+import { evaluateDispatchGuards } from '../../mcp-bridge/dispatch-guards.mjs';
+import { TriggerRouter } from '../../mcp-bridge/trigger-router.mjs';
+import { createMetrics } from '../../mcp-bridge/metrics.mjs';
+// OACA-2：动作注册表 repo（纯 DB 层）。路由与编译同步共用同一个 bridgeDb 连接。
+import {
+  getPublishedAction as getPublishedActionRow,
+  listPublishedActions as listPublishedActionRows,
+  getCurrentManifest as getCurrentManifestRow,
+} from '../../dsh-l2d-db/src/action-manifest-repo.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OVERLAY_FILE = path.join(PKG_ROOT, 'lib', 'overlay.js');
@@ -623,6 +636,16 @@ let mcpHeartbeatTimer = null;
 // W1：在 webServer 注入闭包里初始化（那里才有前台采集器与路由），桥用它取最新快照。
 let runtimeSnapshotBuilder = null;
 const workspaceEventCache = new Map();
+
+// OACA-4 指标单例（模块级、纯内存、无 I/O）：
+//  - runtimeLlmCallCount 是"运行时 0 LLM"的可验证数字（唯一运行时 LLM 入口 = /dsh-l2d/ai-action.json）；
+//  - 编译期调用（/api/actions/compile、ai-plan）不计入 runtime*，见各调用点注释。
+const metrics = createMetrics();
+
+// OACA-2/3 运行时依赖（MCP Bridge 挂载段装配，路由处理时按需读取）：
+// { db, repo, router, triggerRouter, metrics }。未装配（挂载失败/已 dispose）→ 路由如实 503，
+// 绝不伪造"路由可用"。db 复用既有 bridgeDb 连接，不新建第二个库连接。
+let actionDispatchDeps = null;
 
 /** Workspace 状态只输出脱敏活动元数据，不向专属 Agent 暴露其他会话文本。
  *  每个会话额外带：最近一次工具调用（真实回执分类：isError/error.code/超时/中断/退出码）、
@@ -1584,7 +1607,12 @@ export function apply(root, config = {}) {
     const nodegraphApiSend = (res, out) => {
       sendBuffer(res, out.status, MIME['.json'], Buffer.from(JSON.stringify(out.payload), 'utf8'));
     };
-    const nodegraphApiPost = (handler) => async (req, res) => {
+    // opts.loopbackOnly：仅回环可调用（与 /nodegraphs/run 同级的安全面；动作派发不得对
+    // 局域网开放）。默认关闭以保持既有 ai-plan/apply-ops 行为不变。
+    const nodegraphApiPost = (handler, opts = {}) => async (req, res) => {
+      if (opts.loopbackOnly && !isRemoteLoopback(req)) {
+        return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      }
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       if (req.method !== 'POST') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
       let body;
@@ -1625,8 +1653,16 @@ export function apply(root, config = {}) {
       const modelId = (typeof b.modelId === 'string' && b.modelId.trim()) || getCurrentModelId?.() || '';
       if (!modelId) return { status: 400, payload: { ok: false, reason: 'no-model', message: '无法确定目标模型：body.modelId 缺省且宿主当前模型未知' } };
       const key = resolveDeepSeekKey(readSettings());
+      // OACA-4 / QA-F11：编译期提示词计数**在 LLM 调用边界精确计数**。
+      // 旧写法用 summary.compiled（或 summary.requested）近似，会系统性偏低/偏高——
+      // aiPlan 本地前置拒绝、通道失败、内部重试都不体现在 summary 里。包一层 llm 后，
+      // actionPromptCount == 真实发出去的 chat 请求数（含重试），不多不少。
+      // 与 runtime* 严格分开：编译是用户主动行为，永不计入 runtimeLlmCallCount。
       const llm = key
-        ? (prompt) => deepseekChatJson({ key, ...prompt, temperature: 0.2, maxTokens: 2000, timeoutMs: 30000 })
+        ? (prompt) => {
+          metrics.increment('actionPromptCount');
+          return deepseekChatJson({ key, ...prompt, temperature: 0.2, maxTokens: 2000, timeoutMs: 30000 });
+        }
         : null;
       const loaded = loadLive2dIdsForModel(modelId);
       const out = await compileModelActions({
@@ -1643,6 +1679,17 @@ export function apply(root, config = {}) {
           : out.reason === 'unsafe-model-id' ? 400
             : out.reason === 'no-valid-action' ? 422
               : 500;
+      // OACA-2：编译产物同步进动作注册表（复用同一 bridgeDb；未发布/注册表未就绪则跳过，
+      // 不影响编译本身——文件系统 bundle 已由 publishBundle 原子落盘）。
+      let registrySync = null;
+      if (out.ok && out.published && actionDispatchDeps && actionDispatchDeps.db) {
+        try {
+          registrySync = syncCompiledBundle({ db: actionDispatchDeps.db, result: out });
+        } catch (err) {
+          diag('动作注册表同步失败（编译产物已落盘，仅注册表未更新）: ' + String(err && err.message ? err.message : err));
+          registrySync = { ok: false, reason: 'registry-sync-failed' };
+        }
+      }
       return {
         status,
         payload: {
@@ -1653,6 +1700,7 @@ export function apply(root, config = {}) {
           ...(out.summary ? { summary: out.summary } : {}),
           ...(out.capabilityRevision ? { capabilityRevision: out.capabilityRevision } : {}),
           ...(out.published ? { published: out.published } : {}),
+          ...(registrySync ? { registry: registrySync } : {}),
           // dryRun 时把候选动作的校验结论一并返回，便于前端展示"哪条被拒、为什么"
           ...(b.dryRun === true && out.bundle
             ? { actions: out.bundle.actions.map((a) => ({ actionId: a.actionId, status: a.status, stage: a.stage, errors: a.errors || [], layers: a.layers || null })) }
@@ -1680,6 +1728,125 @@ export function apply(root, config = {}) {
         ...(manifest ? {} : { reason: 'manifest-unreadable' }),
       }), 'utf8'));
     });
+
+    // OACA-3 运行时派发（确定性路由，0 LLM）：body {modelId?, actionId, parameters?, requestId}。
+    // 链路：compiled_actions 查表 → 参数校验 → 闸门（模式互斥 / strict 绑定 / 图存在）
+    //      → bridge_actions 记账 → 触发执行 → 终态回写。**编译期之外零 LLM**。
+    // 状态码语义由 ActionRouterError 携带（400 invalid / 404 unknown·graph / 409 stale·mismatch·mode）；
+    // 注册表或队列未就绪 → 503，不伪造"已排队"。{type} 形式走 TriggerRouter（事件 → 择优动作）。
+    // 安全（QA-F2）：这是**写端点**（会真实驱动角色动作 + 写 bridge_actions），
+    // 与 /settings.json 同规格，必须回环限制；isCrossSite 单独不足以挡住同机恶意页面。
+    const actionDispatchPost = (handler) => async (req, res) => {
+      if (!isLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      return nodegraphApiPost(handler)(req, res);
+    };
+    route('/dsh-l2d/api/actions/dispatch', actionDispatchPost(async (body) => {
+      const b = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+      const deps = actionDispatchDeps;
+      if (!deps) {
+        return { status: 503, payload: { ok: false, reason: 'bridge-not-ready', message: '动作注册表/队列未装配（MCP Bridge 未挂载或已 dispose）' } };
+      }
+      const modelId = (typeof b.modelId === 'string' && b.modelId.trim()) || getCurrentModelId?.() || '';
+      try {
+        if (b.type && !b.actionId) {
+          const out = await deps.triggerRouter.handle({
+            type: b.type,
+            modelId,
+            payload: b.payload && typeof b.payload === 'object' ? b.payload : {},
+            requestId: b.requestId,
+          });
+          // 无命中不是错误：200 + status:'no_matching_action'（不兜底生成、不调 LLM）
+          return { status: 200, payload: { ok: out.status !== 'no_matching_action', modelId, ...out } };
+        }
+        const out = await deps.router.dispatch({
+          modelId,
+          actionId: b.actionId,
+          parameters: b.parameters && typeof b.parameters === 'object' ? b.parameters : {},
+          requestId: b.requestId,
+        });
+        return { status: 200, payload: { ...out, modelId } };
+      } catch (err) {
+        if (err instanceof ActionRouterError) {
+          return { status: err.status, payload: { ok: false, reason: err.reason, message: err.message, modelId } };
+        }
+        if (err && err.code === 'BRIDGE_NOT_READY') {
+          return { status: 503, payload: { ok: false, reason: 'bridge-not-ready', message: String(err.message || err), modelId } };
+        }
+        throw err; // 未知异常交给 nodegraphApiPost 的 500 兜底（不泄露内部堆栈）
+      }
+    }, { loopbackOnly: true }));
+
+    // OACA-3 只读：某模型当前可派发动作清单（compiled_actions.status='published'）。
+    route('/dsh-l2d/api/actions/published', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      let model = '';
+      try { model = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('model') || ''); } catch { model = ''; }
+      const targetModel = model || getCurrentModelId?.() || '';
+      if (!targetModel) {
+        return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'no-model' }), 'utf8'));
+      }
+      const deps = actionDispatchDeps;
+      if (!deps) {
+        return sendBuffer(res, 503, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'bridge-not-ready', modelId: targetModel }), 'utf8'));
+      }
+      const actions = deps.repo.listPublishedActions({ modelId: targetModel });
+      const manifest = deps.repo.getCurrentManifest({ modelId: targetModel });
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({
+        ok: true,
+        modelId: targetModel,
+        count: actions.length,
+        revision: manifest ? manifest.revision : null,
+        capabilityRevision: manifest ? manifest.capabilityRevision : null,
+        actions,
+      }), 'utf8'));
+    });
+
+    // 派发终态回查（异步语义的配套）：requestId → bridge_actions 行。
+    // 与 dispatch 返回的 receipt.lookup 对应，避免调用方只能靠猜。
+    route('/dsh-l2d/api/actions/status', (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      let requestId = '';
+      try { requestId = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('requestId') || ''); } catch { requestId = ''; }
+      if (!requestId) return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'requestId-required' }), 'utf8'));
+      const deps = actionDispatchDeps;
+      if (!deps || !deps.db) return sendBuffer(res, 503, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'bridge-not-ready' }), 'utf8'));
+      const row = findBridgeRequest(deps.db, requestId);
+      if (!row) return sendBuffer(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'unknown-request', requestId }), 'utf8'));
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({
+        ok: true,
+        requestId,
+        state: row.state,
+        action: row.action,
+        executionId: row.executionId ?? null,
+        startedAt: row.startedAt ?? null,
+        completedAt: row.completedAt ?? null,
+        error: row.error ?? null,
+      }), 'utf8'));
+    });
+
+    // OACA-4 指标只读出口：计数 + 缓存命中率 + token 三态（actual/estimated/unavailable）。
+    // 内部诊断面，只对回环开放（isRemoteLoopback + isCrossSite 双闸）。
+    // 两个路径指向**同一处理器**：/api/metrics 是内部诊断名，/api/oaca/metrics.json 是
+    // OACA 验收口径（QA-F5）——不做第二套实现，避免两个入口读出不同数字。
+    const metricsHandler = (req, res) => {
+      if (!isRemoteLoopback(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      if (req.method !== 'GET') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use GET'));
+      sendBuffer(res, 200, MIME['.json'], Buffer.from(JSON.stringify({
+        ok: true,
+        ...metrics.snapshot(),
+        // 隔离口径自证：运行时 LLM 调用数 vs 编译期提示词数，两个数分开摆，便于反驳"运行时偷偷调 LLM"
+        policy: {
+          runtimeLlmEntrypoint: '/dsh-l2d/ai-action.json',
+          runtimeIsolationClaim: 'deterministic routing only; LLM never called from /api/actions/*',
+        },
+      }), 'utf8'));
+    };
+    route('/dsh-l2d/api/metrics', metricsHandler);
+    route('/dsh-l2d/api/oaca/metrics.json', metricsHandler);
 
     // 行为记忆检索（Phase 3+4）：语义关键词查既有动作链 + 最近一次真实执行摘要。
     // 只读；执行史来自本进程的 nodegraphRunRegistry（重启即清空，与执行中状态生命周期一致）。
@@ -1843,6 +2010,11 @@ export function apply(root, config = {}) {
         sendBuffer(res, status, MIME['.json'], Buffer.from(JSON.stringify(payload), 'utf8'));
       };
 
+      // OACA-4：这是**唯一**被认定为"运行时 LLM"的入口（用户戳一戳 → 现场生成一次动作）。
+      // runtimeCallCount 计入口调用；runtimeLlmCallCount 只在实际发出 LLM 请求处计数——
+      // cooldown / no-key / empty-capabilities 三分支根本没发生 LLM 调用，计入会变成假指标。
+      metrics.increment('runtimeCallCount');
+
       try {
         const now = Date.now();
         if (now - lastPokeApiAt < POKE_API_COOLDOWN) {
@@ -1863,6 +2035,8 @@ export function apply(root, config = {}) {
         if (!allowed.expressions.length || !allowed.motions.length) {
           return sendJson(200, { ok: false, reason: 'empty-capabilities' });
         }
+        // OACA-4：真实 LLM 调用即刻计数（成功与失败都算——调用已经发生；抛错走下面 catch）。
+        metrics.increment('runtimeLlmCallCount');
         const action = await requestDeepSeekPokeAction(key, allowed, {
           memeStyle: readSettings().memeStyle !== false,
           memeLevel: Number(readSettings().memeLevel) || 0,
@@ -2418,6 +2592,196 @@ export function apply(root, config = {}) {
         executor,
         actionsRepo: { findById: (requestId) => findBridgeRequest(bridgeDb, requestId) },
       });
+      // OACA-2/3 装配（路由侧经 actionDispatchDeps 消费；db 复用上面同一个 bridgeDb 连接）：
+      //  - repo：compiled_actions 查表（唯一可派发事实源）；
+      //  - router：查表 → 参数校验 → enqueue（本文件内实现，不再是 bridge.enqueueAction）；
+      //  - triggerRouter：事件 type → 确定性择优动作；
+      //  - getCapabilityRevision：读能力档案算 revision（与编译期 capabilityRevisionOf 同源，
+      //    档案缺失返回 null → 路由跳过比对并记 warning，不伪报已核对）。
+      // 执行语义边界（已接线，不伪报）：enqueue 先做「requestId 幂等查重 + 模式互斥 + strict
+      // 绑定 + 图存在」四项本地闸门，再入 bridge_actions 记账，然后**同步执行**（进程内
+      // runNodegraph）并等待终态；回执 state=completed 才代表角色真的动完了，
+      // 失败/超时一律抛 ActionRouterError（409/502/504）并落 bridge_actions.failed。
+      // 单次派发墙钟上限：DISPATCH_TIMEOUT_MS（超时即 requestCancel + 504，不让请求悬挂）。
+      const DISPATCH_TIMEOUT_MS = 120_000;
+      const actionRepo = {
+        getPublishedAction: (query) => getPublishedActionRow(bridgeDb, query),
+        listPublishedActions: (query) => listPublishedActionRows(bridgeDb, query),
+        getCurrentManifest: (query) => getCurrentManifestRow(bridgeDb, query),
+      };
+      const actionRouter = new ActionRouter({
+        repo: actionRepo,
+        enqueue: async (request) => {
+          if (!mcpBridge || !mcpBridge.initialized) {
+            throw Object.assign(new Error('MCP Bridge 未 initialize，动作队列不可用'), { code: 'BRIDGE_NOT_READY' });
+          }
+          const graphName = String(request.graphId || '');
+          const requestId = String(request.requestId || '');
+          if (!graphName) throw new ActionRouterError('invalid-request', '缺少 graphId', 400);
+
+          // ① requestId 幂等：事实源是 bridge_actions 主键（跨重启有效），不是内存 Map。
+          //    命中即**不再执行**（QA-F4），回执如实带既有 state，供调用方判断是否需要重试。
+          const prior = findBridgeRequest(bridgeDb, requestId);
+          if (prior) {
+            return {
+              status: 'duplicate',
+              state: prior.state,
+              duplicate: true,
+              requestId,
+              priorState: prior.state,
+              actionId: request.actionId,
+              graphId: graphName,
+              executionId: prior.executionId ?? null,
+              note: '同 requestId 已受理过，本次未重复执行；终态见 state 或 /api/actions/status',
+            };
+          }
+
+          // ② 前置闸门：在派发前做确定性判定，避免"200 accepted 但根本没执行"的假阳性
+          //    （QA F-3）。判定抽在 mcp-bridge/dispatch-guards.mjs（纯函数，可单测），
+          //    与 /nodegraphs/run 用同一套口径。作用域显式解析，避免跨块引用。
+          const homeDir = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+          const guard = evaluateDispatchGuards({
+            graphId: graphName,
+            mode: readMotionMode({ homeDir }).mode,
+            binding: checkRunModelBinding(graphName, { currentModelId: getCurrentModelId() }),
+            graphExists: loadNodegraph(graphName, { homeDir }) !== null,
+          });
+          if (!guard.ok) throw new ActionRouterError(guard.reason, guard.message, guard.status);
+
+          // ③ 记账：先入 bridge_actions 再执行，崩溃后可经 findUnfinished 追溯；
+          //    终态由 ④ 的**真实执行结果**写回（completed / failed），不冒充已完成。
+          //    insertRequest 只持久化既定列（request_id/workspace/session/action/args/
+          //    created_at/memory_revision），priority/timeoutMs 不是该表字段，传了也会被丢弃，
+          //    故不传——墙钟上限由 ④ 的 DISPATCH_TIMEOUT_MS 独立保证。
+          const workspaceId = request.workspaceId || (mcpBridge.workspace && mcpBridge.workspace.id) || '';
+          if (!workspaceId) {
+            // 装配异常属服务端问题，不能落库成空归属（QA W-4），也不冒充"动作失败"。
+            throw new ActionRouterError('bridge-not-ready', '工作区未就绪（workspaceId 缺失），未入队任何动作', 503);
+          }
+          const startedAt = Date.now();
+          insertBridgeRequest(bridgeDb, {
+            requestId,
+            workspaceId,
+            controlSessionId: (mcpBridge.workspace && (mcpBridge.workspace.actionSessionId || mcpBridge.workspace.controlSessionId)) || '',
+            action: request.actionId,
+            args: { graphId: graphName, capabilityRevision: request.capabilityRevision, parameters: request.parameters },
+            createdAt: startedAt,
+            memoryRevision: 0,
+          });
+          markBridgeRunning(bridgeDb, requestId, startedAt);
+
+          // ④ 执行并等待终态（QA-F3 收口）：**不再 fire-and-forget**。
+          //    进程内直接调用 runNodegraph——与 /dsh-l2d/nodegraphs/run 同一实现、
+          //    同一 nodegraphRunRegistry 互斥（busy）、同一批次取消语义，
+          //    拿到的就是终态 result，回执里的 state 不再是固定 accepted:true。
+          //    放弃自 HTTP fetch 的额外好处：不经网络层、不与自己抢同一 endpoint、
+          //    executionId 当场可得（可直接 requestCancel）。
+          const executionId = randomUUID();
+          const begun = nodegraphRunRegistry.begin(executionId, graphName);
+          if (!begun.ok) {
+            markBridgeTerminal(bridgeDb, requestId, 'failed', { error: 'busy', executionId: begun.executionId });
+            throw new ActionRouterError(
+              'busy',
+              `节点图 ${graphName} 已在执行中（executionId=${begun.executionId}），未重复执行`,
+              409,
+            );
+          }
+          // 与 run 路由同款：每批下发前检查取消标志，已请求取消则不再下发该批。
+          // QA W-3：注册表条目在 finish 后会被回收，`get()` 变 null；旧写法此时会
+          // 落回正常执行分支，与"已超时收尾"竞争。这里用本地闩 + null 判据双保险：
+          // 一旦本地闩置位或条目消失，都按 cancelled 停手，绝不再下发新批次。
+          let cancelRequested = false;
+          const cancellableExecutor = async (input) => {
+            const record = nodegraphRunRegistry.get(executionId);
+            if (cancelRequested || (record && record.cancelRequested)) {
+              return { ok: false, accepted: false, reason: 'cancelled' };
+            }
+            if (!record) return { ok: false, accepted: false, reason: 'finished' };
+            return nodegraphExecutor(input);
+          };
+          let runResult = null;
+          try {
+            runResult = await Promise.race([
+              runNodegraph(graphName, cancellableExecutor, { currentModelId: getCurrentModelId() }),
+              new Promise((_, reject) => {
+                const timer = setTimeout(
+                  () => reject(Object.assign(new Error('dispatch-timeout'), { code: 'DISPATCH_TIMEOUT' })),
+                  DISPATCH_TIMEOUT_MS,
+                );
+                timer.unref && timer.unref();
+              }),
+            ]);
+          } catch (err) {
+            const message = String((err && err.message) || err);
+            if (err && err.code === 'DISPATCH_TIMEOUT') {
+              cancelRequested = true; // 先置本地闩：已在飞的批次返回后不会再放行下一批
+              nodegraphRunRegistry.requestCancel(executionId); // 让底层批次尽快停手
+              nodegraphRunRegistry.finish(executionId, { ok: false, status: 504, reason: 'dispatch-timeout' });
+              markBridgeTerminal(bridgeDb, requestId, 'failed', { error: 'dispatch-timeout', executionId });
+              throw new ActionRouterError('dispatch-timeout', `动作执行超过 ${DISPATCH_TIMEOUT_MS}ms 未完成（已请求取消）`, 504);
+            }
+            nodegraphRunRegistry.finish(executionId, { ok: false, status: 502, reason: 'dispatch-exception', errors: [message] });
+            markBridgeTerminal(bridgeDb, requestId, 'failed', { error: message.slice(0, 500), executionId });
+            throw new ActionRouterError('execution-failed', `动作执行异常：${message}`, 502);
+          }
+          nodegraphRunRegistry.finish(executionId, runResult);
+
+          if (!runResult || runResult.ok === false) {
+            // 真实失败（mode-blocked / no-segments / model-mismatch / busy / cancelled）：
+            // 回执带的就是失败本身，绝不再伪装成"已受理"。
+            const rawReason = runResult && (runResult.reason
+              || (Array.isArray(runResult.errors) ? runResult.errors.join('; ') : runResult.errors));
+            const reason = String(rawReason || 'execution-failed');
+            const status = runResult && typeof runResult.status === 'number' ? runResult.status : 502;
+            markBridgeTerminal(bridgeDb, requestId, 'failed', { error: reason.slice(0, 500), executionId });
+            throw new ActionRouterError(
+              String((runResult && runResult.reason) || 'execution-failed'),
+              `动作未执行完成：${reason}（executionId=${executionId}）`,
+              status,
+            );
+          }
+
+          markBridgeTerminal(bridgeDb, requestId, 'completed', { result: runResult, executionId });
+          return {
+            status: 'completed',
+            state: 'completed',
+            requestId,
+            actionId: request.actionId,
+            graphId: graphName,
+            parameters: request.parameters,
+            requiresOwn: request.requiresOwn || [],
+            executionId,
+            completedAt: Date.now(),
+            result: {
+              ok: true,
+              completedSegments: runResult.completedSegments ?? null,
+              remainingSegments: runResult.remainingSegments ?? null,
+              receipts: runResult.receipts ?? null,
+            },
+            // 同步语义：state='completed' 即真实完成；status 路由保留给重启后/超时后的回查。
+            receipt: {
+              state: 'completed',
+              executionId,
+              lookup: `/dsh-l2d/api/actions/status?requestId=${encodeURIComponent(requestId)}`,
+            },
+          };
+        },
+        getCapabilityRevision: (modelId) => {
+          try {
+            const loaded = loadCapabilityProfile(modelId);
+            return loaded.profile ? capabilityRevisionOf(loaded.profile) : null;
+          } catch {
+            return null;
+          }
+        },
+      });
+      actionDispatchDeps = {
+        db: bridgeDb,
+        repo: actionRepo,
+        router: actionRouter,
+        triggerRouter: new TriggerRouter({ router: actionRouter, repo: actionRepo }),
+        metrics,
+      };
       mcpBridge
         .initialize()
         .then(() => {
@@ -2512,6 +2876,8 @@ export function apply(root, config = {}) {
         ctx.effect(() => () => {
           try { if (mcpStatusReporter) mcpStatusReporter.stop(); } catch { /* ignore */ }
           try { if (mcpBridge) void mcpBridge.dispose(); } catch { /* ignore */ }
+          // OACA-2/3：先解绑路由依赖再关库，避免请求线程拿到已关闭的 DatabaseSync。
+          actionDispatchDeps = null;
           try { bridgeDb.close(); } catch { /* ignore */ }
           mcpStatusReporter = null;
           try { if (mcpHeartbeatTimer) clearInterval(mcpHeartbeatTimer); } catch { /* ignore */ }

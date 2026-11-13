@@ -17,6 +17,10 @@ import {
   upsertMotionAsset, upsertMotionDefinition, upsertActionChain, upsertMotionBinding,
   recordExecution, upsertLearningJob,
 } from '../src/repo.mjs';
+// QA-F8：把「SCHEMA_VERSION 与迁移条目数一致」这条不变式锁进测试。
+// 此前只有 SCHEMA_VERSION 的钉死断言（且已被放宽为 >=），一旦有人改了版本号却忘记
+// 追加 MIGRATIONS 条目（或反之），没有任何用例会报警。
+import { SCHEMA_VERSION as SCHEMA_VERSION_UNDER_TEST, MIGRATIONS } from '../src/schema.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-l2d-db-'));
 const dbFile = path.join(tmp, 'bootstrap-state.sqlite');
@@ -31,9 +35,15 @@ function test(name, fn) {
 
 // ---- 1. 迁移幂等：重复打开不重复执行、不报错
 test('migrations are idempotent across reopen', () => {
+  // 不变式（QA-F8）：SCHEMA_VERSION 必须等于 MIGRATIONS 的条目数，且条目键是 1..N 连续。
+  // 这锁住的是"版本号与迁移集合同步推进"，而不是某个具体数字，故不会再随版本升级而误伤。
+  const versions = Object.keys(MIGRATIONS).map(Number).sort((a, b) => a - b);
+  assert.equal(SCHEMA_VERSION_UNDER_TEST, versions.length, 'SCHEMA_VERSION 必须等于迁移条目数');
+  assert.deepEqual(versions, Array.from({ length: versions.length }, (_, i) => i + 1), '迁移版本必须从 1 起连续无空洞');
+
   const again = openDb({ path: dbFile });
   const rows = again.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get();
-  assert.equal(rows.n, 11); // … / v9 observer_dispatch_log（Supervisor P12） / v10 gallery_scores / v11 action_session_id（双会话 PR-1）
+  assert.equal(rows.n, 12); // … / v9 observer_dispatch_log（Supervisor P12） / v10 gallery_scores / v11 action_session_id（双会话 PR-1） / v12 action_manifests + compiled_actions（OACA-2）
   const tables = again.prepare(
     "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('skills','workspaces','toolchain_components','startup_checks','tasks','models','nodes','edges','parameters','parameter_bindings','semantic_labels','motions','physics_groups','analysis_jobs','probe_runs','capability_profiles','validation_findings','gallery_items','gallery_labels','prompt_templates','motion_assets','motion_analysis','motion_definitions','action_chains','action_steps','motion_sources','model_capabilities','motion_model_bindings','execution_history','learning_jobs')",
   ).get();

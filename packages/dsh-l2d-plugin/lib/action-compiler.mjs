@@ -24,7 +24,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { aiPlan } from './nodegraph-planner.mjs';
 import { docFromEditorGraph, graphHash } from './nodegraph-ops.mjs';
-import { sanitizeFileName, validateNodegraph } from './nodegraph.mjs';
+import { loadNodegraph, sanitizeFileName, saveNodegraph, validateNodegraph } from './nodegraph.mjs';
 import { isSafeModelId } from './nodegraph-schema.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -320,14 +320,80 @@ function writeJsonAtomic(file, value) {
 }
 
 /**
- * 原子发布：新 revision 目录 + current.json 指针切换。
- * 只有至少一个动作通过校验才发布；失败动作随 manifest 一起入档（status='rejected'），
- * 运行时应忽略它们（见 manifest.actions[].status）。
+ * 把编译产物物化进节点图仓（`$DSH_HOME/l2d-nodegraphs`），让运行时能直接
+ * `runNodegraph(graphId)` —— 否则 dispatch 只能入队一条无法执行的空链（OACA-3 断裂点）。
+ *
+ * 冲突纪律：同名图已存在时
+ *   - 内容哈希相同 → 视为幂等，跳过写入；
+ *   - 内容不同 → **不覆盖**（可能是用户手改图），该动作降级为 rejected，
+ *     运行时永远不会拿到一条"发布成功但跑不起来"的动作。
  */
-export function publishBundle({ bundle, homeDir }) {
+export function materializeGraphs({ bundle, actions, homeDir, allowed = null }) {
+  const runnable = [];
+  const conflicts = [];
+  for (const action of actions) {
+    const doc = bundle.graphs && bundle.graphs[action.graphId];
+    if (!doc) {
+      conflicts.push({ actionId: action.actionId, reason: 'graph-missing' });
+      continue;
+    }
+    // 自证指纹写进 meta：saveNodegraph 会做规范化，落盘后 graphHash 与内存态可能不同口径，
+    // 直接比 graphHash 会把"同一张图"误判成冲突。用自己的指纹判定幂等。
+    const contentHash = graphHash(doc.graph);
+    doc.meta = { ...(doc.meta || {}), oaca: { graphId: action.graphId, contentHash, compilerVersion: COMPILER_VERSION } };
+    const existingRaw = loadNodegraph(action.graphId, { homeDir });
+    if (existingRaw !== null) {
+      // loadNodegraph 返回**原始文本**（不是对象），必须自己 parse。
+      let existing = null;
+      try {
+        existing = JSON.parse(existingRaw);
+      } catch {
+        existing = null;
+      }
+      const existingHash = existing && existing.meta && existing.meta.oaca && existing.meta.oaca.contentHash;
+      if (existingHash && existingHash === contentHash) {
+        runnable.push(action);
+        continue;
+      }
+      conflicts.push({ actionId: action.actionId, reason: 'graph-name-conflict' });
+      continue;
+    }
+    const saved = saveNodegraph(doc, { homeDir, allowed });
+    if (!saved.ok) {
+      conflicts.push({ actionId: action.actionId, reason: 'materialize-failed', errors: saved.errors });
+      continue;
+    }
+    runnable.push(action);
+  }
+  return { runnable, conflicts };
+}
+
+/**
+ * 原子发布：新 revision 目录 + current.json 指针切换。
+ * 只有至少一个动作通过校验**且已物化进节点图仓**才发布；失败动作随 manifest 一起入档
+ * （status='rejected'），运行时应忽略它们（见 manifest.actions[].status）。
+ */
+export function publishBundle({ bundle, homeDir, allowed = null }) {
   if (!bundle || !Array.isArray(bundle.actions)) return { ok: false, reason: 'invalid-bundle' };
-  const valid = bundle.actions.filter((a) => a.status === 'compiled');
-  if (!valid.length) return { ok: false, reason: 'no-valid-action' };
+  const candidates = bundle.actions.filter((a) => a.status === 'compiled');
+  if (!candidates.length) return { ok: false, reason: 'no-valid-action' };
+
+  // 0) 先物化再落档：物化失败的动作用"拒绝"覆盖原状态，不进入发布清单
+  const { runnable, conflicts } = materializeGraphs({ bundle, actions: candidates, homeDir, allowed });
+  if (conflicts.length) {
+    for (const conflict of conflicts) {
+      const entry = bundle.actions.find((a) => a.actionId === conflict.actionId);
+      if (!entry) continue;
+      entry.status = 'rejected';
+      entry.stage = 'materialize';
+      entry.reason = conflict.reason;
+      entry.errors = [...(entry.errors || []), ...(conflict.errors || [`物化失败：${conflict.reason}`])];
+    }
+  }
+  const valid = runnable;
+  if (!valid.length) {
+    return { ok: false, reason: 'no-runnable-action', conflicts: conflicts.map((c) => c.reason) };
+  }
 
   const dir = path.join(bundlesRoot(homeDir), sanitizeFileName(bundle.modelId));
   fs.mkdirSync(dir, { recursive: true });
@@ -459,7 +525,7 @@ export async function compileModelActions(opts = {}) {
     return { ok: compiled > 0, modelId, capabilityRevision: bundle.capabilityRevision, bundle, summary, published: null };
   }
 
-  const published = publishBundle({ bundle, homeDir });
+  const published = publishBundle({ bundle, homeDir, allowed: opts.allowed || null });
   return {
     ok: published.ok,
     modelId,

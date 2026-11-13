@@ -43,7 +43,10 @@ const PLUGIN_ID = 'dsh-l2d';
 console.log('PR-A Workspace / 双会话 / 记忆镜像（B01-B04）');
 
 ok('migration v11：bridge_workspaces 含 action_session_id，SCHEMA_VERSION 与迁移数同步', () => {
-  assert.equal(SCHEMA_VERSION, 11, 'SCHEMA_VERSION 应随 v11（action_session_id）推进到 11');
+  // OACA-2 把 SCHEMA_VERSION 推进到 12（action_manifests / compiled_actions），v11 仍是
+  // 本用例的**下限**保证：断言从 ===11 改为 >=11，既保留"v11 已应用"的事实校验，
+  // 也不会被后续迁移误伤（列集合断言照旧严格）。
+  assert.ok(SCHEMA_VERSION >= 11, `SCHEMA_VERSION 应 ≥11（v11 action_session_id 已应用），实际 ${SCHEMA_VERSION}`);
   const cols = db.prepare("SELECT name FROM pragma_table_info('bridge_workspaces')").all().map((c) => c.name);
   assert.deepEqual(cols.sort(), [
     'action_session_id', 'chat_session_id', 'control_session_id', 'created_at', 'plugin_id', 'workspace_id',

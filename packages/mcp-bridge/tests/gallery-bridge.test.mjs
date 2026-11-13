@@ -58,7 +58,8 @@ function writePng(dir, name, repeat = 1) {
 console.log('GALLERY-BRIDGE（裁决书 §3/§4）');
 
 ok('迁移 v10：gallery_scores DDL 与裁决书一致，SCHEMA_VERSION=10', () => {
-  assert.equal(SCHEMA_VERSION, 10);
+  // OACA-2 把 SCHEMA_VERSION 推进到 12；本用例只需保证 v10（gallery_scores）已应用。
+  assert.ok(SCHEMA_VERSION >= 10, `SCHEMA_VERSION 应 ≥10（v10 gallery_scores 已应用），实际 ${SCHEMA_VERSION}`);
   const cols = db.prepare("SELECT name FROM pragma_table_info('gallery_scores')").all().map((c) => c.name);
   assert.deepEqual(cols.sort(), ['breakdown_json', 'item_id', 'score', 'scored_at', 'scorer']);
 });

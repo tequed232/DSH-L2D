@@ -287,6 +287,31 @@ await it('真实能力档案可加载（tools/capability-scan），且 revision 
   }
 });
 
+await it('物化冲突：同名图已存在且内容不同 → 该动作被拒，不覆盖用户图', async () => {
+  const conflictHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oaca-conflict-'));
+  const dir = path.join(conflictHome, 'l2d-nodegraphs');
+  fs.mkdirSync(dir, { recursive: true });
+  // 预置一张同名但内容不同的图（模拟用户手改/旧模板）
+  const userDoc = {
+    schemaVersion: 1, kind: 'dsh-l2d-nodegraph', name: 'graph_head_nod',
+    modelBinding: { modelId: 'm-test', bindingMode: 'strict' },
+    graph: { nodes: [{ id: 'x', type: 'look', label: 'Look At', pos: { x: 0, y: 0 }, props: { x: 0.5, y: 0, delayMs: 0, portType: 'out' }, disabled: false }], edges: [] },
+    segments: [], meta: { userEdited: true },
+  };
+  fs.writeFileSync(path.join(dir, 'graph_head_nod.json'), JSON.stringify(userDoc, null, 2));
+  const out = await compileModelActions({
+    modelId: 'm-test', homeDir: conflictHome, capability, live2dIds: ids, allowed,
+    actions: [ACTION], llm: fakeLlm(GOOD_OPS),
+  });
+  assert.equal(out.ok, false, '没有可运行动作 → 不发布');
+  assert.equal(out.published.reason, 'no-runnable-action');
+  assert.equal(out.bundle.actions[0].status, 'rejected');
+  assert.equal(out.bundle.actions[0].reason, 'graph-name-conflict');
+  const after = JSON.parse(fs.readFileSync(path.join(dir, 'graph_head_nod.json'), 'utf8'));
+  assert.equal(after.meta.userEdited, true, '用户图不得被覆盖');
+  fs.rmSync(conflictHome, { recursive: true, force: true });
+});
+
 fs.rmSync(tmpHome, { recursive: true, force: true });
 
 console.log('');

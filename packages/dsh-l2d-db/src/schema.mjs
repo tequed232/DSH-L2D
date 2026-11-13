@@ -25,7 +25,7 @@
  *  - 迁移只追加不改写；schema_migrations 记录版本与耗时。
  */
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 /** v1 全量 DDL。单条 exec 执行，语句间以分号分隔。 */
 export const MIGRATIONS = {
@@ -664,5 +664,50 @@ export const MIGRATIONS = {
     ALTER TABLE bridge_workspaces ADD COLUMN action_session_id TEXT NOT NULL DEFAULT '';
     CREATE INDEX IF NOT EXISTS idx_bridge_workspaces_action
       ON bridge_workspaces (workspace_id, action_session_id);
+  `,
+
+  /**
+   * v12：动作注册表（OACA-2）——把「编译产物」从文件系统搬进可查询的库表。
+   *  - action_manifests：一次 compileModelActions 的完整 manifest 快照（含被拒动作，
+   *    审计用）；manifest_id = `${model_id}@rev${revision}`。
+   *  - compiled_actions：只放 status='compiled' 的可派发动作（运行时路由的查询源），
+   *    按 (model_id, action_id) 唯一 —— 同一动作新版本原地覆盖，不堆历史行。
+   *  - 唯一性双闸（照裁决书）：ux_action_manifests_model_rev 保证同一 revision 幂等；
+   *    ux_action_manifests_published（partial unique index）保证**每模型仅一个 published**，
+   *    repo 层发布顺序必须先 demote 旧 published 再写入新行，否则必然撞唯一索引。
+   *  - compiled_actions.manifest_id 外键 ON DELETE CASCADE：删 manifest 连带清动作行，
+   *    不留悬空可派发项（PRAGMA foreign_keys=ON 由 openDb 保证）。
+   *  - 只加表/索引，不改既有列（迁移可逆性由 schema_migrations 门禁 + 表级 DROP 手工回滚）。
+   */
+  12: `
+    CREATE TABLE IF NOT EXISTS action_manifests (
+      manifest_id        TEXT PRIMARY KEY,
+      model_id           TEXT NOT NULL,
+      capability_revision TEXT NOT NULL,
+      manifest_json      TEXT NOT NULL,
+      compiler_version   TEXT NOT NULL,
+      status             TEXT NOT NULL CHECK (status IN ('published','superseded','rejected')),
+      revision           INTEGER NOT NULL,
+      created_at         INTEGER NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_action_manifests_model_rev ON action_manifests(model_id, revision);
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_action_manifests_published ON action_manifests(model_id) WHERE status = 'published';
+
+    CREATE TABLE IF NOT EXISTS compiled_actions (
+      model_id            TEXT NOT NULL,
+      action_id           TEXT NOT NULL,
+      graph_id            TEXT NOT NULL,
+      manifest_id         TEXT NOT NULL REFERENCES action_manifests(manifest_id) ON DELETE CASCADE,
+      graph_hash          TEXT NOT NULL,
+      capability_revision TEXT NOT NULL,
+      status              TEXT NOT NULL CHECK (status IN ('published','stale','rejected')),
+      priority            TEXT NOT NULL,
+      triggers_json       TEXT NOT NULL DEFAULT '[]',
+      parameters_json     TEXT NOT NULL DEFAULT '{}',
+      requires_own_json   TEXT NOT NULL DEFAULT '[]',
+      updated_at          INTEGER NOT NULL,
+      PRIMARY KEY (model_id, action_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_compiled_actions_status ON compiled_actions(model_id, status);
   `,
 };
