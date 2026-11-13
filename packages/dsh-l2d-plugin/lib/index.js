@@ -40,6 +40,7 @@ import { createRunRegistry } from './nodegraph-runs.mjs';
 import { deepseekChatJson, resolveDeepSeekKey } from './llm-channel.mjs';
 import { handleApplyOps, handleAiEdit, handleCatalog, handleGraphGet, NODEGRAPH_API_BODY_LIMIT } from './nodegraph-api.mjs';
 import { handleAiPlan } from './nodegraph-planner.mjs';
+import { compileModelActions, readCurrentBundle } from './action-compiler.mjs';
 import { handleMemorySearch } from './nodegraph-memory.mjs';
 import { isReservedParam } from './param-guards.mjs';
 import { createModelImporter, readBodyBuffer } from './model-import.mjs';
@@ -1616,6 +1617,70 @@ export function apply(root, config = {}) {
         : null;
       return handleAiPlan(body, { llm, getCurrentModelId });
     }));
+    // OACA-1 动作编译流水线：把「自然语言动作清单 → 节点图 + Manifest」一次性编译成动作库。
+    // 这是**编译期**入口（LLM 只在这里出现）；运行时只读已发布 bundle，不再调 LLM。
+    // body: {modelId?, dryRun?, actions?}；actions 缺省用编译器种子表，applied=0 不落盘。
+    route('/dsh-l2d/api/actions/compile', nodegraphApiPost(async (body) => {
+      const b = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+      const modelId = (typeof b.modelId === 'string' && b.modelId.trim()) || getCurrentModelId?.() || '';
+      if (!modelId) return { status: 400, payload: { ok: false, reason: 'no-model', message: '无法确定目标模型：body.modelId 缺省且宿主当前模型未知' } };
+      const key = resolveDeepSeekKey(readSettings());
+      const llm = key
+        ? (prompt) => deepseekChatJson({ key, ...prompt, temperature: 0.2, maxTokens: 2000, timeoutMs: 30000 })
+        : null;
+      const loaded = loadLive2dIdsForModel(modelId);
+      const out = await compileModelActions({
+        modelId,
+        llm,
+        homeDir: process.env.DSH_HOME || path.join(os.homedir(), '.dsh'),
+        live2dIds: loaded.ids,
+        allowed: allowedFromLive2dIds(loaded.ids),
+        dryRun: b.dryRun === true,
+        ...(Array.isArray(b.actions) ? { actions: b.actions } : {}),
+      });
+      const status = out.ok ? 200
+        : out.reason === 'ai-unavailable' ? 503
+          : out.reason === 'unsafe-model-id' ? 400
+            : out.reason === 'no-valid-action' ? 422
+              : 500;
+      return {
+        status,
+        payload: {
+          ok: out.ok === true,
+          modelId: out.modelId || modelId,
+          ...(out.reason ? { reason: out.reason } : {}),
+          ...(out.message ? { message: out.message } : {}),
+          ...(out.summary ? { summary: out.summary } : {}),
+          ...(out.capabilityRevision ? { capabilityRevision: out.capabilityRevision } : {}),
+          ...(out.published ? { published: out.published } : {}),
+          // dryRun 时把候选动作的校验结论一并返回，便于前端展示"哪条被拒、为什么"
+          ...(b.dryRun === true && out.bundle
+            ? { actions: out.bundle.actions.map((a) => ({ actionId: a.actionId, status: a.status, stage: a.stage, errors: a.errors || [], layers: a.layers || null })) }
+            : {}),
+        },
+      };
+    }));
+
+    // OACA-1 只读：当前已发布动作库（Manifest + 指针），运行时与设置页共用。
+    route('/dsh-l2d/api/actions/bundle', (req, res) => {
+      if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
+      let modelId = '';
+      try { modelId = String(new URL(req.url, 'http://127.0.0.1').searchParams.get('model') || ''); } catch { modelId = ''; }
+      const targetModel = modelId || getCurrentModelId?.() || '';
+      if (!targetModel) return sendBuffer(res, 400, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'no-model' }), 'utf8'));
+      const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+      const current = readCurrentBundle({ modelId: targetModel, homeDir: home });
+      if (!current) {
+        return sendBuffer(res, 404, MIME['.json'], Buffer.from(JSON.stringify({ ok: false, reason: 'no-bundle', modelId: targetModel }), 'utf8'));
+      }
+      let manifest = null;
+      try { manifest = JSON.parse(fs.readFileSync(path.join(current.dir, 'manifest.json'), 'utf8')); } catch { manifest = null; }
+      sendBuffer(res, manifest ? 200 : 500, MIME['.json'], Buffer.from(JSON.stringify({
+        ok: !!manifest, modelId: targetModel, revision: current.revision, publishedAt: current.publishedAt, manifest,
+        ...(manifest ? {} : { reason: 'manifest-unreadable' }),
+      }), 'utf8'));
+    });
+
     // 行为记忆检索（Phase 3+4）：语义关键词查既有动作链 + 最近一次真实执行摘要。
     // 只读；执行史来自本进程的 nodegraphRunRegistry（重启即清空，与执行中状态生命周期一致）。
     route('/dsh-l2d/api/nodegraph/memory', (req, res) => {
