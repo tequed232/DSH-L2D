@@ -1,25 +1,17 @@
 /**
  * 未实现的工具名登记表（诚实失败，而不是静默无动作）。
  *
- * 现状：`l2d_emote` 在 MCP 工具表里暴露、宿主 guardAiCall 也放行、`/ai/call` 会把它入队，
- * 但**渲染端没有实现这个名字**（`packages/renderer/src` 全仓无 `l2d_emote` 处理分支）。
- * 结果是调用方以为发成功了，角色却一动不动——比直接报错更糟。
+ * ⚠ 教训（2026-11-13）：曾把 `l2d_emote` 误登记为死工具——判断依据是
+ * "packages/renderer 没有处理分支"，但真正的消费者是**插件侧浏览器脚本**
+ * `packages/dsh-l2d-plugin/lib/overlay.js`（case 'l2d_emote' → emotionSignal）。
+ * 误判导致 501 拦截弄坏了一个能用的工具，已回滚。
+ * 教训：判定死工具必须以 `tools/dead-tool-scan.mjs` 的全量消费方扫描为准，
+ * 且 `case '<name>':` 分支出现在任何消费层（renderer / overlay / 宿主路由）都算"活着"。
  *
- * 处理原则：拦在宿主入口，返回可执行的替代路径，而不是让错误穿过整条链路。
- * 等渲染端真的实现（或改成走已发布动作程序）后，从这里删掉即可。
+ * 当前登记为空。新增条目前必须先跑扫描并确认目标名字在所有消费层都无 `case` 分支；
+ * alternatives 里只能写真实存在的工具名（先在 server.mjs registerTool 里核对）。
  */
-export const UNIMPLEMENTED_TOOLS = Object.freeze({
-  l2d_emote: {
-    reason: 'emote-unimplemented',
-    status: 501,
-    message: 'l2d_emote 宿主端未实现（渲染端无该指令处理分支），调用不会产生任何动作',
-    alternatives: [
-      'POST /dsh-l2d/api/actions/dispatch {actionId, parameters, requestId}（已发布动作，确定性执行）',
-      'MCP: l2d_graph_run（运行已存在的节点图）',
-      'MCP: l2d_perform（presetState / segments 编排）',
-    ],
-  },
-});
+export const UNIMPLEMENTED_TOOLS = Object.freeze({});
 
 /**
  * @param {string} name 工具名

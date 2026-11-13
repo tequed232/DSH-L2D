@@ -156,7 +156,9 @@ await ok('act 模式 accepted 但终态未知 → pending 回执带 id（可查�
     resultEvents: [],
   });
   try {
-    const r = await forwardCall({ base: host.base, name: 'l2d_act', args: { chain: [] }, timeoutMs: 700, mode: 'act', pollIntervalMs: 60 });
+    // 700ms 在 CI/高负载下会因轮询饥饿偶发超时（flake 实证：3 次挂 1 次）；
+    // 这里测的是"pending 回执形状"而非预算精度，故放宽到 2500ms。
+    const r = await forwardCall({ base: host.base, name: 'l2d_act', args: { chain: [] }, timeoutMs: 2500, mode: 'act', pollIntervalMs: 40 });
     assert.equal(r.ok, true);
     assert.equal(r.accepted, true);
     assert.equal(r.settled, false);
@@ -174,7 +176,8 @@ await ok('act 模式 accepted 且事件到达 end → settled 回执（不受修
     resultEvents: [{ type: 'action-done', phase: 'end', runId: 'r2' }],
   });
   try {
-    const r = await forwardCall({ base: host.base, name: 'l2d_act', args: { chain: [] }, timeoutMs: 3000, mode: 'act', pollIntervalMs: 60 });
+    // 同上：放宽预算与轮询间隔，行为断言（settled/completed）不变。
+    const r = await forwardCall({ base: host.base, name: 'l2d_act', args: { chain: [] }, timeoutMs: 4000, mode: 'act', pollIntervalMs: 40 });
     assert.equal(r.ok, true);
     assert.equal(r.settled, true);
     assert.equal(r.outcome, 'completed');

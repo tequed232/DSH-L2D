@@ -42,14 +42,15 @@
   - (b) 接受双队列长期并存，但把文档口径改成"两类队列管辖不同层"（bridge=请求生命周期，inbox=渲染批次）——承认现状，停止收敛。
   - (c) 只把 `bridge_actions` 作为**账本**（所有通道都记账），队列语义不动——最便宜，但"单权威"目标放弃。
 
-### B2 · `l2d_emote` 真实现（现在只是诚实失败）
+### B2 · ~~`l2d_emote` 真实现~~ **撤案（2026-11-13 更正）**
 
-- **现状**：调用返回 501 + 替代路径（不再是静默失败）。
-- **阻塞原因**：真实现需要渲染端新增 `l2d_emote` 指令分支（受保护层），且情绪→表情映射需要真实模型窗口验证效果。
-- **可选方案**：
-  - (a) 维持 501（现状，零风险）；
-  - (b) 渲染端实现"情绪→表情白名单查表"（纯映射、无 LLM），需要时窗验证表情观感；
-  - (c) 走已发布动作：登记 `emote.<mood>` 触发器 → `actions/dispatch`（编译期决定情绪对应哪个程序，运行期零决策）——**与 One-shot 架构最契合**，但依赖已发布动作库。
+- **更正**：`l2d_emote` **不是死工具**。真实消费者是插件侧浏览器脚本
+  `packages/dsh-l2d-plugin/lib/overlay.js:5383`（`case 'l2d_emote'` → `emotionSignal({type:'mood'})`）。
+  首版判断只扫了 `packages/renderer/src`，漏掉了 overlay 这一消费层，导致误加 501 拦截。
+- **处置**：已回滚——登记表清空、MCP 描述恢复原文、测试改为"登记表全量反腐闸门"
+  （任何登记名只要在任何消费层出现 `case` 分支，测试必红）。
+- **教训**：死工具判定必须跑 `tools/dead-tool-scan.mjs` 全量消费方扫描（含 overlay），
+  单看 packages/renderer 会漏。
 
 ### B3 · stage-web 前端 4 组 TODO（接口边界占位）
 
@@ -65,11 +66,23 @@
 - 探针 `tools/runtime-probe/oaca-dispatch-acceptance.mjs` 就绪且经 QA mock 复算；本机 5300/5173/3000/8080/5301/5302/8888 全部 `ECONNREFUSED`。
 - 需要你：启动宿主 → `clickMode=nodegraph` → 给出端口与桌面时窗（角色会真实动一次）。
 
-### B5 · 待人工确认的两个疑似死工具（本轮不敢判死）
+### B5 · ~~疑似死工具~~ **撤案（2026-11-13 更正）**
 
-- `l2d_change_form` / `l2d_set_form`（MCP 暴露，渲染端源码 grep 不到同名分支）。渲染端指令分发点藏在 `packages/renderer/src/index.ts`（千行级文件，无按名 switch），无法静态确证。**验证方法**：真机跑一次这两个工具，看角色是否换装；或由熟悉渲染层的人指出消费点。
+- `l2d_change_form` / `l2d_set_form`：`overlay.js:5598/5615` 均有 `case` 处理分支（换装/回退通道），
+  **活工具**。同 B2 教训。
+- 扫描另发现两类**假阳性模式**（判定时需排除）：
+  1. 工具名从描述文案里被正则捞出来（`l2d_graph_run` / `l2d_perform` 根本不是注册工具）；
+  2. `NO_CONSUMER` 不等于死工具：`l2d_workspace_ensure` 走宿主直达端点
+     `/dsh-l2d/workspace/ensure`，`l2d_toolchain_status` 在 MCP 进程内本地读库，都不经 `/ai/call`。
 
 ---
+
+## 3.5 新发现的阻塞项
+
+- **`forward.test.mjs` 不稳定测试（已修）**：3 次运行挂 1 次，且两次挂的用例不同
+  （"首份 /ai/result 迟到"、"act 模式 accepted 终态未知"）。根因是 600–700ms 真实 socket
+  预算在负载下轮询饥饿。处置：两个 act 用例预算放宽（700→2500ms、3000→4000ms，轮询 60→40ms），
+  **行为断言不变、forward.mjs 实现未动**；放宽后连跑 5 次全绿。
 
 ## 4. 建议的决策清单（勾选即可执行）
 

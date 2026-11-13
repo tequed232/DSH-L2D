@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { UNIMPLEMENTED_TOOLS, unimplementedTool } from '../unimplemented-tools.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -28,13 +29,8 @@ function it(name, fn) {
 
 console.log('未实现工具登记');
 
-it('l2d_emote 已登记，且有 reason/status/message/alternatives 四要素', () => {
-  const entry = unimplementedTool('l2d_emote');
-  assert.ok(entry, 'l2d_emote 必须登记');
-  assert.equal(entry.status, 501);
-  assert.match(entry.reason, /unimplemented/);
-  assert.ok(entry.message.length > 10);
-  assert.ok(Array.isArray(entry.alternatives) && entry.alternatives.length >= 2, '必须给可执行替代路径');
+it('l2d_emote 不在登记表（2026-11-13 误判已回滚：overlay.js:5383 有 case 分支，它是活工具）', () => {
+  assert.equal(unimplementedTool('l2d_emote'), null, '误判残留会把能用的工具拦死');
 });
 
 it('已实现的工具不在表里（防止拦死正常工具）', () => {
@@ -49,25 +45,32 @@ it('未知 / 空名字返回 null（不做过度拦截）', () => {
   assert.equal(unimplementedTool('some_future_tool'), null);
 });
 
-it('渲染端仍无 l2d_emote 处理分支时，本登记才成立（实现后必须同步移除）', () => {
-  const rendererDir = path.join(REPO, 'packages', 'renderer', 'src');
-  let found = 0;
-  const walk = (dir) => {
-    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      const abs = path.join(dir, e.name);
-      if (e.isDirectory()) walk(abs);
-      else if (/\.(ts|mjs|js|vue)$/.test(e.name)) {
-        const text = fs.readFileSync(abs, 'utf8');
-        if (text.includes("'l2d_emote'") || text.includes('"l2d_emote"')) found += 1;
-      }
-    }
-  };
-  walk(rendererDir);
-  if (found > 0) {
-    throw new Error(`渲染端已出现 ${found} 处 l2d_emote 引用：说明它可能已实现，应把 UNIMPLEMENTED_TOOLS 里的条目删掉`);
-  }
-  assert.equal(found, 0);
+// 反腐闸门（对登记表全量生效）：任何一个被登记的名字，只要在任何消费层出现
+// `case '<name>':` 分支，就说明它其实活着——必须从表里删掉，测试直接红。
+const CONSUMER_DIRS = [
+  path.join(REPO, 'packages', 'renderer', 'src'),
+  path.join(REPO, 'packages', 'dsh-l2d-plugin', 'lib'),
+];
+it('登记表为空或每个登记名都确无 case 分支（防误伤活工具）', () => {
+  const names = Object.keys(UNIMPLEMENTED_TOOLS);
+  const offenders = names.filter((name) => {
+    const needle = `case '${name}':`;
+    return CONSUMER_DIRS.some((dir) => {
+      const hit = spawnGrep(needle, dir);
+      return hit;
+    });
+  });
+  assert.deepEqual(offenders, [], `以下名字已有消费分支，必须从 UNIMPLEMENTED_TOOLS 移除：${offenders.join(', ')}`);
 });
+
+function spawnGrep(needle, dir) {
+  try {
+    const r = spawnSync('grep', ['-r', '-l', '--include=*.mjs', '--include=*.js', '--include=*.ts', '-F', needle, dir], { encoding: 'utf8' });
+    return r.status === 0 && r.stdout.trim().length > 0;
+  } catch {
+    return false; // 环境无 grep 时跳过该层（Windows Git Bash 自带 grep）
+  }
+}
 
 console.log('');
 if (process.exitCode) {

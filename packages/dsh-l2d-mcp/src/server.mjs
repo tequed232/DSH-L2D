@@ -88,7 +88,7 @@ const server = new McpServer({
 server.registerTool(
   'l2d_emote',
   {
-    description: '【当前不可用】宿主端未实现 l2d_emote：渲染端没有该指令处理分支，调用会返回 501 并给出替代路径（l2d_graph_run / l2d_perform / actions/dispatch）。保留该工具仅为向后兼容的工具表稳定性，请勿依赖。',
+    description: '用情绪词驱动角色（开心、害羞、生气、惊讶、思考等）。走情绪路由，比直接点表情名更自然。不会打开系统传感器或媒体律动。',
     inputSchema: {
       mood: z.string().describe('情绪词，例如 开心 / 害羞 / 生气 / 惊讶 / 思考'),
     },
