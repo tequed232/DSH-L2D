@@ -299,11 +299,40 @@ npm run test:core && npm run test:db && npm run test:bridge && npm run typecheck
   交给执行 promise 在真实批次边界收敛，避免"库说 failed、角色还在动"的账实不符。
 - 所有"通过"均来自真实命令输出；**唯一无法在本环境证明的是真机渲染 E2E（W-6）**。
 
-### 12.7 后端席未交付项（如实记录，不计入交付）
+### 12.8 结案证据归属（谁验的，分开记）
+
+| 项 | 证据来源 | 独立复验 |
+|---|---|---|
+| OACA-2/3/4 功能与 66 条断言 | 后端席自跑 + QA 四轮复算 | **是** |
+| F-1..F-9、W-1 | QA 首轮 FAILED → 修复 → 复验成立 | **是** |
+| W-7 门禁假绿 | QA 变异实验（M2/M4 精确红） | **是（两轮）** |
+| W-3（超时收敛）/ W-4（空 workspaceId 503）/ W-2（sync 声明） | 主理人落地 | **否**——QA 报告成文早于提交 `651c18b`，未复算这三项 |
+| W-8（探针幂等空证词） | 主理人一行判空，提交 `a15ed60` | **否**——QA 退出前未复算 |
+
+> 口径：**未经独立复验的项一律不写"已通过"**。上表后两行属"已修 + 主理人自检（`node --check` / 定向 grep / 变异 M4 复跑）"，不冒充 QA 背书。
+
+### 12.9 真机取证（唯一硬缺口，环境阻塞）
+
+工具已就绪并被 QA 用 mock 证明"分类正确 + 不加 `--yes` 时零副作用"：
+
+```bash
+# 只读三查（不动角色）
+node tools/runtime-probe/oaca-dispatch-acceptance.mjs --base http://127.0.0.1:<端口> --model <modelId>
+# 含真实派发（角色会动一次）
+node tools/runtime-probe/oaca-dispatch-acceptance.mjs --base http://127.0.0.1:<端口> --model <modelId> --yes
+```
+
+前置：宿主已起 + `clickMode=nodegraph`。当前 5300/5173/3000/8080/5301/5302/8888 均 `ECONNREFUSED`，故未执行。
+输出即 `state:'completed'` + `executionId` + 同 requestId 重放 `duplicate:true` + `runtimeLlmCallCount` 增量 0。
+
+### 12.10 一次失败声明的留档（自我纠错，不删）
 
 | 声明 | 核查结果 |
 |---|---|
-| `tools/nodegraph-schema/oaca-acceptance-probe.mjs`（`--dry-run` 自检 + `--emit-path` 出真机脚本） | **文件不存在**。`tools/nodegraph-schema/` 下只有 `gen.mjs`；全仓 grep 无 `oaca-acceptance-probe` 引用；`node` 执行报 `MODULE_NOT_FOUND`。故本轮**未交付**该探针，真机 E2E 仍只能手工/临时脚本进行 |
+| `tools/nodegraph-schema/oaca-acceptance-probe.mjs`（`--dry-run` 自检 + `--emit-path` 出真机脚本） | **当时文件不存在**。`tools/nodegraph-schema/` 下只有 `gen.mjs`；全仓 grep 无该名引用；`node` 执行报 `MODULE_NOT_FOUND` |
+
+补充：该探针后来以 `tools/runtime-probe/oaca-dispatch-acceptance.mjs` 真正落地（提交 `651c18b`，W-8 修复在 `a15ed60`），12.9 用的就是它。保留此条作为交付纪律的反面样本：**"声明已交付"必须能在盘上点开**，否则一律按未交付记账。
+
 
 
 

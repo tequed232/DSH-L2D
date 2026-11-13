@@ -1,4 +1,4 @@
-# QA-OACA · OACA-2/3/4 回归验收报告（Phase 4 + 修复复验 S3/S4）
+# QA-OACA · OACA-2/3/4 回归验收报告（Phase 4 + 修复复验 S3/S4/S5）
 
 - **Task ID**：QA-OACA
 - **Assigned Model**：顾镜真 · ARCANA 席位 3（多模态回归验收官）— 承载模型为多模态（视觉输入）席位模型
@@ -16,6 +16,7 @@
 | **S2** | 20:21:04–20:23:39 | — | 10/10 绿 | 第一批修复（静态闸门 + `void fetch` 版执行） |
 | **S3** | 20:26:23–20:27:35 | `82ddbe8a…` | **10/10 绿** | 第二批修复（进程内执行 + `isLoopback` + dispatch-guards 抽模块） |
 | **S4** | 20:30:32–20:31:39 | `c6414799…`（跑测前后一致） | 4 条脚本 + 契约门禁全绿 | 第三批：新增 `oaca-route-contract.test.mjs`；跑测期间再被改为 `744bff04…` |
+| **S6** | 20:39:18–20:40:26 | `a74c0f00…`（跑测前后一致） | **全绿**（db/bridge/supervisor/core/typecheck + 契约 12 例） | 代码已**提交**：HEAD `651c18b`；W-7 修复已落盘并经我变异复验 |
 
 **S3 快照指纹（跑测前 == 跑测后，逐字相同）**：
 
@@ -125,7 +126,40 @@ node packages/mcp-bridge/tests/oaca-route-contract.test.mjs
 
 **结论（对契约门禁的判定）**：11 条里 **9 条有真牙齿**（M1/M3/M5 实测精确红），**F-2 那 1 条目前是假绿**——它验证的是"字面量 `loopbackOnly: true` 存在"，而不是"写端点真的受回环限制"。对方所称的变异 ② 之所以变红，是因为他**同时删掉了那个死参数**，删死参数不改变任何安全行为。因此"W-1 已闭合"这个说法**不成立**：最重要的那条（写端点回环限制）仍无人守。
 
-**最小修复（不改业务逻辑即可）**：把 `actionDispatchPost` 的 `isLoopback` 调用纳入断言范围（例如 `slice(index, 'const actionDispatchPost = ', "route('/dsh-l2d/api/actions/dispatch'")` 后再断言 `mustInclude(block, 'isLoopback(req)')`），并顺手删掉注册处的死参数 `{ loopbackOnly: true }` 与 `nodegraphApiPost` 的死分支。附带好处：`isRemoteLoopback` 降级也会被发现。
+**★ S6 复验：W-7 已真修复（同一套变异重新跑，两次都红）**
+
+提交版（HEAD `651c18b`，`index.js` md5 `a74c0f00…`）已改为：断言切片 = `actionDispatchPost` 包装本身，且双向断言（`mustInclude('isLoopback(req)')` + `mustNotInclude('isRemoteLoopback(req)')`），用例数 11 → 12；同时 `loopbackOnly` 在 `index.js` 中**已彻底消失**（`grep loopbackOnly` 零命中，死参数与死分支同时清理）。我在镜像里重跑同一套变异：
+
+```
+基线（提交版）      EXIT=0 :: OACA 路由契约门禁: 12 tests passed
+M2 isLoopback→isRemoteLoopback  EXIT=1  ✗ F-2 安全：dispatch wrapper 内必须以 isLoopback 拦截非回环（Host + socket 双校验）
+M4 只删 isLoopback 守卫整行      EXIT=1  ✗ F-2 安全：dispatch wrapper 内必须以 isLoopback 拦截非回环（Host + socket 双校验）
+```
+
+→ **W-7 关闭**：现在删掉真闸门或降级成 `isRemoteLoopback` 都会精确变红，这条门禁终于有牙齿。
+
+**最小修复（不改业务逻辑即可）**：把 `actionDispatchPost` 的 `isLoopback` 调用纳入断言范围（例如 `slice(index, 'const actionDispatchPost = ', "route('/dsh-l2d/api/actions/dispatch'")` 后再断言 `mustInclude(block, 'isLoopback(req)')`），并顺手删掉注册处的死参数 `{ loopbackOnly: true }` 与 `nodegraphApiPost` 的死分支。附带好处：`isRemoteLoopback` 降级也会被发现。 ← **此条已于 S6 完成**
+
+### 1.5 S5：真机验收探针的复算（`tools/runtime-probe/oaca-dispatch-acceptance.mjs`）
+
+另一席交付了成功路径探针（229 行，`node --check` OK），并自述用 mock 自证过 4 场景。我**不采信自述**，自己起 mock（进程内 `http.createServer` + 异步 `spawn` 子进程，跑完即关）把 4 个场景重算了一遍：
+
+| 场景 | 我方 mock 设定 | 探针输出 | EXIT | 判断 |
+|---|---|---|---|---|
+| A happy path（`--yes`） | 首次 200 `state=completed,executionId=exec-1`；重放 `duplicate:true,executionId=exec-1` | 7 PASS / 0 FAIL | **0** | ✅ 与自述一致 |
+| B mode-blocked（`--yes`） | dispatch 恒返回 409 `mode-blocked` | 3 PASS / 1 BLOCKED，原文：`! [BLOCKED] 4 真实派发 — 409 mode-blocked：…｜处置：先把动作模式切到 nodegraph（设置页 clickMode）后重跑` | **2** | ✅ 分类与处置文案正确 |
+| C 幂等被破坏（`--yes`） | 重放返回 `executionId=exec-2` | 6 PASS / 1 FAIL，原文：`✗ [FAIL] 5 幂等重放 — 判为 duplicate 但 executionId 不一致（首次 exec-1 / 重放 exec-2），可能真的执行了两次` | **1** | ✅ 精确点名 |
+| D 不加 `--yes` | 同 A | 3 PASS / 0 FAIL / 1 SKIP，**mock 侧统计到的 POST 次数 = 0** | **0** | ✅ 证明"不加 --yes 真的零副作用" |
+
+**额外边界（我发现的一个空转 PASS，见 W-8）**：把 mock 改成**首次与重放都不返回 `executionId`**（其余照 happy path），探针第 5 步仍然 PASS，原文：
+
+```
+✓ [PASS] 5 幂等重放 — duplicate=true，executionId 不变（null）——未二次执行
+```
+
+→ 两端都没有 id 时 `null === null` 成立，"executionId 不变"这句话是**空的**，无法证明未二次执行。
+
+**现状判定（环境侧）**：我实测 `127.0.0.1` 的 5300/5173/3000/8080/5301/5302/8888 **全部 ECONNREFUSED（有监听端口数 = 0）**，与另一席"起不了宿主"一致。因此探针的**真实宿主成功路径仍未执行**，只证明了"工具本身分类正确"。
 
 ---
 
@@ -240,16 +274,16 @@ $ grep -nE "llm|deepseek|fetch\(|http" packages/dsh-l2d-plugin/lib/ai-inbox.mjs
 
 ### 3.3 残留项（按严重度）
 
-**W-7（主要，新）· 契约门禁的 F-2 断言是假绿：删掉真正的回环闸门它仍然通过**
+**W-8（次要，新）· 探针第 5 步在"两端都没有 executionId"时是空转 PASS**
 
-- 实测（§1.4 M4，在 `index.js` md5 `744bff04…` 上重做）：**只删** `actionDispatchPost` 里的 `if (!isLoopback(req)) …` 整行，`oaca-route-contract.test.mjs` **EXIT=0**。
-- 根因：断言在 dispatch 路由切片里找 `isLoopback(req)` / `loopbackOnly: true`；真实闸门在切片外的 `actionDispatchPost`（`:1739-1742`），切片内却有**死参数** `{ loopbackOnly: true }` 让 `hasOption` 恒真。
-- 附带发现（同样影响可读性与后续维护）：
-  - `actionDispatchPost = (handler) => …` 只有 1 个形参，注册处却传了 `, { loopbackOnly: true }` → **死参数，被静默丢弃**；
-  - `nodegraphApiPost` 的 5 个调用点（1631/1632/1641/1651/1741）**均不传 opts** → `opts.loopbackOnly` 分支（`:1610-1613`）是**死代码**；
-  - 也就是说 dispatch 当前只有 **1 道**回环闸门（`isLoopback`，强度够），另一席所称"双重闸门"在盘上字节里不成立。
-- 影响：这是本轮最危险的一类问题——**门禁绿 ≠ 安全行为在**。上一轮 F-2 能被引入，正是因为没有任何检查盯着这一层。
-- 最小修复：① 断言改为 `slice(index, 'const actionDispatchPost = ', "route('/dsh-l2d/api/actions/dispatch'")` 后 `mustInclude(block,'isLoopback(req)')`；② 删死参数与死分支。
+- 实测（§1.5 边界）：首次与重放都不返回 `executionId` 时，`sameExec = (null === null)` 成立 → 输出 `✓ [PASS] 5 幂等重放 — executionId 不变（null）——未二次执行`。
+- 影响：这句话在缺 id 时**证明不了任何事**，却会让人以为"已证明角色未二次动作"。当前 `index.js` 成功回执确实带 `executionId`，所以现实风险低；但一个验收工具在关键断言上允许空转，正是最容易被当成证据的那种假绿。
+- 最小修复：`if (!firstExecutionId) return fail('5 幂等重放', '首次回执未返回 executionId，无法证明未二次执行（请先修 index.js 回执）')`。
+
+**W-7（主要，**已于 S6 修复并复验关闭**）· 契约门禁的 F-2 断言曾是假绿**
+
+- 历史事实（保留记录）：在 `index.js` md5 `744bff04…` 上，**只删** `actionDispatchPost` 里的 `if (!isLoopback(req)) …` 整行，契约测试仍 EXIT=0；根因是断言匹配到路由注册处的死参数 `{ loopbackOnly: true }`，而真闸门在切片外。
+- **修复后（HEAD `651c18b`）**：断言改为在 `actionDispatchPost` 包装内双向校验（含 `mustNotInclude('isRemoteLoopback(req)')`），`loopbackOnly` 死参数/死分支已全部移除；我重跑 M2（降级）与 M4（删闸门）**两次都精确变红**（§1.4 ★）。→ 关闭。
 
 **W-1（主要，已收窄）· 仍有 3 处纯 HTTP 行为零自动化覆盖**
 
@@ -302,7 +336,7 @@ $ grep -nE "llm|deepseek|fetch\(|http" packages/dsh-l2d-plugin/lib/ai-inbox.mjs
 - 方案 §6 第 1 条：30 分钟真机交互断言 `runtimeLlmCallCount === 0`（新增的 `/api/oaca/metrics.json` 让这条**第一次可执行**，但仍需有人真机跑）。
 - 方案 §6 第 4 条：断网/无凭据离线执行 + overlay 真机截图取证。
 - 方案 §6 第 6 条：模型升级"兼容动作沿用 / 仅重编译失效项"全流程。
-- 派发**成功路径**的端到端实测（需起宿主 + 切 `mode='nodegraph'` + 真实模型）：本次只有代码读取与闸门单测，未真跑一次成功派发。
+- 派发**成功路径**的端到端实测（需起宿主 + 切 `mode='nodegraph'` + 真实模型）：本次只有代码读取与闸门单测，未真跑一次成功派发。**工具已就绪**（`tools/runtime-probe/oaca-dispatch-acceptance.mjs`，我用 mock 复算 4 场景分类均正确，§1.5），**卡在环境**：`127.0.0.1` 的 5300/5173/3000/8080/5301/5302/8888 全部 ECONNREFUSED。
 - `pnpm run accept` / `test:breakpoint` / `test:chain15`（不在范围/需运行中宿主）。
 
 ---
@@ -311,7 +345,7 @@ $ grep -nE "llm|deepseek|fetch\(|http" packages/dsh-l2d-plugin/lib/ai-inbox.mjs
 
 | 级别 | 风险 | 依据 |
 |---|---|---|
-| **高** | **门禁假绿**：契约测试 F-2 在真正回环闸门被删除后仍通过（我变异实测），"全绿"对写端点安全性没有任何证据力 | §1.4 M4、W-7 |
+| **高** | ~~**门禁假绿**：契约测试 F-2 在真正回环闸门被删除后仍通过~~ → **已于 S6 关闭**：修复后 M2/M4 两次变异都精确变红 | §1.4 ★、W-7 |
 | **高** | 派发成功路径**零端到端实测**：`await runNodegraph` + `Promise.race` 超时 + `nodegraphRunRegistry.finish` 的组合只在代码里正确，没跑过一次真实成功回执 | §4 未执行项 |
 | 中 | W-1 残留 3 处 HTTP 行为零覆盖，被改坏时 10 条命令不会红（上一轮 F-2/F-3/F-4 就是这么进来的） | `grep duplicate` 零命中 |
 | 中 | W-2 同步阻塞 120s：调用方超时/代理空闲超时与产品语义不匹配 | `index.js:2693-2710` |
@@ -324,16 +358,16 @@ $ grep -nE "llm|deepseek|fetch\(|http" packages/dsh-l2d-plugin/lib/ai-inbox.mjs
 
 ## 6. 裁定
 
-**Acceptance Status：`PASS_WITH_WARNINGS`**（较 S3 轮**下调风险评级**：新增"门禁假绿"高风险项，但仍不构成 FAILED——功能路径本身未发现新缺陷）
+**Acceptance Status：`PASS_WITH_WARNINGS`**（S6 快照：门禁假绿 W-7 已关闭并复验，全部回归命令绿；唯一未闭合项是**真机证据**与探针自身的 W-8）
 
 依据：
 
-1. **S3 快照 10/10 命令 EXIT 0**、**S4 快照 4 条脚本 + 契约门禁全绿**，两者 md5 在各自跑测期间一致，每条都有原始输出落档（§1）。
-2. 上一轮 1 项阻断 + 6 项主要缺陷（F-1/F-2/F-3/F-4/F-5/F-6/F-9）**逐条修复并在我复验下成立**；其中 F-1、F-6、F-8、F-9、W-1(部分) 有独立实测证据（§3.2）。
-3. 零 LLM 拿到"字面零命中"级证据（§2A/§2C），不依赖任何人的自述。
-4. **新增主要问题 W-7**：契约门禁的 F-2 断言是**假绿**——我用变异实验证明，删掉 `actionDispatchPost` 里真正的 `isLoopback` 守卫后，该门禁仍 `EXIT=0`；根因是断言匹配到了注册处的**死参数** `{ loopbackOnly: true }`，而真实闸门在切片外。附带证实 `nodegraphApiPost` 的 `opts.loopbackOnly` 已成死分支。对方"W-1 已闭合"的结论**不成立**（11 条里 9 条有齿、1 条无效）。
-5. 不给 `PASS` 的原因：① **派发成功路径从未端到端跑过一次**；② W-7 假绿 + W-1 仍留 3 处 HTTP 行为零覆盖；③ 方案 §6 第 1、4 条验收指标未执行。
+1. **S3 十条命令 EXIT 0**、**S4 四条脚本 + 契约门禁绿**、**S6（已提交 HEAD `651c18b`）db/bridge/supervisor/core/typecheck + 契约 12 例全绿**；每个快照的 md5 在跑测期间一致，均有原始输出落档（§1）。
+2. 上一轮 1 项阻断 + 6 项主要缺陷（F-1/F-2/F-3/F-4/F-5/F-6/F-9）**逐条修复并在我复验下成立**；F-1、F-6、F-8、F-9、W-1(部分) 有独立实测证据（§3.2）。
+3. **W-7 已关闭**：提交版把断言收进 `actionDispatchPost` 并加 `mustNotInclude('isRemoteLoopback(req)')`，删净 `loopbackOnly` 死参数/死分支；我重跑 M2/M4 两次变异**都精确变红**（§1.4 ★）。
+4. 零 LLM 拿到"字面零命中"级证据（§2A/§2C），不依赖任何人的自述。
+5. 不给 `PASS` 的原因：① **派发成功路径从未端到端跑过一次**——工具已就绪且我用 mock 复算其分类正确（§1.5），但 7 个端口全部 ECONNREFUSED，属**环境阻塞**；② W-8：探针第 5 步在缺 `executionId` 时空转 PASS；③ 方案 §6 第 1、4 条验收指标未执行；④ W-1 仍留 3 处 HTTP 行为零覆盖（其中回环 403 虽已有源码门禁，但无行为测试）。
 
 > 编号口径提醒（避免与另一席的编号混淆）：本文 **W-5 = `timeoutMs` 静默不落库**（不是 actionPromptCount）；`actionPromptCount` 的计数边界问题在本文是 **F-11，且已复验通过**（`index.js` 内包住 `deepseekChatJson` 调用边界计数）。另一席所言"W-2 双重闸门已满足"——经盘上字节核对，dispatch 实际只有**一道** `isLoopback` 闸门（另一道 `loopbackOnly` 是死参数/死分支），安全性足够但"双重"表述不成立，并直接导致 W-7。
 
-**本裁定不构成合并/发布放行**，最终决策由主理人执行。升级为 `PASS` 的最小必要动作：① 修 W-7（断言纳入 `actionDispatchPost` + 删死参数/死分支）并用我的 M4 变异回归验证"删闸门必红"；② 起宿主、切 `mode='nodegraph'`，真实跑一次成功派发并记录 `state:'completed'` + `executionId`，另跑一次同 requestId 重放确认 `duplicate:true` 且角色未二次动作；③ 真机提供 `/api/oaca/metrics.json` 读数与离线执行截图。
+**本裁定不构成合并/发布放行**，最终决策由主理人执行。升级为 `PASS` 的最小必要动作：① 修 W-8（缺 `executionId` 时第 5 步必须报 FAIL/SKIP，不得空转 PASS）；② **起宿主 + `clickMode=nodegraph` 后跑一次探针**（先不加 `--yes` 的只读三条，再加 `--yes` 取真实派发），把输出贴进本报告——这是唯一还差的硬证据（属环境阻塞，非交付缺失）；③ 真机提供 `/api/oaca/metrics.json` 读数与离线执行截图。W-7 已于 S6 关闭，可从待办移除。
