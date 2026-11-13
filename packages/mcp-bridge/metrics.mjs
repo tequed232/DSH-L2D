@@ -23,6 +23,11 @@ export const COUNTER_NAMES = Object.freeze([
   'agentPromptCount',
   'runtimeCallCount',
   'runtimeLlmCallCount',
+  // Phase 5 观测先行：旧决策层（context-analyzer / workspace-agent）被调用的次数。
+  // 用途不是"统计热闹"，而是给出"关入口"的放行条件：它必须降到 0 才能进 5c 删文件。
+  'legacyDecisionCount',
+  // 被 DSH_LEGACY_RUNTIME=off 拦下的次数（0 说明没人依赖旧决策层）。
+  'legacyBlockedCount',
 ]);
 
 function emptyCounters() {

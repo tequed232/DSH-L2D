@@ -642,6 +642,15 @@ const workspaceEventCache = new Map();
 //  - 编译期调用（/api/actions/compile、ai-plan）不计入 runtime*，见各调用点注释。
 const metrics = createMetrics();
 
+/**
+ * 旧决策层总开关（Phase 5）。
+ * 默认 on（保持现有行为）；DSH_LEGACY_RUNTIME=off 时关闭 context-analyzer / workspace-agent
+ * 的自主决策，但**不删文件、不改接口**——这是"关入口"，可一行回滚。
+ */
+function legacyRuntimeEnabled() {
+  return process.env.DSH_LEGACY_RUNTIME !== 'off';
+}
+
 // OACA-2/3 运行时依赖（MCP Bridge 挂载段装配，路由处理时按需读取）：
 // { db, repo, router, triggerRouter, metrics }。未装配（挂载失败/已 dispose）→ 路由如实 503，
 // 绝不伪造"路由可用"。db 复用既有 bridgeDb 连接，不新建第二个库连接。
@@ -1086,7 +1095,16 @@ export function apply(root, config = {}) {
       const foreground = foregroundCollector.get();
       const read = entry ? readSessionEvents(entry.file) : { ok: false, events: [], error: 'no-session' };
       const summary = read.ok ? summarizeSession(read.events, { now }) : null;
-      const activity = analyzeContext({ summary, presence, foreground, now });
+      // Phase 5a 观测 + 可关闭：旧决策层（context-analyzer）默认仍在，但每次调用计数；
+      // DSH_LEGACY_RUNTIME=off 时不跑分析（activity 置 null），并计 legacyBlockedCount。
+      // 放行条件（进 5c 删文件）：legacyDecisionCount 长期为 0，且 legacyBlockedCount 期间无异常上报。
+      let activity = null;
+      if (legacyRuntimeEnabled()) {
+        metrics.increment('legacyDecisionCount');
+        activity = analyzeContext({ summary, presence, foreground, now });
+      } else {
+        metrics.increment('legacyBlockedCount');
+      }
       const missingSession = requested && !entry;
       const unavailable = read.ok
         ? []
@@ -2937,8 +2955,9 @@ export function apply(root, config = {}) {
       intervalMs: 4000,
       // PR-2：主动演出默认关。普通状态变化不是用户请求，不能自动触发 LLM。
       // 每次刷新重读设置，设置页开关即时生效（未配置 = false）。
-      proactivePerformance: readSettings().proactivePerformance === true,
-      getProactivePerformance: () => readSettings().proactivePerformance === true,
+      // Phase 5a：DSH_LEGACY_RUNTIME=off 时彻底关闭主动演出（不再由旧决策层决定动作）。
+      proactivePerformance: legacyRuntimeEnabled() && readSettings().proactivePerformance === true,
+      getProactivePerformance: () => legacyRuntimeEnabled() && readSettings().proactivePerformance === true,
     });
     workspaceBridge = bridge;
     bridge.ensure().catch((err) => diag('Workspace Agent 初始化失败: ' + String(err?.message || err)));

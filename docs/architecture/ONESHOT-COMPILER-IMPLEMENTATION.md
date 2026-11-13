@@ -89,16 +89,35 @@ CREATE INDEX idx_compiled_actions_gate ON compiled_actions(model_id, status, app
 
 ---
 
+## 4.5 Phase 5a · 关入口的"观测先行"部分（已做）
+
+按本方案自定的顺序（**先观测，再加限制**），5a 只落地了可观测 + 可关闭，不删任何文件：
+
+- `metrics` 新增两个计数器：
+  - `legacyDecisionCount`：旧决策层（`context-analyzer`、`workspace-agent`）被调用次数；
+  - `legacyBlockedCount`：被开关拦下的次数。
+- `DSH_LEGACY_RUNTIME=off` 总开关（默认 on = 保持现状）：
+  - `context-analyzer` 不再运行（workspace 快照里 `activity=null`）；
+  - `workspace-agent` 的 `proactivePerformance` 被强制关（不再由旧决策层决定动作）；
+  - **不删文件、不改接口**，一行环境变量回滚。
+- 放行判据（进 5c 删文件的前置）：`legacyDecisionCount === 0 && legacyBlockedCount === 0`，
+  由 `packages/mcp-bridge/tests/legacy-metrics.test.mjs`（5 项）把这条判据钉住。
+
+**为什么先不直接关**：直接关会让 `l2d_emote` / 主动演出对现有用户立即失效，属产品行为变更。
+观测期的作用是拿到"到底还有谁在用"的数据，再决定是关死还是迁移。
+
+---
+
 ## 5. 回归结果（本轮最终）
 
 | 命令 | EXIT | 关键输出 |
 |---|---|---|
 | `npm run test:db` | 0 | 29 项断言组 + 注册表 10 + 同步桥 5 + 三态 7 + 巡检 5 |
-| `npm run test:bridge` | 0 | 全过（含 dispatch-guards 8、route-contract 12） |
+| `npm run test:bridge` | 0 | 全过（含 dispatch-guards 8、route-contract 12、legacy-metrics 5） |
 | `npm run test:core` | 0 | 全过（含 legacy-audit 6、action-compiler 14） |
 | `npm run typecheck` | 0 | `vue-tsc --noEmit` 无诊断 |
 
-新增断言：审计 6 + 巡检 5 + 三态 7 + 闸门 +2 = **20 条**。
+新增断言：审计 6 + 巡检 5 + 三态 7 + 闸门 +2 + 旧决策观测 5 = **25 条**。
 
 ---
 
@@ -107,7 +126,7 @@ CREATE INDEX idx_compiled_actions_gate ON compiled_actions(model_id, status, app
 | Phase | 内容 | 前置 | 需要你决策 |
 |---|---|---|---|
 | 4 | 执行通道收敛（单一权威队列）：`/ai/call`→`ai-inbox` 降为执行器接口，排队/去重/取消统一在 `bridge_actions` | Phase 3 已就绪 | 是否接受"`ai-inbox` 不再排队"的语义变化 |
-| 5a | 关入口：`workspace-agent` 运行时决策、`context-analyzer` 自动分析、`planner` 实时入口、`l2d_emote` 动态路由（只关调用点，文件保留） | Phase 0 审计表 | — |
+| 5a | 关入口：`context-analyzer` / `workspace-agent` 已做（开关 + 计数）；`l2d_emote` 动态路由待做 | Phase 0 审计表 | `l2d_emote` 是否允许直接下线 |
 | 5b | 观察 7 天：`metrics` 加 legacy 命中计数，确认 0 | 5a | — |
 | 5c | 删文件（分批）：`planner` + 其测试可先退休；`cue-loop` 需先降级 renderer 通道 | 5b | — |
 | 6 | 真机验收：探针跑通 + 断网 30 分钟 `runtimeLlmCallCount===0` | 宿主启动 | **需要你给桌面时窗** |
