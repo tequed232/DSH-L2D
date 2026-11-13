@@ -1,0 +1,387 @@
+{
+  "generatedAt": "2026-11-13T13:08:41.562Z",
+  "root": "D:\\Desktop\\DSH-L2D",
+  "targets": [
+    {
+      "id": "core.planner",
+      "tier": "P0",
+      "role": "behavior",
+      "path": "packages/core/src/planner",
+      "fileCount": 6,
+      "runtimeReachable": false,
+      "referencedByRenderer": false,
+      "runtimeRefs": [],
+      "importTimeRefs": [],
+      "testRefs": [
+        "packages/core/test/motion-planner.ts"
+      ],
+      "inRefs": [
+        "packages/core/src/planner/actions-lib.ts",
+        "packages/core/src/planner/conflict-resolver.ts",
+        "packages/core/src/planner/index.ts",
+        "packages/core/src/planner/plan-builder.ts",
+        "packages/core/src/planner/timeline-adapter.ts",
+        "packages/core/test/motion-planner.ts"
+      ],
+      "outRefs": [
+        "packages/core/src/motion-contract.ts"
+      ],
+      "verdict": "retire-with-test",
+      "reason": "无运行期路径，仅被 1 个测试引用：删实现时同步删/改测试"
+    },
+    {
+      "id": "core.cue-loop",
+      "tier": "P0",
+      "role": "behavior",
+      "path": "packages/core/src/cue-loop.ts",
+      "fileCount": 1,
+      "runtimeReachable": true,
+      "referencedByRenderer": true,
+      "runtimeRefs": [
+        "packages/core/src/index.ts",
+        "packages/renderer/src/app/cue-bridge.ts",
+        "packages/renderer/src/index.ts"
+      ],
+      "importTimeRefs": [],
+      "testRefs": [
+        "packages/core/test/cue-loop.ts"
+      ],
+      "inRefs": [
+        "packages/core/src/index.ts",
+        "packages/core/test/cue-loop.ts",
+        "packages/renderer/src/app/cue-bridge.ts",
+        "packages/renderer/src/index.ts"
+      ],
+      "outRefs": [
+        "packages/core/src/embodied-cue.ts",
+        "packages/core/src/motion-contract.ts"
+      ],
+      "verdict": "detach-first",
+      "reason": "被 Renderer 层引用：先降级该通道（保留接口、清空决策），再谈删除"
+    },
+    {
+      "id": "core.embodied-cue",
+      "tier": "P0",
+      "role": "behavior",
+      "path": "packages/core/src/embodied-cue.ts",
+      "fileCount": 1,
+      "runtimeReachable": true,
+      "referencedByRenderer": true,
+      "runtimeRefs": [
+        "packages/core/src/cue-loop.ts",
+        "packages/core/src/index.ts",
+        "packages/renderer/src/app/cue-bridge.ts",
+        "packages/renderer/src/index.ts"
+      ],
+      "importTimeRefs": [],
+      "testRefs": [
+        "packages/core/test/cue-loop.ts",
+        "packages/core/test/embodied-cue.ts",
+        "packages/renderer/src/app/cue-bridge.test.mjs"
+      ],
+      "inRefs": [
+        "packages/core/src/cue-loop.ts",
+        "packages/core/src/index.ts",
+        "packages/core/test/cue-loop.ts",
+        "packages/core/test/embodied-cue.ts",
+        "packages/renderer/src/app/cue-bridge.test.mjs",
+        "packages/renderer/src/app/cue-bridge.ts",
+        "packages/renderer/src/index.ts"
+      ],
+      "outRefs": [
+        "packages/core/src/gesture-timeline.ts",
+        "packages/core/src/motion-contract.ts",
+        "packages/core/src/shared-arbitration.ts"
+      ],
+      "verdict": "detach-first",
+      "reason": "被 Renderer 层引用：先降级该通道（保留接口、清空决策），再谈删除"
+    },
+    {
+      "id": "core.motion-intent",
+      "tier": "P0",
+      "role": "behavior",
+      "path": "packages/core/src/motion-intent.ts",
+      "fileCount": 1,
+      "runtimeReachable": true,
+      "referencedByRenderer": false,
+      "runtimeRefs": [
+        "packages/core/src/index.ts",
+        "packages/core/src/limb-controller.ts",
+        "packages/core/src/semantic-binding.ts",
+        "packages/core/src/write-plan.ts"
+      ],
+      "importTimeRefs": [],
+      "testRefs": [
+        "packages/core/test/motion-contract.ts"
+      ],
+      "inRefs": [
+        "packages/core/src/index.ts",
+        "packages/core/src/limb-controller.ts",
+        "packages/core/src/semantic-binding.ts",
+        "packages/core/src/write-plan.ts",
+        "packages/core/test/motion-contract.ts"
+      ],
+      "outRefs": [
+        "packages/core/src/mixer.ts",
+        "packages/core/src/motion-contract.ts"
+      ],
+      "verdict": "detach-first",
+      "reason": "运行期可达（4 个运行入口引用）：先关调用入口、观察命中为 0，再删文件"
+    },
+    {
+      "id": "core.semantic-binding",
+      "tier": "P0",
+      "role": "behavior",
+      "path": "packages/core/src/semantic-binding.ts",
+      "fileCount": 1,
+      "runtimeReachable": true,
+      "referencedByRenderer": false,
+      "runtimeRefs": [
+        "packages/core/src/index.ts",
+        "packages/core/src/posture.ts"
+      ],
+      "importTimeRefs": [],
+      "testRefs": [
+        "packages/core/test/semantic-binding.ts"
+      ],
+      "inRefs": [
+        "packages/core/src/index.ts",
+        "packages/core/src/posture.ts",
+        "packages/core/test/semantic-binding.ts"
+      ],
+      "outRefs": [
+        "packages/core/src/motion-contract.ts",
+        "packages/core/src/motion-intent.ts"
+      ],
+      "verdict": "detach-first",
+      "reason": "运行期可达（2 个运行入口引用）：先关调用入口、观察命中为 0，再删文件"
+    },
+    {
+      "id": "plugin.workspace-agent",
+      "tier": "P0",
+      "role": "behavior",
+      "path": "packages/dsh-l2d-plugin/lib/workspace-agent.mjs",
+      "fileCount": 1,
+      "runtimeReachable": true,
+      "referencedByRenderer": false,
+      "runtimeRefs": [
+        "packages/dsh-l2d-plugin/lib/index.js"
+      ],
+      "importTimeRefs": [
+        "tools/persona-effect-demo.mjs"
+      ],
+      "testRefs": [
+        "packages/dsh-l2d-plugin/lib/workspace-agent.test.mjs"
+      ],
+      "inRefs": [
+        "packages/dsh-l2d-plugin/lib/index.js",
+        "packages/dsh-l2d-plugin/lib/workspace-agent.test.mjs",
+        "tools/persona-effect-demo.mjs"
+      ],
+      "outRefs": [
+        "packages/dsh-l2d-plugin/lib/choreography.mjs",
+        "packages/dsh-l2d-plugin/lib/env-state.mjs",
+        "packages/dsh-l2d-plugin/lib/persona.mjs",
+        "packages/dsh-l2d-plugin/lib/workspace-snapshot.mjs"
+      ],
+      "verdict": "detach-first",
+      "reason": "运行期可达（1 个运行入口引用）：先关调用入口、观察命中为 0，再删文件"
+    },
+    {
+      "id": "plugin.context-analyzer",
+      "tier": "P0",
+      "role": "behavior",
+      "path": "packages/dsh-l2d-plugin/lib/context-analyzer.mjs",
+      "fileCount": 1,
+      "runtimeReachable": true,
+      "referencedByRenderer": false,
+      "runtimeRefs": [
+        "packages/dsh-l2d-plugin/lib/index.js"
+      ],
+      "importTimeRefs": [],
+      "testRefs": [
+        "packages/dsh-l2d-plugin/lib/context-analyzer.test.mjs",
+        "packages/dsh-l2d-plugin/lib/workspace-agent.test.mjs"
+      ],
+      "inRefs": [
+        "packages/dsh-l2d-plugin/lib/context-analyzer.test.mjs",
+        "packages/dsh-l2d-plugin/lib/index.js",
+        "packages/dsh-l2d-plugin/lib/workspace-agent.test.mjs"
+      ],
+      "outRefs": [
+        "packages/dsh-l2d-plugin/lib/session-events.mjs"
+      ],
+      "verdict": "detach-first",
+      "reason": "运行期可达（1 个运行入口引用）：先关调用入口、观察命中为 0，再删文件"
+    },
+    {
+      "id": "plugin.choreography",
+      "tier": "P1",
+      "role": "behavior",
+      "path": "packages/dsh-l2d-plugin/lib/choreography.mjs",
+      "fileCount": 1,
+      "runtimeReachable": true,
+      "referencedByRenderer": false,
+      "runtimeRefs": [
+        "packages/dsh-l2d-mcp/src/action-sequence.mjs",
+        "packages/dsh-l2d-mcp/src/server.mjs",
+        "packages/dsh-l2d-mcp/src/validate.mjs",
+        "packages/dsh-l2d-plugin/lib/host-guard.mjs",
+        "packages/dsh-l2d-plugin/lib/nodegraph-schema.mjs",
+        "packages/dsh-l2d-plugin/lib/nodegraph-templates.mjs",
+        "packages/dsh-l2d-plugin/lib/nodegraph.mjs",
+        "packages/dsh-l2d-plugin/lib/workspace-agent.mjs"
+      ],
+      "importTimeRefs": [
+        "tools/act-choreo/index.mjs"
+      ],
+      "testRefs": [
+        "packages/dsh-l2d-plugin/lib/choreography.test.mjs"
+      ],
+      "inRefs": [
+        "packages/dsh-l2d-mcp/src/action-sequence.mjs",
+        "packages/dsh-l2d-mcp/src/server.mjs",
+        "packages/dsh-l2d-mcp/src/validate.mjs",
+        "packages/dsh-l2d-plugin/lib/choreography.test.mjs",
+        "packages/dsh-l2d-plugin/lib/host-guard.mjs",
+        "packages/dsh-l2d-plugin/lib/nodegraph-schema.mjs",
+        "packages/dsh-l2d-plugin/lib/nodegraph-templates.mjs",
+        "packages/dsh-l2d-plugin/lib/nodegraph.mjs",
+        "packages/dsh-l2d-plugin/lib/workspace-agent.mjs",
+        "tools/act-choreo/index.mjs"
+      ],
+      "outRefs": [
+        "packages/dsh-l2d-plugin/lib/param-guards.mjs"
+      ],
+      "verdict": "detach-first",
+      "reason": "运行期可达（8 个运行入口引用）：先关调用入口、观察命中为 0，再删文件"
+    },
+    {
+      "id": "core.continuous-action",
+      "tier": "P1",
+      "role": "behavior",
+      "path": "packages/core/src/continuous-action.ts",
+      "fileCount": 1,
+      "runtimeReachable": true,
+      "referencedByRenderer": false,
+      "runtimeRefs": [
+        "packages/core/src/index.ts"
+      ],
+      "importTimeRefs": [],
+      "testRefs": [
+        "packages/core/test/continuous-action.ts"
+      ],
+      "inRefs": [
+        "packages/core/src/index.ts",
+        "packages/core/test/continuous-action.ts"
+      ],
+      "outRefs": [],
+      "verdict": "detach-first",
+      "reason": "运行期可达（1 个运行入口引用）：先关调用入口、观察命中为 0，再删文件"
+    },
+    {
+      "id": "plugin.llm-channel",
+      "tier": "P1",
+      "role": "plumbing",
+      "path": "packages/dsh-l2d-plugin/lib/llm-channel.mjs",
+      "fileCount": 1,
+      "runtimeReachable": true,
+      "referencedByRenderer": false,
+      "runtimeRefs": [
+        "packages/dsh-l2d-plugin/lib/index.js"
+      ],
+      "importTimeRefs": [
+        "tools/dev-server/index.mjs"
+      ],
+      "testRefs": [],
+      "inRefs": [
+        "packages/dsh-l2d-plugin/lib/index.js",
+        "tools/dev-server/index.mjs"
+      ],
+      "outRefs": [],
+      "verdict": "keep-with-boundary",
+      "reason": "运行期入口引用 1 处：保留文件，需确认它只出现在编译/执行通道、不参与行为决策"
+    },
+    {
+      "id": "plugin.nodegraph-ai",
+      "tier": "P1",
+      "role": "plumbing",
+      "path": "packages/dsh-l2d-plugin/lib/nodegraph-ai.mjs",
+      "fileCount": 1,
+      "runtimeReachable": true,
+      "referencedByRenderer": false,
+      "runtimeRefs": [
+        "packages/dsh-l2d-plugin/lib/nodegraph-api.mjs",
+        "packages/dsh-l2d-plugin/lib/nodegraph-planner.mjs"
+      ],
+      "importTimeRefs": [],
+      "testRefs": [
+        "packages/dsh-l2d-plugin/lib/nodegraph-ops.test.mjs"
+      ],
+      "inRefs": [
+        "packages/dsh-l2d-plugin/lib/nodegraph-api.mjs",
+        "packages/dsh-l2d-plugin/lib/nodegraph-ops.test.mjs",
+        "packages/dsh-l2d-plugin/lib/nodegraph-planner.mjs"
+      ],
+      "outRefs": [
+        "packages/dsh-l2d-plugin/lib/nodegraph-ops.mjs",
+        "packages/dsh-l2d-plugin/lib/nodegraph-schema.mjs"
+      ],
+      "verdict": "keep-with-boundary",
+      "reason": "运行期入口引用 2 处：保留文件，需确认它只出现在编译/执行通道、不参与行为决策"
+    },
+    {
+      "id": "plugin.ai-inbox",
+      "tier": "P1",
+      "role": "plumbing",
+      "path": "packages/dsh-l2d-plugin/lib/ai-inbox.mjs",
+      "fileCount": 1,
+      "runtimeReachable": true,
+      "referencedByRenderer": false,
+      "runtimeRefs": [
+        "packages/dsh-l2d-plugin/lib/index.js"
+      ],
+      "importTimeRefs": [
+        "tools/dev-server/index.mjs"
+      ],
+      "testRefs": [
+        "packages/dsh-l2d-plugin/lib/ai-inbox.test.mjs"
+      ],
+      "inRefs": [
+        "packages/dsh-l2d-plugin/lib/ai-inbox.test.mjs",
+        "packages/dsh-l2d-plugin/lib/index.js",
+        "tools/dev-server/index.mjs"
+      ],
+      "outRefs": [],
+      "verdict": "keep-with-boundary",
+      "reason": "运行期入口引用 1 处：保留文件，需确认它只出现在编译/执行通道、不参与行为决策"
+    },
+    {
+      "id": "renderer.cue-bridge",
+      "tier": "P1",
+      "role": "renderer",
+      "path": "packages/renderer/src/app/cue-bridge.ts",
+      "fileCount": 1,
+      "runtimeReachable": true,
+      "referencedByRenderer": true,
+      "runtimeRefs": [
+        "packages/renderer/src/index.ts"
+      ],
+      "importTimeRefs": [],
+      "testRefs": [
+        "packages/renderer/src/app/cue-bridge.test.mjs"
+      ],
+      "inRefs": [
+        "packages/renderer/src/app/cue-bridge.test.mjs",
+        "packages/renderer/src/index.ts"
+      ],
+      "outRefs": [
+        "packages/core/src/cue-loop.ts",
+        "packages/core/src/embodied-cue.ts",
+        "packages/core/src/gesture-timeline.ts"
+      ],
+      "verdict": "detach-first",
+      "reason": "被 Renderer 层引用：先降级该通道（保留接口、清空决策），再谈删除"
+    }
+  ]
+}

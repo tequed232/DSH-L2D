@@ -768,7 +768,10 @@ export async function runNodegraph(name, execute, options = {}) {
   }
   const homeDir = options.homeDir;
   const mode = readMotionMode({ homeDir }).mode;
-  if (mode !== 'nodegraph') {
+  // Phase 3 双模式收敛：默认仍按全局模式闸门（旧行为）；但当调用方是**已发布动作程序**
+  // 的派发路径时，程序本身就是权威，不再要求用户先切到节点图模式。
+  // 只对显式传入 requireNodegraphMode === false 的调用方放行，普通 /nodegraphs/run 不受影响。
+  if (mode !== 'nodegraph' && options.requireNodegraphMode !== false) {
     return {
       ok: false,
       status: 409,

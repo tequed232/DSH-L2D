@@ -2635,9 +2635,13 @@ export function apply(root, config = {}) {
           //    （QA F-3）。判定抽在 mcp-bridge/dispatch-guards.mjs（纯函数，可单测），
           //    与 /nodegraphs/run 用同一套口径。作用域显式解析，避免跨块引用。
           const homeDir = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+          // Phase 3 双模式收敛：默认以"已发布程序"为授权依据（gate='program'）；
+          // 置 DSH_ACTION_GATE=mode 可一行回滚到旧的"必须先切节点图模式"行为。
+          const actionGate = process.env.DSH_ACTION_GATE === 'mode' ? 'mode' : 'program';
           const guard = evaluateDispatchGuards({
             graphId: graphName,
             mode: readMotionMode({ homeDir }).mode,
+            gate: actionGate,
             binding: checkRunModelBinding(graphName, { currentModelId: getCurrentModelId() }),
             graphExists: loadNodegraph(graphName, { homeDir }) !== null,
           });
@@ -2696,7 +2700,11 @@ export function apply(root, config = {}) {
           };
           let runResult = null;
           // 原始执行 promise 单独持有：超时只"脱钩"，不取消对方的收敛权。
-          const runPromise = runNodegraph(graphName, cancellableExecutor, { currentModelId: getCurrentModelId() });
+          const runPromise = runNodegraph(graphName, cancellableExecutor, {
+            currentModelId: getCurrentModelId(),
+            // 与上面同一口径：program 模式下，已发布程序不因全局 clickMode=llm 而被拦。
+            requireNodegraphMode: actionGate === 'program',
+          });
           try {
             runResult = await Promise.race([
               runPromise,

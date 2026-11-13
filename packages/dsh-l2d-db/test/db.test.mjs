@@ -43,7 +43,7 @@ test('migrations are idempotent across reopen', () => {
 
   const again = openDb({ path: dbFile });
   const rows = again.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get();
-  assert.equal(rows.n, 12); // … / v9 observer_dispatch_log（Supervisor P12） / v10 gallery_scores / v11 action_session_id（双会话 PR-1） / v12 action_manifests + compiled_actions（OACA-2）
+  assert.equal(rows.n, 13); // … / v9 observer_dispatch_log（Supervisor P12） / v10 gallery_scores / v11 action_session_id（双会话 PR-1） / v12 action_manifests + compiled_actions（OACA-2） / v13 runtime_verified + approved + program_hash（三态语义分离）
   const tables = again.prepare(
     "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('skills','workspaces','toolchain_components','startup_checks','tasks','models','nodes','edges','parameters','parameter_bindings','semantic_labels','motions','physics_groups','analysis_jobs','probe_runs','capability_profiles','validation_findings','gallery_items','gallery_labels','prompt_templates','motion_assets','motion_analysis','motion_definitions','action_chains','action_steps','motion_sources','model_capabilities','motion_model_bindings','execution_history','learning_jobs')",
   ).get();

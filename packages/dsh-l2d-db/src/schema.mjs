@@ -25,7 +25,7 @@
  *  - 迁移只追加不改写；schema_migrations 记录版本与耗时。
  */
 
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 /** v1 全量 DDL。单条 exec 执行，语句间以分号分隔。 */
 export const MIGRATIONS = {
@@ -709,5 +709,18 @@ export const MIGRATIONS = {
       PRIMARY KEY (model_id, action_id)
     );
     CREATE INDEX IF NOT EXISTS idx_compiled_actions_status ON compiled_actions(model_id, status);
+  `,
+
+  // v13 · 动作状态语义分离（Phase 1/2：真源收口 + 三态互不覆盖）
+  // 为什么不是合并成一个 success 字段：'通过校验'、'真机跑过'、'人工批准'是三件不同的事，
+  // 合并后无法回答"这条动作到底被谁验过"。
+  // program_hash 与 graph_hash 分离：graph 变了、或 manifest 级字段（参数/触发器/优先级）变了，
+  // 都属于"程序变了"，此前真机验证结论应失效 —— 由 publishBundleToDb 的 CASE 保证。
+  13: `
+    ALTER TABLE compiled_actions ADD COLUMN runtime_verified INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE compiled_actions ADD COLUMN approved INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE compiled_actions ADD COLUMN program_hash TEXT;
+    CREATE INDEX IF NOT EXISTS idx_compiled_actions_gate
+      ON compiled_actions(model_id, status, approved, runtime_verified);
   `,
 };

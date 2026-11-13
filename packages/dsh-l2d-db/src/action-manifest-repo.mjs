@@ -21,6 +21,7 @@
  *    不产生重复行、不抛错（Agent/用户重试编译不得把注册表撑爆）。
  *  - 时间列由本层显式传值（对齐 v7/v8/v9 风格，不用 DEFAULT 表达式），便于测试与回放。
  */
+import { createHash } from 'node:crypto';
 import { withTransaction } from './db.mjs';
 
 const MANIFEST_COLS =
@@ -28,7 +29,8 @@ const MANIFEST_COLS =
 
 const ACTION_COLS =
   'model_id, action_id, graph_id, manifest_id, graph_hash, capability_revision, status, ' +
-  'priority, triggers_json, parameters_json, requires_own_json, updated_at';
+  'priority, triggers_json, parameters_json, requires_own_json, updated_at, ' +
+  'runtime_verified, approved, program_hash';
 
 function isNonEmptyString(v) {
   return typeof v === 'string' && v.length > 0;
@@ -43,6 +45,24 @@ function assertPublishArgs({ modelId, revision, actions, manifest }) {
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
     throw new Error('publishBundleToDb: manifest 必须是对象');
   }
+}
+
+/**
+ * 动作程序指纹：manifest 级字段（参数域/触发器/优先级/requiresOwn）+ 图哈希。
+ * 与 graph_hash 的区别：只改参数默认值或触发器，graph_hash 不变但**程序已变**，
+ * 此时旧的真机验证结论必须失效 —— 这就是本字段存在的理由。
+ */
+export function programHashOf(action) {
+  const canonical = JSON.stringify({
+    actionId: action.actionId ?? '',
+    graphId: action.graphId ?? '',
+    graphHash: action.graphHash ?? '',
+    priority: action.priority ?? 'NORMAL',
+    triggers: Array.isArray(action.triggers) ? [...action.triggers].sort() : [],
+    parameters: action.parameters && typeof action.parameters === 'object' ? action.parameters : {},
+    requiresOwn: Array.isArray(action.requiresOwn) ? [...action.requiresOwn].sort() : [],
+  });
+  return 'ph' + createHash('sha256').update(canonical).digest('hex').slice(0, 24);
 }
 
 /** manifest_id 生成规则：`${model_id}@rev${revision}`（与 schema 注释一致，唯一入口）。 */
@@ -107,7 +127,7 @@ export function publishBundleToDb(db, input) {
     // 3) 可派发动作（仅 status='compiled'）逐条 UPSERT。
     const upsertAction = db.prepare(
       `INSERT INTO compiled_actions (${ACTION_COLS})
-       VALUES (?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?, ?, 0, 0, ?)
        ON CONFLICT(model_id, action_id) DO UPDATE SET
          graph_id            = excluded.graph_id,
          manifest_id         = excluded.manifest_id,
@@ -118,7 +138,14 @@ export function publishBundleToDb(db, input) {
          triggers_json       = excluded.triggers_json,
          parameters_json     = excluded.parameters_json,
          requires_own_json   = excluded.requires_own_json,
-         updated_at          = excluded.updated_at`,
+         updated_at          = excluded.updated_at,
+         -- 程序未变（program_hash 相同）→ 保留既有真机验证/批准结论；
+         -- 程序变了 → 旧结论一律失效（回到 0），绝不让"改过的程序"继承"验过的章"。
+         runtime_verified    = CASE WHEN compiled_actions.program_hash IS excluded.program_hash
+                                    THEN compiled_actions.runtime_verified ELSE 0 END,
+         approved            = CASE WHEN compiled_actions.program_hash IS excluded.program_hash
+                                    THEN compiled_actions.approved ELSE 0 END,
+         program_hash        = excluded.program_hash`,
     );
     for (const action of compiled) {
       upsertAction.run(
@@ -133,6 +160,7 @@ export function publishBundleToDb(db, input) {
         JSON.stringify(action.parameters && typeof action.parameters === 'object' ? action.parameters : {}),
         JSON.stringify(Array.isArray(action.requiresOwn) ? action.requiresOwn : []),
         now,
+        programHashOf(action),
       );
     }
 
@@ -190,6 +218,51 @@ export function listPublishedActions(db, { modelId } = {}) {
 }
 
 /** 当前 published manifest（含完整 manifest 快照）。 */
+/**
+ * 置"真机验证"结论（只影响 runtime_verified，不碰 approved / status）。
+ * 调用方必须在真实 Renderer 上跑过该程序的**当前 program_hash** 才有资格调它。
+ */
+export function setRuntimeVerified(db, { modelId, actionId, verified = true } = {}) {
+  if (!isNonEmptyString(modelId) || !isNonEmptyString(actionId)) {
+    throw new Error('setRuntimeVerified: modelId/actionId 必填');
+  }
+  const r = db
+    .prepare('UPDATE compiled_actions SET runtime_verified = ?, updated_at = ? WHERE model_id = ? AND action_id = ?')
+    .run(verified ? 1 : 0, Date.now(), modelId, actionId);
+  return r.changes > 0;
+}
+
+/** 置"人工批准"结论（只影响 approved）。与 runtime_verified 相互独立，禁止联动。 */
+export function setApproved(db, { modelId, actionId, approved = true } = {}) {
+  if (!isNonEmptyString(modelId) || !isNonEmptyString(actionId)) {
+    throw new Error('setApproved: modelId/actionId 必填');
+  }
+  const r = db
+    .prepare('UPDATE compiled_actions SET approved = ?, updated_at = ? WHERE model_id = ? AND action_id = ?')
+    .run(approved ? 1 : 0, Date.now(), modelId, actionId);
+  return r.changes > 0;
+}
+
+/** 三态查询（供路由/验收/巡检读取，避免各处自己拼 SQL 造成口径漂移）。 */
+export function getActionState(db, { modelId, actionId } = {}) {
+  if (!isNonEmptyString(modelId) || !isNonEmptyString(actionId)) return null;
+  const row = db
+    .prepare(
+      `SELECT status, runtime_verified, approved, program_hash, graph_hash, manifest_id
+       FROM compiled_actions WHERE model_id = ? AND action_id = ?`,
+    )
+    .get(modelId, actionId);
+  if (!row) return null;
+  return {
+    status: row.status,
+    runtimeVerified: row.runtime_verified === 1,
+    approved: row.approved === 1,
+    programHash: row.program_hash ?? null,
+    graphHash: row.graph_hash,
+    manifestId: row.manifest_id,
+  };
+}
+
 export function getCurrentManifest(db, { modelId } = {}) {
   if (!isNonEmptyString(modelId)) return null;
   const row = db
@@ -250,6 +323,10 @@ function toActionDomain(row) {
     requiresOwn: parseJsonColumn(row.requires_own_json, []),
     manifestId: row.manifest_id,
     updatedAt: row.updated_at,
+    // v13 状态语义：三者互不覆盖（通过校验 / 真机跑过 / 人工批准）
+    runtimeVerified: row.runtime_verified === 1,
+    approved: row.approved === 1,
+    programHash: row.program_hash ?? null,
   };
 }
 

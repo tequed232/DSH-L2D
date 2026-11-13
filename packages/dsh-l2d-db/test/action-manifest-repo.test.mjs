@@ -64,13 +64,13 @@ function manifestFor(revision, actions) {
 
 // ---- 0. 迁移到位：v12 表存在
 test('v12 tables exist and schema version is 12', () => {
-  assert.equal(SCHEMA_VERSION, 12);
+  assert.ok(SCHEMA_VERSION >= 12, `SCHEMA_VERSION 应 ≥12（v12 动作注册表已应用），实际 ${SCHEMA_VERSION}`);
   const n = db.prepare(
     "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('action_manifests','compiled_actions')",
   ).get().n;
   assert.equal(n, 2);
   const applied = db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get().n;
-  assert.equal(applied, 12);
+  assert.ok(applied >= 12, `已应用迁移应 ≥12（v12 注册表），实际 ${applied}`);
 });
 
 // ---- 1. 首次发布：1 manifest + N actions，可读回并解析 JSON 列

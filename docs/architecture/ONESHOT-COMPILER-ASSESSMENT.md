@@ -87,12 +87,13 @@
 
 ### 4.1 `semantic-binding.ts` 不是纯运行时模块（**删除会打断导入期**）
 
-方案写"语义到动作的动态映射可在导入期完成 → 评估后删除"。真实引用：
-- `tools/capability-scan/bindings.mjs` —— **导入期扫描器**用它生成绑定；
+方案写"语义到动作的动态映射可在导入期完成 → 评估后删除"。真实引用（Phase 0 审计工具复核后的更正：原判断有误）：
+- `tools/capability-scan/bindings.mjs` —— **只在注释里提到**，不是 import 依赖（首版评估误判，已更正）；
+- 真实依赖是 `core/src/index.ts`（barrel）与 `posture.ts`（参数仲裁）；
 - `packages/core/src/posture.ts`、`shared-arbitration.ts` —— 参数仲裁链用它；
 - `packages/core/src/motion-contract.ts`、`index.ts` —— 契约层导出。
 
-**修订**：保留为"导入期 + 仲裁共用"的纯函数库，删除的只是"运行时按语义动态查表"这条调用路径。
+**修订**：它是**参数仲裁**依赖，不是导入期依赖 → 不能删，只能把"运行时按语义动态查表"这条调用路径关掉。
 
 ### 4.2 `cue-loop.ts` 被 Renderer 消费（触碰受保护层）
 

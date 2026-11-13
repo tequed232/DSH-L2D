@@ -553,8 +553,23 @@ export function createActionsRepository(db, { snapshotDir } = {}) {
   function getMotion(motionId) { return getMotionRow(db, motionId); }
   function getMotionBySemanticKeyPub(semanticKey) { return getMotionBySemanticKey(db, semanticKey); }
 
+  // Phase 1 真源收口：旧 Lib 写入通道可被环境变量冻结（默认关闭，零行为变化）。
+  // 目的不是禁止旧代码，而是让"唯一真源"这件事**可验证**：冻结后若还有写入方，
+  // 会立刻抛 LEGACY_ACTIONS_FROZEN，从而暴露未迁移的调用点。
+  function assertLegacyWritable(op) {
+    if (process.env.DSH_LEGACY_ACTIONS_FROZEN === '1') {
+      throw Object.assign(
+        new Error(`旧动作库写入已冻结（DSH_LEGACY_ACTIONS_FROZEN=1），拒绝执行 ${op}；` +
+          '新写入请走 action-registry（compiled_actions）'),
+        { code: 'LEGACY_ACTIONS_FROZEN' },
+      );
+    }
+  }
+
   return {
-    createActionChain, createActionChainVersion,
+    createActionChain: (...args) => { assertLegacyWritable('createActionChain'); return createActionChain(...args); },
+    createActionChainVersion: (...args) => { assertLegacyWritable('createActionChainVersion'); return createActionChainVersion(...args); },
+    assertLegacyWritable,
     resolveSemanticKey: (semanticKey, chainHash) => resolveSemanticKey(db, semanticKey, chainHash),
     getActionChain, listActionChains, getMotion, getMotionBySemanticKey: getMotionBySemanticKeyPub,
     transitionActionChainStatus, exportActionSnapshot,

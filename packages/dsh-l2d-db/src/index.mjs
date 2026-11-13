@@ -40,8 +40,9 @@ export {
 } from './model-adapter.mjs';
 export { createIngestionPipeline } from './ingestion-pipeline.mjs';
 
-// ---- OACA-2 动作注册表（schema v12）----
+// ---- OACA-2 动作注册表（schema v12）+ v13 三态语义 ----
 export {
   manifestIdOf, publishBundleToDb, getPublishedAction, listPublishedActions,
   getCurrentManifest, markStaleByCapability, supersedeManifest,
+  programHashOf, setRuntimeVerified, setApproved, getActionState,
 } from './action-manifest-repo.mjs';

@@ -30,8 +30,8 @@ it('全通过 → {ok:true}', () => {
   assert.deepEqual(r, { ok: true });
 });
 
-it('模式非 nodegraph → 409 mode-blocked（llm 模式下不得假报可派发）', () => {
-  const r = evaluateDispatchGuards({ graphId: 'g', mode: 'llm', binding: OK_BINDING, graphExists: true });
+it('gate=mode（旧口径）下模式非 nodegraph → 409 mode-blocked', () => {
+  const r = evaluateDispatchGuards({ graphId: 'g', mode: 'llm', binding: OK_BINDING, graphExists: true, gate: 'mode' });
   assert.equal(r.ok, false);
   assert.equal(r.status, 409);
   assert.equal(r.reason, DISPATCH_GUARD.MODE_BLOCKED);
@@ -55,9 +55,21 @@ it('图不存在 → 404 graph-not-found', () => {
   assert.match(r.message, /graph_x/);
 });
 
-it('优先级：模式问题先于绑定问题（避免误报模型不匹配）', () => {
-  const r = evaluateDispatchGuards({ graphId: 'g', mode: 'llm', binding: MISMATCH, graphExists: false });
+it('gate=mode 下优先级：模式问题先于绑定问题（避免误报模型不匹配）', () => {
+  const r = evaluateDispatchGuards({ graphId: 'g', mode: 'llm', binding: MISMATCH, graphExists: false, gate: 'mode' });
   assert.equal(r.reason, DISPATCH_GUARD.MODE_BLOCKED);
+});
+
+it('Phase 3 默认口径：llm 模式下已发布程序仍可派发（程序是权威，不再要求切模式）', () => {
+  const r = evaluateDispatchGuards({ graphId: 'g', mode: 'llm', binding: OK_BINDING, graphExists: true });
+  assert.deepEqual(r, { ok: true }, 'gate 缺省=program，模式不应再阻断');
+});
+
+it('Phase 3 收敛不放松执行安全：llm 模式下绑定不符 / 图缺失仍然拦', () => {
+  const bad = evaluateDispatchGuards({ graphId: 'g', mode: 'llm', binding: MISMATCH, graphExists: true });
+  assert.equal(bad.reason, DISPATCH_GUARD.MODEL_MISMATCH);
+  const noGraph = evaluateDispatchGuards({ graphId: 'g', mode: 'llm', binding: OK_BINDING, graphExists: false });
+  assert.equal(noGraph.reason, DISPATCH_GUARD.GRAPH_NOT_FOUND);
 });
 
 it('binding 缺省（undefined）按不匹配处理，不放行', () => {
