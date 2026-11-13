@@ -88,26 +88,35 @@ ok('F-3 回归门禁：不得退回 fire-and-forget（禁止 void fetch( ）、�
   mustInclude(enqueue, 'new ActionRouterError(', '带 status 的错误回执');
 });
 
-// ---- 3. F-2：dispatch 路由必须回环受限（isLoopback 或 loopbackOnly 选项至少其一，两者都在更好）
+// ---- 3. F-2：dispatch 路由必须回环受限
+// ⚠ QA-W7 修正（假绿事故）：原断言在 dispatch 注册切片里找 `isLoopback(req)`，
+// 但真正的闸门在 `actionDispatchPost` 的**定义**里（注册切片之外），而切片里恰好有
+// 一个 `, { loopbackOnly: true }` 死参数 ⇒ `hasStrict || hasOption` 恒真。
+// 变异实验实证：删掉闸门那一行 / 把 isLoopback 降级成 isRemoteLoopback，原断言都仍然绿。
+// 现在改成两段独立断言：① 闸门必须出现在 wrapper 定义体内且必须是 isLoopback；
+// ② 不得再把 loopbackOnly 当第二实参传给只收一个形参的 wrapper（否则又是死参数骗人）。
+const dispatchWrapper = slice(index, 'const actionDispatchPost = ', "route('/dsh-l2d/api/actions/dispatch'", 'dispatch wrapper 定义段');
 const dispatchRoute = slice(index, "route('/dsh-l2d/api/actions/dispatch'", "route('/dsh-l2d/api/actions/published'", 'dispatch 路由段');
-ok('F-2 安全：dispatch 回环受限（isLoopback 严格校验 或 loopbackOnly 选项）', () => {
-  // 注意：只按"函数名出现"判定是假通过——必须看到**真正的闸门调用/选项**。
-  const hasStrict = dispatchRoute.includes('isLoopback(req)');
-  const hasOption = dispatchRoute.includes('loopbackOnly: true');
+
+ok('F-2 安全：dispatch wrapper 内必须以 isLoopback 拦截非回环（Host + socket 双校验）', () => {
+  mustInclude(dispatchWrapper, 'isLoopback(req)', 'dispatch 回环闸门');
+  // 必须是严格版 isLoopback，不接受降级成 isRemoteLoopback（后者不核 Host，挡不住 DNS-rebinding）
+  mustNotInclude(dispatchWrapper, 'isRemoteLoopback(req)', 'dispatch 闸门降级');
+  mustInclude(dispatchWrapper, 'nodegraphApiPost(handler)', '必须复用 nodegraphApiPost（isCrossSite/405/body 上限）');
+});
+
+ok('F-2 反假绿：不得把 loopbackOnly 当第二实参塞给只收一个形参的 wrapper（死参数）', () => {
+  // wrapper 形参只有 handler —— 第二实参会被静默丢弃，看起来"有回环选项"其实没接上
+  const singleParam = /const actionDispatchPost = \(handler\)\s*=>/.test(index);
+  const deadArg = /actionDispatchPost\([\s\S]{0,4000}?\},\s*\{\s*loopbackOnly/.test(index);
   assert.ok(
-    hasStrict || hasOption,
-    'dispatch 路由既没有 isLoopback(req) 也没有 loopbackOnly:true —— 写端点被暴露给局域网',
+    !(singleParam && deadArg),
+    'actionDispatchPost 只收一个形参，却被传了 { loopbackOnly: … } —— 该参数被丢弃（死参数）。'
+    + '要么删掉它，要么在 wrapper 内真正透传给 nodegraphApiPost(handler, opts)',
   );
-  // 跨站防护由 nodegraphApiPost 统一施加：dispatch 必须走该包装（不得手写裸 handler 绕过）
-  const wrapperBlock = index.slice(
-    index.indexOf('const nodegraphApiPost'),
-    index.indexOf('const nodegraphApiPost') + 1200,
-  );
+  // 跨站防护由 nodegraphApiPost 统一施加（wrapper 必须走它，不得手写裸 handler 绕过）
+  const wrapperBlock = index.slice(index.indexOf('const nodegraphApiPost'), index.indexOf('const nodegraphApiPost') + 1200);
   mustInclude(wrapperBlock, 'isCrossSite(req)', 'nodegraphApiPost 跨站防护');
-  assert.ok(
-    dispatchRoute.includes('nodegraphApiPost(handler)') || dispatchRoute.includes('loopbackOnly: true'),
-    'dispatch 必须经 nodegraphApiPost 包装（isCrossSite / 405 / body 上限由此保证）',
-  );
 });
 
 ok('路由错误映射：ActionRouterError 必须按自身 status 返回（不得一律 200/500）', () => {

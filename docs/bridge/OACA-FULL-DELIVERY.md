@@ -272,6 +272,7 @@ npm run test:core && npm run test:db && npm run test:bridge && npm run typecheck
 | F-8 | 迁移条数断言脆弱 | 补 `SCHEMA_VERSION === Object.keys(MIGRATIONS).length` 不变式 |
 | F-9 | 同 revision 重发布残留被移除动作 | 重发布时把本次未出现的旧动作置 `stale` |
 | W-1 | 守卫链无单测 | 抽 `dispatch-guards.mjs` 纯函数 + 6 例（生产同源，非复制） |
+| **W-7** | **契约门禁 F-2 假绿**：断言在路由切片里匹配 `loopbackOnly: true`，而真闸门在 wrapper 定义外；删掉 `isLoopback` 仍绿 | **已修并实证**：删除死参数 `{loopbackOnly:true}` 与 `opts.loopbackOnly` 死分支；断言改为"wrapper 定义体内必须 `isLoopback(req)`、且不得降级为 `isRemoteLoopback`"。**变异 M4**：删掉闸门那一行 → `✗ F-2` 变红；恢复 → 12 项全过 |
 
 ### 12.4 遗留风险（已知，不阻塞交付）
 
@@ -292,7 +293,17 @@ npm run test:core && npm run test:db && npm run test:bridge && npm run typecheck
 
 ### 12.6 验收口径声明（避免误读）
 
-- `dispatch` 是**同步**语义：HTTP 200 且 `state='completed'` 才算角色真的动完。这是对 QA F-3「200 accepted 假阳性」的正面修复，代价见 W-2。
-- 所有"通过"均来自真实命令输出；**唯一无法在本环境证明的是真机渲染 E2E（W-6）**，已在文档与报告中标明，不冒充已通过。
+- `dispatch` 是**同步**语义：HTTP 200 且 `state='completed'` 才算角色真的动完。响应显式带
+  `sync:true` 与 `timeoutMs`，避免调用方误以为"入队即返回"。
+- **超时不先判失败**：超时只 `requestCancel` 并返回 504，注册表收尾与 `bridge_actions` 终态
+  交给执行 promise 在真实批次边界收敛，避免"库说 failed、角色还在动"的账实不符。
+- 所有"通过"均来自真实命令输出；**唯一无法在本环境证明的是真机渲染 E2E（W-6）**。
+
+### 12.7 后端席未交付项（如实记录，不计入交付）
+
+| 声明 | 核查结果 |
+|---|---|
+| `tools/nodegraph-schema/oaca-acceptance-probe.mjs`（`--dry-run` 自检 + `--emit-path` 出真机脚本） | **文件不存在**。`tools/nodegraph-schema/` 下只有 `gen.mjs`；全仓 grep 无 `oaca-acceptance-probe` 引用；`node` 执行报 `MODULE_NOT_FOUND`。故本轮**未交付**该探针，真机 E2E 仍只能手工/临时脚本进行 |
+
 
 

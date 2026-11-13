@@ -1607,12 +1607,7 @@ export function apply(root, config = {}) {
     const nodegraphApiSend = (res, out) => {
       sendBuffer(res, out.status, MIME['.json'], Buffer.from(JSON.stringify(out.payload), 'utf8'));
     };
-    // opts.loopbackOnly：仅回环可调用（与 /nodegraphs/run 同级的安全面；动作派发不得对
-    // 局域网开放）。默认关闭以保持既有 ai-plan/apply-ops 行为不变。
-    const nodegraphApiPost = (handler, opts = {}) => async (req, res) => {
-      if (opts.loopbackOnly && !isRemoteLoopback(req)) {
-        return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('loopback only'));
-      }
+    const nodegraphApiPost = (handler) => async (req, res) => {
       if (isCrossSite(req)) return sendBuffer(res, 403, 'text/plain; charset=utf-8', Buffer.from('forbidden'));
       if (req.method !== 'POST') return sendBuffer(res, 405, 'text/plain; charset=utf-8', Buffer.from('use POST'));
       let body;
@@ -1774,7 +1769,7 @@ export function apply(root, config = {}) {
         }
         throw err; // 未知异常交给 nodegraphApiPost 的 500 兜底（不泄露内部堆栈）
       }
-    }, { loopbackOnly: true }));
+    }));
 
     // OACA-3 只读：某模型当前可派发动作清单（compiled_actions.status='published'）。
     route('/dsh-l2d/api/actions/published', (req, res) => {
@@ -2700,9 +2695,11 @@ export function apply(root, config = {}) {
             return nodegraphExecutor(input);
           };
           let runResult = null;
+          // 原始执行 promise 单独持有：超时只"脱钩"，不取消对方的收敛权。
+          const runPromise = runNodegraph(graphName, cancellableExecutor, { currentModelId: getCurrentModelId() });
           try {
             runResult = await Promise.race([
-              runNodegraph(graphName, cancellableExecutor, { currentModelId: getCurrentModelId() }),
+              runPromise,
               new Promise((_, reject) => {
                 const timer = setTimeout(
                   () => reject(Object.assign(new Error('dispatch-timeout'), { code: 'DISPATCH_TIMEOUT' })),
@@ -2716,9 +2713,29 @@ export function apply(root, config = {}) {
             if (err && err.code === 'DISPATCH_TIMEOUT') {
               cancelRequested = true; // 先置本地闩：已在飞的批次返回后不会再放行下一批
               nodegraphRunRegistry.requestCancel(executionId); // 让底层批次尽快停手
-              nodegraphRunRegistry.finish(executionId, { ok: false, status: 504, reason: 'dispatch-timeout' });
-              markBridgeTerminal(bridgeDb, requestId, 'failed', { error: 'dispatch-timeout', executionId });
-              throw new ActionRouterError('dispatch-timeout', `动作执行超过 ${DISPATCH_TIMEOUT_MS}ms 未完成（已请求取消）`, 504);
+              // QA W-3 修正：超时**不得**立刻判 failed 并 finish——批次可能仍在跑，
+              // 那会造成"库说失败、角色还在动"的账实不符。这里只脱钩请求，
+              // 把注册表收尾与终态落库交给 runPromise 在**真实批次边界**收敛。
+              void runPromise
+                .then((final) => {
+                  nodegraphRunRegistry.finish(executionId, final);
+                  const failed = !final || final.ok === false;
+                  markBridgeTerminal(bridgeDb, requestId, failed ? 'failed' : 'completed', {
+                    result: final,
+                    executionId,
+                    ...(failed ? { error: 'cancelled-after-timeout' } : {}),
+                  });
+                })
+                .catch((finalErr) => {
+                  const msg = String((finalErr && finalErr.message) || finalErr);
+                  nodegraphRunRegistry.finish(executionId, { ok: false, status: 502, reason: 'dispatch-exception', errors: [msg] });
+                  markBridgeTerminal(bridgeDb, requestId, 'failed', { error: msg.slice(0, 500), executionId });
+                });
+              throw new ActionRouterError(
+                'dispatch-timeout',
+                `动作执行超过 ${DISPATCH_TIMEOUT_MS}ms 未完成（已请求取消；终态将在批次边界收敛，可经 /api/actions/status 回查）`,
+                504,
+              );
             }
             nodegraphRunRegistry.finish(executionId, { ok: false, status: 502, reason: 'dispatch-exception', errors: [message] });
             markBridgeTerminal(bridgeDb, requestId, 'failed', { error: message.slice(0, 500), executionId });
@@ -2752,6 +2769,9 @@ export function apply(root, config = {}) {
             requiresOwn: request.requiresOwn || [],
             executionId,
             completedAt: Date.now(),
+            // QA W-2：同步语义必须显式声明，避免调用方误以为是"已入队即返回"。
+            sync: true,
+            timeoutMs: DISPATCH_TIMEOUT_MS,
             result: {
               ok: true,
               completedSegments: runResult.completedSegments ?? null,
