@@ -25,7 +25,7 @@
  *  - 迁移只追加不改写；schema_migrations 记录版本与耗时。
  */
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 /** v1 全量 DDL。单条 exec 执行，语句间以分号分隔。 */
 export const MIGRATIONS = {
@@ -648,5 +648,21 @@ export const MIGRATIONS = {
     );
     CREATE INDEX IF NOT EXISTS idx_gallery_scores_score
       ON gallery_scores (score DESC);
+  `,
+
+  /**
+   * v11：双会话改造（PR-1，Dual-Session Bridge Router）。
+   *  - 只加列，不改既有列：control_session_id 保留为**只读兼容列**，新写入一律走
+   *    action_session_id；旧行不自动回填（提示词 §四「不得未经检查直接复用旧
+   *    Control Session」），升级后旧值原样留存可追溯、可回滚。
+   *  - 幂等：ALTER TABLE ADD COLUMN 本身不可重复执行，由 schema_migrations 门禁保证；
+   *    UPDATE 语句带 WHERE 条件，即便被重放也不会二次写入。
+   *  - 本迁移同时作用于两个真实库（<repo>/data/bootstrap-state.sqlite 与
+   *    $DSH_HOME/l2d-bridge.sqlite）：bridge_workspaces 在 v7 已建，两库均适用。
+   */
+  11: `
+    ALTER TABLE bridge_workspaces ADD COLUMN action_session_id TEXT NOT NULL DEFAULT '';
+    CREATE INDEX IF NOT EXISTS idx_bridge_workspaces_action
+      ON bridge_workspaces (workspace_id, action_session_id);
   `,
 };

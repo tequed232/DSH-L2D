@@ -64,7 +64,12 @@ export class Live2DMCPBridge {
 
   /**
    * 动作入队（PR-C，执行串行原则）。queue 未注入时明确拒绝，不伪报已受理。
-   * workspaceId / controlSessionId 由桥补齐（workspace 隔离原则），调用方不可伪造。
+   * workspaceId / 会话归属由桥补齐（workspace 隔离原则），调用方不可伪造。
+   *
+   * PR-1 语义切换：执行归属从旧 Control Session 切到 **Action Session**。
+   * `bridge_actions.control_session_id` 是 v8 既定列名（本 PR 不改表结构），
+   * 值改为 actionSessionId 以满足"动作由 Action 会话上下文产生"的双会话语义；
+   * 旧库若尚无 action（升级后首次启动），退回读兼容列，绝不写空串丢归属。
    */
   async enqueueAction(request) {
     if (!this.queue) throw new Error('enqueueAction: action queue 未注入（PR-C 接线缺失），拒绝执行');
@@ -73,10 +78,12 @@ export class Live2DMCPBridge {
     if (!request.requestId || typeof request.action !== 'string' || !request.action) {
       throw new Error('enqueueAction: requestId / action 必填');
     }
+    const sessionId = this.workspace.actionSessionId || this.workspace.controlSessionId || '';
+    if (!sessionId) throw new Error('enqueueAction: 工作区无可用 action session（双会话未建立），拒绝伪报归属');
     return this.queue.enqueue({
       ...request,
       workspaceId: this.workspace.id,
-      controlSessionId: this.workspace.controlSessionId,
+      controlSessionId: sessionId,
     });
   }
 

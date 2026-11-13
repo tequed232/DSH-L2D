@@ -52,7 +52,7 @@ export function registerLive2DTools(registry, deps) {
   if (typeof enqueue !== 'function') throw new Error('registerLive2DTools: deps.enqueue 必填（PR-C 队列注入）');
   if (typeof getStatus !== 'function') throw new Error('registerLive2DTools: deps.getStatus 必填');
   if (typeof cancel !== 'function') throw new Error('registerLive2DTools: deps.cancel 必填');
-  if (!isPlainObject(workspace) || !workspace.id) throw new Error('registerLive2DTools: deps.workspace{id,controlSessionId} 必填');
+  if (!isPlainObject(workspace) || !workspace.id) throw new Error('registerLive2DTools: deps.workspace{id,actionSessionId?} 必填');
   if (typeof validateAction !== 'function') throw new Error('registerLive2DTools: deps.validateAction 必填（动作合法性闸门）');
 
   registry.registerTool('l2d_action_enqueue', async (args = {}) => {
@@ -71,7 +71,8 @@ export function registerLive2DTools(registry, deps) {
     return enqueue({
       requestId,
       workspaceId: workspace.id,
-      controlSessionId: workspace.controlSessionId,
+      // PR-1：动作归属 Action Session（旧库无 action 时退回兼容列，绝不写空）。
+      controlSessionId: workspace.actionSessionId || workspace.controlSessionId || '',
       action: args.action,
       args: args.args ?? {},
       priority,

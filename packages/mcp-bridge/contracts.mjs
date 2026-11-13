@@ -9,7 +9,12 @@
 
 /** @typedef {'crashed'|'success'|'waiting'|'running'|'idle'} UiStatus */
 
-/** @typedef {{id: string, chatSessionId: string, controlSessionId: string}} Live2DWorkspace */
+/**
+ * @typedef {{id: string, chatSessionId: string, actionSessionId: string,
+ *   controlSessionId?: string, sessionKind?: 'host'|'logical'}} Live2DWorkspace
+ *   chat/action = 两个活动会话；controlSessionId 为只读兼容列（v11 起不再写入）。
+ *   sessionKind='logical' 表示 sessionId 是逻辑标识而非宿主会话 id（R1 裁决）。
+ */
 
 /** @typedef {{workspaceId: string, chatSessionId: string, summary: string, recentMessages: Array<{role: 'user'|'assistant', content: string, timestamp: number}>, revision: number}} SessionMemory */
 

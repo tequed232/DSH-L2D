@@ -2305,7 +2305,12 @@ export function apply(root, config = {}) {
         (ctx.webServer.port ? `http://127.0.0.1:${ctx.webServer.port}` : '') ||
         'http://127.0.0.1:5300';
       const bridgeDb = openDb({ path: path.join(home, 'l2d-bridge.sqlite') });
+      // R1 裁决（2026-11-13）：接受"逻辑会话降级"——宿主暂无可注入的真实 A2A 客户端，
+      // 此处的 sessionId 是**逻辑标识**（`local-dsh-l2d:chat` / `:action`），不是宿主
+      // 会话 id。kind 显式声明，让 ensureWorkspace 返回 sessionKind='logical'，
+      // 验收据此按「2 逻辑会话 + 1 真实宿主会话」执行，禁止宣称"恰好两个宿主会话"。
       const localAgentClient = {
+        kind: 'logical-placeholder',
         async acquireWorkspace({ pluginId }) {
           return { workspaceId: `local-${String(pluginId || 'dsh-l2d')}` };
         },
@@ -2349,7 +2354,7 @@ export function apply(root, config = {}) {
       mcpBridge
         .initialize()
         .then(() => {
-          diag(`mcp bridge ready: workspace=${mcpBridge.workspace.id} control=${mcpBridge.workspace.controlSessionId}`);
+          diag(`mcp bridge ready: workspace=${mcpBridge.workspace.id} chat=${mcpBridge.workspace.chatSessionId} action=${mcpBridge.workspace.actionSessionId} kind=${mcpBridge.workspace.sessionKind || 'host'}`);
           // StatusReporter（状态解耦）：60s 合规区间；source 读真实 agent 状态
           // （getAgentState → UiStatus 映射），sink 落 $DSH_HOME/l2d-status-report.json。
           // revision 取 agentStateCache.ts（缓存周期内稳定、数据刷新即前进——
