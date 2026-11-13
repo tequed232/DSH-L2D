@@ -25,7 +25,7 @@
  *  - 迁移只追加不改写；schema_migrations 记录版本与耗时。
  */
 
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 14;
 
 /** v1 全量 DDL。单条 exec 执行，语句间以分号分隔。 */
 export const MIGRATIONS = {
@@ -722,5 +722,23 @@ export const MIGRATIONS = {
     ALTER TABLE compiled_actions ADD COLUMN program_hash TEXT;
     CREATE INDEX IF NOT EXISTS idx_compiled_actions_gate
       ON compiled_actions(model_id, status, approved, runtime_verified);
+  `,
+
+  // v14 · 触发层（用户设计 2026-11-13）：emote/系统事件 → programId 的确定性查表。
+  // 原则：运行期可以"选择"程序，但不能"生成"或"修改"程序；查不到匹配返回 no_match，
+  // 绝不回退到实时规划。映射在导入期生成（LLM 编译期产物），运行期只读。
+  14: `
+    CREATE TABLE IF NOT EXISTS trigger_map (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      model_id       TEXT NOT NULL,
+      version        INTEGER NOT NULL,
+      emotion        TEXT NOT NULL,
+      intensity_min  REAL NOT NULL,
+      intensity_max  REAL NOT NULL,
+      program_id     TEXT NOT NULL,
+      created_at     INTEGER NOT NULL,
+      UNIQUE(model_id, version, emotion, intensity_min, intensity_max)
+    );
+    CREATE INDEX IF NOT EXISTS idx_trigger_map_lookup ON trigger_map(model_id, emotion);
   `,
 };

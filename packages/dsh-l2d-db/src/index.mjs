@@ -46,3 +46,6 @@ export {
   getCurrentManifest, markStaleByCapability, supersedeManifest,
   programHashOf, setRuntimeVerified, setApproved, getActionState,
 } from './action-manifest-repo.mjs';
+
+// ---- v14 触发层（emote/系统事件 → programId 确定性查表）----
+export { setTriggerMap, resolveEmoteProgram, getTriggerMap } from './trigger-map-repo.mjs';
