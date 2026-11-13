@@ -181,12 +181,17 @@ function finish() {
   try {
     const r = await req('/dsh-l2d/api/actions/dispatch', { method: 'POST', body });
     const p = r.payload || {};
-    const sameExec = (p.executionId || p.receipt?.executionId || null) === firstExecutionId;
+    const replayExec = p.executionId || p.receipt?.executionId || null;
+    // QA W-8 修正：首次没拿到 executionId 时，null===null 会让"未二次执行"变成空话。
+    // 幂等证据必须建立在**两个非空标识相等**之上，否则直接判失败，不给假证词。
+    const sameExec = Boolean(firstExecutionId) && replayExec === firstExecutionId;
     const isDup = p.status === 'duplicate' || p.duplicate === true || p.receipt?.duplicate === true;
-    if (r.status === 200 && isDup && sameExec) {
+    if (!firstExecutionId) {
+      fail('5 幂等重放', '首次派发未返回 executionId，无法证明"未二次执行"（拒绝以 null===null 结案）');
+    } else if (r.status === 200 && isDup && sameExec) {
       pass('5 幂等重放', `duplicate=true，executionId 不变（${firstExecutionId}）——未二次执行`);
     } else if (isDup) {
-      fail('5 幂等重放', `判为 duplicate 但 executionId 不一致（首次 ${firstExecutionId} / 重放 ${p.executionId}），可能真的执行了两次`);
+      fail('5 幂等重放', `判为 duplicate 但 executionId 不一致（首次 ${firstExecutionId} / 重放 ${replayExec}），可能真的执行了两次`);
     } else {
       fail('5 幂等重放', `期望 duplicate，实际 ${r.status} ${JSON.stringify(p).slice(0, 200)}——同 requestId 被重复执行`);
     }
