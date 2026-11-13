@@ -93,6 +93,15 @@ export function resolveEmoteProgram(db, { modelId, emotion, intensity }) {
     .all(modelId, emotionKey);
   for (const row of rows) {
     if (value >= row.intensity_min && value <= row.intensity_max) {
+      // fail-closed：命中规则还不够，指向的程序必须**当前确实可派发**。
+      // 映射是导入期产物，程序可能已重编译/下线；放行一个不存在的 programId
+      // 会让派发层报 404，而查表层却宣称命中——账实不符。
+      const program = db
+        .prepare("SELECT status FROM compiled_actions WHERE model_id = ? AND action_id = ?")
+        .get(modelId, row.program_id);
+      if (!program || program.status !== 'published') {
+        return { match: false, reason: 'no_match', detail: `映射命中 ${row.program_id} 但该程序已不可派发（${program ? program.status : '不存在'}）` };
+      }
       return { match: true, programId: row.program_id, version: row.version };
     }
   }

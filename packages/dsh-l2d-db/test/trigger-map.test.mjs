@@ -25,6 +25,36 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oaca-trigger-'));
 const db = openDb({ path: path.join(tmp, 't.sqlite') });
 const M = 'm-trigger';
 
+// fail-closed 校验要求命中的 programId 真实存在且 published——先发布测试程序
+import { publishBundleToDb } from '../src/action-manifest-repo.mjs';
+function publishProgram(programId, revision) {
+  const action = {
+    actionId: programId, graphId: `graph_${programId}`, graphHash: `gh-${programId}`,
+    capabilityRevision: 'rT', priority: 'NORMAL', triggers: [], parameters: {}, requiresOwn: [],
+    status: 'compiled',
+  };
+  publishBundleToDb(db, {
+    modelId: M, capabilityRevision: 'rT', compilerVersion: 't', revision,
+    manifest: { manifestVersion: 1, modelId: M, revision, actions: [action] },
+    actions: [action],
+  });
+}
+// 一次 bundle 发布全部程序（发布是收缩语义：每次发布只保留本次集合，
+// 分开发布会让前面的程序变 stale）
+{
+  const ids = ['happy.light.v1', 'happy.strong.v1', 'shy.v1', 'shy.v2'];
+  const actions = ids.map((id) => ({
+    actionId: id, graphId: `graph_${id}`, graphHash: `gh-${id}`,
+    capabilityRevision: 'rT', priority: 'NORMAL', triggers: [], parameters: {}, requiresOwn: [],
+    status: 'compiled',
+  }));
+  publishBundleToDb(db, {
+    modelId: M, capabilityRevision: 'rT', compilerVersion: 't', revision: 1,
+    manifest: { manifestVersion: 1, modelId: M, revision: 1, actions },
+    actions,
+  });
+}
+
 console.log('v14 触发层');
 
 it('写入映射并按 (emotion, intensity) 命中 programId', () => {
@@ -81,9 +111,20 @@ it('同 (modelId, version) 重写 = 整体替换（不留旧规则残影）', ()
   assert.equal(map.rules.length, 1, '旧规则必须被替换而非追加');
 });
 
+it('fail-closed：映射命中但程序不存在/不可派发 → no_match（账实一致）', () => {
+  setTriggerMap(db, {
+    modelId: M,
+    version: 4,
+    rules: [{ emotion: 'curious', intensity: [0, 1], programId: 'ghost.program.v1' }],
+  });
+  const r = resolveEmoteProgram(db, { modelId: M, emotion: 'curious', intensity: 0.5 });
+  assert.equal(r.match, false, '指向不存在的程序必须放行为 no_match，不能宣称命中');
+  assert.match(r.detail || '', /不可派发/);
+});
+
 it('getTriggerMap 取最大 version；无映射返回空', () => {
   const map = getTriggerMap(db, { modelId: M });
-  assert.equal(map.version, 3);
+  assert.equal(map.version, 4);
   assert.deepEqual(getTriggerMap(db, { modelId: 'nobody' }), { version: 0, rules: [] });
 });
 
