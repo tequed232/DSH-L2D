@@ -83,6 +83,7 @@ import { createGallerySource } from '../../mcp-bridge/gallery-source.mjs';
 // OACA-3/4：确定性路由（0 LLM）、触发器路由、指标收集器。
 import { ActionRouter, ActionRouterError } from '../../mcp-bridge/action-router.mjs';
 import { evaluateDispatchGuards } from '../../mcp-bridge/dispatch-guards.mjs';
+import { unimplementedTool } from '../../mcp-bridge/unimplemented-tools.mjs';
 import { TriggerRouter } from '../../mcp-bridge/trigger-router.mjs';
 import { createMetrics } from '../../mcp-bridge/metrics.mjs';
 // OACA-2：动作注册表 repo（纯 DB 层）。路由与编译同步共用同一个 bridgeDb 连接。
@@ -1142,6 +1143,17 @@ export function apply(root, config = {}) {
         const name = String(body.name || '').trim();
         if (!name) {
           return sendBuffer(res, 400, 'text/plain; charset=utf-8', Buffer.from('name required'));
+        }
+        // 未实现工具：在入队前显式失败（501），并给出可执行替代路径。
+        // 不这么做的话，错误会穿过 guard → inbox → 渲染端，最后变成"看起来成功、角色不动"。
+        const unimplemented = unimplementedTool(name);
+        if (unimplemented) {
+          return sendBuffer(res, unimplemented.status, MIME['.json'], Buffer.from(JSON.stringify({
+            ok: false,
+            reason: unimplemented.reason,
+            message: unimplemented.message,
+            alternatives: unimplemented.alternatives,
+          }), 'utf8'));
         }
         // 工具入参守卫（纵深防御，见 docs/Embodied-Behavior.md §7 / docs/M1-D-Adapter-Spec.md）：
         // 未知工具名、口型参数、物理输出未 own、未索引表情/动作组在入队前就 400；

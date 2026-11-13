@@ -115,7 +115,34 @@ await it('L2 诚实性：无能力档案标 skipped，绝不冒充 pass', () => 
   const r = validateCompiledAction({ doc, entry: { actionId: 'x', requiredControls: ['head.pitch'], parameters: {} }, capability: null, allowed });
   assert.equal(r.layers.capability.status, 'skipped');
   assert.equal(r.layers.capability.reason, 'capability-profile-missing');
-  assert.equal(r.layers.execution.status, 'skipped', 'L4 在 OACA-1 不执行');
+  // L4 现在做静态编译验证：空图 schema 就已经不合法，因此 L4 如实标 skipped(schema-failed)，
+  // 而不是"没做"。真正跑得动的图会在下面的用例里得到 pass。
+  assert.equal(r.layers.execution.status, 'skipped');
+  assert.equal(r.layers.execution.reason, 'schema-failed', 'L4 只因 schema 失败才跳过，不是"未实现"');
+});
+
+await it('L4 静态编译验证：合法图 → pass 且带段数/步数（不再谎报 skipped）', async () => {
+  const out = await compileModelActions({
+    modelId: 'm-test', homeDir: tmpHome, capability, live2dIds: ids, allowed,
+    actions: [ACTION], dryRun: true, llm: fakeLlm(GOOD_OPS),
+  });
+  const entry = out.bundle.actions[0];
+  assert.equal(entry.status, 'compiled', entry.errors?.join(';'));
+  const exec = entry.layers.execution;
+  assert.equal(exec.status, 'pass', JSON.stringify(exec));
+  assert.equal(exec.mode, 'static-compile');
+  assert.ok(exec.segments >= 1, '至少编译出一段');
+  assert.ok(exec.steps >= 1, '至少一个步骤');
+  assert.match(exec.note, /runtime verification/i, '必须声明"这不是真机验证"');
+});
+
+await it('L4 与真机验证分离：静态通过不等于 runtime_verified', async () => {
+  const out = await compileModelActions({
+    modelId: 'm-test', homeDir: tmpHome, capability, live2dIds: ids, allowed,
+    actions: [ACTION], dryRun: true, llm: fakeLlm(GOOD_OPS),
+  });
+  assert.equal(out.bundle.actions[0].layers.execution.status, 'pass');
+  assert.notEqual(out.bundle.actions[0].layers.execution.mode, 'runtime', 'mode 不得声称真机');
 });
 
 await it('L3：manifest 参数域非法 → 拒绝；requires-own 只转约束不误判失败', () => {

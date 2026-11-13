@@ -16,7 +16,9 @@
  *   - L1 Schema：`validateNodegraph`（Schema v1）
  *   - L2 Capability：本文件用 Capability Profile 的 controls + ownership
  *   - L3 Safety：manifest 参数域自检 + `ownership: requires-own` 标记（运行时必须先 own）
- *   - L4 Execution：OACA-1 阶段标 `skipped`（deferred-to-oaca-4），不伪报已执行
+ *   - L4 Execution：**静态编译验证**（graph→segments 能否落地、段数/步数/类型是否合规）。
+ *     这只证明"能编译成执行序列"，**不等于真机跑过**；真机结论记在
+ *     `compiled_actions.runtime_verified`（schema v13），两者不许混。
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,7 +26,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { aiPlan } from './nodegraph-planner.mjs';
 import { docFromEditorGraph, graphHash } from './nodegraph-ops.mjs';
-import { loadNodegraph, sanitizeFileName, saveNodegraph, validateNodegraph } from './nodegraph.mjs';
+import { compileGraphToSegments, loadNodegraph, sanitizeFileName, saveNodegraph, validateNodegraph } from './nodegraph.mjs';
 import { isSafeModelId } from './nodegraph-schema.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -35,6 +37,11 @@ const DEFAULT_PROFILE_DIR = path.join(REPO_ROOT, 'tools', 'capability-scan');
 export const COMPILER_VERSION = 'oaca-1.0.0';
 export const MANIFEST_VERSION = 1;
 export const BUNDLE_VERSION = 1;
+/** L4 静态编译验证的上限（超出即视为程序异常，不是"长动作"）。 */
+export const MAX_SEGMENTS = 8;
+export const MAX_STEPS = 64;
+/** Runtime 能消费的步骤类型白名单（与 nodegraph 节点编译器输出一致）。 */
+export const STEP_KINDS = Object.freeze(new Set(['expression', 'motion', 'pose', 'look', 'delay']));
 /** 单次编译最多处理的动作数（防止一次导入把 LLM 预算打穿）。 */
 export const MAX_ACTIONS_PER_COMPILE = 12;
 export const BUNDLE_DIR_NAME = 'l2d-action-bundles';
@@ -280,14 +287,51 @@ export function validateCompiledAction({ doc, entry, capability, allowed = null 
   }
   errors.push(...safetyErrors);
 
+  // L4 Execution（静态编译验证）：把图编译成执行序列，验证"这份程序能被 Runtime 消费"。
+  // 刻意不叫"试执行"：没有渲染器参与，不得冒充真机验证（真机结论在 runtime_verified）。
+  let executionLayer;
+  if (!schema.ok) {
+    // 图本身不合法就不编译——避免用一份非法图的编译错误去掩盖 schema 错误
+    executionLayer = { status: 'skipped', reason: 'schema-failed' };
+  } else {
+    const compiled = compileGraphToSegments(doc.graph);
+    const execErrors = [];
+    if (!compiled || compiled.ok !== true) {
+      execErrors.push(`execution: 图无法编译成执行序列（${(compiled && compiled.errors || []).join('; ') || '无错误信息'}）`);
+    } else {
+      const segments = Array.isArray(compiled.segments) ? compiled.segments : [];
+      const steps = Array.isArray(compiled.steps) ? compiled.steps : [];
+      if (!segments.length) execErrors.push('execution: 编译结果没有任何段（运行时无事可做）');
+      if (!steps.length) execErrors.push('execution: 编译结果没有任何步骤');
+      if (segments.length > MAX_SEGMENTS) execErrors.push(`execution: 段数 ${segments.length} 超过上限 ${MAX_SEGMENTS}`);
+      if (steps.length > MAX_STEPS) execErrors.push(`execution: 步骤数 ${steps.length} 超过上限 ${MAX_STEPS}`);
+      for (const step of steps) {
+        if (!STEP_KINDS.has(step && step.kind)) {
+          execErrors.push(`execution: 未知步骤类型 ${String(step && step.kind)}（白名单 ${[...STEP_KINDS].join('/')}）`);
+          break;
+        }
+      }
+    }
+    errors.push(...execErrors);
+    executionLayer = execErrors.length
+      ? { status: 'fail', mode: 'static-compile', errors: execErrors }
+      : {
+        status: 'pass',
+        mode: 'static-compile',
+        segments: (compiled.segments || []).length,
+        steps: (compiled.steps || []).length,
+        // 说清边界：pass 只代表"能编译成执行序列"，真机验证另记
+        note: 'static-compile only; runtime verification tracked by runtime_verified',
+      };
+  }
+
   return {
     ok: errors.length === 0,
     layers: {
       schema: { status: schema.ok ? 'pass' : 'fail', errors: schemaErrors },
       capability: capabilityLayer,
       safety: { status: safetyErrors.length ? 'fail' : 'pass', errors: safetyErrors },
-      // 不谎报：OACA-1 不做真机试执行
-      execution: { status: 'skipped', reason: 'deferred-to-oaca-4' },
+      execution: executionLayer,
     },
     errors,
     warnings,
