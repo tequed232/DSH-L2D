@@ -1,6 +1,6 @@
 # Legacy Runtime Dependency Audit（Phase 0 产物）
 
-- 生成时间：2026-11-13T13:08:41.562Z
+- 生成时间：2026-11-13T13:17:14.773Z
 - 生成器：`tools/legacy-audit/audit.mjs`（解析真实 import 图 + 从运行期入口 BFS）
 - 判定口径：`detach-first` 先关入口、`keep-import-time` 保留（编译期资产）、`delete-safe` 可删
 
