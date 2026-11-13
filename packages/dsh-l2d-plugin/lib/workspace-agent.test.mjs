@@ -219,4 +219,93 @@ try {
   assert.equal(r.retryAfterMs, 59000, 'retryAfterMs 应按 60s 间隔而非默认 30s');
 }
 
+// ---------------------------------------------------------------- PR-2：隐式推理闸门
+// 目标（提示词 §三）：普通状态变化不是用户请求，不得自动触发 LLM；
+// 主动演出必须独立 opt-in 且默认关。
+{
+  /** 造一个可控状态的桥：snapshotOf() 可在用例中途改状态。 */
+  function makeHarness({ proactivePerformance, getProactivePerformance, homePrefix }) {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), homePrefix));
+    const ws = { id: `ws-${homePrefix}`, title: 'Live2D Agent', sessionIds: [] };
+    const prompts = [];
+    let state = 'idle';
+    const ctxX = {
+      workspaceRegistry: { async create() { return ws; } },
+      sessionController: {
+        async create() { ws.sessionIds = [`s-${homePrefix}`]; return { sessionId: `s-${homePrefix}` }; },
+        async prompt(req) { prompts.push(req); return { accepted: true }; },
+      },
+    };
+    const bridge = createWorkspaceAgentBridge({
+      ctx: ctxX,
+      homeDir: home,
+      getSnapshot: async () => ({
+        ok: true,
+        generatedAt: new Date(Date.now()).toISOString(),
+        workspaces: [{ workspaceId: 'ws-other', title: 'X', sessions: [{ sessionId: 's-other', state, ageMs: 100 }] }],
+      }),
+      intervalMs: 60000,
+      ...(proactivePerformance !== undefined ? { proactivePerformance } : {}),
+      ...(getProactivePerformance ? { getProactivePerformance } : {}),
+    });
+    return { bridge, prompts, home, setState: (s) => { state = s; } };
+  }
+
+  // ① 默认关：无论状态怎么变、轮询多少次，除了 bootstrap 不再产生 prompt
+  {
+    const h = makeHarness({ homePrefix: 'dsh-p2-off-' });
+    try {
+      await h.bridge.ensure();                        // bootstrap 1 次（显式初始化，允许）
+      const baseline = h.prompts.length;
+      assert.equal(baseline, 1, 'bootstrap 只发 1 次');
+      for (let i = 0; i < 5; i++) { h.setState(i % 2 ? 'error' : 'idle'); await h.bridge.refresh(true); }
+      assert.equal(h.prompts.length, baseline, '状态反复变化 + 主动通知请求 → 0 次推理');
+      const r = await h.bridge.refresh(true);
+      assert.equal(r.notify.fired, false);
+      assert.equal(r.notify.reason, 'proactive-disabled', 'reason 必须可断言，不允许含糊');
+      assert.equal(h.bridge.status ? true : true, true);
+    } finally { h.bridge.dispose(); fs.rmSync(h.home, { recursive: true, force: true }); }
+  }
+
+  // ② 状态查询（/workspace/status.json）反复拉取：0 次额外推理
+  {
+    const h = makeHarness({ homePrefix: 'dsh-p2-status-' });
+    try {
+      await h.bridge.ensure();
+      const baseline = h.prompts.length;
+      for (let i = 0; i < 20; i++) { h.setState(i % 2 ? 'working' : 'error'); await h.bridge.status(); }
+      assert.equal(h.prompts.length, baseline, '20 次 status 轮询不得触发任何 prompt');
+      const st = await h.bridge.status();
+      assert.equal(st.proactivePerformance, false, 'status 必须暴露主动演出实际生效值');
+    } finally { h.bridge.dispose(); fs.rmSync(h.home, { recursive: true, force: true }); }
+  }
+
+  // ③ opt-in 打开：恢复原行为（error 状态可触发）——证明闸门是开关而不是拆除功能
+  {
+    const h = makeHarness({ proactivePerformance: true, homePrefix: 'dsh-p2-on-' });
+    try {
+      await h.bridge.ensure();
+      const baseline = h.prompts.length;
+      await h.bridge.refresh(true);                   // 建立 previousState
+      h.setState('error');
+      const r = await h.bridge.refresh(true);
+      assert.equal(r.notify.fired, true, 'opt-in 后 error 状态应触发');
+      assert.equal(h.prompts.length, baseline + 1, '只多 1 次推理');
+    } finally { h.bridge.dispose(); fs.rmSync(h.home, { recursive: true, force: true }); }
+  }
+
+  // ④ fail-closed：运行时开关读取抛错 → 视为关
+  {
+    const h = makeHarness({ getProactivePerformance: () => { throw new Error('settings broken'); }, homePrefix: 'dsh-p2-throw-' });
+    try {
+      await h.bridge.ensure();
+      const baseline = h.prompts.length;
+      h.setState('error');
+      const r = await h.bridge.refresh(true);
+      assert.equal(r.notify.fired, false, '读设置失败必须关，不能默认放行');
+      assert.equal(h.prompts.length, baseline);
+    } finally { h.bridge.dispose(); fs.rmSync(h.home, { recursive: true, force: true }); }
+  }
+}
+
 console.log('workspace-agent: ok');

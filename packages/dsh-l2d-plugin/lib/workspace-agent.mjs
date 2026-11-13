@@ -242,8 +242,26 @@ export function hasPendingAction(snapshot) {
  * @param {() => object} [options.getPersona] 人设读取（默认读 persona 文件）
  * @param {number} [options.intervalMs]
  * @param {number} [options.notifyMinIntervalMs]
+ * @param {boolean} [options.proactivePerformance=false] 主动演出 opt-in 开关（PR-2）：
+ *   默认 **false**——周期轮询/状态查询只做本地快照，绝不 prompt。置 true 才恢复
+ *   原来的「状态变化 → 通知 Agent」行为。这是提示词 §三「普通状态变化不是用户请求，
+ *   不能自动触发 LLM」的硬闸门，不允许被调用方默认打开。
+ * @param {() => boolean} [options.getProactivePerformance] 运行时读取开关（设置页改动即时
+ *   生效）。每次刷新重读，抛错/非严格 true 一律视为关（fail-closed）。
  */
-export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir(), '.dsh'), getSnapshot, getPersona, getWorkspaceSnapshot, intervalMs = 1500, notifyMinIntervalMs = NOTIFY_MIN_INTERVAL_MS }) {
+export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir(), '.dsh'), getSnapshot, getPersona, getWorkspaceSnapshot, intervalMs = 1500, notifyMinIntervalMs = NOTIFY_MIN_INTERVAL_MS, proactivePerformance = false, getProactivePerformance }) {
+  // 只认严格的 true：'true' / 1 / 未定义一律关（fail-closed，防止配置串型误开）。
+  let proactive = proactivePerformance === true;
+  /** 每次刷新重读开关：设置页改完无需重启，且失败即关。 */
+  function syncProactive() {
+    if (typeof getProactivePerformance !== 'function') return proactive;
+    try {
+      proactive = getProactivePerformance() === true;
+    } catch {
+      proactive = false;
+    }
+    return proactive;
+  }
   const directory = path.join(homeDir, 'workspaces', 'live2d-agent');
   const manifestPath = path.join(homeDir, 'l2d-workspace-agent.json');
   let workspace = null;
@@ -308,16 +326,28 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
     return { state: aggregate.state, why: 'aggregate' };
   }
 
+  /**
+   * 刷新一轮。
+   *
+   * PR-2 契约（与提示词 §三 对齐）：
+   *   - **本地部分恒执行**：读快照、写 agent.md、算 fingerprint、维护状态/翻转窗口、
+   *     更新 persona/env 引用 —— 这些都不产生任何 LLM 推理。
+   *   - **通知部分需两道开关同时成立**：调用方显式要求（notify=true）且
+   *     `proactivePerformance === true`（opt-in，默认关）。缺一即只做本地刷新，
+   *     reason 记 'proactive-disabled' / 'local-only'，便于验收直接断言。
+   *   - bootstrap（ensure 内的首启引导）不走本函数，属显式初始化，保留。
+   */
   async function refresh(notify = true) {
     if (!workspace || refreshing || typeof getSnapshot !== 'function') return latest;
     refreshing = true;
     try {
+      syncProactive();
       const snapshot = (await getSnapshot()) || latest;
       latest = snapshot;
       const env = readEnvSafe();
       const persona = readPersonaSafe();
       // W1：结构化工作区快照 → 规划 prompt 的「事实 / 推断 / 不可得」三段。
-      // 取不到快照只影响这一段（按 unavailable 渲染），不阻塞通知链路。
+      // 取不到快照只影响这一段（按 unavailable 渲染），不阻塞任何链路。
       let wsSnapshot = null;
       try {
         wsSnapshot = typeof getWorkspaceSnapshot === 'function' ? await getWorkspaceSnapshot() : null;
@@ -350,8 +380,10 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
         gate.stateSince = now;
       }
 
-      let result = { fire: false, reason: 'no-change' };
-      if (notify && (changed || picked.state !== gate.previousState)) {
+      // PR-2 硬闸门：主动演出未 opt-in 时，无论调用方传什么，都不进入通知判定。
+      const notifyAllowed = notify && proactive;
+      let result = { fire: false, reason: notifyAllowed ? 'no-change' : (notify ? 'proactive-disabled' : 'local-only') };
+      if (notifyAllowed && (changed || picked.state !== gate.previousState)) {
         result = decideNotification({
           state: picked.state,
           previousState: gate.previousState,
@@ -409,9 +441,22 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
     }
   }
 
+  /** 只做本地刷新（恒不 prompt）。状态查询、UI 轮询、诊断一律走它。 */
+  async function refreshLocal() {
+    return refresh(false);
+  }
+
+  /** 运行时开关（设置页改动即时生效；只认严格 true）。 */
+  function setProactivePerformance(value) {
+    proactive = value === true;
+    if (!proactive) gate.lastReason = 'proactive-disabled';
+    return proactive;
+  }
+
   function start() {
     if (timer || typeof getSnapshot !== 'function') return;
-    timer = setInterval(() => { void refresh().catch(() => {}); }, Math.max(500, intervalMs));
+    // 轮询恒为本地刷新：主动演出关闭时不应因为"定时器在跑"而进入通知判定。
+    timer = setInterval(() => { void refreshLocal().catch(() => {}); }, Math.max(500, intervalMs));
     timer.unref?.();
   }
 
@@ -478,12 +523,17 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
     return pendingEnsure;
   }
 
+  /**
+   * 状态查询：只读本地快照。
+   * PR-2 修复点：旧实现走 refresh()（notify 缺省 true），导致 UI 每拉一次
+   * /workspace/status.json 都可能触发一次 Agent 推理——这是最隐蔽的隐式触发源。
+   */
   async function status() {
     if (!workspace) {
       const ready = await ensure();
       if (!ready.ok) return ready;
     }
-    await refresh();
+    await refreshLocal();
     return {
       ok: true,
       workspace: { workspaceId: workspace.id, title: workspace.title, sessionId },
@@ -491,6 +541,8 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
       workspaces: latest.workspaces,
       // 快照摘要（只给结构键；完整快照在 /dsh-l2d/workspace/snapshot.json）。
       snapshot: summarizeSnapshot(latestSnapshot),
+      // 主动演出开关的实际生效值（验收据此判断是否可能触发推理）。
+      proactivePerformance: proactive,
     };
   }
 
@@ -499,5 +551,5 @@ export function createWorkspaceAgentBridge({ ctx, homeDir = path.join(os.homedir
     timer = null;
   }
 
-  return { ensure, status, refresh, dispose };
+  return { ensure, status, refresh, refreshLocal, setProactivePerformance, dispose };
 }

@@ -194,6 +194,7 @@ const SETTINGS_SHAPE = {
   reverseEnabled: { type: 'boolean', default: true, description: '反向桥：模型交互事件回流宿主（l2d-reverse-state.json + /ai/poll 搭车）' },
   workspaceForeground: { type: 'boolean', default: false, description: '工作区快照：读取前台应用进程名（默认关；仅本机、不取标题/路径/内容）' },
   consumerLeaseEnabled: { type: 'boolean', default: false, description: '消费者租约：/ai/poll 单消费者接管 + /ai/result token fencing，默认关' },
+  proactivePerformance: { type: 'boolean', default: false, description: '主动演出（状态变化唤醒 Agent 做表情/动作），默认关：普通状态变化不触发 LLM' },
 };
 
 let z = null;
@@ -223,6 +224,7 @@ export const Config = z
       reverseEnabled: z.boolean().default(true).description('反向桥：模型交互事件回流宿主（l2d-reverse-state.json + /ai/poll 搭车）').extra('volatile', true),
       workspaceForeground: z.boolean().default(false).description('工作区快照：读取前台应用进程名（默认关；仅本机、不取标题/路径/内容）').extra('volatile', true),
       consumerLeaseEnabled: z.boolean().default(false).description('消费者租约：/ai/poll 单消费者接管 + /ai/result token fencing，默认关').extra('volatile', true),
+      proactivePerformance: z.boolean().default(false).description('主动演出（状态变化唤醒 Agent 做表情/动作），默认关：普通状态变化不触发 LLM').extra('volatile', true),
     })
   : { ...SETTINGS_SHAPE };
 
@@ -2474,6 +2476,10 @@ export function apply(root, config = {}) {
       // 规划上下文用「结构化事实 + 推断 + 不可得」三段，不含会话正文。
       getWorkspaceSnapshot: () => (typeof runtimeSnapshotBuilder === 'function' ? runtimeSnapshotBuilder() : null),
       intervalMs: 4000,
+      // PR-2：主动演出默认关。普通状态变化不是用户请求，不能自动触发 LLM。
+      // 每次刷新重读设置，设置页开关即时生效（未配置 = false）。
+      proactivePerformance: readSettings().proactivePerformance === true,
+      getProactivePerformance: () => readSettings().proactivePerformance === true,
     });
     workspaceBridge = bridge;
     bridge.ensure().catch((err) => diag('Workspace Agent 初始化失败: ' + String(err?.message || err)));
