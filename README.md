@@ -105,6 +105,9 @@ Agent 描述“看向用户”“进入思考状态”或“一段连续动作�
 | Sidebar / 独立桌宠窗口 | **部分实现 / 待验收** | 有扩展点或窗口通道设计；不能据此推断所有容器已完成无缝切换 |
 | 自动肢体分配 / 多肢协调 | **规划与前置验证中** | M1 语义 Cue 路径不等于自动肢体分配完成；需先完成参数域证据和真实模型 acquire/release 验证 |
 | Workspace 双视图 UI | **实验性** | Whale Workspace 有双视图和会话连续性实现；当前 InMemoryConversationService 是 mock，不是生产 AI 后端 |
+| One-shot 动作编译器（OACA） | **已实现，静态层已验证** | 编译期四层校验（L1–L3 已验，L4 为静态编译验证）→ 一次性发布到 SQLite 注册表（v14）；运行期确定性路由 + 派发前置闸门，`action-router` 无任何 LLM/网络 import（静态断言）；真机渲染 E2E 尚未取证 |
+| 触发层 / trigger_map | **已实现（查表层）** | `emote(emotion, intensity) → programId` 确定性查表；区间重叠写入即拒；命中后 fail-closed 校验程序仍 published；未命中返回 `no_match`，绝不回退实时规划 |
+| 运行时参数槽 | **解析器已实现，待接线** | `$slot` 解引用 + min/max 钳制 + 缺省 default；槽只负责取值，仍过参数所有权与能力检查；接线需编译器先生成槽语法 |
 
 ### 最近的工程进展
 
@@ -115,6 +118,8 @@ Agent 描述“看向用户”“进入思考状态”或“一段连续动作�
 - **MCP Bridge：** 插件宿主挂载 WorkspaceManager、Live2DMCPBridge 和 StatusReporter；工具在 Bridge 初始化就绪后注册，避免未就绪时伪报工具可用。
 - **模型与参数写入：** Renderer 修复了 Angle 短名托管白名单和 AngleZ 总线限幅问题，并补充目标动作的有界预载等待。
 - **动作知识库：** SQLite 注册表、GIF 时序分析、Model Adapter、审核流程和 E2E 管线已建立；validated、runtime_verified 与人工 approved 是不同状态，不能互相替代。
+- **One-shot 动作编译（OACA）：** 架构收敛为「导入期一次 LLM 编程 + 运行期零 LLM」。编译产物经 schema/能力/安全/静态编译四层校验后原子发布到注册表（每模型仅一条 published，不可变版本 + stale 标记）；`/api/actions/dispatch` 同步执行并返回真实终态（busy 409 / 超时 504 / 失败 502），`requestId` 以 `bridge_actions` 主键做跨重启幂等；运行期指标可证（`runtimeLlmCallCount` 增量 0）。QA 独立验收 PASS_WITH_WARNINGS，唯一缺口是真机渲染 E2E。
+- **触发层：** `trigger_map`（v14）让 `l2d_emote` 等语义入口退化为确定性查表——运行期可"选择"程序，不能"生成/修改"程序；程序变更（参数/触发器/图）会使旧验证结论自动失效（`program_hash`）。
 
 相关追踪：[PR #27 · FIFO 动作链](https://github.com/tequed232/DSH-L2D/pull/27) · [PR #26 · MCP Bridge](https://github.com/tequed232/DSH-L2D/pull/26) · [PR #25 · 动作知识库](https://github.com/tequed232/DSH-L2D/pull/25) · [PR #19 · M1 行为循环](https://github.com/tequed232/DSH-L2D/pull/19)
 
@@ -141,6 +146,14 @@ flowchart TB
 
     P["SQLite Registry / Actions Lib"] --> D
     P --> E
+
+    subgraph OACA["One-shot 编译（导入期一次，运行期零 LLM）"]
+        X["LLM Compiler"] --> Y["4 层校验 L1-L4"]
+        Y --> P
+        Y --> Z["Node Graph 产物"]
+        Z --> E
+    end
+    T["trigger_map 查表"] --> E
 ~~~
 
 > 上图是模块关系示意。不同入口和容器的接线状态并不相同；图示不代表所有宿主扩展点均已完成端到端验收。
@@ -345,6 +358,15 @@ DSH-L2D/
 │   └── ...                      # 生成器、注册表和开发工具
 └── docs/                       # 架构、规范、审计与 Agent 指南
 ~~~
+
+## 🧾 One-shot 编译与触发层（新架构）
+
+当前分支正在把「运行时语义决策」收敛为「导入期一次编译 + 运行期确定性执行」：
+
+- **编译期（允许 LLM，仅一次）**：模型导入 → 能力扫描 → LLM 生成动作 → 四层校验（L1 Schema / L2 能力 / L3 安全 / L4 静态编译验证）→ 原子发布到 SQLite（`action_manifests` + `compiled_actions`，v14）。
+- **运行期（禁止 LLM）**：`/api/actions/dispatch` → 三项前置闸门（程序可用性 / strict 模型绑定 / 图存在）→ 进程内执行节点图 → 真实终态回执；`l2d_emote` 等语义入口退化为 `trigger_map` 查表。
+- **状态语义**：`published`（通过校验）、`runtime_verified`（真机跑过）、`approved`（人工批准）三者独立；程序变更（`program_hash` 变化）会自动失效旧验证结论。
+- 详见：[方案评估](docs/architecture/ONESHOT-COMPILER-ASSESSMENT.md) · [实施记录](docs/architecture/ONESHOT-COMPILER-IMPLEMENTATION.md) · [程序规范草案](docs/architecture/ACTION-PROGRAM-SPEC-DRAFT.md) · [交付报告](docs/bridge/OACA-FULL-DELIVERY.md)
 
 ## 🗺️ 路线图
 
