@@ -115,7 +115,26 @@
 
 ---
 
-## 8. 建议的下一步
+## 8. 测试前置：清理旧插件构建（用户 2026-11-13 要求）
+
+E2E / 真机验收前必须先下线 DSH 侧的旧插件构建，否则会出现"改了代码但行为没变"的假阴性。
+
+```bash
+npm run clean:plugin         # 只列出候选（DRY-RUN，不动文件）
+npm run clean:plugin:apply   # 移到 <DSH_HOME>/plugins/.trash-<时间戳>/，可恢复
+```
+
+- 工具：`tools/dev/clean-plugin-build.mjs`
+- 扫描范围：`<DSH_HOME>/plugins/dsh-l2d*`（含 `.uninstalled-bak`）与 `<repo>/dist/dsh-l2d-*`
+- 白名单根目录 + 真实路径校验（防符号链接逃逸）；dev link 符号链接一律跳过
+- **不碰**：`*.sqlite` / `l2d-nodegraphs` / `l2d-*.json` / 日志 / 设置（用户数据与工作区绑定）
+- 跨盘（D: → C:）自动退化为 copy + unlink，不因 EXDEV 失败
+
+首次执行结果（2026-11-13 19:51）：已下线 `dsh-l2d@0.1.0-preview` 插件备份（997 KB）与旧打包 `dsh-l2d-0.1.0-preview.tgz`（110 KB），两者均保留在回收目录可撤回。
+
+---
+
+## 9. 建议的下一步
 
 **先 OACA-1**（编译流水线），因为它能立刻产出可验证的价值：一次真实的"模型导入 → LLM 编译 → 四层校验 → 原子发布"闭环，且不触碰 Runtime。
 
